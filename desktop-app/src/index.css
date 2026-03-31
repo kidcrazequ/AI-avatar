@@ -1,0 +1,186 @@
+/* Terminal Luxe — 黑白像素风设计系统 */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  * {
+    border-radius: 0 !important;
+    -webkit-font-smoothing: auto;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    background-color: #0A0A0A;
+    color: #FAFAFA;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background-color: #FAFAFA;
+    color: #0A0A0A;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #1A1A1A; }
+  ::-webkit-scrollbar-thumb { background: #333333; border: 1px solid #1A1A1A; }
+  ::-webkit-scrollbar-thumb:hover { background: #525252; }
+}
+
+@layer components {
+  /* ─── 按钮 ─────────────────────────────────────────── */
+
+  /** 主按钮：黑底白字，按下反转为白底黑字 */
+  .pixel-btn-primary {
+    @apply px-4 py-2 bg-px-black text-px-white border-2 border-px-white
+           font-pixel text-[10px] tracking-wider uppercase
+           shadow-pixel-sm transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-primary:hover:not(:disabled) {
+    @apply bg-px-white text-px-black;
+  }
+  .pixel-btn-primary:active:not(:disabled) {
+    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+  }
+
+  /** 描边按钮：透明底，浅色边框（深色背景上使用）*/
+  .pixel-btn-secondary {
+    @apply px-4 py-2 bg-transparent text-px-white border-2 border-px-line
+           font-pixel text-[10px] tracking-wider uppercase
+           transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-secondary:hover:not(:disabled) {
+    @apply border-px-white text-px-white shadow-pixel-sm;
+  }
+  .pixel-btn-secondary:active:not(:disabled) {
+    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+  }
+
+  /** 幽灵按钮：无边框，深色背景上使用 */
+  .pixel-btn-ghost {
+    @apply px-4 py-2 bg-transparent text-px-muted border-2 border-transparent
+           font-pixel text-[10px] tracking-wider uppercase
+           hover:text-px-white hover:border-px-line transition-none select-none cursor-pointer;
+  }
+
+  /** 深色背景上的描边按钮（顶栏/面板用）*/
+  .pixel-btn-outline-light {
+    @apply px-4 py-2 bg-transparent text-px-white border-2 border-px-white
+           font-pixel text-[10px] tracking-wider uppercase
+           hover:bg-px-white hover:text-px-black transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-outline-light:active:not(:disabled) {
+    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+  }
+
+  /** 深色背景上的低调按钮 */
+  .pixel-btn-outline-muted {
+    @apply px-4 py-2 bg-transparent text-px-muted border-2 border-px-muted
+           font-pixel text-[10px] tracking-wider uppercase
+           hover:border-px-subtle hover:text-px-subtle transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-outline-muted:active:not(:disabled) {
+    @apply bg-px-subtle text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+  }
+
+  /** 危险按钮 */
+  .pixel-btn-danger {
+    @apply px-4 py-2 bg-px-danger text-px-white border-2 border-px-danger
+           font-pixel text-[10px] tracking-wider uppercase
+           shadow-pixel-sm transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-danger:hover {
+    @apply bg-transparent text-px-danger;
+  }
+  .pixel-btn-danger:active {
+    @apply bg-px-white text-px-danger shadow-none translate-x-[2px] translate-y-[2px];
+  }
+
+  /** 关闭按钮（Modal 头部）*/
+  .pixel-close-btn {
+    @apply w-8 h-8 flex items-center justify-center border-2 border-px-white
+           text-px-white font-pixel text-xs
+           hover:bg-px-white hover:text-px-black transition-none select-none cursor-pointer;
+  }
+  .pixel-close-btn:active {
+    @apply bg-px-white text-px-black translate-x-[1px] translate-y-[1px];
+  }
+
+  /* ─── 输入框 ───────────────────────────────────────── */
+
+  .pixel-input {
+    @apply px-4 py-2 bg-px-white text-px-black border-2 border-px-border
+           font-mono text-sm
+           placeholder:text-px-subtle
+           focus:border-px-black focus:outline-none
+           shadow-[inset_2px_2px_0_0_rgba(0,0,0,0.05)];
+  }
+
+  .pixel-input-dark {
+    @apply px-4 py-3 bg-px-dark text-px-white border-2 border-px-line
+           font-mono text-sm
+           placeholder:text-[#525252]
+           focus:border-px-white focus:outline-none;
+  }
+
+  /* ─── 标签 ─────────────────────────────────────────── */
+
+  .pixel-label {
+    @apply block font-mono text-xs text-px-subtle tracking-wider mb-2;
+  }
+
+  /* ─── 分割线 ───────────────────────────────────────── */
+
+  .pixel-divider {
+    @apply h-[2px];
+    background: repeating-linear-gradient(
+      90deg,
+      #0A0A0A 0px, #0A0A0A 4px,
+      transparent 4px, transparent 8px
+    );
+  }
+
+  /* ─── 像素扫描线（侧边栏叠加）──────────────────────── */
+
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,255,255,0.02) 2px,
+      rgba(255,255,255,0.02) 4px
+    );
+    pointer-events: none;
+  }
+}
+
+/* ─── 闪烁光标 ─────────────────────────────────────────── */
+.cursor-blink {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: currentColor;
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes pixelSlideIn {
+  from { transform: translateX(-8px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes pixelExpand {
+  0%   { transform: scale(0.9);  opacity: 0; }
+  50%  { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}

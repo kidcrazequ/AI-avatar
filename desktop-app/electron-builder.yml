@@ -1,0 +1,23 @@
+appId: com.soul.avatar
+productName: AI分身
+directories:
+  output: release
+files:
+  - dist/**/*
+  - dist-electron/**/*
+# BUG3 修复：打包分身数据、模板、共享知识库为只读资源
+# 生产环境首次启动时会将这些资源复制到 userData/avatars
+extraResources:
+  - from: ../avatars
+    to: avatars
+  - from: ../templates
+    to: templates
+  - from: ../shared
+    to: shared
+win:
+  target: nsis
+  icon: build/icon.ico
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.productivity

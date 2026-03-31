@@ -1,0 +1,35 @@
+# 测试报告（每次运行生成，不需要提交）
+**/tests/reports/*.md
+!**/tests/reports/.gitkeep
+
+# 依赖与构建产物
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+out/
+**/out/
+release/
+**/release/
+*.log
+.vite/
+
+# 环境变量与密钥（勿提交）
+.env
+.env.*
+!.env.example
+
+# 系统与 IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude 本地权限（含本机路径，勿提交）
+**/.claude/settings.local.json
+
+# Electron / 前端构建与测试报告
+desktop-app/dist-electron/
+desktop-app/playwright-report/
+desktop-app/test-results/
+**/*.tsbuildinfo

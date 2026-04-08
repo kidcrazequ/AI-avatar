@@ -4,7 +4,6 @@ interface Props {
   tree: FileNode[]
   onSelectFile: (path: string) => void
   selectedPath: string | null
-  /** GAP7: 内联删除确认状态 */
   confirmDeletePath?: string | null
   onRequestDelete?: (path: string) => void
   onConfirmDelete?: (path: string) => void
@@ -57,14 +56,17 @@ function TreeNode({
     return (
       <div>
         <div
-          className="flex items-center gap-1 px-2 py-1.5 hover:bg-px-warm cursor-pointer group"
+          className="flex items-center gap-1.5 px-2 py-1.5 hover:bg-px-hover cursor-pointer group"
           style={{ paddingLeft: `${level * 12 + 8}px` }}
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <span className="font-mono text-px-muted text-xs w-3 select-none">
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <span className="font-mono text-xs font-semibold text-px-black">{node.name}/</span>
+          <svg className={`w-3 h-3 text-px-text-dim transition-none ${isExpanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="square" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          <svg className="w-3.5 h-3.5 text-px-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="square" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+          <span className="font-game text-[13px] font-medium text-px-text">{node.name}</span>
         </div>
         {isExpanded && node.children && (
           <div>
@@ -90,38 +92,40 @@ function TreeNode({
   return (
     <div style={{ paddingLeft: `${level * 12 + 20}px` }}>
       <div
-        className={`flex items-center gap-1 px-2 py-1.5 cursor-pointer group
-          ${isSelected ? 'bg-px-black text-px-white' : 'hover:bg-px-warm text-px-black'}`}
+        className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer group transition-none
+          ${isSelected ? 'bg-px-primary/15 text-px-text border-l-2 border-l-px-primary -ml-0.5' : 'hover:bg-px-hover text-px-text-sec'}`}
         onClick={() => onSelectFile(node.path)}
       >
-        <span className="font-mono text-xs text-px-muted select-none">-</span>
-        <span className="font-mono text-xs flex-1 truncate">{node.name}</span>
-        {/* GAP7: 删除按钮（hover 显示） */}
+        <svg className="w-3.5 h-3.5 text-px-text-dim flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="square" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span className="font-game text-[13px] flex-1 truncate">{node.name}</span>
         {onRequestDelete && !isConfirmingDelete && (
           <button
-            className="opacity-0 group-hover:opacity-100 font-pixel text-[8px] text-px-muted hover:text-px-danger px-1"
+            className="opacity-0 group-hover:opacity-100 text-px-text-dim hover:text-px-danger px-1"
             aria-label={`删除 ${node.name}`}
             onClick={(e) => { e.stopPropagation(); onRequestDelete(node.path) }}
           >
-            ×
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="square" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         )}
       </div>
-      {/* GAP7: 内联删除确认（替代 window.confirm） */}
       {isConfirmingDelete && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-px-warm border-l-2 border-px-danger ml-4">
-          <span className="font-pixel text-[8px] text-px-danger">DELETE?</span>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 bg-px-danger/10 border-l-2 border-px-danger ml-4">
+          <span className="font-game text-[11px] text-px-danger tracking-wider">删除?</span>
           <button
-            className="font-pixel text-[8px] px-1.5 py-0.5 bg-px-danger text-px-white"
+            className="font-game text-[11px] px-2 py-0.5 bg-px-danger text-white"
             onClick={() => onConfirmDelete?.(node.path)}
           >
-            DEL
+            是
           </button>
           <button
-            className="font-pixel text-[8px] px-1.5 py-0.5 border border-px-border text-px-muted"
+            className="font-game text-[11px] px-2 py-0.5 border border-px-border text-px-text-sec"
             onClick={onCancelDelete}
           >
-            NO
+            否
           </button>
         </div>
       )}

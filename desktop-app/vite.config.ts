@@ -14,4 +14,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // 将 @soul/core (CommonJS) 预构建为 ESM，确保命名导出可用
+  optimizeDeps: {
+    include: ['@soul/core'],
+  },
 })

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e0e7ff"/>
+      <stop offset="100%" stop-color="#c7d2fe"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <!-- ��o -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+  <!-- 4�n� -->
+  <ellipse cx="512" cy="420" rx="200" ry="220" fill="url(#face)" opacity="0.95"/>
+  <!-- �S -->
+  <path d="M310,700 Q310,580 512,580 Q714,580 714,700 L714,780 Q714,820 674,820 L350,820 Q310,820 310,780 Z" fill="url(#face)" opacity="0.9"/>
+  <!-- �< -->
+  <circle cx="430" cy="400" r="32" fill="url(#glow)"/>
+  <circle cx="430" cy="400" r="14" fill="#1e1b4b"/>
+  <circle cx="420" cy="390" r="6" fill="white" opacity="0.8"/>
+  <!-- �< -->
+  <circle cx="594" cy="400" r="32" fill="url(#glow)"/>
+  <circle cx="594" cy="400" r="14" fill="#1e1b4b"/>
+  <circle cx="584" cy="390" r="6" fill="white" opacity="0.8"/>
+  <!-- � -->
+  <path d="M460,470 Q512,510 564,470" stroke="#7c3aed" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- 5� - � -->
+  <circle cx="340" cy="340" r="6" fill="#a78bfa" opacity="0.7"/>
+  <line x1="340" y1="346" x2="340" y2="400" stroke="#a78bfa" stroke-width="3" opacity="0.5"/>
+  <line x1="340" y1="400" x2="300" y2="400" stroke="#a78bfa" stroke-width="3" opacity="0.5"/>
+  <!-- 5� - � -->
+  <circle cx="684" cy="340" r="6" fill="#a78bfa" opacity="0.7"/>
+  <line x1="684" y1="346" x2="684" y2="400" stroke="#a78bfa" stroke-width="3" opacity="0.5"/>
+  <line x1="684" y1="400" x2="724" y2="400" stroke="#a78bfa" stroke-width="3" opacity="0.5"/>
+  <!-- )�/�� -->
+  <line x1="512" y1="200" x2="512" y2="160" stroke="#e0e7ff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="512" cy="148" r="12" fill="#e0e7ff"/>
+  <circle cx="512" cy="148" r="6" fill="#a78bfa"/>
+  <!-- ��� -->
+  <path d="M470,130 Q512,100 554,130" stroke="#e0e7ff" stroke-width="4" fill="none" opacity="0.6" stroke-linecap="round"/>
+  <path d="M450,110 Q512,70 574,110" stroke="#e0e7ff" stroke-width="3" fill="none" opacity="0.4" stroke-linecap="round"/>
+</svg>

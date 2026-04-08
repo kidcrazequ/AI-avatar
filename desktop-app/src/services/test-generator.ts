@@ -2,47 +2,52 @@ import { LLMService, ModelConfig, LLMMessage } from './llm-service'
 
 /**
  * 从知识文件内容自动生成测试用例（GAP12）。
- * 调用 LLM 分析知识内容，返回结构化的测试用例列表。
+ * 基于 templates/test-case-template.md 的规范，调用 LLM 生成覆盖 6 个维度的测试用例。
+ *
+ * @author zhi.qu
+ * @date 2026-04-02
  */
 export async function generateTestCasesFromContent(
   knowledgeContent: string,
   fileName: string,
   chatModel: ModelConfig,
-  count: number = 3
+  count: number = 6
 ): Promise<GeneratedTestCase[]> {
   if (!chatModel.apiKey) {
     throw new Error('请先配置 Chat API Key')
   }
 
-  const prompt = `你是一个专业的 AI 测试工程师。请根据以下知识内容，生成 ${count} 个高质量的测试用例。
+  // 从后端获取基于 test-case-template.md 构建的 system prompt
+  let systemPrompt = ''
+  try {
+    systemPrompt = await window.electronAPI.getTestCreationPrompt()
+  } catch (e) {
+    console.error('[TestGenerator] 获取测试模板 system prompt 失败，使用降级方案', e)
+  }
+
+  const userPrompt = `请根据以下知识文件内容，生成 ${count} 个测试用例。
 
 ## 知识文件：${fileName}
 
-${knowledgeContent.slice(0, 3000)}
+${knowledgeContent.slice(0, 4000)}
 
 ---
 
-请生成 ${count} 个测试用例，每个测试用例用以下格式输出（严格遵守格式，不要添加额外内容）：
-
-===TEST_CASE===
-名称: [测试用例名称]
-类别: [知识验证/计算能力/推理分析/政策解读 中选一]
-用户问题: [用户会问的具体问题，要自然真实]
-期望包含: [回答中必须包含的关键词，每行一个，最多3个]
-评分标准: [评估回答质量的标准，每行一个，最多3条]
-===END===
-
-注意：
-- 问题要针对知识内容中的具体细节
+要求：
+- 必须覆盖知识准确性、知识库约束、数据溯源这 3 个核心类别
+- 问题要针对知识内容中的具体细节和数据
 - 期望包含要是该知识中的关键事实或数字
+- 不应包含要列出编造数据或模糊表述的典型错误
 - 评分标准要可量化`
 
-  const messages: LLMMessage[] = [
-    { role: 'user', content: prompt }
-  ]
+  const messages: LLMMessage[] = []
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt })
+  }
+  messages.push({ role: 'user', content: userPrompt })
 
   const llm = new LLMService(chatModel)
-  const response = await llm.complete(messages, { maxTokens: 2000 })
+  const response = await llm.complete(messages, { maxTokens: 3000 })
 
   return parseGeneratedTestCases(response)
 }
@@ -52,6 +57,7 @@ export interface GeneratedTestCase {
   category: string
   prompt: string
   mustContain: string[]
+  mustNotContain: string[]
   rubrics: string[]
 }
 
@@ -67,10 +73,11 @@ function parseGeneratedTestCases(text: string): GeneratedTestCase[] {
     const lines = content.split('\n').map(l => l.trim()).filter(Boolean)
     const testCase: Partial<GeneratedTestCase> = {
       mustContain: [],
+      mustNotContain: [],
       rubrics: [],
     }
 
-    let currentField: 'mustContain' | 'rubrics' | null = null
+    let currentField: 'mustContain' | 'mustNotContain' | 'rubrics' | null = null
 
     for (const line of lines) {
       if (line.startsWith('名称:')) {
@@ -86,12 +93,18 @@ function parseGeneratedTestCases(text: string): GeneratedTestCase[] {
         const inline = line.replace('期望包含:', '').trim()
         if (inline) testCase.mustContain!.push(inline)
         currentField = 'mustContain'
+      } else if (line.startsWith('不应包含:')) {
+        const inline = line.replace('不应包含:', '').trim()
+        if (inline) testCase.mustNotContain!.push(inline)
+        currentField = 'mustNotContain'
       } else if (line.startsWith('评分标准:')) {
         const inline = line.replace('评分标准:', '').trim()
         if (inline) testCase.rubrics!.push(inline)
         currentField = 'rubrics'
       } else if (currentField === 'mustContain') {
         testCase.mustContain!.push(line.replace(/^[-*]/, '').trim())
+      } else if (currentField === 'mustNotContain') {
+        testCase.mustNotContain!.push(line.replace(/^[-*]/, '').trim())
       } else if (currentField === 'rubrics') {
         testCase.rubrics!.push(line.replace(/^[-*]/, '').trim())
       }
@@ -103,6 +116,7 @@ function parseGeneratedTestCases(text: string): GeneratedTestCase[] {
         category: testCase.category || '知识验证',
         prompt: testCase.prompt,
         mustContain: testCase.mustContain!.filter(Boolean),
+        mustNotContain: testCase.mustNotContain!.filter(Boolean),
         rubrics: testCase.rubrics!.filter(Boolean),
       })
     }

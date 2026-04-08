@@ -33,3 +33,12 @@ desktop-app/dist-electron/
 desktop-app/playwright-report/
 desktop-app/test-results/
 **/*.tsbuildinfo
+
+# 图标生成产物（保留 SVG 源文件）
+desktop-app/build/icon.png
+desktop-app/build/icon.icns
+desktop-app/build/icon.ico
+
+# 本地测试输出（视频、截图、临时报告，勿提交）
+test-output/
+desktop-app/test-output/

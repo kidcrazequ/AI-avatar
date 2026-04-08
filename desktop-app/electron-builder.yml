@@ -1,23 +1,80 @@
+# electron-builder 打包配置
+# @author zhi.qu
+# @date 2026-04-03
+
 appId: com.soul.avatar
 productName: AI分身
+copyright: Copyright © 2026
+
 directories:
   output: release
+  buildResources: build
+
 files:
   - dist/**/*
   - dist-electron/**/*
-# BUG3 修复：打包分身数据、模板、共享知识库为只读资源
-# 生产环境首次启动时会将这些资源复制到 userData/avatars
+  - "!**/*.map"
+
+# 打包模板和共享知识库为只读资源（分身由用户在应用内创建，不预置）
 extraResources:
-  - from: ../avatars
-    to: avatars
   - from: ../templates
     to: templates
   - from: ../shared
     to: shared
-win:
-  target: nsis
-  icon: build/icon.ico
+
+# ========== macOS ==========
 mac:
-  target: dmg
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
   icon: build/icon.icns
   category: public.app-category.productivity
+  artifactName: "${productName}-${version}-mac-${arch}.${ext}"
+
+dmg:
+  title: "${productName} ${version}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ========== Windows ==========
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: "${productName}-${version}-win-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AI分身
+
+# ========== Linux ==========
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: build/icon.png
+  category: Utility
+  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
+
+# macOS 交叉编译 Windows 时，清除 quarantine 属性防止 7zip 权限错误
+afterPack: scripts/after-pack.js
+afterSign: scripts/after-sign.js
+
+# native 模块重建
+npmRebuild: true

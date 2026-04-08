@@ -67,6 +67,25 @@ export const DEFAULT_OCR_MODEL: ModelConfig = {
   apiKey: '',
 }
 
+/**
+ * 创作模型默认配置（用于 soul.md / 技能 / 测试用例生成）。
+ * 默认使用 Qwen-Max，中文创作能力优于 DeepSeek。
+ * 如果用户未单独配置，系统自动回退到 chat 模型。
+ */
+export const DEFAULT_CREATION_MODEL: ModelConfig = {
+  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  model: 'qwen-max',
+  apiKey: '',
+}
+
+/**
+ * 选择最优模型：优先使用 creationModel，未配置则回退到 chatModel。
+ */
+export function resolveCreationModel(creationModel: ModelConfig, chatModel: ModelConfig): ModelConfig {
+  if (creationModel.apiKey) return creationModel
+  return chatModel
+}
+
 export class LLMService {
   private config: ModelConfig
 

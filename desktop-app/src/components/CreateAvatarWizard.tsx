@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { LLMService, ModelConfig } from '../services/llm-service'
+import { generateSoulStepByStep, StepProgress } from '../services/soul-step-generator'
+import { validateSoulContent, ValidationResult } from '../services/soul-validator'
 
 interface Props {
   chatModel: ModelConfig
+  creationModel: ModelConfig
   onClose: () => void
   onCreated: (avatarId: string) => void
 }
@@ -17,9 +20,15 @@ interface CustomSkill {
   content: string
 }
 
-const STEPS = ['基本信息', '人格定义', '知识库', '技能定义', '预览与创建']
+const STEPS = [
+  { en: '01', zh: '基本信息' },
+  { en: '02', zh: '人格定义' },
+  { en: '03', zh: '知识库' },
+  { en: '04', zh: '技能定义' },
+  { en: '05', zh: '确认创建' },
+]
 
-export default function CreateAvatarWizard({ chatModel, onClose, onCreated }: Props) {
+export default function CreateAvatarWizard({ chatModel, creationModel, onClose, onCreated }: Props) {
   const [currentStep, setCurrentStep] = useState(0)
 
   const [avatarName, setAvatarName] = useState('')
@@ -27,6 +36,8 @@ export default function CreateAvatarWizard({ chatModel, onClose, onCreated }: Pr
   const [personalityInput, setPersonalityInput] = useState('')
   const [soulContent, setSoulContent] = useState('')
   const [isGeneratingSoul, setIsGeneratingSoul] = useState(false)
+  const [soulProgress, setSoulProgress] = useState<StepProgress | null>(null)
+  const [soulValidation, setSoulValidation] = useState<ValidationResult | null>(null)
   const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([])
   const [newFileName, setNewFileName] = useState('')
   const [newFileContent, setNewFileContent] = useState('')
@@ -42,66 +53,67 @@ export default function CreateAvatarWizard({ chatModel, onClose, onCreated }: Pr
   }
 
   const handleGenerateSoul = async () => {
-    if (!personalityInput.trim() || !chatModel.apiKey) return
+    const soulModel = creationModel.apiKey ? creationModel : chatModel
+    if (!personalityInput.trim() || !soulModel.apiKey) return
     setIsGeneratingSoul(true)
-    const llm = new LLMService(chatModel)
-    let result = ''
+    setSoulValidation(null)
+    setSoulProgress(null)
 
-    const prompt = `请根据以下描述，生成一份完整的 AI 分身灵魂文档（soul.md）。
+    try {
+      const result = await generateSoulStepByStep(
+        avatarName,
+        `${personalityInput}\n${avatarDescription ? `补充说明：${avatarDescription}` : ''}`,
+        soulModel,
+        (progress) => setSoulProgress(progress),
+        (content) => setSoulContent(content),
+      )
 
-用户描述：
-${personalityInput}
+      setSoulValidation(result.validation)
 
-分身名称：${avatarName}
+      if (result.supplemented) {
+        showStatus(`已自动补全 ${result.validation.missing.length > 0 ? '部分' : '全部'}缺失项`)
+      }
+    } catch (error) {
+      const err = error as Error
+      showStatus(`生成失败: ${err.message}`)
+    } finally {
+      setIsGeneratingSoul(false)
+      setSoulProgress(null)
+    }
+  }
 
-请严格按以下格式生成（直接输出 Markdown，不要加代码块标记）：
-
-# ${avatarName}灵魂文档
-
-## 1. Identity — 我是谁
-## 2. Background — 我的专业背景
-## 3. Style — 我怎么说话
-### 说话方式
-### 口头禅
-## 4. Principles — 我的原则
-## 5. Workflow — 我怎么工作
-## 6. Commitment — 我的承诺`
-
-    await llm.chat(
-      [{ role: 'user', content: prompt }],
-      (chunk) => { result += chunk; setSoulContent(result) },
-      () => setIsGeneratingSoul(false),
-      (error) => { showStatus(`生成失败: ${error.message}`); setIsGeneratingSoul(false) }
-    )
+  const handleValidateSoul = () => {
+    if (!soulContent.trim()) return
+    const result = validateSoulContent(soulContent)
+    setSoulValidation(result)
   }
 
   const handleGenerateSkill = async () => {
-    if (!skillInput.trim() || !chatModel.apiKey) return
+    const skillModel = creationModel.apiKey ? creationModel : chatModel
+    if (!skillInput.trim() || !skillModel.apiKey) return
     setIsGeneratingSkill(true)
-    const llm = new LLMService(chatModel)
+    const llm = new LLMService(skillModel)
     let result = ''
 
-    const prompt = `请根据以下描述，生成一份 AI 分身技能定义文件。
+    let systemPrompt = ''
+    try {
+      systemPrompt = await window.electronAPI.getSkillCreationPrompt()
+    } catch (e) {
+      console.error('[CreateAvatar] 获取技能模板 system prompt 失败，使用降级方案', e)
+    }
 
-用户描述：
-${skillInput}
+    const userPrompt = `请根据以下描述，为分身「${avatarName}」生成一份技能定义文件：
 
-请按以下格式生成（直接输出 Markdown，不要加代码块标记）：
+${skillInput}`
 
-# 技能名称
-
-> **级别**：🟢 基础
-> **版本**：v1.0
-
-## 技能说明
-## 触发条件
-## 输入
-## 执行流程
-## 输出格式
-## 质量标准`
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = []
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt })
+    }
+    messages.push({ role: 'user', content: userPrompt })
 
     await llm.chat(
-      [{ role: 'user', content: prompt }],
+      messages,
       (chunk) => { result += chunk },
       () => {
         const nameMatch = result.match(/^#\s+(.+)$/m)
@@ -123,7 +135,6 @@ ${skillInput}
     setNewFileContent('')
   }
 
-  // BUG8 修复：正确传入 customSkills 到 createAvatar
   const handleCreate = async () => {
     setIsCreating(true)
     try {
@@ -134,10 +145,8 @@ ${skillInput}
         .replace(/^-|-$/g, '')
         || `avatar-${Date.now()}`
 
-      // 创建分身骨架
       await window.electronAPI.createAvatar(avatarId, soulContent, [], knowledgeFiles)
 
-      // 写入自定义技能文件
       for (const skill of customSkills) {
         await window.electronAPI.writeSkillFile(avatarId, skill.name, skill.content)
       }
@@ -159,142 +168,237 @@ ${skillInput}
     }
   }
 
+  const getProgressText = (): string => {
+    if (!soulProgress) return '生成中...'
+    const { currentStep: step, totalSteps, stepName, phase } = soulProgress
+    const phaseLabel = phase === 'generating' ? '生成中'
+      : phase === 'validating' ? '校验中'
+      : phase === 'supplementing' ? '补全中'
+      : '完成'
+    return `[${step}/${totalSteps}] ${stepName} · ${phaseLabel}`
+  }
+
   return (
-    <div className="fixed inset-0 bg-px-black/80 flex items-center justify-center z-50">
-      <div className="bg-px-dark border-2 border-px-line shadow-pixel-xl w-[800px] max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-[2px] flex items-center justify-center z-50 animate-fade-in">
+      <div className="bg-px-surface border-2 border-px-border shadow-pixel-glow w-[800px] max-h-[90vh] flex flex-col animate-pixel-expand">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 bg-px-black text-px-white border-b-2 border-px-black">
-          <div>
-            <h2 className="font-pixel text-sm tracking-wider">CREATE AVATAR</h2>
-            {statusMsg && <p className="font-pixel text-[8px] text-px-danger mt-0.5">{statusMsg}</p>}
+        <div className="flex items-center justify-between px-6 py-4 bg-px-bg text-px-text border-b-2 border-px-border">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-6 bg-px-primary" />
+            <div>
+              <h2 className="font-game text-[14px] tracking-wider">创建分身</h2>
+              {statusMsg && <p className="font-game text-[13px] text-px-danger mt-0.5">{statusMsg}</p>}
+            </div>
           </div>
-          <button onClick={onClose} className="pixel-close-btn">X</button>
+          <button onClick={onClose} className="pixel-close-btn">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="square" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         {/* 步骤指示器 */}
-        <div className="flex items-center px-6 py-3 border-b-2 border-px-line bg-px-mid overflow-x-auto">
+        <div className="flex items-center px-6 py-3 border-b-2 border-px-border bg-px-elevated overflow-x-auto">
           {STEPS.map((step, index) => (
-            <div key={step} className="flex items-center flex-shrink-0">
-              <div className={`flex items-center gap-2 ${index <= currentStep ? 'text-px-white' : 'text-px-muted'}`}>
-                <div className={`w-6 h-6 border-2 flex items-center justify-center font-mono text-xs font-bold
-                  ${index < currentStep ? 'bg-px-white border-px-white text-px-black'
-                  : index === currentStep ? 'border-px-white text-px-white'
-                  : 'border-px-line text-px-muted'}`}>
+            <div key={step.en} className="flex items-center flex-shrink-0">
+              <div className={`flex items-center gap-2 ${index <= currentStep ? 'text-px-text' : 'text-px-text-dim'}`}>
+                <div className={`w-7 h-7 border-2 flex items-center justify-center font-game text-[12px]
+                  ${index < currentStep ? 'bg-px-primary border-px-primary text-px-bg'
+                  : index === currentStep ? 'border-px-primary text-px-primary'
+                  : 'border-px-border text-px-text-dim'}`}>
                   {index < currentStep ? '✓' : index + 1}
                 </div>
-                <span className="font-mono text-xs hidden sm:block">{step}</span>
+                <span className="font-game text-[14px] hidden sm:block">{step.zh}</span>
               </div>
               {index < STEPS.length - 1 && (
-                <div className={`w-4 h-0.5 mx-2 ${index < currentStep ? 'bg-px-white' : 'bg-px-line'}`} />
+                <div className={`w-6 h-0.5 mx-2 ${index < currentStep ? 'bg-px-primary' : 'bg-px-border'}`} />
               )}
             </div>
           ))}
         </div>
 
         {/* 内容区域 */}
-        <div className="flex-1 overflow-y-auto p-6 bg-px-dark">
+        <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
           {currentStep === 0 && (
-            <div className="space-y-4">
+            <div className="space-y-5 max-w-lg">
               <div>
-                <label className="pixel-label text-px-white">分身名称 *</label>
+                <label className="pixel-label">分身名称 *</label>
                 <input type="text" value={avatarName} onChange={(e) => setAvatarName(e.target.value)}
-                  placeholder="例如：小李 - 光伏专家" className="pixel-input-dark w-full" />
+                  placeholder="例如：小李 — 光伏专家" className="pixel-input w-full" />
               </div>
               <div>
-                <label className="pixel-label text-px-white">一句话描述</label>
+                <label className="pixel-label">一句话描述</label>
                 <input type="text" value={avatarDescription} onChange={(e) => setAvatarDescription(e.target.value)}
-                  placeholder="例如：专注光伏电站设计与收益测算" className="pixel-input-dark w-full" />
+                  placeholder="例如：专注光伏电站设计与收益测算" className="pixel-input w-full" />
+                <p className="mt-1 font-game text-[12px] text-px-text-dim">会作为补充信息传给 AI，帮助生成更贴合的人格定义。不填也不影响创建。</p>
               </div>
             </div>
           )}
 
           {currentStep === 1 && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              <p className="font-game text-[14px] text-px-text-sec">必填。用自然语言描述分身人格，AI 生成灵魂文档。创建后可在「人格」面板中继续编辑。</p>
               <div>
-                <label className="pixel-label text-px-white">用自然语言描述分身人格</label>
+                <label className="pixel-label">用自然语言描述分身人格</label>
                 <textarea value={personalityInput} onChange={(e) => setPersonalityInput(e.target.value)}
                   placeholder="例如：我想创建一个光伏电站设计专家，叫小李。严谨专业，喜欢用数据说话..."
-                  className="pixel-input-dark w-full font-mono" rows={4} />
+                  className="pixel-input w-full" rows={4} />
                 <button onClick={handleGenerateSoul}
-                  disabled={isGeneratingSoul || !personalityInput.trim() || !chatModel.apiKey}
-                  className="mt-2 pixel-btn-outline-light disabled:opacity-40">
-                  {isGeneratingSoul ? 'GENERATING...' : '[AI] 生成人格定义'}
+                  disabled={isGeneratingSoul || !personalityInput.trim() || !(creationModel.apiKey || chatModel.apiKey)}
+                  className="mt-2 pixel-btn-primary">
+                  {isGeneratingSoul ? getProgressText() : '生成'}
                 </button>
-                {!chatModel.apiKey && (
-                  <p className="mt-1 font-pixel text-[8px] text-px-danger">请先在设置中配置 API Key</p>
+                {creationModel.apiKey && (
+                  <p className="mt-1 font-game text-[12px] text-px-text-dim">模型: {creationModel.model}</p>
+                )}
+                {!(creationModel.apiKey || chatModel.apiKey) && (
+                  <p className="mt-1 font-game text-[12px] text-px-danger">请先在设置中配置 API Key</p>
                 )}
               </div>
+
+              {/* 生成进度条 */}
+              {isGeneratingSoul && soulProgress && (
+                <div className="border-2 border-px-border p-4 bg-px-elevated">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-game text-[12px] text-px-primary tracking-wider">
+                      步骤 {soulProgress.currentStep}/{soulProgress.totalSteps}
+                    </span>
+                    <span className="font-game text-[14px] text-px-text-sec">{soulProgress.stepName}</span>
+                  </div>
+                  <div className="w-full h-2 border-2 border-px-border bg-px-bg">
+                    <div
+                      className="h-full bg-px-primary transition-none"
+                      style={{ width: `${(soulProgress.currentStep / soulProgress.totalSteps) * 100}%` }}
+                    />
+                  </div>
+                  <div className="mt-1.5 font-game text-[12px] text-px-text-dim">
+                    {soulProgress.phase === 'generating' && '正在生成...'}
+                    {soulProgress.phase === 'validating' && '校验结构完整性...'}
+                    {soulProgress.phase === 'supplementing' && '自动补全缺失项...'}
+                    {soulProgress.phase === 'done' && '生成完成'}
+                  </div>
+                </div>
+              )}
+
+              {/* 校验结果 */}
+              {soulValidation && !isGeneratingSoul && (
+                <div className={`border-2 p-4 ${soulValidation.isValid ? 'border-px-success bg-px-success/5' : 'border-px-warning bg-px-warning/5'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-game text-[12px] tracking-wider text-px-text">
+                      {soulValidation.isValid ? '通过' : '警告'}
+                    </span>
+                    <span className="font-game text-[14px] text-px-text-sec">
+                      {soulValidation.score}%
+                    </span>
+                  </div>
+                  {soulValidation.missing.length > 0 && (
+                    <ul className="space-y-1">
+                      {soulValidation.missing.map((item) => (
+                        <li key={item.id} className="font-game text-[14px] flex items-start gap-2">
+                          <span className={item.severity === 'critical' ? 'text-px-danger' : 'text-px-warning'}>
+                            {item.severity === 'critical' ? '✗' : '!'}
+                          </span>
+                          <span className="text-px-text-sec">
+                            [{item.chapter}] {item.description}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               {soulContent && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="pixel-label text-px-white mb-0">生成结果（可编辑）</label>
-                    <span className="font-pixel text-[8px] text-px-muted">{soulContent.length} 字</span>
+                    <label className="pixel-label mb-0">生成结果（可编辑）</label>
+                    <div className="flex items-center gap-3">
+                      <button onClick={handleValidateSoul}
+                        className="font-game text-[12px] text-px-primary hover:underline tracking-wider">
+                        校验
+                      </button>
+                      <span className="font-game text-[12px] text-px-text-dim">{soulContent.length} 字</span>
+                    </div>
                   </div>
-                  <textarea value={soulContent} onChange={(e) => setSoulContent(e.target.value)}
-                    className="pixel-input-dark w-full font-mono text-sm" rows={15} />
+                  <textarea value={soulContent} onChange={(e) => { setSoulContent(e.target.value); setSoulValidation(null) }}
+                    className="pixel-input w-full font-mono text-[14px]" rows={15} />
                 </div>
               )}
             </div>
           )}
 
           {currentStep === 2 && (
-            <div className="space-y-4">
-              <p className="font-mono text-sm text-px-muted">添加知识文件。可跳过，后续在知识库管理中添加。</p>
+            <div className="space-y-5">
+              <p className="font-game text-[14px] text-px-text-sec">添加知识文件。可跳过，后续在知识库管理中添加。</p>
               {knowledgeFiles.length > 0 && (
                 <div className="space-y-2">
                   {knowledgeFiles.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-px-mid border-2 border-px-line">
-                      <span className="font-mono text-sm font-medium text-px-white">{file.name}</span>
+                    <div key={index} className="flex items-center justify-between p-3 bg-px-elevated border-2 border-px-border">
+                      <span className="font-game text-[14px] font-medium text-px-text">{file.name}</span>
                       <button onClick={() => setKnowledgeFiles(prev => prev.filter((_, i) => i !== index))}
-                        className="font-pixel text-[8px] text-px-danger hover:text-px-white">DEL</button>
+                        className="font-game text-[12px] text-px-danger hover:underline tracking-wider">删除</button>
                     </div>
                   ))}
                 </div>
               )}
-              <div className="border-2 border-px-line p-4 space-y-3">
+              <div className="border-2 border-px-border p-4 space-y-3 bg-px-elevated">
                 <input type="text" value={newFileName} onChange={(e) => setNewFileName(e.target.value)}
-                  placeholder="文件名，例如：policy.md" className="pixel-input-dark w-full" />
+                  placeholder="文件名，例如：policy.md" className="pixel-input w-full" />
                 <textarea value={newFileContent} onChange={(e) => setNewFileContent(e.target.value)}
                   placeholder="粘贴知识内容（Markdown 格式）..."
-                  className="pixel-input-dark w-full font-mono text-sm" rows={8} />
+                  className="pixel-input w-full" rows={8} />
                 <button onClick={handleAddKnowledgeFile}
                   disabled={!newFileName.trim() || !newFileContent.trim()}
-                  className="pixel-btn-outline-light disabled:opacity-40">[+] 添加文件</button>
+                  className="pixel-btn-primary">[+] 添加</button>
               </div>
             </div>
           )}
 
           {currentStep === 3 && (
-            <div className="space-y-4">
-              <p className="font-mono text-sm text-px-muted">用自然语言描述技能，AI 自动生成。可跳过。</p>
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <p className="font-game text-[14px] text-px-text-sec">用自然语言描述技能，AI 自动生成。可跳过，后续在技能面板中添加。</p>
+                <div className="font-game text-[12px] text-px-text-dim space-y-0.5 pl-3 border-l-2 border-px-border">
+                  <p>描述时建议包含：</p>
+                  <p>· 技能名称和用途（做什么）</p>
+                  <p>· 触发关键词（用户说什么时激活，如"算收益""回收期"）</p>
+                  <p>· 必须参数（用户必须提供的信息，如储能容量、所在地区）</p>
+                  <p>· 可选参数（有则更好，如投资金额、充放电策略）</p>
+                  <p>· 执行逻辑（大致的计算/分析步骤）</p>
+                </div>
+              </div>
               {customSkills.length > 0 && (
                 <div className="space-y-2">
                   {customSkills.map((skill, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-px-mid border-2 border-px-line">
-                      <span className="font-mono text-sm font-medium text-px-white">{skill.name}</span>
+                    <div key={index} className="flex items-center justify-between p-3 bg-px-elevated border-2 border-px-border">
+                      <span className="font-game text-[14px] font-medium text-px-text">{skill.name}</span>
                       <button onClick={() => setCustomSkills(prev => prev.filter((_, i) => i !== index))}
-                        className="font-pixel text-[8px] text-px-danger hover:text-px-white">DEL</button>
+                        className="font-game text-[12px] text-px-danger hover:underline tracking-wider">删除</button>
                     </div>
                   ))}
                 </div>
               )}
-              <div className="border-2 border-px-line p-4 space-y-3">
+              <div className="border-2 border-px-border p-4 space-y-3 bg-px-elevated">
                 <textarea value={skillInput} onChange={(e) => setSkillInput(e.target.value)}
-                  placeholder="例如：我需要一个技能，当用户问到光伏组件选型时，能够根据项目规模推荐合适的组件..."
-                  className="pixel-input-dark w-full" rows={4} />
+                  placeholder={`例如：我需要一个收益测算技能。\n当用户提到"收益测算""算收益""回收期""IRR"时触发。\n用户需要提供：储能容量（必须）、所在地区（必须）、投资金额（可选）、充放电策略（可选）。\n执行流程：确定投资参数 → 计算峰谷套利收益 → 计算财务指标 → 敏感性分析，输出乐观/中性/保守三档。`}
+                  className="pixel-input w-full" rows={5} />
                 <button onClick={handleGenerateSkill}
-                  disabled={isGeneratingSkill || !skillInput.trim() || !chatModel.apiKey}
-                  className="pixel-btn-outline-light disabled:opacity-40">
-                  {isGeneratingSkill ? 'GENERATING...' : '[AI] 生成技能'}
+                  disabled={isGeneratingSkill || !skillInput.trim() || !(creationModel.apiKey || chatModel.apiKey)}
+                  className="pixel-btn-primary">
+                  {isGeneratingSkill ? '...' : '生成'}
                 </button>
               </div>
             </div>
           )}
 
           {currentStep === 4 && (
-            <div className="space-y-4">
-              <h3 className="font-pixel text-[10px] text-px-white tracking-wider">CONFIRM</h3>
-              <div className="bg-px-mid border-2 border-px-line p-4 space-y-3 font-mono text-sm">
+            <div className="space-y-5 max-w-lg">
+              <div className="border-l-3 border-px-primary pl-4 py-1">
+                <h3 className="font-game text-[14px] text-px-text tracking-wider">确认创建</h3>
+                <p className="font-game text-[13px] text-px-text-sec mt-1">检查以下信息，确认无误后点击创建</p>
+              </div>
+
+              <div className="bg-px-elevated border-2 border-px-border p-5 space-y-3 font-game text-[14px]">
                 {[
                   ['名称', avatarName],
                   ['描述', avatarDescription || '（未填写）'],
@@ -302,15 +406,25 @@ ${skillInput}
                   ['知识文件', `${knowledgeFiles.length} 个`],
                   ['自定义技能', `${customSkills.length} 个`],
                 ].map(([label, value]) => (
-                  <div key={label} className="flex justify-between">
-                    <span className="text-px-muted">{label}</span>
-                    <span className="font-medium text-px-white">{value}</span>
+                  <div key={label} className="flex justify-between py-1 border-b border-px-border last:border-b-0">
+                    <span className="text-px-text-sec">{label}</span>
+                    <span className="font-medium text-px-text">{value}</span>
                   </div>
                 ))}
               </div>
-              <div className="bg-px-mid border-l-2 border-l-px-white p-4">
-                <p className="font-mono text-sm text-px-muted">
-                  将自动生成：CLAUDE.md · soul.md · memory/MEMORY.md
+
+              {soulValidation && (
+                <div className={`border-l-3 p-4 bg-px-elevated ${soulValidation.isValid ? 'border-l-px-success' : 'border-l-px-warning'}`}>
+                  <p className="font-game text-[14px] text-px-text-sec">
+                    完整度: {soulValidation.score}%
+                    {soulValidation.isValid ? ' — 完成' : ` — ${soulValidation.missing.length} 项缺失`}
+                  </p>
+                </div>
+              )}
+
+              <div className="border-l-3 border-l-px-accent p-4 bg-px-elevated">
+                <p className="font-game text-[13px] text-px-text-sec">
+                  自动生成: CLAUDE.md / soul.md / knowledge/README.md / memory/MEMORY.md
                 </p>
               </div>
             </div>
@@ -318,29 +432,29 @@ ${skillInput}
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex items-center justify-between px-6 py-4 border-t-2 border-px-line bg-px-mid">
+        <div className="flex items-center justify-between px-6 py-4 border-t-2 border-px-border bg-px-elevated">
           <button
             onClick={() => currentStep > 0 ? setCurrentStep(currentStep - 1) : onClose()}
             className="pixel-btn-outline-muted"
           >
-            {currentStep > 0 ? '← BACK' : 'CANCEL'}
+            {currentStep > 0 ? '上一步' : '取消'}
           </button>
 
           {currentStep < STEPS.length - 1 ? (
             <button
               onClick={() => setCurrentStep(currentStep + 1)}
               disabled={!canProceed()}
-              className="pixel-btn-outline-light disabled:opacity-40"
+              className="pixel-btn-primary"
             >
-              NEXT →
+              下一步
             </button>
           ) : (
             <button
               onClick={handleCreate}
               disabled={isCreating}
-              className="pixel-btn-outline-light disabled:opacity-40"
+              className="pixel-btn-primary"
             >
-              {isCreating ? 'CREATING...' : '[✓] CREATE'}
+              {isCreating ? '...' : '创建'}
             </button>
           )}
         </div>

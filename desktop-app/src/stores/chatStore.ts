@@ -175,13 +175,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ messages: [...messages, userMessage], isLoading: true })
     await window.electronAPI.saveMessage(conversationId, 'user', content, undefined, images)
 
+    // 程序化 RAG：纯文字消息时，通过多跳检索 + 5 规则增强 user 消息
+    let enhancedContent = content
+    if (!images || images.length === 0) {
+      try {
+        const ragApiKey = await window.electronAPI.getSetting('ocr_api_key') || chatModel.apiKey
+        const ragBaseUrl = await window.electronAPI.getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        if (ragApiKey) {
+          enhancedContent = await window.electronAPI.ragRetrieve(avatarId, content, ragApiKey, ragBaseUrl)
+        }
+      } catch (err) {
+        console.warn('RAG 检索失败，使用原始消息:', err)
+      }
+    }
+
     // 构建用户消息内容（纯文字 or 多模态）
     const userContent: LLMMessage['content'] = (images && images.length > 0)
       ? [
           ...images.map(url => ({ type: 'image_url' as const, image_url: { url } })),
           { type: 'text' as const, text: content || '请描述图片内容' },
         ]
-      : content
+      : enhancedContent
 
     // 构建 API 消息列表（包含 system prompt）
     const apiMessages: LLMMessage[] = [

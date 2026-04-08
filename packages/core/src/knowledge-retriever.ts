@@ -1,0 +1,486 @@
+import fs from 'fs'
+import path from 'path'
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { useDefault, Segment } = require('segmentit')
+
+/**
+ * 每个 chunk 的最大字符数。超过此阈值的章节按段落二次切分。
+ */
+const CHUNK_SPLIT_THRESHOLD = 4000
+
+/**
+ * BM25 参数
+ * k1: 词频饱和系数（越大，高频词贡献越多；通常 1.2~2.0）
+ * b:  文档长度归一化系数（0=不考虑长度，1=完全归一化；通常 0.75）
+ */
+const BM25_K1 = 1.5
+const BM25_B = 0.75
+
+/** 中文分词器（segmentit，纯 JS 实现） */
+const segmentit = useDefault(new Segment())
+
+/**
+ * Chunk 数据结构
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+interface Chunk {
+  file: string
+  heading: string
+  content: string
+  /** 上下文索引描述（由 LLM 在索引阶段生成的 1 句话摘要） */
+  context?: string
+  /** 预计算的分词结果缓存（避免重复分词） */
+  tokens?: string[]
+}
+
+/**
+ * 对文本进行中文分词。
+ * 先按 ASCII/CJK 边界切分（保留型号如 ENS-L262），再对 CJK 部分用 segmentit 分词。
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+export function tokenize(text: string): string[] {
+  const parts = text.split(
+    /(?<=[^\u4e00-\u9fa5])(?=[\u4e00-\u9fa5])|(?<=[\u4e00-\u9fa5])(?=[^\u4e00-\u9fa5])/
+  )
+
+  const tokens: string[] = []
+  for (const part of parts) {
+    if (/[\u4e00-\u9fa5]/.test(part)) {
+      const words: string[] = segmentit.doSegment(part, { simple: true })
+      for (const w of words) {
+        if (w.length >= 2) tokens.push(w)
+      }
+    } else {
+      const cleaned = part.replace(/^[-\s]+|[-\s]+$/g, '')
+      if (cleaned.length >= 2) tokens.push(cleaned)
+    }
+  }
+  return tokens
+}
+
+/**
+ * 检测 chunk 是否为纯文档元数据（封面页、版权页、页脚等），这类 chunk 不含实质技术内容。
+ * 元数据 chunk 包含产品型号关键词，会在 BM25/向量检索中排名虚高，干扰检索质量。
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+function isMetadataChunk(heading: string, content: string, file?: string): boolean {
+  if (file?.toLowerCase() === 'readme.md') return true
+  const metaKeywords = ['文档标题', '版权信息', '页码', '公司标识', '公司名称', '品牌标识']
+  const headingLower = heading.toLowerCase()
+  if (headingLower.includes('前言') && headingLower.includes('目录')) return true
+  if (/^(附：|附:).*元数据/.test(heading)) return true
+  const matchCount = metaKeywords.filter(kw => content.includes(kw)).length
+  return matchCount >= 3
+}
+
+/**
+ * 计算 BM25 得分
+ *
+ * @param queryTokens - 查询分词结果
+ * @param docTokens - 文档 chunk 分词结果
+ * @param avgDl - 全部 chunk 的平均 token 数
+ * @param df - 每个词的文档频率（在多少个 chunk 中出现）
+ * @param totalDocs - chunk 总数
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+function bm25Score(
+  queryTokens: string[],
+  docTokens: string[],
+  avgDl: number,
+  df: Map<string, number>,
+  totalDocs: number,
+): number {
+  const dl = docTokens.length
+  const tf = new Map<string, number>()
+  for (const t of docTokens) {
+    tf.set(t, (tf.get(t) || 0) + 1)
+  }
+
+  let score = 0
+  for (const q of queryTokens) {
+    const termFreq = tf.get(q) || 0
+    if (termFreq === 0) continue
+
+    const docFreq = df.get(q) || 0
+    // IDF: log((N - df + 0.5) / (df + 0.5) + 1)
+    const idf = Math.log((totalDocs - docFreq + 0.5) / (docFreq + 0.5) + 1)
+    // TF 饱和: (tf * (k1+1)) / (tf + k1 * (1 - b + b * dl/avgDl))
+    const tfNorm = (termFreq * (BM25_K1 + 1)) /
+      (termFreq + BM25_K1 * (1 - BM25_B + BM25_B * dl / avgDl))
+
+    score += idf * tfNorm
+  }
+  return score
+}
+
+/**
+ * KnowledgeRetriever: 知识库检索引擎。
+ *
+ * 支持三层检索策略：
+ * 1. BM25 关键词检索（segmentit 中文分词 + BM25 评分）
+ * 2. 上下文索引补充（可选，通过 setContexts 注入 LLM 生成的摘要）
+ * 3. 向量语义检索 + RRF 融合（可选，通过 setEmbeddings 注入）
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+export class KnowledgeRetriever {
+  private knowledgePath: string
+  /** 缓存的 chunk 列表（懒加载） */
+  private chunksCache: Chunk[] | null = null
+  /** 上下文索引描述映射：key = "file::heading" */
+  private contextMap = new Map<string, string>()
+  /** 向量 embedding 映射：key = "file::heading" */
+  private embeddingMap = new Map<string, number[]>()
+
+  constructor(knowledgePath: string) {
+    this.knowledgePath = knowledgePath
+  }
+
+  /**
+   * 注入 LLM 生成的上下文索引描述。
+   * 每个 chunk 对应一句话摘要，在检索时拼接到 chunk 文本前面参与 BM25 评分。
+   */
+  setContexts(contexts: Map<string, string>): void {
+    this.contextMap = contexts
+    this.chunksCache = null
+  }
+
+  /**
+   * 注入向量 embedding。
+   * 启用后 searchChunks 自动执行 BM25 + 向量 的 RRF 融合排序。
+   */
+  setEmbeddings(embeddings: Map<string, number[]>): void {
+    this.embeddingMap = embeddings
+  }
+
+  /**
+   * 获取当前 embedding Map 的引用（用于 RAG 时注入 __query__ 向量）。
+   */
+  getEmbeddings(): Map<string, number[]> {
+    return this.embeddingMap
+  }
+
+  /**
+   * 检索知识库中与查询最相关的 chunk。
+   *
+   * 评分策略：
+   * - 仅 BM25：当未注入 embedding 时，用 segmentit 分词 + BM25 评分
+   * - BM25 + 向量 RRF：当注入了 embedding 时，两路检索结果用 RRF 融合
+   */
+  searchChunks(
+    query: string,
+    topN: number = 5,
+  ): Array<{ file: string; heading: string; content: string; score: number }> {
+    // 过滤掉内容过短或纯元数据的 chunk
+    const MIN_CHUNK_LENGTH = 80
+    const allChunks = this.getChunks().filter(c =>
+      c.content.length >= MIN_CHUNK_LENGTH && !isMetadataChunk(c.heading, c.content, c.file),
+    )
+    if (allChunks.length === 0) return []
+
+    // ── BM25 检索 ──
+    const queryTokens = tokenize(query.toLowerCase())
+    if (queryTokens.length === 0) return []
+
+    // 预计算所有 chunk 的分词（带缓存）
+    for (const chunk of allChunks) {
+      if (!chunk.tokens) {
+        const searchableText = (chunk.context ? chunk.context + ' ' : '') +
+          chunk.heading + ' ' + chunk.content
+        chunk.tokens = tokenize(searchableText.toLowerCase())
+      }
+    }
+
+    // 计算文档频率
+    const df = new Map<string, number>()
+    for (const chunk of allChunks) {
+      const uniqueTokens = new Set(chunk.tokens!)
+      for (const t of uniqueTokens) {
+        df.set(t, (df.get(t) || 0) + 1)
+      }
+    }
+
+    const avgDl = allChunks.reduce((sum, c) => sum + c.tokens!.length, 0) / allChunks.length
+
+    const bm25Results = allChunks.map(chunk => ({
+      file: chunk.file,
+      heading: chunk.heading,
+      content: chunk.content,
+      score: bm25Score(queryTokens, chunk.tokens!, avgDl, df, allChunks.length),
+    }))
+
+    // ── 如果有 embedding → RRF 融合 ──
+    if (this.embeddingMap.size > 0) {
+      return this.rrfFusion(query, bm25Results, allChunks, topN)
+    }
+
+    // ── 纯 BM25 ──
+    return bm25Results
+      .filter(c => c.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN)
+  }
+
+  /**
+   * 多跳检索：首次检索 + 按实体二次检索 → 合并去重。
+   * 调用方负责从首次结果中提取实体列表，传入 entities 参数。
+   *
+   * @param primaryQuery - 用户原始查询
+   * @param entities - 从首次检索结果中提取的实体/组件名列表
+   * @param topN - 最终返回数量
+   *
+   * @author zhi.qu
+   * @date 2026-04-03
+   */
+  multiHopSearch(
+    primaryQuery: string,
+    entities: string[],
+    topN: number = 10,
+  ): Array<{ file: string; heading: string; content: string; score: number; hop: number }> {
+    // 第一跳：原始查询
+    const hop1 = this.searchChunks(primaryQuery, topN).map(c => ({ ...c, hop: 1 }))
+    const seen = new Set(hop1.map(c => `${c.file}::${c.heading}`))
+
+    // 第二跳：按每个实体分别检索
+    const hop2: Array<{ file: string; heading: string; content: string; score: number; hop: number }> = []
+    for (const entity of entities) {
+      const entityQuery = `${entity} 参数 规格 技术`
+      const results = this.searchChunks(entityQuery, 5)
+      for (const r of results) {
+        const key = `${r.file}::${r.heading}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          hop2.push({ ...r, hop: 2 })
+        }
+      }
+    }
+
+    // 合并：第一跳优先，第二跳按 score 排序追加
+    hop2.sort((a, b) => b.score - a.score)
+    const merged = [...hop1, ...hop2]
+    return merged.slice(0, topN)
+  }
+
+  /**
+   * score = 1/(k + rank_bm25) + 1/(k + rank_vector)
+   */
+  private rrfFusion(
+    query: string,
+    bm25Results: Array<{ file: string; heading: string; content: string; score: number }>,
+    allChunks: Chunk[],
+    topN: number,
+  ): Array<{ file: string; heading: string; content: string; score: number }> {
+    const k = 60
+
+    // BM25 排名
+    const bm25Sorted = [...bm25Results]
+      .sort((a, b) => b.score - a.score)
+    const bm25Rank = new Map<string, number>()
+    bm25Sorted.forEach((r, i) => bm25Rank.set(`${r.file}::${r.heading}`, i + 1))
+
+    // 向量排名
+    const queryKey = `__query__`
+    const queryEmb = this.embeddingMap.get(queryKey)
+    if (!queryEmb) {
+      // 没有查询向量，退回纯 BM25
+      return bm25Sorted.filter(c => c.score > 0).slice(0, topN)
+    }
+
+    const vectorScored = allChunks.map(chunk => {
+      const chunkKey = `${chunk.file}::${chunk.heading}`
+      const chunkEmb = this.embeddingMap.get(chunkKey)
+      const sim = chunkEmb ? cosineSimilarity(queryEmb, chunkEmb) : 0
+      return { key: chunkKey, sim }
+    }).sort((a, b) => b.sim - a.sim)
+
+    const vectorRank = new Map<string, number>()
+    vectorScored.forEach((r, i) => vectorRank.set(r.key, i + 1))
+
+    // RRF 融合：只考虑 BM25 或向量排名前 N 的候选（避免全量排名噪音）
+    const candidateWindow = Math.min(topN * 10, allChunks.length)
+    const bm25Candidates = new Set(bm25Sorted.slice(0, candidateWindow).map(r => `${r.file}::${r.heading}`))
+    const vectorCandidates = new Set(vectorScored.slice(0, candidateWindow).map(r => r.key))
+
+    const fusedResults = bm25Results
+      .filter(r => {
+        const key = `${r.file}::${r.heading}`
+        return bm25Candidates.has(key) || vectorCandidates.has(key)
+      })
+      .map(r => {
+        const key = `${r.file}::${r.heading}`
+        const br = bm25Rank.get(key) || bm25Sorted.length
+        const vr = vectorRank.get(key) || allChunks.length
+        const rrfScore = 1 / (k + br) + 1 / (k + vr)
+        return { ...r, score: rrfScore }
+      })
+
+    return fusedResults
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN)
+  }
+
+  /**
+   * 获取所有 chunk（带缓存）
+   */
+  private getChunks(): Chunk[] {
+    if (!this.chunksCache) {
+      this.chunksCache = this.buildChunks()
+      // 注入上下文索引描述
+      for (const chunk of this.chunksCache) {
+        const key = `${chunk.file}::${chunk.heading}`
+        const ctx = this.contextMap.get(key)
+        if (ctx) chunk.context = ctx
+      }
+    }
+    return this.chunksCache
+  }
+
+  /**
+   * 读取指定相对路径的文件完整内容
+   */
+  readFile(relativePath: string): string {
+    const fullPath = path.join(this.knowledgePath, relativePath)
+    try {
+      return fs.readFileSync(fullPath, 'utf-8')
+    } catch {
+      throw new Error(`文件不存在: ${relativePath}`)
+    }
+  }
+
+  /**
+   * 列出所有知识文件路径
+   */
+  listFiles(): string[] {
+    return this.collectFiles(this.knowledgePath).map(f =>
+      path.relative(this.knowledgePath, f)
+    )
+  }
+
+  /**
+   * 获取所有 chunk 的 key 列表（用于外部生成上下文和 embedding）
+   */
+  getChunkKeys(): Array<{ key: string; file: string; heading: string; contentPreview: string }> {
+    return this.getChunks().map(c => ({
+      key: `${c.file}::${c.heading}`,
+      file: c.file,
+      heading: c.heading,
+      contentPreview: c.content.slice(0, 200),
+    }))
+  }
+
+  /** 将所有知识文件按 h2/h3 标题切片 */
+  private buildChunks(): Chunk[] {
+    const chunks: Chunk[] = []
+    const files = this.collectFiles(this.knowledgePath)
+
+    for (const filePath of files) {
+      const relativePath = path.relative(this.knowledgePath, filePath)
+      let content: string
+      try {
+        content = fs.readFileSync(filePath, 'utf-8')
+      } catch {
+        continue
+      }
+
+      const sections = content.split(/^#{2,3}\s+/m)
+      const headingMatches = [...content.matchAll(/^#{2,3}\s+(.+)$/gm)]
+
+      if (sections.length <= 1) {
+        this.pushChunks(chunks, relativePath, relativePath, content)
+      } else {
+        sections.forEach((section, i) => {
+          if (!section.trim()) return
+          const heading = headingMatches[i - 1]?.[1] ?? relativePath
+          this.pushChunks(chunks, relativePath, heading, section)
+        })
+      }
+    }
+
+    return chunks
+  }
+
+  /**
+   * 将章节内容加入 chunk 列表。
+   * 保留章节完整内容，仅对超长章节（> CHUNK_SPLIT_THRESHOLD）按段落二次切分。
+   */
+  private pushChunks(
+    chunks: Chunk[],
+    file: string,
+    heading: string,
+    section: string,
+  ): void {
+    if (section.length <= CHUNK_SPLIT_THRESHOLD) {
+      chunks.push({ file, heading, content: section })
+      return
+    }
+
+    const paragraphs = section.split(/\n{2,}/)
+    let current = ''
+    let partNum = 1
+
+    for (const para of paragraphs) {
+      const candidate = current ? `${current}\n\n${para}` : para
+      if (candidate.length > CHUNK_SPLIT_THRESHOLD && current) {
+        chunks.push({ file, heading: `${heading}（${partNum}）`, content: current })
+        current = para
+        partNum++
+      } else {
+        current = candidate
+      }
+    }
+
+    if (current.trim()) {
+      chunks.push({
+        file,
+        heading: partNum > 1 ? `${heading}（${partNum}）` : heading,
+        content: current,
+      })
+    }
+  }
+
+  /** 递归收集 .md 文件路径 */
+  private collectFiles(dirPath: string): string[] {
+    const results: string[] = []
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name)
+        if (entry.isDirectory()) {
+          results.push(...this.collectFiles(fullPath))
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          results.push(fullPath)
+        }
+      }
+    } catch {
+      // 忽略
+    }
+    return results
+  }
+}
+
+/**
+ * 余弦相似度
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0
+  let dotProduct = 0
+  let normA = 0
+  let normB = 0
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i]
+    normA += a[i] * a[i]
+    normB += b[i] * b[i]
+  }
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB)
+  return denominator === 0 ? 0 : dotProduct / denominator
+}

@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readMemory: (avatarId: string) => ipcRenderer.invoke('read-memory', avatarId),
   writeMemory: (avatarId: string, content: string) => ipcRenderer.invoke('write-memory', avatarId, content),
 
+  // 人格管理
+  readSoul: (avatarId: string) => ipcRenderer.invoke('read-soul', avatarId),
+  writeSoul: (avatarId: string, content: string) => ipcRenderer.invoke('write-soul', avatarId, content),
+
   // 分身管理
   listAvatars: () => ipcRenderer.invoke('list-avatars'),
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) =>
@@ -69,6 +73,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) =>
     ipcRenderer.invoke('search-knowledge-chunks', avatarId, query, topN),
 
+  // 知识索引构建 + RAG 检索
+  buildKnowledgeIndex: (avatarId: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('build-knowledge-index', avatarId, apiKey, baseUrl),
+  ragRetrieve: (avatarId: string, question: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('rag-retrieve', avatarId, question, apiKey, baseUrl),
+
+  // 模板管理
+  getTemplate: (templateName: string) => ipcRenderer.invoke('get-template', templateName),
+  getSoulCreationPrompt: (avatarName: string) => ipcRenderer.invoke('get-soul-creation-prompt', avatarName),
+  getSkillCreationPrompt: () => ipcRenderer.invoke('get-skill-creation-prompt'),
+  getTestCreationPrompt: () => ipcRenderer.invoke('get-test-creation-prompt'),
+  listTemplates: () => ipcRenderer.invoke('list-templates'),
+
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) =>
     ipcRenderer.invoke('show-open-dialog', options),
@@ -88,4 +105,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTestResultBadge: (callback: (data: { passed: boolean; total: number; failed: number }) => void) => {
     ipcRenderer.on('test-result-badge', (_, data) => callback(data))
   },
+
+  // 日志系统
+  logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) =>
+    ipcRenderer.invoke('log-event', level, action, detail),
+  getActivityLogs: (date?: string) => ipcRenderer.invoke('get-activity-logs', date),
+  getErrorLogs: (date?: string) => ipcRenderer.invoke('get-error-logs', date),
+  getGeneratedIndex: () => ipcRenderer.invoke('get-generated-index'),
+  openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  exportErrorLog: (days?: number) => ipcRenderer.invoke('export-error-log', days),
 })

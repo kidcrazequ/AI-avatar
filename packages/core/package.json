@@ -1,0 +1,27 @@
+{
+  "name": "@soul/core",
+  "version": "1.0.0",
+  "description": "Soul 分身框架核心 SDK，与运行环境无关（Node.js / Electron / CLI）",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/tests/core.test.js",
+    "test:cleaner": "node --test dist/tests/ocr-html-cleaner.test.js",
+    "test:all": "node --test dist/tests/core.test.js dist/tests/ocr-html-cleaner.test.js"
+  },
+  "keywords": [
+    "soul",
+    "avatar",
+    "ai"
+  ],
+  "author": "zhi.qu",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  },
+  "dependencies": {
+    "segmentit": "^2.0.3"
+  }
+}

@@ -40,47 +40,45 @@ export default function ConversationItem({ conversation, isActive, onClick, onDe
     <div>
       <div
         className={`group flex items-center justify-between px-4 py-3 cursor-pointer
-          border-l-2 transition-none
+          border-l-3 transition-none
           ${isActive
-            ? 'bg-px-mid border-l-px-white text-px-white'
-            : 'bg-transparent border-l-transparent text-px-subtle hover:bg-px-mid hover:text-px-white'
+            ? 'bg-px-surface border-l-px-primary text-px-text'
+            : 'bg-transparent border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
           }`}
         onClick={onClick}
       >
         <div className="flex-1 min-w-0">
-          <p className="font-mono text-sm font-medium truncate">{conversation.title}</p>
-          <p className="font-pixel text-[8px] text-px-muted mt-0.5 tracking-wider">
+          <p className="font-game text-[14px] font-medium truncate">{conversation.title}</p>
+          <p className="font-game text-[10px] text-px-text-dim mt-1 tracking-wider">
             {formatDate(conversation.updated_at)}
           </p>
         </div>
 
-        {/* 删除按钮（hover 可见，键盘可达） */}
         {!confirmingDelete && (
           <button
             onClick={handleDeleteRequest}
             aria-label={`删除 ${conversation.title}`}
-            className="ml-2 opacity-0 group-hover:opacity-100 font-pixel text-[10px] text-px-muted hover:text-px-danger px-1 py-0.5 focus:opacity-100"
+            className="ml-2 opacity-0 group-hover:opacity-100 font-game text-[12px] text-px-text-dim hover:text-px-danger px-1 py-0.5 focus:opacity-100"
           >
             ×
           </button>
         )}
       </div>
 
-      {/* GAP15 UX: 内联删除确认（替代 confirm()） */}
       {confirmingDelete && (
-        <div className="flex items-center gap-1 px-4 py-1.5 bg-px-black border-l-2 border-px-danger">
-          <span className="font-pixel text-[8px] text-px-danger mr-1">DEL?</span>
+        <div className="flex items-center gap-1 px-4 py-1.5 bg-px-danger/10 border-l-3 border-px-danger">
+          <span className="font-game text-[11px] text-px-danger mr-1">删除?</span>
           <button
             onClick={handleConfirmDelete}
-            className="font-pixel text-[8px] px-2 py-0.5 bg-px-danger text-px-white"
+            className="font-game text-[11px] px-2 py-0.5 bg-px-danger text-white"
           >
-            YES
+            是
           </button>
           <button
             onClick={handleCancelDelete}
-            className="font-pixel text-[8px] px-2 py-0.5 border border-px-muted text-px-muted"
+            className="font-game text-[11px] px-2 py-0.5 border border-px-border text-px-text-sec"
           >
-            NO
+            否
           </button>
         </div>
       )}

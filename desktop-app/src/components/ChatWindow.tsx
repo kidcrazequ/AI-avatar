@@ -4,15 +4,8 @@ import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import { ModelConfig } from '../services/llm-service'
 
-/** GAP8: 快捷问题建议（展示在空对话时） */
-const QUICK_QUESTIONS = [
-  '帮我做一个储能项目收益测算',
-  '广东省工商业储能政策有哪些？',
-  '500kWh 柜式储能产品参数是什么？',
-  '如何做需量管理方案设计？',
-]
+const QUICK_QUESTIONS: string[] = []
 
-/** GAP8: 工具名称中文映射 */
 const TOOL_NAME_MAP: Record<string, string> = {
   search_knowledge: '检索知识库',
   read_knowledge_file: '读取知识文件',
@@ -26,7 +19,6 @@ interface Props {
   conversationId: string
   avatarId: string
   onConversationUpdate: () => void
-  /** GAP9b: 图片理解模型配置，有图片时使用 */
   visionModel?: ModelConfig
 }
 
@@ -49,7 +41,6 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   }, [conversationId, setMessages])
 
   const handleSendMessage = async (content: string, images?: string[]) => {
-    // GAP8: /test-self 命令拦截
     if (content.trim() === '/test-self') {
       await handleTestSelf()
       return
@@ -58,10 +49,6 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     onConversationUpdate()
   }
 
-  /**
-   * GAP8: 执行自检命令 /test-self
-   * 运行该分身的所有测试用例，将摘要结果作为消息显示在对话中
-   */
   const handleTestSelf = async () => {
     setIsRunningTests(true)
     const userMsg = { role: 'user' as const, content: '/test-self' }
@@ -98,17 +85,20 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
 
   if (!isInitialized) {
     return (
-      <div className="flex items-center justify-center h-full bg-px-black">
-        <span className="font-pixel text-[10px] text-px-muted tracking-wider animate-blink">
-          LOADING...
-        </span>
+      <div className="flex items-center justify-center h-full bg-px-bg">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 bg-px-primary animate-blink" />
+          <span className="font-game text-[12px] text-px-text-dim tracking-widest">
+            加载中...
+          </span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full bg-px-black">
-      {/* 消息列表（含空状态快捷问题） */}
+    <div className="flex flex-col h-full bg-px-bg">
+      {/* 消息列表 */}
       <div className="flex-1 overflow-hidden">
         <MessageList
           messages={messages}
@@ -118,22 +108,24 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         />
       </div>
 
-      {/* GAP8: 工具调用状态可视化 / 思考状态 */}
+      {/* 工具调用 / 思考状态 */}
       {(isLoading || isRunningTests) && (
-        <div className="px-6 py-2 bg-px-mid border-t-2 border-px-line">
-          <span className="font-pixel text-[9px] text-px-muted tracking-wider">
-            {toolCallStatus
-              ? `[ TOOL ] ${TOOL_NAME_MAP[toolCallStatus] ?? toolCallStatus}...`
-              : isRunningTests
-                ? 'RUNNING TESTS▌'
-                : 'THINKING▌'}
-            {!toolCallStatus && <span className="animate-blink"> </span>}
-          </span>
+        <div className="px-6 py-2 bg-px-surface border-t-2 border-px-border">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-px-primary animate-pulse-glow" />
+            <span className="font-game text-[13px] text-px-text-sec tracking-wider">
+              {toolCallStatus
+                ? `${TOOL_NAME_MAP[toolCallStatus] ?? toolCallStatus}...`
+                : isRunningTests
+                  ? '正在运行测试...'
+                  : '思考中...'}
+            </span>
+          </div>
         </div>
       )}
 
       {/* 输入区 */}
-      <div className="border-t-2 border-px-line bg-px-black p-4">
+      <div className="border-t-2 border-px-border bg-px-surface/50 p-4">
         <MessageInput
           onSend={handleSendMessage}
           disabled={isLoading || isRunningTests}

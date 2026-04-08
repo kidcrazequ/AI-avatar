@@ -71,7 +71,7 @@ export class DatabaseManager {
       CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        avatar_id TEXT NOT NULL DEFAULT 'ci-storage-expert',
+        avatar_id TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -115,8 +115,15 @@ export class DatabaseManager {
 
     if (version < 2) {
       // v1 → v2：conversations 增加 avatar_id，messages 增加 tool_call_id 和 image_urls
+      // 同时确保 settings 表存在（旧版本可能未创建）
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      `)
       try {
-        this.db.exec(`ALTER TABLE conversations ADD COLUMN avatar_id TEXT NOT NULL DEFAULT 'ci-storage-expert'`)
+        this.db.exec(`ALTER TABLE conversations ADD COLUMN avatar_id TEXT NOT NULL DEFAULT ''`)
       } catch (_) { /* 字段已存在则忽略 */ }
       try {
         this.db.exec(`ALTER TABLE messages ADD COLUMN tool_call_id TEXT`)

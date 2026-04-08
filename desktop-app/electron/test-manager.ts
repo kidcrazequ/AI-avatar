@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { extractFrontmatterField, extractBetweenDelimiters, extractListItems } from './utils/markdown-parser'
+import { extractFrontmatterField, extractBetweenDelimiters, extractListItems } from '@soul/core'
 
 export interface TestCase {
   id: string

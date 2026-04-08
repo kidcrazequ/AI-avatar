@@ -1,19 +1,13 @@
 import { ReactNode } from 'react'
 import ConversationList from './ConversationList'
 
-interface Conversation {
-  id: string
-  title: string
-  created_at: number
-  updated_at: number
-}
-
 interface Props {
   conversations: Conversation[]
   activeConversationId: string | null
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
   onNewConversation: () => void
+  isCreatingConversation?: boolean
   children: ReactNode
 }
 
@@ -23,6 +17,7 @@ export default function Sidebar({
   onSelectConversation,
   onDeleteConversation,
   onNewConversation,
+  isCreatingConversation = false,
   children,
 }: Props) {
   return (
@@ -34,6 +29,7 @@ export default function Sidebar({
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}
+          isCreatingConversation={isCreatingConversation}
         />
       </div>
       <div className="flex-1">

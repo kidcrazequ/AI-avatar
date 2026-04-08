@@ -9,13 +9,13 @@ interface Props {
 export default function KnowledgeEditor({ content, onChange, onSave }: Props) {
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b">
-        <span className="text-sm text-gray-600">编辑模式</span>
+      <div className="flex items-center justify-between px-4 py-2 bg-px-elevated border-b-2 border-px-border">
+        <span className="font-game text-[12px] text-px-text-sec tracking-wider">编辑模式</span>
         <button
           onClick={onSave}
-          className="px-4 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+          className="pixel-btn-primary py-1"
         >
-          保存 (Ctrl+S)
+          保存
         </button>
       </div>
       <div className="flex-1">
@@ -28,14 +28,15 @@ export default function KnowledgeEditor({ content, onChange, onSave }: Props) {
           options={{
             minimap: { enabled: false },
             fontSize: 14,
+            fontFamily: '"JetBrains Mono", "Courier New", monospace',
             wordWrap: 'on',
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
+            renderLineHighlight: 'all',
+            lineHeight: 24,
           }}
           onMount={(editor) => {
-            // 添加保存快捷键
             editor.addCommand(
-              // Ctrl+S / Cmd+S
               window.navigator.platform.match('Mac') ? 2097 : 2048 + 49,
               onSave
             )

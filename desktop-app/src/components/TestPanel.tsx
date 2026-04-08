@@ -60,7 +60,7 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
       return
     }
     if (!chatModel.apiKey) {
-      showAlert('请先在设置中配置 API Key')
+      showAlert('请先在 SETTINGS 中配置 API Key')
       return
     }
 
@@ -113,50 +113,47 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
 
   return (
     <Modal isOpen={true} onClose={onClose} size="lg">
-      <PanelHeader title="自检测试" onClose={onClose} />
+      <PanelHeader title="TEST CENTER" onClose={onClose} />
 
-      {/* 内联提示信息 */}
       {alertMsg && (
-        <div className="px-6 py-2 bg-px-mid border-b-2 border-px-danger">
-          <span className="font-pixel text-[9px] text-px-danger tracking-wider">{alertMsg}</span>
+        <div className="px-6 py-2 bg-px-danger/10 border-b-2 border-px-danger">
+          <span className="font-game text-[13px] text-px-danger tracking-wider">{alertMsg}</span>
         </div>
       )}
 
       {!showResults ? (
-        /* ─── 测试用例列表 ─────────────────────────────── */
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* 工具栏 */}
-          <div className="px-6 py-3 border-b-2 border-px-line bg-px-mid flex items-center justify-between">
+          <div className="px-6 py-3 border-b-2 border-px-border bg-px-elevated flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button onClick={handleSelectAll} className="pixel-btn-outline-muted">
-                {selectedCases.size === testCases.length ? '取消全选' : '[ ] 全选'}
+                {selectedCases.size === testCases.length ? 'NONE' : 'ALL'}
               </button>
-              <span className="font-mono text-sm text-px-muted">
-                已选择 {selectedCases.size} / {testCases.length} 个测试用例
+              <span className="font-game text-[13px] text-px-text-sec">
+                {selectedCases.size} / {testCases.length}
               </span>
             </div>
             <button
               onClick={handleRunTests}
               disabled={isRunning || selectedCases.size === 0}
-              className="pixel-btn-outline-light disabled:opacity-40"
+              className="pixel-btn-primary"
             >
-              {isRunning ? 'RUNNING...' : '[▶] 运行测试'}
+              {isRunning ? 'RUNNING...' : 'RUN TEST'}
             </button>
           </div>
 
-          {/* 运行进度条 */}
+          {/* 进度条 */}
           {isRunning && (
-            <div className="px-6 py-3 border-b-2 border-px-line bg-px-dark">
+            <div className="px-6 py-3 border-b-2 border-px-border bg-px-surface">
               <div className="flex items-center justify-between mb-2">
-                <span className="font-pixel text-[9px] text-px-muted tracking-wider">
-                  TESTING {progress.current} / {progress.total}
+                <span className="font-game text-[12px] text-px-primary tracking-wider">
+                  {progress.current} / {progress.total}
                 </span>
-                <span className="font-mono text-xs text-px-muted">{progress.message}</span>
+                <span className="font-game text-[13px] text-px-text-sec">{progress.message}</span>
               </div>
-              {/* 像素进度条 */}
-              <div className="w-full h-2 border-2 border-px-line bg-px-black">
+              <div className="w-full h-2 border-2 border-px-border bg-px-bg">
                 <div
-                  className="h-full bg-px-white transition-none"
+                  className="h-full bg-px-primary transition-none"
                   style={{ width: progress.total > 0 ? `${(progress.current / progress.total) * 100}%` : '0%' }}
                 />
               </div>
@@ -164,32 +161,32 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
           )}
 
           {/* 用例列表 */}
-          <div className="flex-1 overflow-y-auto p-6 bg-px-dark">
+          <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
             {testCases.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <p className="font-pixel text-[10px] text-px-muted tracking-wider">NO TEST CASES</p>
+                <div className="text-center">
+                  <div className="w-12 h-12 border-2 border-px-primary bg-px-primary/10 flex items-center justify-center mx-auto mb-3">
+                    <span className="text-px-primary font-game text-[12px]">T</span>
+                  </div>
+                  <p className="font-game text-[12px] text-px-text-dim tracking-wider">暂无测试用例</p>
+                </div>
               </div>
             ) : (
               Object.entries(groupedCases).map(([category, cases]) => (
                 <div key={category} className="mb-6">
-                  <h3 className="font-pixel text-[9px] text-px-muted tracking-wider mb-3 uppercase">
+                  <h3 className="font-game text-[13px] text-px-text-sec tracking-widest mb-3">
                     {category}
                   </h3>
                   <div className="space-y-2">
                     {cases.map((tc) => (
                       <label
                         key={tc.id}
-                        className="flex items-start gap-3 p-3 border-2 border-px-line bg-px-dark
-                          hover:bg-px-mid cursor-pointer transition-none"
+                        className="flex items-start gap-3 p-3 border-2 border-px-border bg-px-elevated
+                          hover:bg-px-hover cursor-pointer transition-none"
                       >
-                        {/* 像素风 checkbox */}
                         <div
-                          className={`w-5 h-5 border-2 flex items-center justify-center flex-shrink-0 mt-0.5
-                            font-pixel text-[8px] select-none cursor-pointer
-                            ${selectedCases.has(tc.id)
-                              ? 'bg-px-white border-px-white text-px-black'
-                              : 'bg-transparent border-px-line text-transparent'
-                            }`}
+                          className="pixel-checkbox mt-0.5 flex-shrink-0"
+                          data-checked={selectedCases.has(tc.id)}
                           onClick={() => handleToggleCase(tc.id)}
                         >
                           ✓
@@ -201,9 +198,9 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
                           className="sr-only"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="font-mono text-sm text-px-white font-medium">{tc.name}</div>
-                          <div className="font-mono text-xs text-px-muted mt-1">
-                            {tc.id} · 超时: {tc.timeout}s · {tc.rubrics.length} 个评分标准
+                          <div className="font-game text-[14px] text-px-text font-medium">{tc.name}</div>
+                          <div className="font-game text-[12px] text-px-text-dim mt-1">
+                            {tc.id} · {tc.timeout}s · {tc.rubrics.length} 规则
                           </div>
                         </div>
                       </label>
@@ -215,46 +212,44 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
           </div>
         </div>
       ) : (
-        /* ─── 测试结果 ─────────────────────────────────── */
+        /* ── 测试结果 ── */
         <div className="flex-1 overflow-hidden flex">
-          {/* 左侧：结果列表 */}
-          <div className="w-1/3 border-r-2 border-px-line flex flex-col">
-            <div className="px-4 py-3 border-b-2 border-px-line bg-px-mid">
+          {/* 左侧列表 */}
+          <div className="w-1/3 border-r-2 border-px-border flex flex-col">
+            <div className="px-4 py-3 border-b-2 border-px-border bg-px-elevated">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-pixel text-[10px] text-px-white tracking-wider">TEST RESULTS</h3>
-                <button onClick={() => setShowResults(false)} className="pixel-btn-outline-muted text-[8px] px-2 py-1">
-                  ← BACK
-                </button>
+                <h3 className="font-game text-[14px] text-px-text tracking-wider">测试结果</h3>
+                <button onClick={() => setShowResults(false)} className="pixel-btn-outline-muted text-[10px] px-2 py-1">返回</button>
               </div>
-              <div className="flex gap-4 font-mono text-sm">
-                <span className="text-green-400">✓ {passedCount} 通过</span>
-                <span className="text-px-danger">✗ {failedCount} 失败</span>
-                <span className="text-px-muted">
+              <div className="flex gap-4 font-game text-[12px] tracking-wider">
+                <span className="text-px-success">通过 {passedCount}</span>
+                <span className="text-px-danger">失败 {failedCount}</span>
+                <span className="text-px-text-dim">
                   {results.length > 0 ? Math.round((passedCount / results.length) * 100) : 0}%
                 </span>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto bg-px-dark">
+            <div className="flex-1 overflow-y-auto bg-px-bg">
               {results.map((result) => (
                 <button
                   key={result.caseId}
                   onClick={() => setSelectedResult(result)}
-                  className={`w-full text-left px-4 py-3 border-b-2 border-px-line
+                  className={`w-full text-left px-4 py-3 border-b border-px-border-dim transition-none
                     ${selectedResult?.caseId === result.caseId
-                      ? 'bg-px-black border-l-4 border-l-px-white'
-                      : 'hover:bg-px-mid'
+                      ? 'bg-px-surface border-l-3 border-l-px-primary'
+                      : 'hover:bg-px-surface/50 border-l-3 border-l-transparent'
                     }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className={result.passed ? 'text-green-400 font-pixel text-[9px]' : 'text-px-danger font-pixel text-[9px]'}>
-                      {result.passed ? '✓' : '✗'}
+                    <span className={`font-game text-[12px] ${result.passed ? 'text-px-success' : 'text-px-danger'}`}>
+                      {result.passed ? '通过' : '失败'}
                     </span>
-                    <span className="font-mono text-sm text-px-white flex-1 truncate">
+                    <span className="font-game text-[14px] text-px-text flex-1 truncate">
                       {result.caseName}
                     </span>
-                    <span className="font-pixel text-[8px] text-px-muted">{result.score}分</span>
+                    <span className="font-game text-[12px] text-px-text-dim">{result.score}</span>
                   </div>
-                  <div className="font-mono text-xs text-px-muted mt-0.5 pl-5">
+                  <div className="font-game text-[12px] text-px-text-dim mt-0.5 pl-12">
                     {(result.duration / 1000).toFixed(1)}s
                   </div>
                 </button>
@@ -262,40 +257,45 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
             </div>
           </div>
 
-          {/* 右侧：详细信息 */}
-          <div className="flex-1 overflow-y-auto p-6 bg-px-dark">
+          {/* 右侧详情 */}
+          <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
             {selectedResult ? (
               <div className="space-y-5">
                 <div>
-                  <h3 className="font-mono text-base font-semibold text-px-white mb-2">
+                  <h3 className="font-game text-[16px] font-bold text-px-text mb-2">
                     {selectedResult.caseName}
                   </h3>
-                  <div className="flex items-center gap-4 font-mono text-sm">
-                    <span className={selectedResult.passed ? 'text-green-400' : 'text-px-danger'}>
-                      {selectedResult.passed ? '✓ 通过' : '✗ 失败'}
+                  <div className="flex items-center gap-4 font-game text-[12px] tracking-wider">
+                    <span className={selectedResult.passed ? 'text-px-success' : 'text-px-danger'}>
+                      {selectedResult.passed ? '通过' : '失败'}
                     </span>
-                    <span className="text-px-muted">得分: {selectedResult.score}/100</span>
-                    <span className="text-px-muted">耗时: {(selectedResult.duration / 1000).toFixed(1)}s</span>
+                    <span className="text-px-text-sec">{selectedResult.score}/100</span>
+                    <span className="text-px-text-sec">{(selectedResult.duration / 1000).toFixed(1)}s</span>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-pixel text-[9px] text-px-muted tracking-wider mb-2 uppercase">评估反馈</h4>
-                  <pre className="bg-px-black border-2 border-px-line p-4 font-mono text-sm text-px-warm whitespace-pre-wrap leading-relaxed">
+                  <h4 className="font-game text-[13px] text-px-text-sec tracking-widest mb-2">反馈</h4>
+                  <pre className="bg-px-bg border-2 border-px-border p-4 font-game text-[14px] text-px-text-sec whitespace-pre-wrap leading-relaxed">
                     {selectedResult.feedback}
                   </pre>
                 </div>
 
                 <div>
-                  <h4 className="font-pixel text-[9px] text-px-muted tracking-wider mb-2 uppercase">AI 回复</h4>
-                  <pre className="bg-px-black border-2 border-px-line p-4 font-mono text-sm text-px-warm whitespace-pre-wrap leading-relaxed">
+                  <h4 className="font-game text-[13px] text-px-text-sec tracking-widest mb-2">AI 回复</h4>
+                  <pre className="bg-px-bg border-2 border-px-border p-4 font-game text-[14px] text-px-text-sec whitespace-pre-wrap leading-relaxed">
                     {selectedResult.response}
                   </pre>
                 </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-full">
-                <p className="font-pixel text-[10px] text-px-muted tracking-wider">SELECT A RESULT</p>
+                <div className="text-center">
+                  <div className="w-12 h-12 border-2 border-px-primary bg-px-primary/10 flex items-center justify-center mx-auto mb-3">
+                    <span className="text-px-primary font-game text-[12px]">R</span>
+                  </div>
+                  <p className="font-game text-[12px] text-px-text-dim tracking-wider">选择一个结果</p>
+                </div>
               </div>
             )}
           </div>

@@ -10,12 +10,22 @@ export interface ParsedDocument {
   fileName: string
   /** 文件类型 */
   fileType: 'pdf' | 'word' | 'image' | 'text'
+  /** 每页的字符数，用于定位 Vision 数据在原文中的位置（PDF 专属） */
+  perPageChars?: Array<{ num: number; chars: number }>
+  /** 图表页截图对应的页码列表（与 images 数组一一对应） */
+  imagePageNumbers?: number[]
 }
 
 /**
- * DocumentParser: 负责解析 PDF / Word / 图片 / 文本文件，提取文字和图片（GAP9a）。
- * - PDF → pdf-parse 提取文字，同时将页面图片返回给渲染进程用 OCR 处理
- * - Word (.docx) → mammoth 提取 HTML/文本
+ * 图表页文字阈值：一页文字（去空白后）少于此字符数，认为该页以图表为主，需要 OCR。
+ * 300 字符是经验值：PDF 每页约有 60 字页眉，300 以下的页基本是图表/图纸页。
+ */
+const IMAGE_PAGE_TEXT_THRESHOLD = 300
+
+/**
+ * DocumentParser: 负责解析 PDF / Word / 图片 / 文本文件，提取文字和图片。
+ * - PDF → pdf-parse v2 提取文字；文字少的页面同时渲染为截图供 OCR 识别图表内容
+ * - Word (.docx) → mammoth 提取文本
  * - 图片 → 编码为 base64 data URL，交由渲染进程调用 Qwen VL OCR
  * - 纯文本 → 直接读取
  */
@@ -49,14 +59,53 @@ export class DocumentParser {
 
   private async parsePdf(filePath: string, fileName: string): Promise<ParsedDocument> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
+    const { PDFParse } = require('pdf-parse')
     const buffer = fs.readFileSync(filePath)
-    const data = await pdfParse(buffer)
+    const data = new Uint8Array(buffer)
+    const parser = new PDFParse({ data })
+
+    // 1. 提取全文
+    const textResult = await parser.getText({ parsePageInfo: true })
+    const fullText: string = textResult.text || ''
+
+    // 2. 统计每页字符数（用于 Vision 数据定位），并找出图表页
+    const perPageChars: Array<{ num: number; chars: number }> = []
+    const imageDensePages: number[] = []
+    if (Array.isArray(textResult.pages)) {
+      textResult.pages.forEach((page: { num: number; text: string }) => {
+        const chars = (page.text || '').replace(/\s+/g, '').length
+        perPageChars.push({ num: page.num, chars })
+        if (chars < IMAGE_PAGE_TEXT_THRESHOLD) {
+          imageDensePages.push(page.num)
+        }
+      })
+    }
+
+    // 3. 渲染所有页截图，然后按文字密度筛选（getScreenshot 的 pages 参数在 v2 中无效）
+    const images: string[] = []
+    const imagePageNumbers: number[] = []
+    if (imageDensePages.length > 0) {
+      try {
+        const imageDenseSet = new Set(imageDensePages)
+        const screenshotResult = await parser.getScreenshot({ scale: 2 })
+        for (const screenshot of screenshotResult.pages) {
+          if (imageDenseSet.has(screenshot.pageNumber) && screenshot.dataUrl) {
+            images.push(screenshot.dataUrl)
+            imagePageNumbers.push(screenshot.pageNumber)
+          }
+        }
+      } catch (err) {
+        console.error('[DocumentParser] PDF 截图失败:', err)
+      }
+    }
+
     return {
-      text: data.text || '',
-      images: [],  // pdf-parse 不提取图片；图片页面通过视觉模型处理
+      text: fullText,
+      images,
       fileName,
       fileType: 'pdf',
+      perPageChars,
+      imagePageNumbers,
     }
   }
 

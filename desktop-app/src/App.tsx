@@ -8,9 +8,10 @@ import CreateAvatarWizard from './components/CreateAvatarWizard'
 import TestPanel from './components/TestPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
+import SoulEditorPanel from './components/SoulEditorPanel'
 import Toast from './components/shared/Toast'
 import { useChatStore } from './stores/chatStore'
-import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL } from './services/llm-service'
+import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
 
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -21,15 +22,16 @@ function App() {
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [showSkillsPanel, setShowSkillsPanel] = useState(false)
   const [showMemoryPanel, setShowMemoryPanel] = useState(false)
-  const [activeAvatarId, setActiveAvatarId] = useState<string>('ci-storage-expert')
-  const [activeAvatarName, setActiveAvatarName] = useState<string>('AI分身')
+  const [showSoulEditor, setShowSoulEditor] = useState(false)
+  const [activeAvatarId, setActiveAvatarId] = useState<string>('')
+  const [activeAvatarName, setActiveAvatarName] = useState<string>('')
+  const [avatarList, setAvatarList] = useState<Avatar[]>([])
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null)
 
-  // 多模型配置
   const [visionModel, setVisionModel] = useState<ModelConfig>(DEFAULT_VISION_MODEL)
   const [ocrModel, setOcrModel] = useState<ModelConfig>(DEFAULT_OCR_MODEL)
+  const [creationModel, setCreationModel] = useState<ModelConfig>(DEFAULT_CREATION_MODEL)
 
-  // GAP14: 测试红点状态
   const [testBadge, setTestBadge] = useState<{ failed: number } | null>(null)
 
   const { clearMessages, setSystemPrompt, setChatModel, chatModel, systemPrompt } = useChatStore()
@@ -40,18 +42,18 @@ function App() {
   }, [])
 
   const loadConversations = useCallback(async () => {
+    if (!activeAvatarId) return
     const convs = await window.electronAPI.getConversations(activeAvatarId)
     setConversations(convs)
   }, [activeAvatarId])
 
-  // GAP6: 重新加载分身配置（技能/知识编辑后调用此函数刷新 system prompt）
   const loadAvatarConfig = useCallback(async (avatarId: string) => {
+    if (!avatarId) return
     const config = await window.electronAPI.loadAvatar(avatarId)
     setSystemPrompt(config.systemPrompt)
     return config
   }, [setSystemPrompt])
 
-  // 从 settings 加载模型配置
   const loadModelConfigs = useCallback(async () => {
     const chatApiKey = await window.electronAPI.getSetting('chat_api_key')
     const chatBaseUrl = await window.electronAPI.getSetting('chat_base_url')
@@ -62,6 +64,9 @@ function App() {
     const ocrApiKey = await window.electronAPI.getSetting('ocr_api_key')
     const ocrBaseUrl = await window.electronAPI.getSetting('ocr_base_url')
     const ocrModelName = await window.electronAPI.getSetting('ocr_model')
+    const creationApiKey = await window.electronAPI.getSetting('creation_api_key')
+    const creationBaseUrl = await window.electronAPI.getSetting('creation_base_url')
+    const creationModelName = await window.electronAPI.getSetting('creation_model')
 
     setChatModel({
       baseUrl: chatBaseUrl || DEFAULT_CHAT_MODEL.baseUrl,
@@ -78,37 +83,36 @@ function App() {
       model: ocrModelName || DEFAULT_OCR_MODEL.model,
       apiKey: ocrApiKey || '',
     })
+    setCreationModel({
+      baseUrl: creationBaseUrl || DEFAULT_CREATION_MODEL.baseUrl,
+      model: creationModelName || DEFAULT_CREATION_MODEL.model,
+      apiKey: creationApiKey || '',
+    })
   }, [setChatModel])
 
-  // 初始化
+  const refreshAvatarList = useCallback(async () => {
+    const avatars = await window.electronAPI.listAvatars()
+    setAvatarList(avatars)
+    return avatars
+  }, [])
+
   useEffect(() => {
-    loadConversations()
-    loadAvatarConfig(activeAvatarId)
     loadModelConfigs()
+    refreshAvatarList()
 
-    // 加载分身名称
-    window.electronAPI.listAvatars().then((avatars) => {
-      const avatar = avatars.find(a => a.id === activeAvatarId)
-      if (avatar) setActiveAvatarName(avatar.name)
-    })
-
-    // 监听设置更新事件
     const handleSettingsUpdate = () => {
       loadModelConfigs()
     }
     window.addEventListener('settings-updated', handleSettingsUpdate)
 
-    // GAP14: 监听定时自检触发事件
     window.electronAPI.onScheduledTestTrigger((avatarId) => {
-      // 触发后切换到对应分身并打开测试面板
       handleSelectAvatar(avatarId).then(() => setShowTestPanel(true))
     })
 
-    // GAP14: 监听测试结果红点更新
     window.electronAPI.onTestResultBadge((data) => {
       if (data.failed > 0) {
         setTestBadge({ failed: data.failed })
-        showToast(`⚠ 自检完成：${data.failed}/${data.total} 个用例失败`, 'error')
+        showToast(`自检完成：${data.failed}/${data.total} 个用例失败`, 'error')
       } else {
         setTestBadge(null)
       }
@@ -117,7 +121,13 @@ function App() {
     return () => window.removeEventListener('settings-updated', handleSettingsUpdate)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 切换分身
+  useEffect(() => {
+    if (activeAvatarId) {
+      loadConversations()
+      loadAvatarConfig(activeAvatarId)
+    }
+  }, [activeAvatarId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSelectAvatar = async (avatarId: string) => {
     setActiveAvatarId(avatarId)
     await loadAvatarConfig(avatarId)
@@ -127,6 +137,7 @@ function App() {
     setConversations(convs)
 
     const avatars = await window.electronAPI.listAvatars()
+    setAvatarList(avatars)
     const avatar = avatars.find(a => a.id === avatarId)
     if (avatar) setActiveAvatarName(avatar.name)
   }
@@ -136,18 +147,26 @@ function App() {
     await handleSelectAvatar(avatarId)
   }
 
+  // 并发锁：防止双击或同时点击两个"新建对话"按钮导致重复创建
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false)
+
   const handleNewConversation = async () => {
-    const id = await window.electronAPI.createConversation('新对话', activeAvatarId)
-    await loadConversations()
-    setActiveConversationId(id)
-    clearMessages()
+    if (!activeAvatarId || isCreatingConversation) return
+    setIsCreatingConversation(true)
+    try {
+      const id = await window.electronAPI.createConversation('新对话', activeAvatarId)
+      await loadConversations()
+      setActiveConversationId(id)
+      clearMessages()
+    } finally {
+      setIsCreatingConversation(false)
+    }
   }
 
   const handleSelectConversation = (id: string) => {
     setActiveConversationId(id)
   }
 
-  // GAP15 UX: 使用 Toast 替代 confirm() 的内联确认
   const handleDeleteConversation = async (id: string) => {
     await window.electronAPI.deleteConversation(id)
     await loadConversations()
@@ -157,135 +176,208 @@ function App() {
     }
   }
 
-  // GAP3: 技能切换后刷新 system prompt
   const handleSkillsChanged = useCallback(async () => {
+    if (!activeAvatarId) return
     await loadAvatarConfig(activeAvatarId)
     showToast('技能已更新，上下文已刷新')
   }, [activeAvatarId, loadAvatarConfig, showToast])
 
-  // GAP6: 知识编辑后刷新 system prompt
   const handleKnowledgeSaved = useCallback(async () => {
+    if (!activeAvatarId) return
     await loadAvatarConfig(activeAvatarId)
     showToast('知识已保存，上下文已刷新')
   }, [activeAvatarId, loadAvatarConfig, showToast])
 
-  return (
-    <>
-      <Sidebar
-        conversations={conversations}
-        activeConversationId={activeConversationId}
-        onSelectConversation={handleSelectConversation}
-        onDeleteConversation={handleDeleteConversation}
-        onNewConversation={handleNewConversation}
-      >
-        {activeConversationId ? (
-          <div className="flex flex-col h-screen">
-            {/* 顶部操作栏 */}
-            <div className="flex items-center justify-between px-6 py-3 bg-px-black border-b-2 border-px-black">
-              <div className="flex items-center gap-4">
-                <AvatarSelector
-                  activeAvatarId={activeAvatarId}
-                  onSelectAvatar={handleSelectAvatar}
-                  onCreateAvatar={() => setShowCreateWizard(true)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowSkillsPanel(true)}
-                  className="pixel-btn-outline-light"
-                  aria-label="技能管理"
-                >
-                  [⚡] SKILLS
-                </button>
-                <button
-                  onClick={() => { setShowTestPanel(true); setTestBadge(null) }}
-                  className="pixel-btn-outline-light relative"
-                  aria-label="自检测试"
-                >
-                  [▶] TEST
-                  {testBadge && testBadge.failed > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white
-                      font-pixel text-[6px] w-4 h-4 flex items-center justify-center
-                      border border-px-black">
-                      {testBadge.failed}
-                    </span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowKnowledgePanel(true)}
-                  className="pixel-btn-outline-light"
-                  aria-label="知识库"
-                >
-                  [≡] DOCS
-                </button>
-                <button
-                  onClick={() => setShowMemoryPanel(true)}
-                  className="pixel-btn-outline-light"
-                  aria-label="记忆管理"
-                >
-                  [◈] MEM
-                </button>
-                <button
-                  onClick={() => setShowSettingsPanel(true)}
-                  className="pixel-btn-outline-muted"
-                  aria-label="设置"
-                >
-                  [⚙] SET
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <ChatWindow
-                conversationId={activeConversationId}
-                avatarId={activeAvatarId}
-                onConversationUpdate={loadConversations}
-                visionModel={visionModel}
-              />
-            </div>
+  const handleSoulChanged = useCallback(async () => {
+    if (!activeAvatarId) return
+    await loadAvatarConfig(activeAvatarId)
+    showToast('人格已保存，上下文已刷新')
+  }, [activeAvatarId, loadAvatarConfig, showToast])
+
+  /** 顶栏导航按钮 */
+  const navButtons = [
+    { label: '人格', key: 'soul', onClick: () => setShowSoulEditor(true), active: showSoulEditor },
+    { label: '技能', key: 'skills', onClick: () => setShowSkillsPanel(true), active: showSkillsPanel },
+    {
+      label: '测试', key: 'test',
+      onClick: () => { setShowTestPanel(true); setTestBadge(null) },
+      active: showTestPanel, badge: testBadge?.failed,
+    },
+    { label: '知识库', key: 'docs', onClick: () => setShowKnowledgePanel(true), active: showKnowledgePanel },
+    { label: '记忆', key: 'mem', onClick: () => setShowMemoryPanel(true), active: showMemoryPanel },
+    { label: '设置', key: 'set', onClick: () => setShowSettingsPanel(true), active: showSettingsPanel },
+  ]
+
+  /** 未选择分身时的引导页 */
+  const renderAvatarSelectPage = () => (
+    <div className="flex items-center justify-center h-screen bg-px-bg relative overflow-hidden">
+      <div className="absolute inset-0 pixel-grid opacity-50" />
+
+      <div className="text-center max-w-lg px-8 relative z-10 animate-fade-in">
+        <div className="inline-flex items-center justify-center w-20 h-20 border-2 border-px-primary bg-px-primary/10 mb-8 shadow-pixel-glow">
+          <span className="font-game text-[24px] text-px-primary leading-none">S</span>
+        </div>
+
+        <div className="font-game text-[20px] text-px-primary tracking-widest mb-4">
+          SOUL DESKTOP
+        </div>
+        <p className="font-game text-[14px] text-px-text-sec tracking-wider mb-8">
+          AI 分身专家系统
+        </p>
+
+        {avatarList.length > 0 ? (
+          <div className="space-y-2 mb-8">
+            {avatarList.map((avatar) => (
+              <button
+                key={avatar.id}
+                onClick={() => handleSelectAvatar(avatar.id)}
+                className="w-full flex items-center gap-4 px-5 py-4 border-2 border-px-border bg-px-surface
+                  hover:border-px-primary hover:bg-px-primary/5 transition-none text-left"
+              >
+                <div className="w-10 h-10 bg-px-primary flex items-center justify-center flex-shrink-0 shadow-pixel-brand">
+                  <span className="font-game text-[14px] text-white leading-none">
+                    {avatar.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-game text-[16px] text-px-text font-bold truncate">{avatar.name}</p>
+                  <p className="font-game text-[13px] text-px-text-dim mt-0.5 truncate">{avatar.description || avatar.id}</p>
+                </div>
+                <span className="font-game text-[12px] text-px-text-dim">&gt;</span>
+              </button>
+            ))}
           </div>
         ) : (
-          /* GAP15 UX: 欢迎页 Terminal 风格 */
-          <div className="flex items-center justify-center h-screen bg-px-black">
-            <div className="text-center max-w-lg px-8">
-              <div className="border-2 border-px-line inline-block px-8 py-5 mb-8 select-none">
-                <div className="font-pixel text-[8px] text-px-muted tracking-wider mb-3 text-left">
-                  AVATAR LOADED
+          <p className="font-game text-[14px] text-px-text-dim tracking-wider mb-8">暂无分身，请先创建</p>
+        )}
+
+        <div className="flex justify-center gap-3">
+          <button
+            onClick={() => setShowCreateWizard(true)}
+            className="pixel-btn-primary px-6 py-3"
+          >
+            [+] 新建分身
+          </button>
+          <button
+            onClick={() => setShowSettingsPanel(true)}
+            className="pixel-btn-outline-muted px-6 py-3"
+          >
+            设置
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <>
+      {!activeAvatarId ? (
+        renderAvatarSelectPage()
+      ) : (
+        <Sidebar
+          conversations={conversations}
+          activeConversationId={activeConversationId}
+          onSelectConversation={handleSelectConversation}
+          onDeleteConversation={handleDeleteConversation}
+          onNewConversation={handleNewConversation}
+          isCreatingConversation={isCreatingConversation}
+        >
+          {activeConversationId ? (
+            <div className="flex flex-col h-screen">
+              {/* ── 顶部操作栏 ── */}
+              <div className="flex items-center justify-between px-5 py-2.5 bg-px-surface border-b-2 border-px-border">
+                <div className="flex items-center gap-4">
+                  <AvatarSelector
+                    activeAvatarId={activeAvatarId}
+                    onSelectAvatar={handleSelectAvatar}
+                    onCreateAvatar={() => setShowCreateWizard(true)}
+                  />
                 </div>
-                <div className="font-mono text-base text-px-white tracking-wide mb-2">
-                  {activeAvatarName}
-                </div>
-                <div className="h-[1px] bg-px-line mb-2" />
-                <div className="font-mono text-sm text-px-muted">
-                  AI 分身专家系统
+                <div className="flex gap-2">
+                  {navButtons.map(btn => (
+                    <button
+                      key={btn.key}
+                      onClick={btn.onClick}
+                      className={`relative px-5 py-2 font-game text-[15px] tracking-wider
+                        border-2 transition-none select-none
+                        ${btn.active
+                          ? 'border-px-primary text-px-primary bg-px-primary/10'
+                          : btn.key === 'set'
+                            ? 'border-transparent text-px-text-dim hover:text-px-text-sec hover:border-px-border-dim'
+                            : 'border-px-border-dim text-px-text-sec hover:border-px-border hover:text-px-text'
+                        }`}
+                      aria-label={btn.label}
+                    >
+                      {btn.label}
+                      {btn.badge && btn.badge > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-px-danger text-white
+                          font-game text-[10px] w-4 h-4 flex items-center justify-center
+                          border border-px-surface">
+                          {btn.badge}
+                        </span>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <p className="font-mono text-px-muted text-sm mb-8">
-                {'// ready for input...'}
-              </p>
-              <button
-                onClick={handleNewConversation}
-                className="pixel-btn-primary"
-              >
-                [+] START NEW CHAT
-              </button>
+              <div className="flex-1 overflow-hidden">
+                <ChatWindow
+                  conversationId={activeConversationId}
+                  avatarId={activeAvatarId}
+                  onConversationUpdate={loadConversations}
+                  visionModel={visionModel}
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </Sidebar>
+          ) : (
+            /* ── 已选分身，未选对话 ── */
+            <div className="flex items-center justify-center h-screen bg-px-bg relative overflow-hidden">
+              <div className="absolute inset-0 pixel-grid opacity-50" />
 
-      {showKnowledgePanel && (
+              <div className="text-center max-w-md px-8 relative z-10 animate-fade-in">
+                <div className="inline-flex items-center justify-center w-20 h-20 border-2 border-px-primary bg-px-primary/10 mb-8 shadow-pixel-glow">
+                  <span className="font-game text-[24px] text-px-primary leading-none">
+                    {activeAvatarName.charAt(0)?.toUpperCase() || 'A'}
+                  </span>
+                </div>
+
+                <div className="border-2 border-px-border bg-px-surface/50 px-6 py-4 mb-6">
+                  <div className="font-game text-[13px] text-px-primary tracking-widest mb-3">
+                    分身就绪
+                  </div>
+                  <div className="font-game text-[18px] text-px-text font-bold tracking-wide">
+                    {activeAvatarName}
+                  </div>
+                  <div className="pixel-divider my-3" />
+                  <div className="font-game text-[14px] text-px-text-sec">
+                    AI 分身专家系统
+                  </div>
+                </div>
+
+                <p className="font-game text-px-text-dim text-[14px]">
+                  点击左侧「[+] NEW CHAT」开始第一条对话
+                </p>
+              </div>
+            </div>
+          )}
+        </Sidebar>
+      )}
+
+      {showKnowledgePanel && activeAvatarId && (
         <KnowledgePanel
           avatarId={activeAvatarId}
           onClose={() => setShowKnowledgePanel(false)}
           onSaved={handleKnowledgeSaved}
           ocrModel={ocrModel}
           chatModel={chatModel}
+          creationModel={resolveCreationModel(creationModel, chatModel)}
         />
       )}
 
       {showCreateWizard && (
         <CreateAvatarWizard
           chatModel={chatModel}
+          creationModel={resolveCreationModel(creationModel, chatModel)}
           onClose={() => setShowCreateWizard(false)}
           onCreated={handleAvatarCreated}
         />
@@ -297,7 +389,7 @@ function App() {
         />
       )}
 
-      {showTestPanel && (
+      {showTestPanel && activeAvatarId && (
         <TestPanel
           avatarId={activeAvatarId}
           chatModel={chatModel}
@@ -306,7 +398,7 @@ function App() {
         />
       )}
 
-      {showSkillsPanel && (
+      {showSkillsPanel && activeAvatarId && (
         <SkillsPanel
           avatarId={activeAvatarId}
           onClose={() => setShowSkillsPanel(false)}
@@ -314,10 +406,18 @@ function App() {
         />
       )}
 
-      {showMemoryPanel && (
+      {showMemoryPanel && activeAvatarId && (
         <MemoryPanel
           avatarId={activeAvatarId}
           onClose={() => setShowMemoryPanel(false)}
+        />
+      )}
+
+      {showSoulEditor && activeAvatarId && (
+        <SoulEditorPanel
+          avatarId={activeAvatarId}
+          onClose={() => setShowSoulEditor(false)}
+          onSoulChanged={handleSoulChanged}
         />
       )}
 

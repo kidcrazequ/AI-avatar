@@ -12,18 +12,18 @@ export default function Modal({ isOpen, onClose, children, size = 'lg' }: ModalP
 
   const sizeClasses = {
     sm: 'w-[600px] max-h-[70vh]',
-    md: 'w-[720px] max-h-[80vh]',
+    md: 'w-[720px] h-[80vh]',
     lg: 'w-[90vw] h-[90vh]',
     xl: 'w-[95vw] h-[95vh]',
   }
 
   return (
     <div
-      className="fixed inset-0 bg-px-black/80 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className={`bg-px-dark border-2 border-px-line shadow-pixel-xl ${sizeClasses[size]} flex flex-col`}
+        className={`bg-px-surface border-2 border-px-border shadow-pixel-glow ${sizeClasses[size]} flex flex-col animate-pixel-expand`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}

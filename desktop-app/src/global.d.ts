@@ -47,6 +47,10 @@ interface ParsedDocument {
   images: string[]
   fileName: string
   fileType: 'pdf' | 'word' | 'image' | 'text'
+  /** 每页字符数，用于 Vision 数据按页码融入原文（PDF 专属） */
+  perPageChars?: Array<{ num: number; chars: number }>
+  /** 图表页截图对应的页码列表（与 images 一一对应） */
+  imagePageNumbers?: number[]
 }
 
 /** 统一 LLM 模型配置（OpenAI 兼容接口） */
@@ -103,6 +107,17 @@ interface ElectronAPI {
   readMemory: (avatarId: string) => Promise<string>
   writeMemory: (avatarId: string, content: string) => Promise<void>
 
+  // 人格管理
+  readSoul: (avatarId: string) => Promise<string>
+  writeSoul: (avatarId: string, content: string) => Promise<void>
+
+  // 模板管理
+  getTemplate: (templateName: string) => Promise<string>
+  getSoulCreationPrompt: (avatarName: string) => Promise<string>
+  getSkillCreationPrompt: () => Promise<string>
+  getTestCreationPrompt: () => Promise<string>
+  listTemplates: () => Promise<string[]>
+
   // 分身管理
   listAvatars: () => Promise<Avatar[]>
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => Promise<void>
@@ -132,6 +147,10 @@ interface ElectronAPI {
   // 知识检索（GAP1）
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) => Promise<Array<{ file: string; heading: string; content: string; score: number }>>
 
+  // 知识索引构建 + RAG 检索
+  buildKnowledgeIndex: (avatarId: string, apiKey: string, baseUrl: string) => Promise<{ contextCount: number; embeddingCount: number }>
+  ragRetrieve: (avatarId: string, question: string, apiKey: string, baseUrl: string) => Promise<string>
+
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) => Promise<{ canceled: boolean; filePaths: string[] }>
   parseDocument: (filePath: string) => Promise<ParsedDocument>
@@ -142,6 +161,16 @@ interface ElectronAPI {
   notifyTestResult: (passed: number, total: number, failed: number) => Promise<void>
   onScheduledTestTrigger: (callback: (avatarId: string) => void) => void
   onTestResultBadge: (callback: (data: { passed: boolean; total: number; failed: number }) => void) => void
+
+  // 日志系统
+  logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) => Promise<void>
+  getActivityLogs: (date?: string) => Promise<string>
+  getErrorLogs: (date?: string) => Promise<string>
+  getGeneratedIndex: () => Promise<GeneratedRecord[]>
+  /** 用系统文件管理器打开日志目录，返回目录路径 */
+  openLogsFolder: () => Promise<string>
+  /** 将最近 N 天错误日志导出到桌面，返回导出结果 */
+  exportErrorLog: (days?: number) => Promise<{ success: boolean; message?: string; filePath?: string }>
 }
 
 interface Avatar {
@@ -198,4 +227,14 @@ interface Skill {
 
 interface Window {
   electronAPI: ElectronAPI
+}
+
+/** 生成文档归档记录（与 electron/logger.ts 的 GeneratedRecord 保持一致） */
+interface GeneratedRecord {
+  type: 'soul' | 'skill' | 'memory' | 'knowledge' | 'test-report'
+  avatarId: string
+  originalPath: string
+  archivedFile: string
+  createdAt: string
+  meta?: Record<string, unknown>
 }

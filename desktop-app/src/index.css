@@ -1,8 +1,26 @@
-/* Terminal Luxe — 黑白像素风设计系统 */
+/* Pixel Luxe — 暖金琥珀 × 像素风设计系统 */
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @config "../tailwind.config.js";
+
+/* Fusion Pixel — 开源 CJK 像素字体（OFL-1.1） */
+@font-face {
+  font-family: 'Fusion Pixel';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./fonts/fusion-pixel-12px-proportional-zh_hans.otf.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fusion Pixel';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('./fonts/fusion-pixel-12px-proportional-latin.otf.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
 @layer base {
   * {
@@ -12,138 +30,159 @@
   }
 
   body {
-    font-family: 'JetBrains Mono', 'Courier New', monospace;
-    background-color: #0A0A0A;
-    color: #FAFAFA;
+    font-family: 'Fusion Pixel', 'JetBrains Mono', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    background-color: #13131B;
+    color: #EAEAE8;
     overflow: hidden;
   }
 
   ::selection {
-    background-color: #FAFAFA;
-    color: #0A0A0A;
+    background-color: #E8A830;
+    color: #13131B;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #1A1A1A; }
-  ::-webkit-scrollbar-thumb { background: #333333; border: 1px solid #1A1A1A; }
-  ::-webkit-scrollbar-thumb:hover { background: #525252; }
+  ::-webkit-scrollbar-track { background: #1B1B26; }
+  ::-webkit-scrollbar-thumb { background: #353548; border: 1px solid #1B1B26; }
+  ::-webkit-scrollbar-thumb:hover { background: #E8A830; }
 }
 
 @layer components {
-  /* ─── 按钮 ─────────────────────────────────────────── */
+  /* ═══════════════════════════════════════
+     按钮 —— 像素字体 + 英文大写
+     ═══════════════════════════════════════ */
 
-  /** 主按钮：黑底白字，按下反转为白底黑字 */
   .pixel-btn-primary {
-    @apply px-4 py-2 bg-px-black text-px-white border-2 border-px-white
-           font-pixel text-[10px] tracking-wider uppercase
-           shadow-pixel-sm transition-none select-none cursor-pointer;
+    @apply px-5 py-2.5 bg-px-primary text-white border-2 border-px-primary
+           font-game text-[12px] tracking-wider uppercase
+           shadow-pixel-brand transition-none select-none cursor-pointer;
   }
   .pixel-btn-primary:hover:not(:disabled) {
-    @apply bg-px-white text-px-black;
+    @apply bg-px-primary-hover border-px-primary-hover;
   }
   .pixel-btn-primary:active:not(:disabled) {
-    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+    @apply shadow-none translate-x-[2px] translate-y-[2px];
+  }
+  .pixel-btn-primary:disabled {
+    @apply opacity-40 cursor-not-allowed;
   }
 
-  /** 描边按钮：透明底，浅色边框（深色背景上使用）*/
   .pixel-btn-secondary {
-    @apply px-4 py-2 bg-transparent text-px-white border-2 border-px-line
-           font-pixel text-[10px] tracking-wider uppercase
+    @apply px-5 py-2.5 bg-transparent text-px-text border-2 border-px-border
+           font-game text-[12px] tracking-wider uppercase
            transition-none select-none cursor-pointer;
   }
   .pixel-btn-secondary:hover:not(:disabled) {
-    @apply border-px-white text-px-white shadow-pixel-sm;
+    @apply border-px-primary text-px-primary;
   }
   .pixel-btn-secondary:active:not(:disabled) {
-    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+    @apply bg-px-primary text-px-bg shadow-none translate-x-[2px] translate-y-[2px];
+  }
+  .pixel-btn-secondary:disabled {
+    @apply opacity-40 cursor-not-allowed;
   }
 
-  /** 幽灵按钮：无边框，深色背景上使用 */
   .pixel-btn-ghost {
-    @apply px-4 py-2 bg-transparent text-px-muted border-2 border-transparent
-           font-pixel text-[10px] tracking-wider uppercase
-           hover:text-px-white hover:border-px-line transition-none select-none cursor-pointer;
+    @apply px-4 py-2.5 bg-transparent text-px-text-dim border-2 border-transparent
+           font-game text-[12px] tracking-wider uppercase
+           hover:text-px-text hover:border-px-border-dim transition-none select-none cursor-pointer;
   }
 
-  /** 深色背景上的描边按钮（顶栏/面板用）*/
   .pixel-btn-outline-light {
-    @apply px-4 py-2 bg-transparent text-px-white border-2 border-px-white
-           font-pixel text-[10px] tracking-wider uppercase
-           hover:bg-px-white hover:text-px-black transition-none select-none cursor-pointer;
+    @apply px-4 py-2 bg-transparent text-px-text border-2 border-px-border
+           font-game text-[12px] tracking-wider uppercase
+           hover:border-px-primary hover:text-px-primary transition-none select-none cursor-pointer;
   }
   .pixel-btn-outline-light:active:not(:disabled) {
-    @apply bg-px-white text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+    @apply bg-px-primary text-px-bg border-px-primary shadow-none translate-x-[2px] translate-y-[2px];
+  }
+  .pixel-btn-outline-light:disabled {
+    @apply opacity-40 cursor-not-allowed;
   }
 
-  /** 深色背景上的低调按钮 */
   .pixel-btn-outline-muted {
-    @apply px-4 py-2 bg-transparent text-px-muted border-2 border-px-muted
-           font-pixel text-[10px] tracking-wider uppercase
-           hover:border-px-subtle hover:text-px-subtle transition-none select-none cursor-pointer;
+    @apply px-4 py-2 bg-transparent text-px-text-dim border-2 border-px-border-dim
+           font-game text-[12px] tracking-wider uppercase
+           hover:border-px-text-sec hover:text-px-text-sec transition-none select-none cursor-pointer;
   }
   .pixel-btn-outline-muted:active:not(:disabled) {
-    @apply bg-px-subtle text-px-black shadow-none translate-x-[2px] translate-y-[2px];
+    @apply bg-px-hover text-px-text shadow-none translate-x-[2px] translate-y-[2px];
+  }
+  .pixel-btn-outline-muted:disabled {
+    @apply opacity-40 cursor-not-allowed;
   }
 
-  /** 危险按钮 */
   .pixel-btn-danger {
-    @apply px-4 py-2 bg-px-danger text-px-white border-2 border-px-danger
-           font-pixel text-[10px] tracking-wider uppercase
-           shadow-pixel-sm transition-none select-none cursor-pointer;
+    @apply px-5 py-2.5 bg-px-danger text-white border-2 border-px-danger
+           font-game text-[12px] tracking-wider uppercase
+           shadow-[2px_2px_0_0_#B83030] transition-none select-none cursor-pointer;
   }
   .pixel-btn-danger:hover {
     @apply bg-transparent text-px-danger;
   }
   .pixel-btn-danger:active {
-    @apply bg-px-white text-px-danger shadow-none translate-x-[2px] translate-y-[2px];
+    @apply shadow-none translate-x-[2px] translate-y-[2px];
   }
 
-  /** 关闭按钮（Modal 头部）*/
   .pixel-close-btn {
-    @apply w-8 h-8 flex items-center justify-center border-2 border-px-white
-           text-px-white font-pixel text-xs
-           hover:bg-px-white hover:text-px-black transition-none select-none cursor-pointer;
+    @apply w-8 h-8 flex items-center justify-center border-2 border-px-border
+           text-px-text-dim font-game text-[12px]
+           hover:bg-px-danger hover:text-white hover:border-px-danger
+           transition-none select-none cursor-pointer;
   }
   .pixel-close-btn:active {
-    @apply bg-px-white text-px-black translate-x-[1px] translate-y-[1px];
+    @apply translate-x-[1px] translate-y-[1px];
   }
 
-  /* ─── 输入框 ───────────────────────────────────────── */
+  /* ═══════════════════════════════════════
+     输入框
+     ═══════════════════════════════════════ */
 
   .pixel-input {
-    @apply px-4 py-2 bg-px-white text-px-black border-2 border-px-border
-           font-mono text-sm
-           placeholder:text-px-subtle
-           focus:border-px-black focus:outline-none
-           shadow-[inset_2px_2px_0_0_rgba(0,0,0,0.05)];
+    @apply px-4 py-2.5 bg-px-surface text-px-text border-2 border-px-border
+           font-game text-[14px]
+           placeholder:text-px-text-dim
+           focus:border-px-primary focus:outline-none focus:shadow-glow-sm;
   }
 
   .pixel-input-dark {
-    @apply px-4 py-3 bg-px-dark text-px-white border-2 border-px-line
-           font-mono text-sm
-           placeholder:text-[#525252]
-           focus:border-px-white focus:outline-none;
+    @apply px-4 py-3 bg-px-bg text-px-text border-2 border-px-border
+           font-game text-[14px]
+           placeholder:text-px-text-dim
+           focus:border-px-primary focus:outline-none focus:shadow-glow-sm;
   }
 
-  /* ─── 标签 ─────────────────────────────────────────── */
+  /* ═══════════════════════════════════════
+     标签 / 分割线 / 纹理
+     ═══════════════════════════════════════ */
 
   .pixel-label {
-    @apply block font-mono text-xs text-px-subtle tracking-wider mb-2;
+    @apply block font-game text-[13px] font-bold text-px-text-sec tracking-widest uppercase mb-2;
   }
-
-  /* ─── 分割线 ───────────────────────────────────────── */
 
   .pixel-divider {
     @apply h-[2px];
     background: repeating-linear-gradient(
       90deg,
-      #0A0A0A 0px, #0A0A0A 4px,
+      #353548 0px, #353548 4px,
       transparent 4px, transparent 8px
     );
   }
 
-  /* ─── 像素扫描线（侧边栏叠加）──────────────────────── */
+  .pixel-grid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(232,168,48,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(232,168,48,0.015) 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
+  }
 
+  /** 扫描线效果（侧栏用）*/
   .scanlines::after {
     content: '';
     position: absolute;
@@ -152,19 +191,49 @@
       0deg,
       transparent,
       transparent 2px,
-      rgba(255,255,255,0.02) 2px,
-      rgba(255,255,255,0.02) 4px
+      rgba(232,168,48,0.015) 2px,
+      rgba(232,168,48,0.015) 4px
     );
     pointer-events: none;
   }
+
+  /* ═══════════════════════════════════════
+     像素风组件
+     ═══════════════════════════════════════ */
+
+  .pixel-checkbox {
+    @apply w-5 h-5 border-2 border-px-border bg-px-bg
+           flex items-center justify-center cursor-pointer
+           font-game text-[10px] text-transparent select-none;
+  }
+  .pixel-checkbox[data-checked="true"] {
+    @apply bg-px-primary border-px-primary text-px-bg;
+  }
+
+  .pixel-badge {
+    @apply inline-flex items-center px-2 py-0.5 border border-px-border
+           font-game text-[10px] text-px-text-sec tracking-wider uppercase;
+  }
+  .pixel-badge-success {
+    @apply border-px-success text-px-success bg-px-success/10;
+  }
+  .pixel-badge-danger {
+    @apply border-px-danger text-px-danger bg-px-danger/10;
+  }
+  .pixel-badge-primary {
+    @apply border-px-primary text-px-primary bg-px-primary/10;
+  }
 }
 
-/* ─── 闪烁光标 ─────────────────────────────────────────── */
+/* ═══════════════════════════════════════
+   动画
+   ═══════════════════════════════════════ */
+
 .cursor-blink {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background-color: currentColor;
+  background-color: #E8A830;
   animation: blink 1s step-end infinite;
   vertical-align: text-bottom;
 }
@@ -183,4 +252,42 @@
   0%   { transform: scale(0.9);  opacity: 0; }
   50%  { transform: scale(1.02); opacity: 1; }
   100% { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(232,168,48,0.08); }
+  50%      { box-shadow: 0 0 16px rgba(232,168,48,0.20); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ═══════════════════════════════════════
+   Markdown 暗色渲染（prose-invert 增强）
+   ═══════════════════════════════════════ */
+
+.prose-pixel {
+  --tw-prose-body: #EAEAE8;
+  --tw-prose-headings: #EAEAE8;
+  --tw-prose-lead: #A0A0AC;
+  --tw-prose-links: #E8A830;
+  --tw-prose-bold: #EAEAE8;
+  --tw-prose-counters: #A0A0AC;
+  --tw-prose-bullets: #E8A830;
+  --tw-prose-hr: #353548;
+  --tw-prose-quotes: #A0A0AC;
+  --tw-prose-quote-borders: #E8A830;
+  --tw-prose-captions: #68687A;
+  --tw-prose-code: #50D8A0;
+  --tw-prose-pre-code: #EAEAE8;
+  --tw-prose-pre-bg: #13131B;
+  --tw-prose-th-borders: #353548;
+  --tw-prose-td-borders: #353548;
 }

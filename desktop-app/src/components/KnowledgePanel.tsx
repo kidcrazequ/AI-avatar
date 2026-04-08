@@ -3,20 +3,22 @@ import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
 import { LLMService, ModelConfig } from '../services/llm-service'
+import { cleanOcrHtml, cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument } from '@soul/core'
+import type { LLMCallFn } from '@soul/core'
 import { generateTestCasesFromContent } from '../services/test-generator'
+import Modal from './shared/Modal'
+import PanelHeader from './shared/PanelHeader'
 
 interface Props {
   avatarId: string
   onClose: () => void
-  /** GAP6: 知识文件保存后回调，用于刷新 system prompt */
   onSaved?: () => void
-  /** GAP9a: OCR 模型配置，用于图片文字识别 */
   ocrModel?: ModelConfig
-  /** GAP12: Chat 模型，用于自动生成测试用例 */
   chatModel?: ModelConfig
+  creationModel?: ModelConfig
 }
 
-export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, chatModel }: Props) {
+export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, chatModel, creationModel }: Props) {
   const [tree, setTree] = useState<FileNode[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<string>('')
@@ -26,16 +28,13 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
-  // GAP7: 新建文件对话框状态
   const [showNewFileDialog, setShowNewFileDialog] = useState(false)
   const [newFilePath, setNewFilePath] = useState('')
   const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
 
-  // GAP9a: 文档导入状态
   const [isImporting, setIsImporting] = useState(false)
-  // GAP12: 自动生成测试用例状态
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
   const newFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -63,12 +62,13 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     setEditedContent(content)
   }
 
-  const showStatus = (msg: string) => {
+  const showStatus = (msg: string, autoClear = true) => {
     setStatusMsg(msg)
-    setTimeout(() => setStatusMsg(''), 2500)
+    if (autoClear) {
+      setTimeout(() => setStatusMsg(''), 2500)
+    }
   }
 
-  // GAP6: 保存后触发 prompt 刷新
   const handleSave = async () => {
     if (!selectedPath) return
     setIsSaving(true)
@@ -97,7 +97,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     setIsSearching(false)
   }
 
-  // GAP7: 创建新文件
   const handleCreateFile = async () => {
     if (!newFilePath.trim()) return
     const filePath = newFilePath.endsWith('.md') ? newFilePath : `${newFilePath}.md`
@@ -114,7 +113,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
-  // GAP7: 删除文件（使用内联确认替代 confirm()）
   const handleDeleteFile = async (filePath: string) => {
     try {
       await window.electronAPI.deleteKnowledgeFile(avatarId, filePath)
@@ -132,15 +130,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
-  /**
-   * GAP9a: 导入文档
-   * 1. 打开文件选择对话框
-   * 2. 调用主进程解析文件（提取文字 + 图片）
-   * 3. 对每张图片调用 Qwen OCR（如已配置 ocrModel）
-   * 4. 将合并文本保存为新知识文件
-   */
   const handleImportDocument = async () => {
-    setIsImporting(true)
     try {
       const result = await window.electronAPI.showOpenDialog({
         title: '导入文档',
@@ -155,51 +145,162 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       })
       if (result.canceled || result.filePaths.length === 0) return
 
+      setIsImporting(true)
       const filePath = result.filePaths[0]
-      showStatus('解析文档中...')
+      showStatus('解析文档中...', false)
 
       const parsed = await window.electronAPI.parseDocument(filePath)
-      const textParts: string[] = []
 
-      if (parsed.text) {
-        textParts.push(parsed.text)
-      }
+      let rawText = parsed.text || ''
 
-      // OCR 图片（需要 ocrModel 配置）
+      const visionResults: string[] = []
       if (parsed.images.length > 0 && ocrModel?.apiKey) {
-        showStatus(`OCR 识别 ${parsed.images.length} 张图片...`)
-        const ocr = new LLMService(ocrModel)
-        for (const imageDataUrl of parsed.images) {
+        const visionConfig: ModelConfig = {
+          ...ocrModel,
+          model: 'qwen-vl-max',
+        }
+        const vision = new LLMService(visionConfig)
+        const visionPrompt = '请仔细分析这张技术文档页面图片，提取所有有价值的结构化信息：' +
+          '1. 尺寸图/工程图：提取所有尺寸标注数值（单位mm），整理为参数表格；' +
+          '2. 设备布局图：描述各组件的空间位置关系，整理为布局表格；' +
+          '3. 原理图/流程图：描述流向、各部件名称和功能；' +
+          '4. 数据表格：以 Markdown 表格格式输出；' +
+          '5. 接线图：描述端子排列、线缆规格。' +
+          '输出要求：使用 Markdown 格式，直接输出内容不要用代码围栏包裹，保留原始精度数值，' +
+          '只输出图片中实际可见的数据，不要编造或推断图片中不存在的数值，' +
+          '禁止使用任何 emoji 图标，不要在末尾附加总结或自评。'
+
+        for (let i = 0; i < parsed.images.length; i++) {
+          showStatus(`图纸解读 ${i + 1} / ${parsed.images.length}...`, false)
           try {
-            const ocrText = await ocr.complete([
+            const visionText = await vision.complete([
               {
                 role: 'user',
                 content: [
-                  { type: 'image_url', image_url: { url: imageDataUrl } },
-                  { type: 'text', text: '请识别图片中的所有文字内容，保持原始格式输出。' },
+                  { type: 'image_url', image_url: { url: parsed.images[i] } },
+                  { type: 'text', text: visionPrompt },
                 ],
               },
             ])
-            if (ocrText) textParts.push(`\n---\n${ocrText}`)
+            if (visionText) {
+              const cleaned = cleanOcrHtml(visionText)
+              visionResults.push(cleaned)
+            }
           } catch (err) {
-            console.error('OCR 失败:', err)
+            console.error('Vision 分析失败:', err)
           }
         }
       } else if (parsed.images.length > 0 && !ocrModel?.apiKey) {
-        textParts.push(`\n\n> 注意：文档包含 ${parsed.images.length} 张图片，但未配置 OCR 模型，图片内容未识别。请在设置中配置 Qwen API Key。`)
+        rawText += `\n\n> 注意：文档包含 ${parsed.images.length} 张图表页，但未配置 Qwen API Key，图片内容未识别。请在设置中配置。`
       }
 
-      if (textParts.length === 0) {
+      if (!rawText && visionResults.length === 0) {
         showStatus('✗ 未能提取任何内容')
         return
       }
 
-      // 生成目标知识文件名
-      const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
-      const targetPath = `imports/${baseName}.md`
-      const fileContent = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}  \n> 类型: ${parsed.fileType}\n\n---\n\n${textParts.join('\n\n')}`
+      let cleanedText = cleanPdfFullText(rawText)
+      if (parsed.fileType === 'docx') {
+        cleanedText = stripDocxToc(cleanedText)
+      }
 
-      await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, fileContent)
+      if (visionResults.length > 0 && parsed.perPageChars) {
+        const visionForMerge = visionResults.map((content, i) => ({
+          pageNum: parsed.imagePageNumbers?.[i] ?? (i + 1),
+          content,
+        }))
+        cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+      }
+
+      const baseModel = creationModel?.apiKey ? creationModel : chatModel
+      let finalContent: string
+
+      if (baseModel?.apiKey && cleanedText.length > 500) {
+        showStatus('LLM 逐章格式化中...', false)
+
+        const restructureModel: ModelConfig = { ...baseModel, model: 'qwen-plus' }
+        const llm = new LLMService(restructureModel)
+
+        const callLLM: LLMCallFn = async (systemPrompt, userPrompt, maxTokens = 8192) => {
+          return llm.complete([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ], { maxTokens })
+        }
+
+        try {
+          finalContent = await formatDocument(
+            cleanedText,
+            parsed.fileName.replace(/\.[^.]+$/, ''),
+            parsed.fileName,
+            callLLM,
+            (progress) => {
+              showStatus(`格式化章节 ${progress.current}/${progress.total}：${progress.chapterTitle}`, false)
+            },
+          )
+
+          const visionAllText = visionResults.join('\n')
+          const fabricated = detectFabricatedNumbers(finalContent, rawText + '\n' + visionAllText)
+          if (fabricated.length > 0) {
+            console.warn(`数值校验警告：发现 ${fabricated.length} 个疑似编造数值：${fabricated.join(', ')}`)
+          }
+        } catch (err) {
+          console.error('LLM 逐章格式化失败，使用原始文本:', err)
+          finalContent = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}\n\n---\n\n${cleanedText}`
+        }
+      } else {
+        finalContent = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}\n> 类型: ${parsed.fileType}\n\n---\n\n${cleanedText}`
+      }
+
+      const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      const targetPath = `${baseName}.md`
+
+      await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)
+
+      try {
+        let existingReadme = ''
+        try {
+          existingReadme = await window.electronAPI.readKnowledgeFile(avatarId, 'README.md')
+        } catch {
+          // README 不存在
+        }
+
+        const fileEntry = `| \`${targetPath}\` | ${parsed.fileName} | 导入自 ${parsed.fileType.toUpperCase()} 文件 |`
+
+        if (existingReadme && existingReadme.includes('_(暂无，待添加)_')) {
+          const updatedReadme = existingReadme.replace(
+            '| _(暂无，待添加)_ | | |',
+            fileEntry
+          )
+          await window.electronAPI.writeKnowledgeFile(avatarId, 'README.md', updatedReadme)
+        } else if (existingReadme && !existingReadme.includes(targetPath)) {
+          const tableEndPattern = /(\| .+ \| .+ \| .+ \|)\n\n## 图片/
+          const match = existingReadme.match(tableEndPattern)
+          if (match) {
+            const updatedReadme = existingReadme.replace(
+              tableEndPattern,
+              `$1\n${fileEntry}\n\n## 图片`
+            )
+            await window.electronAPI.writeKnowledgeFile(avatarId, 'README.md', updatedReadme)
+          }
+        }
+      } catch (readmeErr) {
+        console.warn('README.md 回填失败（不影响导入）:', readmeErr)
+      }
+
+      // 构建检索索引（上下文摘要 + 向量嵌入），提升 RAG 检索质量
+      const indexApiKey = ocrModel?.apiKey || baseModel?.apiKey
+      const indexBaseUrl = ocrModel?.baseUrl || baseModel?.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      if (indexApiKey) {
+        try {
+          showStatus('构建检索索引（上下文摘要 + 向量嵌入）...', false)
+          const indexResult = await window.electronAPI.buildKnowledgeIndex(avatarId, indexApiKey, indexBaseUrl)
+          console.log(`检索索引构建完成：${indexResult.contextCount} 上下文，${indexResult.embeddingCount} 向量`)
+        } catch (indexErr) {
+          console.warn('检索索引构建失败（不影响导入）:', indexErr)
+        }
+      }
+
       await loadTree()
       handleSelectFile(targetPath)
       showStatus(`✓ 已导入: ${targetPath}`)
@@ -212,19 +313,17 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
-  /**
-   * GAP12: 根据当前选中的知识文件自动生成测试用例
-   */
   const handleGenerateTests = async () => {
-    if (!selectedPath || !fileContent || !chatModel?.apiKey) {
-      showStatus('✗ 需要选择文件并配置 Chat API Key')
+    const testModel = creationModel?.apiKey ? creationModel : chatModel
+    if (!selectedPath || !fileContent || !testModel?.apiKey) {
+      showStatus('✗ 需要选择文件并配置 API Key')
       return
     }
     setIsGeneratingTests(true)
-    showStatus('生成测试用例中...')
+    showStatus(`生成测试用例中（${testModel.model}）...`, false)
     try {
       const fileName = selectedPath.split('/').pop() ?? selectedPath
-      const generated = await generateTestCasesFromContent(fileContent, fileName, chatModel)
+      const generated = await generateTestCasesFromContent(fileContent, fileName, testModel)
       if (generated.length === 0) {
         showStatus('✗ 未能生成测试用例，请检查内容')
         return
@@ -238,7 +337,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           prompt: tc.prompt,
           rubrics: tc.rubrics,
           mustContain: tc.mustContain,
-          mustNotContain: [],
+          mustNotContain: tc.mustNotContain,
         })
       }
       showStatus(`✓ 已生成 ${generated.length} 个测试用例`)
@@ -251,171 +350,178 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   }
 
   return (
-    <div className="fixed inset-0 bg-px-black/80 flex items-center justify-center z-50">
-      <div className="bg-px-white border-2 border-px-black shadow-[8px_8px_0_0_#0A0A0A] w-[90vw] h-[90vh] flex flex-col">
-        {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 bg-px-black text-px-white border-b-2 border-px-black">
-          <div>
-            <h2 className="font-pixel text-sm tracking-wider">KNOWLEDGE BASE</h2>
-            {statusMsg && (
-              <p className={`font-pixel text-[8px] mt-0.5 ${statusMsg.includes('✓') ? 'text-green-400' : 'text-red-400'}`}>
-                {statusMsg}
-              </p>
-            )}
-          </div>
+    <Modal isOpen={true} onClose={onClose} size="lg">
+      <PanelHeader
+        title="KNOWLEDGE BASE"
+        subtitle={statusMsg || undefined}
+        onClose={onClose}
+        actions={
           <div className="flex items-center gap-2">
-            {/* GAP9a: 导入文档按钮 */}
             <button
               onClick={handleImportDocument}
               disabled={isImporting}
-              className="pixel-btn-outline-light text-[10px] disabled:opacity-40"
+              className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="导入文档"
             >
-              {isImporting ? 'IMPORTING...' : '[↑] IMPORT'}
+              {isImporting ? '...' : 'IMPORT'}
             </button>
-            {/* GAP7: 新建文件按钮 */}
             <button
               onClick={() => setShowNewFileDialog(true)}
-              className="pixel-btn-outline-light text-[10px]"
+              className="pixel-btn-outline-light"
               aria-label="新建文件"
             >
               [+] NEW
             </button>
-            <button onClick={onClose} className="pixel-close-btn" aria-label="关闭">X</button>
+          </div>
+        }
+      />
+
+      {/* 新建文件内联对话框 */}
+      {showNewFileDialog && (
+        <div className="px-6 py-3 bg-px-elevated border-b-2 border-px-border flex items-center gap-3">
+          <span className="font-game text-[12px] text-px-primary tracking-wider">新建:</span>
+          <input
+            ref={newFileInputRef}
+            type="text"
+            value={newFilePath}
+            onChange={(e) => setNewFilePath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateFile()
+              if (e.key === 'Escape') { setShowNewFileDialog(false); setNewFilePath('') }
+            }}
+            placeholder="path/to/file.md"
+            className="pixel-input flex-1 text-sm py-1.5"
+          />
+          <button onClick={handleCreateFile} className="pixel-btn-primary py-1.5">OK</button>
+          <button onClick={() => { setShowNewFileDialog(false); setNewFilePath('') }} className="pixel-btn-ghost py-1.5">CANCEL</button>
+        </div>
+      )}
+
+      {/* 导入进度条 */}
+      {isImporting && statusMsg && (
+        <div className="px-6 py-3 border-b-2 border-px-primary/30 bg-px-primary/5">
+          <div className="flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-px-primary border-t-transparent rounded-full animate-spin" />
+            <span className="font-game text-[13px] text-px-primary tracking-wider">{statusMsg}</span>
           </div>
         </div>
+      )}
 
-        {/* GAP7: 新建文件内联对话框 */}
-        {showNewFileDialog && (
-          <div className="px-6 py-3 bg-px-warm border-b-2 border-px-border flex items-center gap-3">
-            <span className="font-pixel text-[8px] text-px-black tracking-wider">NEW FILE:</span>
-            <input
-              ref={newFileInputRef}
-              type="text"
-              value={newFilePath}
-              onChange={(e) => setNewFilePath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateFile()
-                if (e.key === 'Escape') { setShowNewFileDialog(false); setNewFilePath('') }
-              }}
-              placeholder="path/to/file.md"
-              className="pixel-input flex-1 text-sm py-1.5"
-            />
-            <button onClick={handleCreateFile} className="pixel-btn-primary text-[10px]">[✓] OK</button>
-            <button onClick={() => { setShowNewFileDialog(false); setNewFilePath('') }} className="pixel-btn-ghost text-[10px]">CANCEL</button>
-          </div>
-        )}
-
-        {/* 搜索栏 */}
-        <div className="px-6 py-3 border-b-2 border-px-border">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="> search knowledge..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="pixel-input flex-1"
-            />
-            <button
-              onClick={handleSearch}
-              disabled={isSearching}
-              className="pixel-btn-secondary disabled:opacity-40"
-            >
-              {isSearching ? 'SEARCHING...' : '[?] SEARCH'}
-            </button>
-          </div>
-        </div>
-
-        {/* 主体 */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* 左侧：文件树 */}
-          <div className="w-64 border-r-2 border-px-border overflow-y-auto bg-px-warm">
-            <KnowledgeTree
-              tree={tree}
-              onSelectFile={handleSelectFile}
-              selectedPath={selectedPath}
-              confirmDeletePath={confirmDeletePath}
-              onRequestDelete={(path) => setConfirmDeletePath(path)}
-              onConfirmDelete={handleDeleteFile}
-              onCancelDelete={() => setConfirmDeletePath(null)}
-            />
-          </div>
-
-          {/* 右侧：内容区域 */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {searchResults.length > 0 ? (
-              <div className="flex-1 overflow-y-auto p-6">
-                <h3 className="font-pixel text-xs text-px-black tracking-wider mb-4">
-                  RESULTS ({searchResults.length})
-                </h3>
-                {searchResults.map((result, index) => (
-                  <div key={index} className="mb-4 p-4 border-2 border-px-border bg-px-warm">
-                    <button
-                      onClick={() => { handleSelectFile(result.path); setSearchResults([]) }}
-                      className="font-mono text-sm font-medium text-px-black hover:underline mb-2 block"
-                    >
-                      {result.path}
-                    </button>
-                    <div className="font-mono text-xs text-px-muted space-y-1">
-                      {result.matches.map((match, i) => (
-                        <div key={i}>{match}</div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : selectedPath ? (
-              <>
-                <div className="flex items-center justify-between px-4 py-2 border-b-2 border-px-border bg-px-warm">
-                  <span className="font-mono text-sm text-px-muted">{selectedPath}</span>
-                  <div className="flex gap-2 items-center">
-                    {isSaving && <span className="font-pixel text-[8px] text-px-muted">SAVING...</span>}
-                    {isEditMode ? (
-                      <>
-                        <button onClick={() => setIsEditMode(false)} className="pixel-btn-ghost text-[10px]">PREVIEW</button>
-                        <button onClick={handleSave} disabled={isSaving} className="pixel-btn-primary text-[10px] disabled:opacity-40">
-                          [✓] SAVE
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {/* GAP12: 自动生成测试用例按钮 */}
-                        {chatModel?.apiKey && (
-                          <button
-                            onClick={handleGenerateTests}
-                            disabled={isGeneratingTests}
-                            className="pixel-btn-outline text-[10px] disabled:opacity-40"
-                            title="根据此文件生成测试用例"
-                          >
-                            {isGeneratingTests ? 'GEN...' : '[T] GEN TESTS'}
-                          </button>
-                        )}
-                        <button onClick={() => setIsEditMode(true)} className="pixel-btn-secondary text-[10px]">[/] EDIT</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  {isEditMode ? (
-                    <KnowledgeEditor
-                      content={editedContent}
-                      onChange={(value) => setEditedContent(value || '')}
-                      onSave={handleSave}
-                    />
-                  ) : (
-                    <KnowledgeViewer content={fileContent} />
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="font-pixel text-[10px] text-px-muted tracking-wider">SELECT A FILE</p>
-              </div>
-            )}
-          </div>
+      {/* 搜索栏 */}
+      <div className="px-6 py-3 border-b-2 border-px-border bg-px-surface">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="搜索知识..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="pixel-input flex-1"
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching}
+            className="pixel-btn-secondary disabled:opacity-40"
+          >
+            {isSearching ? '...' : 'SEARCH'}
+          </button>
         </div>
       </div>
-    </div>
+
+      {/* 主体 */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* 左侧：文件树 */}
+        <div className="w-60 border-r-2 border-px-border overflow-y-auto bg-px-bg">
+          <KnowledgeTree
+            tree={tree}
+            onSelectFile={handleSelectFile}
+            selectedPath={selectedPath}
+            confirmDeletePath={confirmDeletePath}
+            onRequestDelete={(path) => setConfirmDeletePath(path)}
+            onConfirmDelete={handleDeleteFile}
+            onCancelDelete={() => setConfirmDeletePath(null)}
+          />
+        </div>
+
+        {/* 右侧：内容区域 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {searchResults.length > 0 ? (
+            <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+              <h3 className="font-game text-[13px] text-px-text tracking-wider mb-4">
+                搜索结果 ({searchResults.length})
+              </h3>
+              {searchResults.map((result, index) => (
+                <div key={index} className="mb-4 p-4 border-2 border-px-border bg-px-elevated">
+                  <button
+                    onClick={() => { handleSelectFile(result.path); setSearchResults([]) }}
+                    className="font-game text-[14px] font-medium text-px-primary hover:underline mb-2 block"
+                  >
+                    {result.path}
+                  </button>
+                  <div className="font-game text-[13px] text-px-text-sec space-y-1">
+                    {result.matches.map((match, i) => (
+                      <div key={i}>{match}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : selectedPath ? (
+            <>
+              <div className="flex items-center justify-between px-4 py-2 border-b-2 border-px-border bg-px-elevated">
+                <span className="font-game text-[13px] text-px-text-sec">{selectedPath}</span>
+                <div className="flex gap-2 items-center">
+                  {isSaving && <span className="font-game text-[12px] text-px-text-dim tracking-wider">保存中...</span>}
+                  {isEditMode ? (
+                    <>
+                      <button onClick={() => setIsEditMode(false)} className="pixel-btn-ghost py-1">PREVIEW</button>
+                      <button onClick={handleSave} disabled={isSaving} className="pixel-btn-primary py-1">
+                        SAVE
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {chatModel?.apiKey && (
+                        <button
+                          onClick={handleGenerateTests}
+                          disabled={isGeneratingTests}
+                          className="pixel-btn-outline-muted py-1"
+                          title="根据此文件生成测试用例"
+                        >
+                          {isGeneratingTests ? '...' : 'GEN TEST'}
+                        </button>
+                      )}
+                      <button onClick={() => setIsEditMode(true)} className="pixel-btn-outline-light py-1">EDIT</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden bg-px-surface">
+                {isEditMode ? (
+                  <KnowledgeEditor
+                    content={editedContent}
+                    onChange={(value) => setEditedContent(value || '')}
+                    onSave={handleSave}
+                  />
+                ) : (
+                  <KnowledgeViewer content={fileContent} />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-px-surface">
+              <div className="text-center">
+                <div className="w-12 h-12 border-2 border-px-border bg-px-elevated flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-5 h-5 text-px-text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="square" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <p className="font-game text-[12px] text-px-text-dim tracking-wider">选择一个文件</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   )
 }

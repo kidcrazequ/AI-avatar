@@ -378,6 +378,21 @@ export class KnowledgeRetriever {
     }))
   }
 
+  /**
+   * 获取所有 chunk 的完整数据（含完整内容）。
+   * 供 WikiCompiler 等外部模块使用，不改变现有检索逻辑。
+   *
+   * @author zhi.qu
+   * @date 2026-04-09
+   */
+  getFullChunks(): Array<{ file: string; heading: string; content: string }> {
+    return this.getChunks().map(c => ({
+      file: c.file,
+      heading: c.heading,
+      content: c.content,
+    }))
+  }
+
   /** 将所有知识文件按 h2/h3 标题切片 */
   private buildChunks(): Chunk[] {
     const chunks: Chunk[] = []

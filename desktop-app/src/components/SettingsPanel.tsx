@@ -61,10 +61,15 @@ export default function SettingsPanel({ onClose }: Props) {
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [testingIdx, setTestingIdx] = useState<number | null>(null)
-  // -1 表示日志与反馈 Tab
+  // 特殊 Tab 标识
   const LOG_TAB = -1
+  const WIKI_TAB = -2
   const [isExporting, setIsExporting] = useState(false)
   const [logMsg, setLogMsg] = useState('')
+  // Wiki 设置状态
+  const [wikiInjectRag, setWikiInjectRag] = useState(false)
+  const [wikiAutoSediment, setWikiAutoSediment] = useState(false)
+  const [wikiStatusMsg, setWikiStatusMsg] = useState('')
 
   useEffect(() => {
     loadSettings()
@@ -78,6 +83,12 @@ export default function SettingsPanel({ onClose }: Props) {
       return { apiKey, baseUrl, model, showApiKey: slots[i]?.showApiKey ?? false }
     }))
     setSlots(newSlots)
+
+    // 加载 Wiki 设置
+    const wikiInject = await window.electronAPI.getSetting('wiki_inject_rag')
+    setWikiInjectRag(wikiInject === 'true')
+    const wikiSediment = await window.electronAPI.getSetting('wiki_auto_sediment')
+    setWikiAutoSediment(wikiSediment === 'true')
   }
 
   const updateSlot = (idx: number, updates: Partial<ModelValues>) => {
@@ -203,6 +214,19 @@ export default function SettingsPanel({ onClose }: Props) {
     }
   }
 
+  /** 保存 Wiki 设置 */
+  const handleSaveWikiSettings = async () => {
+    try {
+      await window.electronAPI.setSetting('wiki_inject_rag', wikiInjectRag ? 'true' : 'false')
+      await window.electronAPI.setSetting('wiki_auto_sediment', wikiAutoSediment ? 'true' : 'false')
+      setWikiStatusMsg('SAVED')
+      window.dispatchEvent(new CustomEvent('settings-updated'))
+      setTimeout(() => setWikiStatusMsg(''), 2000)
+    } catch (error) {
+      setWikiStatusMsg(`FAILED - ${(error as Error).message}`)
+    }
+  }
+
   return (
     <Modal isOpen={true} onClose={onClose} size="md">
       <PanelHeader title="SETTINGS" onClose={onClose} />
@@ -225,6 +249,18 @@ export default function SettingsPanel({ onClose }: Props) {
             </button>
           ))}
           <div className="flex-1" />
+          {/* Wiki 百科 Tab */}
+          <button
+            onClick={() => setActiveTab(WIKI_TAB)}
+            className={`text-left px-4 py-3 border-l-3 border-t-2 border-t-px-border transition-none
+              ${activeTab === WIKI_TAB
+                ? 'border-l-px-primary bg-px-surface text-px-text'
+                : 'border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
+              }`}
+          >
+            <span className="font-game text-[12px] tracking-wider">WIKI</span>
+            <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">知识百科</span>
+          </button>
           {/* 日志与反馈 Tab */}
           <button
             onClick={() => setActiveTab(LOG_TAB)}
@@ -244,7 +280,93 @@ export default function SettingsPanel({ onClose }: Props) {
 
         {/* 右侧内容区 */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {activeTab === LOG_TAB ? (
+          {activeTab === WIKI_TAB ? (
+            /* ── 知识百科设置面板 ── */
+            <>
+              <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+                <div className="max-w-lg space-y-6">
+                  <div className="border-l-3 border-px-primary pl-4 py-1">
+                    <h3 className="font-game text-[16px] font-bold text-px-text mb-1">知识百科</h3>
+                    <p className="font-game text-[14px] text-px-text-sec">融合 Karpathy Wiki 思想的知识增强功能</p>
+                  </div>
+
+                  {/* 注入百科到 RAG 开关 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <span
+                        className="pixel-checkbox"
+                        role="checkbox"
+                        aria-checked={wikiInjectRag}
+                        data-checked={wikiInjectRag || undefined}
+                        onClick={() => setWikiInjectRag(!wikiInjectRag)}
+                        onKeyDown={(e) => e.key === ' ' && setWikiInjectRag(!wikiInjectRag)}
+                        tabIndex={0}
+                      />
+                      <div>
+                        <div className="font-game text-[14px] text-px-text">注入百科到 RAG</div>
+                        <div className="font-game text-[12px] text-px-text-dim mt-0.5">
+                          启用后，RAG 检索时同时搜索 wiki/concepts/ 中的概念页，作为补充参考注入问答
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* 自动沉淀优质回答 开关 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <span
+                        className="pixel-checkbox"
+                        role="checkbox"
+                        aria-checked={wikiAutoSediment}
+                        data-checked={wikiAutoSediment || undefined}
+                        onClick={() => setWikiAutoSediment(!wikiAutoSediment)}
+                        onKeyDown={(e) => e.key === ' ' && setWikiAutoSediment(!wikiAutoSediment)}
+                        tabIndex={0}
+                      />
+                      <div>
+                        <div className="font-game text-[14px] text-px-text">自动沉淀优质回答</div>
+                        <div className="font-game text-[12px] text-px-text-dim mt-0.5">
+                          启用后，当回答满足质量规则（长度 &gt; 300 字、含来源引用）时自动保存到 wiki/qa/
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* 说明 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">功能说明</p>
+                    <ul className="space-y-1.5">
+                      {[
+                        '百科内容由知识库面板的 WIKI 按钮编译生成，保存在 wiki/concepts/ 目录',
+                        '注入 RAG 时百科仅作为补充参考，以知识库原文为准',
+                        '自动沉淀的问答保存到 wiki/qa/，也可在消息气泡上手动点击 SAVE',
+                        '所有 Wiki 功能不修改 knowledge/ 中的任何文件',
+                      ].map((item, i) => (
+                        <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
+                          <span className="text-px-primary flex-shrink-0">-</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* 底部保存栏 */}
+              <div className="flex items-center justify-between px-6 py-3 border-t-2 border-px-border bg-px-elevated">
+                <span className={`font-game text-[12px] tracking-wider ${
+                  wikiStatusMsg.includes('SAVED') ? 'text-px-success' :
+                  wikiStatusMsg.includes('FAIL') ? 'text-px-danger' : 'text-px-text-dim'
+                }`}>
+                  {wikiStatusMsg}
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="pixel-btn-ghost">CANCEL</button>
+                  <button onClick={handleSaveWikiSettings} className="pixel-btn-primary">SAVE</button>
+                </div>
+              </div>
+            </>
+          ) : activeTab === LOG_TAB ? (
             /* ── 日志与反馈面板 ── */
             <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
               <div className="max-w-lg space-y-6">

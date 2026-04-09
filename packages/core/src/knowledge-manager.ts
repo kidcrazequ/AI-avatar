@@ -51,6 +51,9 @@ export class KnowledgeManager {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true })
 
       for (const entry of entries) {
+        // 跳过内部目录（_index, _raw 等），保持知识树简洁
+        if (entry.isDirectory() && entry.name.startsWith('_')) continue
+
         const fullPath = path.join(dirPath, entry.name)
         const relativePath = path.relative(this.knowledgePath, fullPath)
 

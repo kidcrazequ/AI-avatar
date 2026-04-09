@@ -52,19 +52,25 @@ const ANSWER_RULES = `规则：
  * 增强后的消息包含：
  *   - 用户原始问题
  *   - 多跳检索结果（带来源标注）
+ *   - 可选的百科参考（来自 wiki/concepts/）
  *   - 5 条答题规则
  *
- * @param retriever   已注入 contexts + embeddings 的 KnowledgeRetriever
- * @param question    用户原始问题
- * @param config      LLM 和 Embedding 调用函数
+ * @param retriever    已注入 contexts + embeddings 的 KnowledgeRetriever
+ * @param question     用户原始问题
+ * @param config       LLM 和 Embedding 调用函数
  * @param embeddingMap 当前的 embedding Map（用于注入 __query__）
+ * @param wikiChunks   可选的百科概念页检索结果（不参与多跳，仅作为补充参考）
  * @returns 增强后的 user 消息文本
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
  */
 export async function retrieveAndBuildPrompt(
   retriever: KnowledgeRetriever,
   question: string,
   config: RAGConfig,
   embeddingMap?: Map<string, number[]>,
+  wikiChunks?: Array<{ file: string; heading: string; content: string; score: number }>,
 ): Promise<string> {
   const keywords = tokenize(question)
   const query = keywords.join(' ')
@@ -117,6 +123,18 @@ export async function retrieveAndBuildPrompt(
     )
     .join('\n\n---\n\n')
 
+  // 百科参考：来自 wiki/concepts/ 的补充性概念聚合页（可选）
+  let wikiRefText = ''
+  if (wikiChunks && wikiChunks.length > 0) {
+    wikiRefText = '\n\n---\n\n百科参考（概念聚合页，仅供补充，以知识库原文为准）：\n' +
+      wikiChunks
+        .slice(0, 3)
+        .map((c, idx) =>
+          `【百科${idx + 1}】来源：${c.file} > ${c.heading}\n${c.content.trim().slice(0, 1500)}`,
+        )
+        .join('\n\n---\n\n')
+  }
+
   return `用户问题：${question}
 
 以下检索结果是回答的起点，但不是你的全部知识。你的完整知识库在 system prompt 中，请同时使用检索结果和 system prompt 中的所有相关章节来回答。
@@ -124,5 +142,5 @@ export async function retrieveAndBuildPrompt(
 ${ANSWER_RULES}
 
 检索起点：
-${refText}`
+${refText}${wikiRefText}`
 }

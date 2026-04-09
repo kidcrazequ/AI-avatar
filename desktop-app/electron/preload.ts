@@ -86,6 +86,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTestCreationPrompt: () => ipcRenderer.invoke('get-test-creation-prompt'),
   listTemplates: () => ipcRenderer.invoke('list-templates'),
 
+  // 知识百科（Wiki 融合层）
+  compileWiki: (avatarId: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('compile-wiki', avatarId, apiKey, baseUrl),
+  getWikiStatus: (avatarId: string) =>
+    ipcRenderer.invoke('get-wiki-status', avatarId),
+  getConceptPages: (avatarId: string) =>
+    ipcRenderer.invoke('get-concept-pages', avatarId),
+  readConceptPage: (avatarId: string, name: string) =>
+    ipcRenderer.invoke('read-concept-page', avatarId, name),
+  lintKnowledge: (avatarId: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('lint-knowledge', avatarId, apiKey, baseUrl),
+  getLintReport: (avatarId: string) =>
+    ipcRenderer.invoke('get-lint-report', avatarId),
+  saveWikiAnswer: (avatarId: string, qa: { id: string; question: string; answer: string; sources: string[]; savedAt: string }) =>
+    ipcRenderer.invoke('save-wiki-answer', avatarId, qa),
+  getWikiAnswers: (avatarId: string) =>
+    ipcRenderer.invoke('get-wiki-answers', avatarId),
+  preserveRawFile: (avatarId: string, originalFilePath: string) =>
+    ipcRenderer.invoke('preserve-raw-file', avatarId, originalFilePath),
+  detectEvolution: (avatarId: string, newContent: string, newFileName: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('detect-evolution', avatarId, newContent, newFileName, apiKey, baseUrl),
+  getEvolutionReport: (avatarId: string) =>
+    ipcRenderer.invoke('get-evolution-report', avatarId),
+
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) =>
     ipcRenderer.invoke('show-open-dialog', options),

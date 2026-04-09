@@ -39,3 +39,12 @@ export type { EmbeddingCallFn, IndexerConfig, IndexBuildProgress } from './knowl
 
 export { retrieveAndBuildPrompt, ENTITY_EXTRACT_PROMPT } from './rag-answerer'
 export type { RAGConfig } from './rag-answerer'
+
+export { WikiCompiler } from './wiki-compiler'
+export type {
+  ChunkData, EntityInfo, EntityAppearance, ConceptPage,
+  LintIssue, LintReport, WikiMeta, WikiAnswer, WikiCompileProgress,
+  EvolutionDiff, EvolutionReport,
+} from './wiki-compiler'
+
+export { tokenize } from './knowledge-retriever'

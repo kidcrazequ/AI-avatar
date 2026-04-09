@@ -83,6 +83,28 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     }
   }
 
+  /**
+   * 沉淀优质回答到 wiki/qa/。
+   * 由 MessageBubble 上的 SAVE 按钮触发。
+   *
+   * @author zhi.qu
+   * @date 2026-04-09
+   */
+  const handleSaveAnswer = async (question: string, answer: string) => {
+    try {
+      const qa: WikiAnswerData = {
+        id: `qa-${Date.now()}`,
+        question,
+        answer,
+        sources: [],
+        savedAt: new Date().toISOString().slice(0, 10),
+      }
+      await window.electronAPI.saveWikiAnswer(avatarId, qa)
+    } catch (err) {
+      console.warn('答案沉淀失败:', err)
+    }
+  }
+
   if (!isInitialized) {
     return (
       <div className="flex items-center justify-center h-full bg-px-bg">
@@ -105,6 +127,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           isLoading={isLoading || isRunningTests}
           onQuickQuestion={handleSendMessage}
           quickQuestions={messages.length === 0 ? QUICK_QUESTIONS : undefined}
+          onSaveAnswer={handleSaveAnswer}
         />
       </div>
 

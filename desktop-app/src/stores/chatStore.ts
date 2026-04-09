@@ -14,6 +14,20 @@ function extractMemoryUpdates(text: string): { cleanText: string; updates: strin
   return { cleanText, updates }
 }
 
+/**
+ * 启发式判断回答是否值得自动沉淀到 wiki/qa/。
+ * 条件：长度 > 300、含来源引用、非错误消息。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+function shouldSediment(answer: string): boolean {
+  if (answer.length < 300) return false
+  if (answer.startsWith('抱歉，发生了错误')) return false
+  const hasSource = /来源[：:]/.test(answer) || /\[来源/.test(answer) || /【参考/.test(answer)
+  return hasSource
+}
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -306,6 +320,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         } catch (err) {
           console.error('写入记忆失败:', err)
         }
+      }
+
+      // Phase 2: 自动沉淀优质回答到 wiki/qa/（启发式判断，设置开关控制）
+      try {
+        const autoSediment = await window.electronAPI.getSetting('wiki_auto_sediment')
+        if (autoSediment === 'true' && shouldSediment(displayText)) {
+          await window.electronAPI.saveWikiAnswer(avatarId, {
+            id: `qa-${Date.now()}`,
+            question: content,
+            answer: displayText,
+            sources: [],
+            savedAt: new Date().toISOString().slice(0, 10),
+          })
+        }
+      } catch {
+        // 自动沉淀失败不影响正常对话
       }
 
       set((state) => {

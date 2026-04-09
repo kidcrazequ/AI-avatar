@@ -178,12 +178,6 @@ function hasSection(content: string, keyword: string): boolean {
 }
 
 function countGoodExamples(content: string): number {
-  const patterns = [
-    /####\s*场景\s*\d/g,
-    /####\s*示例\s*\d/g,
-    /####\s*好的.*\d/g,
-  ]
-
   // 在"好的回答示例"区域内计数
   const goodSection = extractSectionContent(content, '好的回答示例', '不好的回答示例')
   if (!goodSection) {

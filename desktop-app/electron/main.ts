@@ -8,8 +8,8 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, retrieveAndBuildPrompt } from '@soul/core'
-import type { LLMCallFn, EmbeddingCallFn } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, retrieveAndBuildPrompt, WikiCompiler } from '@soul/core'
+import type { LLMCallFn, EmbeddingCallFn, WikiAnswer } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager } from './test-manager'
 import { DocumentParser } from './document-parser'
@@ -514,7 +514,142 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
 
   const embeddingMap = retriever.getEmbeddings()
-  return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, embeddingMap)
+
+  // Phase 2: 可选注入 wiki/concepts/ 百科内容（设置开关控制，默认关闭）
+  let wikiChunks: Array<{ file: string; heading: string; content: string; score: number }> | undefined
+  try {
+    const wikiInject = getDb().getSetting('wiki_inject_rag')
+    if (wikiInject === 'true') {
+      const wikiConceptsPath = path.join(avatarsPath, avatarId, 'wiki', 'concepts')
+      if (fs.existsSync(wikiConceptsPath)) {
+        const wikiRetriever = new KnowledgeRetriever(wikiConceptsPath)
+        wikiChunks = wikiRetriever.searchChunks(question, 3)
+      }
+    }
+  } catch {
+    // wiki 注入失败不影响正常 RAG
+  }
+
+  return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, embeddingMap, wikiChunks)
+})
+
+// ─── 知识百科（Wiki 融合层）───────────────────────────────────────────────────
+
+/**
+ * compile-wiki: 编译知识百科（实体提取 + 概念页生成）。
+ * 在 avatar/wiki/ 下生成概念页，不影响 knowledge/ 中的任何内容。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+wrapHandler('compile-wiki', async (_, avatarId: string, apiKey: string, baseUrl: string) => {
+  const avatarPath = path.join(avatarsPath, avatarId)
+  const knowledgePath = path.join(avatarPath, 'knowledge')
+  const retriever = new KnowledgeRetriever(knowledgePath)
+  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
+  const wiki = new WikiCompiler(avatarPath)
+  const chunks = retriever.getFullChunks()
+
+  const pages = await wiki.compileConceptPages(chunks, callLLM)
+  if (logger) logger.activity('compile-wiki', `avatarId=${avatarId}, pages=${pages.length}`)
+  return { entityCount: wiki.getMeta()?.entityCount ?? 0, conceptPageCount: pages.length }
+})
+
+/** get-wiki-status: 获取 wiki 编译状态 */
+wrapHandler('get-wiki-status', (_, avatarId: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.getMeta()
+})
+
+/** get-concept-pages: 列出所有概念页 */
+wrapHandler('get-concept-pages', (_, avatarId: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.getConceptPages()
+})
+
+/** read-concept-page: 读取指定概念页内容 */
+wrapHandler('read-concept-page', (_, avatarId: string, name: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.readConceptPage(name)
+})
+
+/**
+ * lint-knowledge: 知识自检（矛盾检测 + 重复检测）。
+ * 结果保存在 avatar/wiki/lint-report.json，不修改 knowledge/ 中的任何文件。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+wrapHandler('lint-knowledge', async (_, avatarId: string, apiKey: string, baseUrl: string) => {
+  const avatarPath = path.join(avatarsPath, avatarId)
+  const knowledgePath = path.join(avatarPath, 'knowledge')
+  const retriever = new KnowledgeRetriever(knowledgePath)
+  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')
+  const wiki = new WikiCompiler(avatarPath)
+  const chunks = retriever.getFullChunks()
+
+  const report = await wiki.lintKnowledge(chunks, callLLM)
+  if (logger) logger.activity('lint-knowledge', `avatarId=${avatarId}, issues=${report.issueCount}`)
+  return report
+})
+
+/** get-lint-report: 获取最近的自检报告 */
+wrapHandler('get-lint-report', (_, avatarId: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.getLintReport()
+})
+
+/** save-wiki-answer: 沉淀优质问答到 wiki/qa/ */
+wrapHandler('save-wiki-answer', (_, avatarId: string, qa: WikiAnswer) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  wiki.sedimentAnswer(qa)
+  if (logger) logger.activity('save-wiki-answer', `avatarId=${avatarId}, question=${qa.question.slice(0, 50)}`)
+})
+
+/** get-wiki-answers: 获取所有沉淀的问答 */
+wrapHandler('get-wiki-answers', (_, avatarId: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.getAnswers()
+})
+
+/**
+ * detect-evolution: 检测新导入文件与已有知识的演化差异。
+ * 仅报告差异，不修改任何现有文件。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+wrapHandler('detect-evolution', async (_, avatarId: string, newContent: string, newFileName: string, apiKey: string, baseUrl: string) => {
+  const avatarPath = path.join(avatarsPath, avatarId)
+  const knowledgePath = path.join(avatarPath, 'knowledge')
+  const retriever = new KnowledgeRetriever(knowledgePath)
+  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')
+  const wiki = new WikiCompiler(avatarPath)
+  const existingChunks = retriever.getFullChunks()
+
+  const report = await wiki.detectEvolution(newContent, newFileName, existingChunks, callLLM)
+  if (logger) logger.activity('detect-evolution', `avatarId=${avatarId}, file=${newFileName}, diffs=${report.diffs.length}`)
+  return report
+})
+
+/** get-evolution-report: 获取最近的知识演化检测报告 */
+wrapHandler('get-evolution-report', (_, avatarId: string) => {
+  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
+  return wiki.getEvolutionReport()
+})
+
+/**
+ * preserve-raw-file: 保存原始导入文件到 knowledge/_raw/。
+ * 保留原始 PDF/Word 等文件供追溯，不影响 .md 知识文件过滤。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+wrapHandler('preserve-raw-file', (_, avatarId: string, originalFilePath: string) => {
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const relativePath = WikiCompiler.preserveRawFile(knowledgePath, originalFilePath)
+  if (logger) logger.activity('preserve-raw-file', `avatarId=${avatarId}, file=${relativePath}`)
+  return relativePath
 })
 
 // ─── 文档导入（GAP9a）────────────────────────────────────────────────────────

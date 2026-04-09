@@ -151,6 +151,19 @@ interface ElectronAPI {
   buildKnowledgeIndex: (avatarId: string, apiKey: string, baseUrl: string) => Promise<{ contextCount: number; embeddingCount: number }>
   ragRetrieve: (avatarId: string, question: string, apiKey: string, baseUrl: string) => Promise<string>
 
+  // 知识百科（Wiki 融合层）
+  compileWiki: (avatarId: string, apiKey: string, baseUrl: string) => Promise<{ entityCount: number; conceptPageCount: number }>
+  getWikiStatus: (avatarId: string) => Promise<WikiMeta | null>
+  getConceptPages: (avatarId: string) => Promise<Array<{ name: string; entity: string; generatedAt: string }>>
+  readConceptPage: (avatarId: string, name: string) => Promise<string>
+  lintKnowledge: (avatarId: string, apiKey: string, baseUrl: string) => Promise<WikiLintReport>
+  getLintReport: (avatarId: string) => Promise<WikiLintReport | null>
+  saveWikiAnswer: (avatarId: string, qa: WikiAnswerData) => Promise<void>
+  getWikiAnswers: (avatarId: string) => Promise<WikiAnswerData[]>
+  preserveRawFile: (avatarId: string, originalFilePath: string) => Promise<string>
+  detectEvolution: (avatarId: string, newContent: string, newFileName: string, apiKey: string, baseUrl: string) => Promise<WikiEvolutionReport>
+  getEvolutionReport: (avatarId: string) => Promise<WikiEvolutionReport | null>
+
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) => Promise<{ canceled: boolean; filePaths: string[] }>
   parseDocument: (filePath: string) => Promise<ParsedDocument>
@@ -223,6 +236,66 @@ interface Skill {
   enabled: boolean
   filePath: string
   content: string
+}
+
+/** Wiki 编译元数据 */
+interface WikiMeta {
+  lastCompiled: string
+  entityCount: number
+  conceptPageCount: number
+  qaCount: number
+}
+
+/** Wiki Lint 自检问题 */
+interface WikiLintIssue {
+  type: 'contradiction' | 'gap' | 'duplicate'
+  severity: 'warning' | 'error'
+  description: string
+  locations: Array<{ file: string; heading: string; excerpt: string }>
+}
+
+/** Wiki Lint 自检报告 */
+interface WikiLintReport {
+  timestamp: string
+  totalChunks: number
+  totalFiles: number
+  issueCount: number
+  issues: WikiLintIssue[]
+}
+
+/** Wiki 沉淀的问答数据 */
+interface WikiAnswerData {
+  id: string
+  question: string
+  answer: string
+  sources: string[]
+  savedAt: string
+}
+
+/**
+ * 知识演化差异项。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+interface WikiEvolutionDiff {
+  entity: string
+  type: 'new' | 'updated' | 'contradiction'
+  description: string
+  oldSource: { file: string; excerpt: string }
+  newExcerpt: string
+}
+
+/**
+ * 知识演化检测报告。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+interface WikiEvolutionReport {
+  timestamp: string
+  newFile: string
+  diffs: WikiEvolutionDiff[]
 }
 
 interface Window {

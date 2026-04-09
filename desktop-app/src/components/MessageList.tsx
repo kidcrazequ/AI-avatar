@@ -7,9 +7,11 @@ interface Props {
   isLoading?: boolean
   quickQuestions?: string[]
   onQuickQuestion?: (question: string) => void
+  /** 沉淀回答到 wiki/qa/ 的回调 */
+  onSaveAnswer?: (question: string, answer: string) => void
 }
 
-export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion }: Props) {
+export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -18,9 +20,20 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
 
   return (
     <div className="h-full overflow-y-auto px-6 py-6 space-y-6 bg-px-bg">
-      {messages.map((message, index) => (
-        <MessageBubble key={index} message={message} />
-      ))}
+      {messages.map((message, index) => {
+        const previousUserMessage = message.role === 'assistant' && index > 0
+          ? messages.slice(0, index).reverse().find(m => m.role === 'user')?.content
+          : undefined
+
+        return (
+          <MessageBubble
+            key={index}
+            message={message}
+            previousUserMessage={previousUserMessage}
+            onSaveAnswer={onSaveAnswer}
+          />
+        )
+      })}
 
       {/* 空对话 — 快捷问题建议 */}
       {messages.length === 0 && !isLoading && (

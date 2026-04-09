@@ -36,6 +36,9 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
   const [isImporting, setIsImporting] = useState(false)
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
+  const [isCompiling, setIsCompiling] = useState(false)
+  const [isLinting, setIsLinting] = useState(false)
+  const [isDetectingEvolution, setIsDetectingEvolution] = useState(false)
   const newFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -147,6 +150,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
       setIsImporting(true)
       const filePath = result.filePaths[0]
+
+      // 保留原始文件到 knowledge/_raw/（Karpathy 融合：source of truth 不丢失）
+      try {
+        await window.electronAPI.preserveRawFile(avatarId, filePath)
+      } catch (rawErr) {
+        console.warn('原始文件保留失败（不影响导入）:', rawErr)
+      }
+
       showStatus('解析文档中...', false)
 
       const parsed = await window.electronAPI.parseDocument(filePath)
@@ -200,7 +211,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
 
       let cleanedText = cleanPdfFullText(rawText)
-      if (parsed.fileType === 'docx') {
+      if (parsed.fileType === 'word') {
         cleanedText = stripDocxToc(cleanedText)
       }
 
@@ -301,9 +312,38 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         }
       }
 
+      // Phase 2: 知识演化检测（导入后自动检测与已有知识的差异）
+      const evolutionModel = creationModel?.apiKey ? creationModel : chatModel
+      if (evolutionModel?.apiKey && finalContent.length > 200) {
+        try {
+          setIsDetectingEvolution(true)
+          showStatus('知识演化检测中...', false)
+          const evoBaseUrl = evolutionModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+          const evoReport = await window.electronAPI.detectEvolution(
+            avatarId, finalContent, parsed.fileName, evolutionModel.apiKey, evoBaseUrl,
+          )
+          if (evoReport.diffs.length > 0) {
+            const newCount = evoReport.diffs.filter(d => d.type === 'new').length
+            const updateCount = evoReport.diffs.filter(d => d.type === 'updated').length
+            const conflictCount = evoReport.diffs.filter(d => d.type === 'contradiction').length
+            showStatus(
+              `✓ 已导入: ${targetPath} | 演化检测：${newCount} 新增，${updateCount} 更新，${conflictCount} 矛盾`,
+            )
+          } else {
+            showStatus(`✓ 已导入: ${targetPath} | 无知识演化差异`)
+          }
+        } catch (evoErr) {
+          console.warn('知识演化检测失败（不影响导入）:', evoErr)
+          showStatus(`✓ 已导入: ${targetPath}`)
+        } finally {
+          setIsDetectingEvolution(false)
+        }
+      } else {
+        showStatus(`✓ 已导入: ${targetPath}`)
+      }
+
       await loadTree()
       handleSelectFile(targetPath)
-      showStatus(`✓ 已导入: ${targetPath}`)
       onSaved?.()
     } catch (error) {
       console.error('导入文档失败:', error)
@@ -349,6 +389,58 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
+  /**
+   * 编译知识百科：提取实体 → 生成概念聚合页。
+   * 结果保存在 avatar/wiki/concepts/，不影响现有知识库和回答。
+   */
+  const handleCompileWiki = async () => {
+    const model = creationModel?.apiKey ? creationModel : chatModel
+    if (!model?.apiKey) {
+      showStatus('✗ 需要配置 API Key')
+      return
+    }
+    setIsCompiling(true)
+    showStatus('编译知识百科中（实体提取 + 概念页生成）...', false)
+    try {
+      const baseUrl = model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      const result = await window.electronAPI.compileWiki(avatarId, model.apiKey, baseUrl)
+      showStatus(`✓ 百科编译完成：${result.entityCount} 个实体，${result.conceptPageCount} 个概念页`)
+    } catch (err) {
+      console.error('百科编译失败:', err)
+      showStatus('✗ 百科编译失败')
+    } finally {
+      setIsCompiling(false)
+    }
+  }
+
+  /**
+   * 知识自检（Lint）：检测知识文件间的矛盾和重复。
+   * 结果保存在 avatar/wiki/lint-report.json，不修改任何知识文件。
+   */
+  const handleLintKnowledge = async () => {
+    const model = creationModel?.apiKey ? creationModel : chatModel
+    if (!model?.apiKey) {
+      showStatus('✗ 需要配置 API Key')
+      return
+    }
+    setIsLinting(true)
+    showStatus('知识自检中（矛盾检测 + 重复检测）...', false)
+    try {
+      const baseUrl = model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+      const report = await window.electronAPI.lintKnowledge(avatarId, model.apiKey, baseUrl)
+      if (report.issueCount === 0) {
+        showStatus(`✓ 自检通过：${report.totalFiles} 个文件，${report.totalChunks} 个片段，未发现问题`)
+      } else {
+        showStatus(`⚠ 发现 ${report.issueCount} 个问题（${report.issues.filter(i => i.type === 'contradiction').length} 矛盾，${report.issues.filter(i => i.type === 'duplicate').length} 重复）`)
+      }
+    } catch (err) {
+      console.error('知识自检失败:', err)
+      showStatus('✗ 自检失败')
+    } finally {
+      setIsLinting(false)
+    }
+  }
+
   return (
     <Modal isOpen={true} onClose={onClose} size="lg">
       <PanelHeader
@@ -371,6 +463,24 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               aria-label="新建文件"
             >
               [+] NEW
+            </button>
+            <button
+              onClick={handleCompileWiki}
+              disabled={isCompiling}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="编译百科"
+              title="提取实体、生成概念聚合页（不影响现有回答）"
+            >
+              {isCompiling ? '...' : 'WIKI'}
+            </button>
+            <button
+              onClick={handleLintKnowledge}
+              disabled={isLinting}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="知识自检"
+              title="检测知识文件间的矛盾和重复（不修改任何文件）"
+            >
+              {isLinting ? '...' : 'LINT'}
             </button>
           </div>
         }
@@ -398,7 +508,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       )}
 
       {/* 导入进度条 */}
-      {isImporting && statusMsg && (
+      {(isImporting || isDetectingEvolution) && statusMsg && (
         <div className="px-6 py-3 border-b-2 border-px-primary/30 bg-px-primary/5">
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 border-2 border-px-primary border-t-transparent rounded-full animate-spin" />

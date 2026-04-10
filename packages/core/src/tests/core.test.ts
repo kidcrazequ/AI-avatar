@@ -252,6 +252,32 @@ describe('AvatarManager', () => {
     assert.ok(content.includes('测试分身'), '应包含分身名称')
   })
 
+  it('parseImageDataUrlBase64 应解析 PNG / webp 等标准 data URL', () => {
+    const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    assert.equal(AvatarManager.parseImageDataUrlBase64(`data:image/png;base64,${b64}`), b64)
+    assert.equal(AvatarManager.parseImageDataUrlBase64(`data:image/webp;base64,${b64}`), b64)
+  })
+
+  it('parseImageDataUrlBase64 应支持含 + 的子类型并去除 base64 中的空白', () => {
+    const b64 = 'YQ=='
+    assert.equal(AvatarManager.parseImageDataUrlBase64(`data:image/svg+xml;base64,${b64}`), b64)
+    assert.equal(AvatarManager.parseImageDataUrlBase64(` data:image/png;base64,${b64} `), b64)
+    assert.equal(AvatarManager.parseImageDataUrlBase64(`data:image/png;base64,Y\nQ==`), b64)
+  })
+
+  it('saveAvatarImage 应将合法 PNG data URL 写入 avatar.png', () => {
+    const manager = new AvatarManager(tmpAvatarsDir, tmpTemplatesDir)
+    const tinyPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    const dataUrl = `data:image/png;base64,${tinyPng.toString('base64')}`
+    manager.saveAvatarImage('avatar-001', dataUrl)
+    const pngPath = path.join(tmpAvatarsDir, 'avatar-001', 'avatar.png')
+    assert.ok(fs.existsSync(pngPath))
+    assert.ok(fs.readFileSync(pngPath).equals(tinyPng))
+  })
+
   it('deleteAvatar 应删除分身目录', () => {
     const manager = new AvatarManager(tmpAvatarsDir, tmpTemplatesDir)
     manager.deleteAvatar('avatar-001')

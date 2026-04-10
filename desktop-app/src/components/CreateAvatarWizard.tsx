@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { LLMService, ModelConfig } from '../services/llm-service'
 import { generateSoulStepByStep, StepProgress } from '../services/soul-step-generator'
 import { validateSoulContent, ValidationResult } from '../services/soul-validator'
+import AvatarPicker from './AvatarPicker'
 
 interface Props {
   chatModel: ModelConfig
@@ -33,6 +34,7 @@ export default function CreateAvatarWizard({ chatModel, creationModel, onClose, 
 
   const [avatarName, setAvatarName] = useState('')
   const [avatarDescription, setAvatarDescription] = useState('')
+  const [avatarImage, setAvatarImage] = useState('')
   const [personalityInput, setPersonalityInput] = useState('')
   const [soulContent, setSoulContent] = useState('')
   const [isGeneratingSoul, setIsGeneratingSoul] = useState(false)
@@ -174,6 +176,17 @@ ${skillInput}`
         if (!mountedRef.current) return
       }
 
+      // 保存头像图片
+      if (avatarImage) {
+        try {
+          await window.electronAPI.saveAvatarImage(avatarId, avatarImage)
+        } catch (imgErr) {
+          // 头像保存失败不阻断分身创建，仅记录日志
+          const msg = imgErr instanceof Error ? imgErr.message : String(imgErr)
+          window.electronAPI.logEvent('warn', 'create-avatar-save-image', msg)
+        }
+      }
+
       if (mountedRef.current) onCreated(avatarId)
     } catch (error) {
       if (!mountedRef.current) return
@@ -256,6 +269,7 @@ ${skillInput}`
                   placeholder="例如：专注光伏电站设计与收益测算" className="pixel-input w-full" />
                 <p className="mt-1 font-game text-[12px] text-px-text-dim">会作为补充信息传给 AI，帮助生成更贴合的人格定义。不填也不影响创建。</p>
               </div>
+              <AvatarPicker value={avatarImage} onChange={setAvatarImage} />
             </div>
           )}
 
@@ -426,6 +440,7 @@ ${skillInput}`
                 {[
                   ['名称', avatarName],
                   ['描述', avatarDescription || '（未填写）'],
+                  ['头像', avatarImage ? (avatarImage.startsWith('default:') ? `预置·${avatarImage.slice(8)}` : '自定义图片') : '（未设置）'],
                   ['人格定义', `${soulContent.length} 字`],
                   ['知识文件', `${knowledgeFiles.length} 个`],
                   ['自定义技能', `${customSkills.length} 个`],

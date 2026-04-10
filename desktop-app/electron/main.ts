@@ -132,10 +132,10 @@ function resolveIconPath(): string | undefined {
 function createWindow() {
   const iconPath = resolveIconPath()
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
+    width: 1280,
+    height: 820,
+    minWidth: 1024,
+    minHeight: 680,
     icon: iconPath ? nativeImage.createFromPath(iconPath) : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -535,6 +535,14 @@ wrapHandler('delete-avatar', (_, id: string) => {
   avatarManager.deleteAvatar(id)
   knowledgeManagers.delete(id)
   wikiCompilers.delete(id)
+})
+
+wrapHandler('save-avatar-image', (_, avatarId: string, dataUrl: string) => {
+  avatarManager.saveAvatarImage(avatarId, dataUrl)
+})
+
+wrapHandler('get-avatar-image', (_, avatarId: string) => {
+  return avatarManager.getAvatarImage(avatarId)
 })
 
 // ─── 测试管理 ────────────────────────────────────────────────────────────────

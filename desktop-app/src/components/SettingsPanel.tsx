@@ -330,7 +330,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧 Tab */}
-        <div className="w-48 border-r-2 border-px-border bg-px-bg flex flex-col">
+        <div className="w-48 border-r-2 border-px-border bg-px-bg flex flex-col overflow-y-auto">
           {MODEL_SLOTS.map((slot, idx) => (
             <button
               key={slot.keyPrefix}
@@ -345,7 +345,6 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
               <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">{slot.label}</span>
             </button>
           ))}
-          <div className="flex-1" />
           {/* Wiki 百科 Tab */}
           <button
             onClick={() => setActiveTab(WIKI_TAB)}
@@ -395,7 +394,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
             <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">日志与反馈</span>
           </button>
           <div className="px-4 py-3 border-t-2 border-px-border">
-            <p className="font-game text-[10px] text-px-text-dim tracking-wider">SOUL V1.0</p>
+            <p className="font-game text-[10px] text-px-text-dim tracking-wider">SOUL V{__APP_VERSION__}</p>
           </div>
         </div>
 
@@ -408,10 +407,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                 <div className="max-w-lg space-y-6">
                   <div className="border-l-3 border-px-primary pl-4 py-1">
                     <h3 className="font-game text-[16px] font-bold text-px-text mb-1">知识百科</h3>
-                    <p className="font-game text-[14px] text-px-text-sec">融合 Karpathy Wiki 思想的知识增强功能</p>
+                    <p className="font-game text-[14px] text-px-text-sec">将知识库内容提炼为百科词条，让 AI 回答更专业准确</p>
                   </div>
 
-                  {/* 注入百科到 RAG 开关 */}
+                  {/* 回答时参考百科 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <span
@@ -424,15 +423,15 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         tabIndex={0}
                       />
                       <div>
-                        <div className="font-game text-[14px] text-px-text">注入百科到 RAG</div>
+                        <div className="font-game text-[14px] text-px-text">回答时参考百科</div>
                         <div className="font-game text-[12px] text-px-text-dim mt-0.5">
-                          启用后，RAG 检索时同时搜索 wiki/concepts/ 中的概念页，作为补充参考注入问答
+                          AI 回答问题时自动查阅百科词条，作为补充参考提升回答质量
                         </div>
                       </div>
                     </label>
                   </div>
 
-                  {/* 自动沉淀优质回答 开关 */}
+                  {/* 自动收藏优质回答 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <span
@@ -445,9 +444,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         tabIndex={0}
                       />
                       <div>
-                        <div className="font-game text-[14px] text-px-text">自动沉淀优质回答</div>
+                        <div className="font-game text-[14px] text-px-text">自动收藏优质回答</div>
                         <div className="font-game text-[12px] text-px-text-dim mt-0.5">
-                          启用后，当回答满足质量规则（长度 &gt; 300 字、含来源引用）时自动保存到 wiki/qa/
+                          当 AI 的回答足够详细且引用了知识来源时，自动收藏到百科中供日后查阅
                         </div>
                       </div>
                     </label>
@@ -455,13 +454,13 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
 
                   {/* 说明 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
-                    <p className="font-game text-[12px] text-px-primary tracking-wider">功能说明</p>
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">使用说明</p>
                     <ul className="space-y-1.5">
                       {[
-                        '百科内容由知识库面板的 WIKI 按钮编译生成，保存在 wiki/concepts/ 目录',
-                        '注入 RAG 时百科仅作为补充参考，以知识库原文为准',
-                        '自动沉淀的问答保存到 wiki/qa/，也可在消息气泡上手动点击 SAVE',
-                        '所有 Wiki 功能不修改 knowledge/ 中的任何文件',
+                        '百科词条由知识库面板的 WIKI 按钮一键生成，无需手动编写',
+                        '百科仅作为补充参考，AI 始终以知识库原文为准',
+                        '收藏的优质问答也可以在消息气泡上手动点击 SAVE 触发',
+                        '百科功能不会修改你的知识库文件，请放心使用',
                       ].map((item, i) => (
                         <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
                           <span className="text-px-primary flex-shrink-0">-</span>
@@ -497,12 +496,12 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                     <p className="font-game text-[14px] text-px-text-sec">管理 AI 分身的长期记忆行为</p>
                   </div>
 
-                  {/* Nudge 间隔设置 */}
+                  {/* 记忆检查频率 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <div>
-                      <div className="font-game text-[14px] text-px-text mb-1">记忆提醒间隔（Nudge）</div>
+                      <div className="font-game text-[14px] text-px-text mb-1">自动记忆频率</div>
                       <div className="font-game text-[12px] text-px-text-dim mb-3">
-                        每隔 N 轮对话，提醒 AI 是否有内容需要用 [MEMORY_UPDATE] 标签记录到长期记忆
+                        AI 每隔几轮对话自动检查是否有值得记住的内容（如你的偏好、重要决定等），保存到长期记忆中
                       </div>
                       <div className="flex items-center gap-3">
                         <label className="font-game text-[13px] text-px-text-sec">每</label>
@@ -514,20 +513,23 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                           onChange={(e) => setNudgeInterval(e.target.value)}
                           className="pixel-input w-20 text-center"
                         />
-                        <label className="font-game text-[13px] text-px-text-sec">轮触发一次（设为 0 禁用）</label>
+                        <label className="font-game text-[13px] text-px-text-sec">轮检查一次</label>
+                      </div>
+                      <div className="font-game text-[11px] text-px-text-dim mt-2">
+                        推荐值 5 · 设为 0 关闭自动记忆 · 一般无需修改
                       </div>
                     </div>
                   </div>
 
                   {/* 容量说明 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
-                    <p className="font-game text-[12px] text-px-primary tracking-wider">记忆容量说明</p>
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">关于记忆</p>
                     <ul className="space-y-1.5">
                       {[
-                        '记忆文件上限为 2200 字符，超出时会自动触发 AI 整理',
-                        '整理会合并重复条目、删除过时信息，但保留纠偏记录',
-                        '也可在 MEMORY 面板中手动点击 CONSOLIDATE 整理',
-                        '用户画像（沟通偏好等）存储在独立的 USER.md 中',
+                        '记忆空间有限，存满时 AI 会自动整理：合并重复、清除过时内容',
+                        '你纠正过的信息会被优先保留，确保 AI 不会重复犯错',
+                        '也可以在「记忆」面板中手动触发整理',
+                        '用户画像（沟通偏好等）独立存储，不占用记忆空间',
                       ].map((item, i) => (
                         <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
                           <span className="text-px-primary flex-shrink-0">-</span>
@@ -560,15 +562,15 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                 <div className="max-w-lg space-y-6">
                   <div className="border-l-3 border-px-primary pl-4 py-1">
                     <h3 className="font-game text-[16px] font-bold text-px-text mb-1">定时任务</h3>
-                    <p className="font-game text-[14px] text-px-text-sec">配置后台自动执行的定期任务（0 = 禁用）</p>
+                    <p className="font-game text-[14px] text-px-text-sec">让 AI 在后台定期自动执行维护工作，保持最佳状态</p>
                   </div>
 
-                  {/* 定时记忆整理 */}
+                  {/* 自动整理记忆 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <div>
-                      <div className="font-game text-[14px] text-px-text mb-1">定时记忆整理</div>
+                      <div className="font-game text-[14px] text-px-text mb-1">自动整理记忆</div>
                       <div className="font-game text-[12px] text-px-text-dim mb-3">
-                        每隔 N 小时检查记忆容量，超过 85% 时自动调用 AI 整理
+                        定期检查记忆是否快满，快满时 AI 自动整理：合并重复、清除过时内容
                       </div>
                       <div className="flex items-center gap-3">
                         <label className="font-game text-[13px] text-px-text-sec">每</label>
@@ -580,17 +582,20 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                           onChange={(e) => setCronMemoryInterval(e.target.value)}
                           className="pixel-input w-20 text-center"
                         />
-                        <label className="font-game text-[13px] text-px-text-sec">小时（0 = 禁用）</label>
+                        <label className="font-game text-[13px] text-px-text-sec">小时检查一次</label>
+                      </div>
+                      <div className="font-game text-[11px] text-px-text-dim mt-2">
+                        设为 0 关闭 · 一般无需开启，记忆满时会自动触发整理
                       </div>
                     </div>
                   </div>
 
-                  {/* 定时知识库检查 */}
+                  {/* 知识库更新提醒 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <div>
-                      <div className="font-game text-[14px] text-px-text mb-1">定时知识库检查</div>
+                      <div className="font-game text-[14px] text-px-text mb-1">知识库更新提醒</div>
                       <div className="font-game text-[12px] text-px-text-dim mb-3">
-                        每隔 N 小时发送通知，提醒检查知识库是否需要更新
+                        定期发送通知提醒你检查知识库是否需要更新，避免信息过时
                       </div>
                       <div className="flex items-center gap-3">
                         <label className="font-game text-[13px] text-px-text-sec">每</label>
@@ -602,19 +607,22 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                           onChange={(e) => setCronKnowledgeInterval(e.target.value)}
                           className="pixel-input w-20 text-center"
                         />
-                        <label className="font-game text-[13px] text-px-text-sec">小时（0 = 禁用）</label>
+                        <label className="font-game text-[13px] text-px-text-sec">小时提醒一次</label>
+                      </div>
+                      <div className="font-game text-[11px] text-px-text-dim mt-2">
+                        设为 0 关闭 · 建议知识更新频繁时开启
                       </div>
                     </div>
                   </div>
 
                   {/* 说明 */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
-                    <p className="font-game text-[12px] text-px-primary tracking-wider">注意事项</p>
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">注意</p>
                     <ul className="space-y-1.5">
                       {[
-                        '定时任务只在应用运行时有效，关闭应用后停止',
-                        '记忆整理任务需要配置对话模型 API Key',
-                        '修改配置后需点击保存才会生效',
+                        '定时任务只在应用打开时运行，关闭应用后暂停',
+                        '自动整理记忆需要先在 CHAT 中配置 API Key',
+                        '修改后点击 SAVE 才会生效',
                       ].map((item, i) => (
                         <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
                           <span className="text-px-primary flex-shrink-0">-</span>
@@ -657,7 +665,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       bg-px-elevated text-px-text font-game text-[14px] tracking-wider
                       hover:border-px-primary hover:text-px-primary transition-none"
                   >
-                    <span className="text-[16px]">📁</span>
+                    <span className="w-8 h-8 border-2 border-px-border flex items-center justify-center text-px-text-sec font-game text-[12px] flex-shrink-0">▤</span>
                     <div className="text-left">
                       <div>打开日志目录</div>
                       <div className="text-[12px] text-px-text-dim mt-0.5">用文件管理器定位到日志文件夹</div>
@@ -672,7 +680,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       hover:border-px-primary hover:text-px-primary transition-none
                       disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className="text-[16px]">📤</span>
+                    <span className="w-8 h-8 border-2 border-px-border flex items-center justify-center text-px-text-sec font-game text-[12px] flex-shrink-0">▲</span>
                     <div className="text-left">
                       <div>{isExporting ? '导出中...' : '导出错误日志到桌面'}</div>
                       <div className="text-[12px] text-px-text-dim mt-0.5">将最近 3 天的报错整合为 txt 文件，保存到桌面</div>

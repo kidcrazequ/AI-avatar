@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** 由 vite.config.ts define 注入的应用版本号 */
+declare const __APP_VERSION__: string
+
 declare module '*.css' {
   const content: string
   export default content
@@ -141,6 +144,10 @@ interface ElectronAPI {
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => Promise<void>
   writeSkillFile: (avatarId: string, fileName: string, content: string) => Promise<void>
   deleteAvatar: (id: string) => Promise<void>
+  /** 保存分身头像：data URL（自定义）或 "default:<key>"（预置） */
+  saveAvatarImage: (avatarId: string, dataUrl: string) => Promise<void>
+  /** 读取分身头像，返回 data URL 或 "default:<key>"，无头像返回 null */
+  getAvatarImage: (avatarId: string) => Promise<string | null>
 
   // 测试管理
   getTestCases: (avatarId: string) => Promise<TestCase[]>
@@ -225,6 +232,8 @@ interface Avatar {
   name: string
   description: string
   createdAt: number
+  /** 头像图片：data URL（自定义上传）或 "default:<key>"（预置头像） */
+  avatarImage?: string
 }
 
 interface TestCase {

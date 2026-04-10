@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage } from '../stores/chatStore'
+import AvatarImage from './AvatarImage'
 
 const REMARK_PLUGINS = [remarkGfm]
 
@@ -9,6 +10,10 @@ interface Props {
   message: ChatMessage
   previousUserMessage?: string
   onSaveAnswer?: (question: string, answer: string) => void
+  /** 分身头像（用于 AI 消息气泡展示） */
+  avatarImage?: string
+  /** 分身名称（用于 AI 消息气泡展示） */
+  avatarName?: string
 }
 
 /** 仅允许安全协议的链接 */
@@ -20,7 +25,7 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -36,12 +41,19 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start gap-3'} animate-fade-in`}>
+      {/* AI 消息左侧小头像 */}
+      {!isUser && (
+        <div className="flex-shrink-0 mt-6">
+          <AvatarImage avatarImage={avatarImage} name={avatarName ?? '专家'} size="sm" />
+        </div>
+      )}
+
       <div className={`max-w-[75%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         {/* 角色标签 */}
         <div className={`font-game text-[12px] tracking-widest mb-1.5
           ${isUser ? 'text-right text-px-primary' : 'text-left text-px-accent'}`}>
-          {isUser ? '你' : '专家'}
+          {isUser ? '你' : (avatarName ?? '专家')}
         </div>
 
         {/* 消息体 */}

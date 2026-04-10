@@ -10,9 +10,13 @@ interface Props {
   onQuickQuestion?: (question: string) => void
   /** 沉淀回答到 wiki/qa/ 的回调 */
   onSaveAnswer?: (question: string, answer: string) => void
+  /** 分身头像（用于 AI 消息气泡展示） */
+  avatarImage?: string
+  /** 分身名称（用于 AI 消息气泡展示） */
+  avatarName?: string
 }
 
-export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer }: Props) {
+export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
 
   /**
@@ -44,10 +48,12 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
           message={message}
           previousUserMessage={prevUserMap.current.get(message.id)}
           onSaveAnswer={onSaveAnswer}
+          avatarImage={avatarImage}
+          avatarName={avatarName}
         />
       </div>
     )
-  }, [messages, onSaveAnswer])
+  }, [messages, onSaveAnswer, avatarImage, avatarName])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

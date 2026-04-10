@@ -8,6 +8,8 @@ export interface Avatar {
   name: string
   description: string
   createdAt: number
+  /** 头像图片：data URL（自定义上传）或 "default:<key>"（预置头像） */
+  avatarImage?: string
 }
 
 /**
@@ -20,6 +22,31 @@ export interface Avatar {
 export class AvatarManager {
   private avatarsPath: string
   private templateLoader: TemplateLoader
+
+  /** 自定义头像文件与读回时的体积上限（与 readAvatarImageSafe 一致） */
+  private static readonly AVATAR_IMAGE_MAX_BYTES = 512 * 1024
+
+  /**
+   * 从 data URL 中解析 base64 载荷（支持 image/png、image/jpeg、image/webp 及含 + 的子类型）。
+   *
+   * @throws Error 格式非法时
+   */
+  static parseImageDataUrlBase64(dataUrl: string): string {
+    const trimmed = dataUrl.trim()
+    const prefix = 'data:image/'
+    const marker = ';base64,'
+    if (!trimmed.startsWith(prefix) || !trimmed.includes(marker)) {
+      throw new Error('无效的头像 data URL 格式')
+    }
+    const afterPrefix = trimmed.slice(prefix.length)
+    const idx = afterPrefix.indexOf(marker)
+    if (idx <= 0) throw new Error('无效的头像 data URL 格式')
+    const subtype = afterPrefix.slice(0, idx).trim()
+    if (!subtype) throw new Error('无效的头像 data URL 格式')
+    const rawB64 = afterPrefix.slice(idx + marker.length).replace(/\s/g, '')
+    if (!rawB64) throw new Error('无效的头像 data URL 格式')
+    return rawB64
+  }
 
   /**
    * @param avatarsPath 分身根目录绝对路径
@@ -50,12 +77,14 @@ export class AvatarManager {
         const name = this.extractName(claudeMd)
         const description = this.extractDescription(claudeMd)
         const stat = fs.statSync(avatarPath)
+        const avatarImage = this.readAvatarImageSafe(avatarPath)
 
         avatars.push({
           id: entry.name,
           name,
           description,
           createdAt: stat.birthtimeMs,
+          avatarImage,
         })
       }
     } catch (error) {
@@ -63,6 +92,82 @@ export class AvatarManager {
     }
 
     return avatars.sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  /**
+   * 保存分身头像图片。
+   * dataUrl 可为 base64 data URL（自定义上传）或 "default:<key>"（预置头像）。
+   * 预置头像直接写入标识文件；自定义头像解码后写入 avatar.png。
+   *
+   * @param avatarId 分身 ID
+   * @param dataUrl  data URL 或 "default:<key>"
+   */
+  saveAvatarImage(avatarId: string, dataUrl: string): void {
+    assertSafeSegment(avatarId, '分身 ID')
+    const avatarPath = path.join(this.avatarsPath, avatarId)
+
+    if (!fs.existsSync(avatarPath)) {
+      throw new Error(`分身目录不存在，无法保存头像：${avatarId}`)
+    }
+
+    const trimmedUrl = dataUrl.trim()
+
+    if (trimmedUrl.startsWith('default:')) {
+      // 预置头像：写入标识文件
+      fs.writeFileSync(path.join(avatarPath, 'avatar.txt'), trimmedUrl, 'utf-8')
+      // 清除可能存在的自定义头像
+      const pngPath = path.join(avatarPath, 'avatar.png')
+      if (fs.existsSync(pngPath)) fs.unlinkSync(pngPath)
+      return
+    }
+
+    // 自定义上传：base64 data URL → 写入 avatar.png（与 readAvatarImageSafe 一致按 PNG 提供）
+    const b64Payload = AvatarManager.parseImageDataUrlBase64(trimmedUrl)
+    const buffer = Buffer.from(b64Payload, 'base64')
+    if (buffer.length > AvatarManager.AVATAR_IMAGE_MAX_BYTES) {
+      throw new Error(`头像图片不能超过 ${Math.floor(AvatarManager.AVATAR_IMAGE_MAX_BYTES / 1024)}KB，请先压缩后再上传`)
+    }
+
+    fs.writeFileSync(path.join(avatarPath, 'avatar.png'), buffer)
+    // 清除可能存在的预置标识文件
+    const txtPath = path.join(avatarPath, 'avatar.txt')
+    if (fs.existsSync(txtPath)) fs.unlinkSync(txtPath)
+  }
+
+  /**
+   * 读取分身头像图片。
+   *
+   * @param avatarId 分身 ID
+   * @returns data URL 或 "default:<key>"，无头像时返回 null
+   */
+  getAvatarImage(avatarId: string): string | null {
+    assertSafeSegment(avatarId, '分身 ID')
+    const avatarPath = path.join(this.avatarsPath, avatarId)
+    return this.readAvatarImageSafe(avatarPath) ?? null
+  }
+
+  /**
+   * 从分身目录读取头像（内部方法，不校验 avatarId）。
+   * 优先读 avatar.png（自定义），其次读 avatar.txt（预置标识）。
+   */
+  private readAvatarImageSafe(avatarPath: string): string | undefined {
+    try {
+      const pngPath = path.join(avatarPath, 'avatar.png')
+      if (fs.existsSync(pngPath)) {
+        const stat = fs.statSync(pngPath)
+        if (stat.size > AvatarManager.AVATAR_IMAGE_MAX_BYTES) return undefined // 超限跳过
+        const buf = fs.readFileSync(pngPath)
+        return `data:image/png;base64,${buf.toString('base64')}`
+      }
+      const txtPath = path.join(avatarPath, 'avatar.txt')
+      if (fs.existsSync(txtPath)) {
+        const content = fs.readFileSync(txtPath, 'utf-8').trim()
+        if (content.startsWith('default:')) return content
+      }
+    } catch {
+      // 读取失败静默处理，降级为无头像
+    }
+    return undefined
   }
 
   /**

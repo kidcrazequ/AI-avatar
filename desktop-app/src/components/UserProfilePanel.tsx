@@ -101,6 +101,11 @@ export default function UserProfilePanel({ avatarId, onClose }: Props) {
         title="USER PROFILE"
         subtitle={`${avatarId} / memory/USER.md`}
         onClose={onClose}
+        actions={
+          !isEditing ? (
+            <button onClick={() => setIsEditing(true)} className="pixel-btn-outline-light py-1">EDIT</button>
+          ) : undefined
+        }
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -129,10 +134,13 @@ export default function UserProfilePanel({ avatarId, onClose }: Props) {
           </div>
         </div>
 
-        {/* 说明栏 */}
-        <div className="px-4 py-2 bg-px-bg border-b border-px-border-dim">
-          <p className="font-game text-[11px] text-px-text-dim">
-            AI 在对话中使用 [USER_UPDATE]...[/USER_UPDATE] 标签自动更新 · 也可手动编辑
+        {/* 功能说明 */}
+        <div className="px-5 py-3 bg-px-bg border-b border-px-border-dim">
+          <p className="font-game text-[13px] text-px-text-sec leading-relaxed">
+            用户画像帮助 AI 分身记住你的沟通偏好、专业背景和常用术语，让回答更贴合你的风格
+          </p>
+          <p className="font-game text-[12px] text-px-text-dim mt-1.5">
+            无需手动维护 · AI 在对话中自动学习并更新 · 你也可以手动编辑微调
           </p>
         </div>
 
@@ -160,12 +168,17 @@ export default function UserProfilePanel({ avatarId, onClose }: Props) {
                 </div>
               ) : (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
+                  <div className="text-center max-w-xs">
                     <div className="w-12 h-12 border-2 border-px-primary bg-px-primary/10 flex items-center justify-center mx-auto mb-3">
                       <span className="text-px-primary font-game text-[12px]">U</span>
                     </div>
-                    <p className="font-game text-[13px] text-px-text-dim tracking-wider">暂无用户画像</p>
-                    <p className="font-game text-[12px] text-px-text-dim mt-1">点击编辑建立用户画像</p>
+                    <p className="font-game text-[13px] text-px-text-dim tracking-wider">尚未建立用户画像</p>
+                    <p className="font-game text-[11px] text-px-text-dim mt-2 leading-relaxed">
+                      开始对话后 AI 会自动学习你的偏好并生成画像
+                    </p>
+                    <p className="font-game text-[11px] text-px-text-dim mt-1 leading-relaxed">
+                      也可以点击右上角 EDIT 手动填写
+                    </p>
                   </div>
                 </div>
               )}

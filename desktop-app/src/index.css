@@ -223,11 +223,80 @@
   .pixel-badge-primary {
     @apply border-px-primary text-px-primary bg-px-primary/10;
   }
+
+  /* ═══════════════════════════════════════
+     导航标签 —— 像素 RPG 菜单风格
+     ═══════════════════════════════════════ */
+
+  .pixel-nav-tab {
+    @apply relative flex items-center gap-2 px-4 py-2.5
+           font-game text-[14px] tracking-wider whitespace-nowrap
+           text-px-text-dim
+           select-none cursor-pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .pixel-nav-tab:hover {
+    @apply text-px-text;
+    background: rgba(232,168,48,0.10);
+    border-bottom-color: rgba(232,168,48,0.35);
+  }
+  .pixel-nav-tab--active {
+    @apply text-px-primary;
+    border-bottom-color: #E8A830;
+    text-shadow: 0 0 8px rgba(232,168,48,0.25);
+  }
+  .pixel-nav-tab--active:hover {
+    @apply text-px-primary;
+    background: rgba(232,168,48,0.12);
+    border-bottom-color: #E8A830;
+  }
+
+  .pixel-nav-cursor {
+    @apply text-[10px] text-px-primary leading-none mr-0.5;
+    animation: blink 1.2s step-end infinite;
+  }
+
+  .pixel-nav-icon {
+    @apply text-[13px] leading-none;
+  }
+  .pixel-nav-tab--active .pixel-nav-icon {
+    text-shadow: 0 0 6px rgba(232,168,48,0.4);
+  }
+
+  .pixel-nav-label {
+    @apply leading-none;
+  }
+
+  .pixel-nav-badge {
+    @apply absolute -top-0.5 -right-0.5 bg-px-danger text-white
+           font-game text-[9px] min-w-[14px] h-[14px]
+           flex items-center justify-center
+           border border-px-surface;
+  }
+
+  .pixel-nav-sep {
+    @apply block w-[2px] h-4 mx-2;
+    background: repeating-linear-gradient(
+      180deg,
+      #353548 0px, #353548 2px,
+      transparent 2px, transparent 4px
+    );
+  }
 }
 
 /* ═══════════════════════════════════════
    动画
    ═══════════════════════════════════════ */
+
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+.pixel-progress-indeterminate {
+  animation: indeterminate 1.8s ease-in-out infinite;
+  width: 33%;
+}
 
 .cursor-blink {
   display: inline-block;

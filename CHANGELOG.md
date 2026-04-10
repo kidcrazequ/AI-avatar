@@ -1,5 +1,32 @@
 # 更新日志
 
+## v0.4.0 (2026-04-10)
+
+### 新功能
+
+- **分身头像系统** — 支持预置像素头像和自定义上传头像，创建分身时可选头像，已有分身可通过选择器下拉菜单「换头像」（`AvatarImage`、`AvatarPicker`、`DefaultAvatars`）
+- **AI 消息气泡头像** — 对话中 AI 消息左侧显示分身头像和名称，替代原来的"专家"通用标签
+- **像素风导航栏** — 顶栏导航重构为 RPG 菜单风格 tab 导航，带图标、光标动画和徽章（`PixelNavBar`）
+- **版本号动态注入** — 设置面板底部显示实际版本号（通过 Vite define 注入 `__APP_VERSION__`）
+
+### 改进
+
+- **窗口尺寸优化** — 默认窗口调大至 1280×820，最小尺寸提升至 1024×680，适配更多内容
+- **提示词模板面板重构** — 从内联弹窗重构为 Modal + PanelHeader 组件化，交互更统一
+- **知识面板进度增强** — 异步任务（百科编译、知识自检）增加计时器和不定进度条，操作过程可感知
+- **设置面板文案优化** — 用面向用户的友好语言替换技术术语（如"注入百科到 RAG"→"回答时参考百科"）
+- **用户画像面板** — PanelHeader 增加 EDIT 按钮，空状态引导文案更清晰
+- **设置面板 Tab** — 左侧标签栏支持滚动，修复 Tab 过多时被截断的问题
+
+### 代码质量
+
+- `AvatarManager` 新增 `saveAvatarImage` / `getAvatarImage` 方法和 `parseImageDataUrlBase64` 静态工具
+- 新增头像相关单元测试（data URL 解析、头像保存）
+- 新增 IPC 通道：`save-avatar-image`、`get-avatar-image`
+- CSS 新增像素导航标签组件样式（`.pixel-nav-*`）和不定进度条动画
+
+---
+
 ## v0.3.0 (2026-04-10)
 
 ### 新功能
@@ -39,6 +66,9 @@
 - 删除 `TEST_PLAN.md`、`auto-test-fix-loop.js`、`main.d.ts` 等过时文件
 - 删除根目录旧版 CLI 测试脚本（`test-avatar.sh` / `generate-knowledge-tests.sh` / `batch-generate-knowledge-tests.sh`），已被桌面端测试系统替代
 - 删除 `docs/phases/`（已完成的开发阶段计划）和 `docs/desktop-app-implementation-plan.md`（初始实施方案）
+- 删除 `deploy/wechat-bot/`（未完成的企业微信机器人草稿，缺少核心模块）
+- 删除 `plans/`（空目录）
+- 清理磁盘构建产物：`release/`（2.1 GB）、`dist/`、`dist-electron/`、`test-output/`、`.DS_Store` 等
 
 ### 文档
 

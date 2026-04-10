@@ -27,9 +27,13 @@ interface Props {
   visionModel?: ModelConfig
   /** 外部填充输入框文本（用于提示词模板一键填入） */
   fillText?: string
+  /** 分身头像值（用于消息气泡展示） */
+  avatarImage?: string
+  /** 分身名称（用于消息气泡展示） */
+  avatarName?: string
 }
 
-export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText }: Props) {
+export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName }: Props) {
   const { messages, isLoading, toolCallStatus, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
@@ -214,6 +218,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           onQuickQuestion={handleSendMessage}
           quickQuestions={messages.length === 0 ? QUICK_QUESTIONS : undefined}
           onSaveAnswer={handleSaveAnswer}
+          avatarImage={avatarImage}
+          avatarName={avatarName}
         />
       </div>
 

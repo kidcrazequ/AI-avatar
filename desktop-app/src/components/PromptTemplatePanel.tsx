@@ -10,14 +10,17 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import Modal from './shared/Modal'
+import PanelHeader from './shared/PanelHeader'
 
 interface Props {
   avatarId: string
+  onClose: () => void
   /** 点击「使用」时的回调，将模板内容传给父组件填入输入框 */
   onUse?: (content: string) => void
 }
 
-export default function PromptTemplatePanel({ avatarId, onUse }: Props) {
+export default function PromptTemplatePanel({ avatarId, onClose, onUse }: Props) {
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
   const [newTitle, setNewTitle] = useState('')
   const [newContent, setNewContent] = useState('')
@@ -84,112 +87,123 @@ export default function PromptTemplatePanel({ avatarId, onUse }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-px-bg px-4 py-4 gap-4 overflow-y-auto">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between">
-        <span className="font-game text-[13px] text-px-text tracking-wider">提示词模板库</span>
-        <button
-          onClick={() => setIsCreating(v => !v)}
-          className="font-game text-[11px] text-px-primary border border-px-primary/50 px-2 py-0.5
-            hover:bg-px-primary/10 transition-none"
-        >
-          {isCreating ? '取消' : '+ 新建'}
-        </button>
-      </div>
-
-      {/* 新建表单 */}
-      {isCreating && (
-        <div className="border-2 border-px-primary/30 bg-px-surface p-3 flex flex-col gap-2">
-          <input
-            type="text"
-            placeholder="模板名称"
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            className="w-full px-2 py-1.5 bg-px-elevated text-px-text border border-px-border-dim
-              font-game text-[13px] focus:outline-none focus:border-px-primary"
-          />
-          <textarea
-            placeholder="模板内容..."
-            value={newContent}
-            onChange={e => setNewContent(e.target.value)}
-            rows={4}
-            className="w-full px-2 py-1.5 bg-px-elevated text-px-text border border-px-border-dim
-              font-game text-[13px] focus:outline-none focus:border-px-primary resize-none"
-          />
+    <Modal isOpen={true} onClose={onClose} size="md">
+      <PanelHeader
+        title="PROMPT TEMPLATES"
+        subtitle={`${avatarId} / ${templates.length} 个模板`}
+        onClose={onClose}
+        actions={
           <button
-            onClick={handleCreate}
-            disabled={!newTitle.trim() || !newContent.trim()}
-            className="font-game text-[12px] text-px-bg bg-px-primary border border-px-primary px-3 py-1
-              hover:bg-px-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-none"
+            onClick={() => setIsCreating(v => !v)}
+            className={isCreating ? 'pixel-btn-outline-muted py-1' : 'pixel-btn-outline-light py-1'}
           >
-            保存模板
+            {isCreating ? 'CANCEL' : '+ NEW'}
           </button>
+        }
+      />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 功能说明 */}
+        <div className="px-5 py-3 bg-px-bg border-b border-px-border-dim">
+          <p className="font-game text-[13px] text-px-text-sec leading-relaxed">
+            话术模板是预设的对话指令，帮助你快速发起常用任务 · 点击「USE」将内容填入输入框
+          </p>
+          <p className="font-game text-[12px] text-px-text-dim mt-1.5">
+            无需主动配置 · 按需创建常用提问、分析框架等模板即可提升效率
+          </p>
         </div>
-      )}
 
-      {/* 模板列表 */}
-      {templates.length === 0 && !isCreating && (
-        <p className="font-game text-[12px] text-px-text-dim text-center py-8">
-          暂无模板，点击「新建」创建第一个
-        </p>
-      )}
-
-      {templates.map(tpl => (
-        <div key={tpl.id} className="border border-px-border bg-px-surface p-3 flex flex-col gap-2">
-          {editId === tpl.id ? (
-            <>
+        {/* 内容区 */}
+        <div className="flex-1 overflow-y-auto bg-px-surface">
+          {/* 新建表单 */}
+          {isCreating && (
+            <div className="mx-4 mt-4 border-2 border-px-primary/30 bg-px-bg p-4 flex flex-col gap-3">
               <input
                 type="text"
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                className="w-full px-2 py-1 bg-px-elevated text-px-text border border-px-border-dim
-                  font-game text-[13px] focus:outline-none focus:border-px-primary"
+                placeholder="模板名称（如：收益测算分析）"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                className="pixel-input"
               />
               <textarea
-                value={editContent}
-                onChange={e => setEditContent(e.target.value)}
+                placeholder="模板内容（将作为对话输入发送）..."
+                value={newContent}
+                onChange={e => setNewContent(e.target.value)}
                 rows={4}
-                className="w-full px-2 py-1 bg-px-elevated text-px-text border border-px-border-dim
-                  font-game text-[13px] focus:outline-none focus:border-px-primary resize-none"
+                className="pixel-input resize-none"
               />
-              <div className="flex gap-2">
-                <button onClick={handleUpdate}
-                  className="font-game text-[11px] text-px-bg bg-px-primary px-2 py-0.5 transition-none">
-                  保存
-                </button>
-                <button onClick={() => setEditId(null)}
-                  className="font-game text-[11px] text-px-text-dim border border-px-border-dim px-2 py-0.5 transition-none">
-                  取消
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <span className="font-game text-[13px] text-px-text">{tpl.title}</span>
-              <p className="font-game text-[11px] text-px-text-dim line-clamp-2">{tpl.content}</p>
-              <div className="flex gap-2 mt-1">
-                {onUse && (
-                  <button onClick={() => onUse(tpl.content)}
-                    className="font-game text-[11px] text-px-primary border border-px-primary/50 px-2 py-0.5
-                      hover:bg-px-primary/10 transition-none">
-                    使用
-                  </button>
-                )}
-                <button onClick={() => startEdit(tpl)}
-                  className="font-game text-[11px] text-px-text-dim border border-px-border-dim px-2 py-0.5
-                    hover:text-px-text transition-none">
-                  编辑
-                </button>
-                <button onClick={() => handleDelete(tpl.id, tpl.title)}
-                  className="font-game text-[11px] text-px-danger/70 border border-px-danger/30 px-2 py-0.5
-                    hover:text-px-danger transition-none ml-auto">
-                  删除
-                </button>
-              </div>
-            </>
+              <button
+                onClick={handleCreate}
+                disabled={!newTitle.trim() || !newContent.trim()}
+                className="pixel-btn-primary py-1.5 self-end"
+              >
+                SAVE
+              </button>
+            </div>
           )}
+
+          {/* 空状态 */}
+          {templates.length === 0 && !isCreating && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-12 h-12 border-2 border-px-primary bg-px-primary/10 flex items-center justify-center mx-auto mb-3">
+                  <span className="text-px-primary font-game text-[12px]">T</span>
+                </div>
+                <p className="font-game text-[13px] text-px-text-dim tracking-wider">暂无提示词模板</p>
+                <p className="font-game text-[12px] text-px-text-dim mt-1">点击右上角「+ NEW」创建常用指令模板</p>
+              </div>
+            </div>
+          )}
+
+          {/* 模板列表 */}
+          <div className="p-4 flex flex-col gap-3">
+            {templates.map(tpl => (
+              <div key={tpl.id} className="border-2 border-px-border bg-px-bg p-4 flex flex-col gap-2">
+                {editId === tpl.id ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      className="pixel-input"
+                    />
+                    <textarea
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      rows={4}
+                      className="pixel-input resize-none"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={handleUpdate} className="pixel-btn-primary py-1">SAVE</button>
+                      <button onClick={() => setEditId(null)} className="pixel-btn-outline-muted py-1">CANCEL</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-game text-[13px] text-px-text tracking-wider">{tpl.title}</span>
+                    <p className="font-game text-[11px] text-px-text-dim line-clamp-2 leading-relaxed">{tpl.content}</p>
+                    <div className="flex gap-2 mt-1">
+                      {onUse && (
+                        <button onClick={() => onUse(tpl.content)} className="pixel-btn-outline-light py-1 text-[11px]">
+                          USE
+                        </button>
+                      )}
+                      <button onClick={() => startEdit(tpl)} className="pixel-btn-outline-muted py-1 text-[11px]">
+                        EDIT
+                      </button>
+                      <button onClick={() => handleDelete(tpl.id, tpl.title)}
+                        className="pixel-btn-outline-muted py-1 text-[11px] ml-auto
+                          hover:!text-px-danger hover:!border-px-danger">
+                        DEL
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      ))}
-    </div>
+      </div>
+    </Modal>
   )
 }

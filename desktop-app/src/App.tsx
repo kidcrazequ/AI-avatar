@@ -11,6 +11,8 @@ import MemoryPanel from './components/MemoryPanel'
 import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
 import PromptTemplatePanel from './components/PromptTemplatePanel'
+import PixelNavBar from './components/PixelNavBar'
+import AvatarImage from './components/AvatarImage'
 import Toast from './components/shared/Toast'
 import { useShallow } from 'zustand/react/shallow'
 import { useChatStore } from './stores/chatStore'
@@ -306,18 +308,18 @@ function App() {
 
   /** 顶栏导航按钮 */
   const navButtons = [
-    { label: '人格', key: 'soul', onClick: () => setActivePanel('soulEditor'), active: showSoulEditor },
-    { label: '技能', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
+    { label: '人设', icon: '♦', key: 'soul', onClick: () => setActivePanel('soulEditor'), active: showSoulEditor },
+    { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     {
-      label: '测试', key: 'test',
+      label: '测试', icon: '▶', key: 'test',
       onClick: () => { setActivePanel('test'); setTestBadge(null) },
       active: showTestPanel, badge: testBadge?.failed,
     },
-    { label: '知识库', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
-    { label: '记忆', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
-    { label: '用户', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
-    { label: '模板', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
-    { label: '设置', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
+    { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
+    { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
+    { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
+    { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
+    { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
   /** 未选择分身时的引导页 */
@@ -346,11 +348,7 @@ function App() {
                 className="w-full flex items-center gap-4 px-5 py-4 border-2 border-px-border bg-px-surface
                   hover:border-px-primary hover:bg-px-primary/5 transition-none text-left"
               >
-                <div className="w-10 h-10 bg-px-primary flex items-center justify-center flex-shrink-0 shadow-pixel-brand">
-                  <span className="font-game text-[14px] text-white leading-none">
-                    {avatar.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                <AvatarImage avatarImage={avatar.avatarImage} name={avatar.name} size="md" className="flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="font-game text-[16px] text-px-text font-bold truncate">{avatar.name}</p>
                   <p className="font-game text-[13px] text-px-text-dim mt-0.5 truncate">{avatar.description || avatar.id}</p>
@@ -404,34 +402,13 @@ function App() {
                     activeAvatarId={activeAvatarId}
                     onSelectAvatar={handleSelectAvatar}
                     onCreateAvatar={() => setActivePanel('createWizard')}
+                    onAvatarsChanged={async () => {
+                      await refreshAvatarList()
+                    }}
+                    showToast={showToast}
                   />
                 </div>
-                <div className="flex gap-2">
-                  {navButtons.map(btn => (
-                    <button
-                      key={btn.key}
-                      onClick={btn.onClick}
-                      className={`relative px-5 py-2 font-game text-[15px] tracking-wider
-                        border-2 transition-none select-none
-                        ${btn.active
-                          ? 'border-px-primary text-px-primary bg-px-primary/10'
-                          : btn.key === 'set'
-                            ? 'border-transparent text-px-text-dim hover:text-px-text-sec hover:border-px-border-dim'
-                            : 'border-px-border-dim text-px-text-sec hover:border-px-border hover:text-px-text'
-                        }`}
-                      aria-label={btn.label}
-                    >
-                      {btn.label}
-                      {btn.badge && btn.badge > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-px-danger text-white
-                          font-game text-[10px] w-4 h-4 flex items-center justify-center
-                          border border-px-surface">
-                          {btn.badge}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <PixelNavBar items={navButtons} />
               </div>
               <div className="flex-1 overflow-hidden">
                 <ChatWindow
@@ -440,6 +417,8 @@ function App() {
                   onConversationUpdate={loadConversations}
                   visionModel={visionModel}
                   fillText={templateFillText}
+                  avatarImage={avatarList.find(a => a.id === activeAvatarId)?.avatarImage}
+                  avatarName={activeAvatarName}
                 />
               </div>
             </div>
@@ -536,30 +515,15 @@ function App() {
       )}
 
       {showPromptTemplatePanel && activeAvatarId && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-8">
-          <div className="w-full max-w-lg h-[70vh] bg-px-bg border-2 border-px-border flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-px-border-dim">
-              <span className="font-game text-[13px] text-px-text">提示词模板库</span>
-              <button
-                onClick={() => setActivePanel(null)}
-                className="font-game text-[14px] text-px-text-dim hover:text-px-text transition-none"
-                aria-label="关闭提示词模板库"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <PromptTemplatePanel
-                avatarId={activeAvatarId}
-                onUse={(content) => {
-                  setTemplateFillText(content)
-                  setActivePanel(null)
-                  setTimeout(() => setTemplateFillText(undefined), 0)
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        <PromptTemplatePanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
+          onUse={(content) => {
+            setTemplateFillText(content)
+            setActivePanel(null)
+            setTimeout(() => setTemplateFillText(undefined), 0)
+          }}
+        />
       )}
 
       {showSoulEditor && activeAvatarId && (

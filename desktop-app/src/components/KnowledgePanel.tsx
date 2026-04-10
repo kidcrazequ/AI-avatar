@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
@@ -41,6 +41,9 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   const [isDetectingEvolution, setIsDetectingEvolution] = useState(false)
   /** 导入进度：current/total 用于进度条百分比，phase 用于文本描述 */
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; phase: string } | null>(null)
+  /** 异步任务开始时间，用于显示已用时间 */
+  const [taskStartTime, setTaskStartTime] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const newFileInputRef = useRef<HTMLInputElement>(null)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const fileSelectSeqRef = useRef(0)
@@ -54,6 +57,25 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       clearTimeout(statusTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (!taskStartTime) { setElapsedSeconds(0); return }
+    const timer = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - taskStartTime) / 1000))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [taskStartTime])
+
+  const isBusy = isImporting || isDetectingEvolution || isCompiling || isLinting
+  useEffect(() => {
+    if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
+    if (!isBusy && taskStartTime) setTaskStartTime(null)
+  }, [isBusy])
+
+  const elapsedDisplay = useMemo(() => {
+    if (elapsedSeconds < 60) return `${elapsedSeconds}s`
+    return `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
+  }, [elapsedSeconds])
 
   const loadTree = useCallback(async () => {
     try {
@@ -86,11 +108,12 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     setEditedContent(content)
   }
 
-  const showStatus = (msg: string, autoClear = true) => {
+  const showStatus = (msg: string, autoClear: boolean | number = true) => {
     setStatusMsg(msg)
     clearTimeout(statusTimerRef.current)
-    if (autoClear) {
-      statusTimerRef.current = setTimeout(() => setStatusMsg(''), 2500)
+    if (autoClear !== false) {
+      const delay = typeof autoClear === 'number' ? autoClear : 2500
+      statusTimerRef.current = setTimeout(() => setStatusMsg(''), delay)
     }
   }
 
@@ -437,14 +460,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       return
     }
     setIsCompiling(true)
-    showStatus('编译知识百科中（实体提取 + 概念页生成）...', false)
+    showStatus('正在生成知识百科...', false)
     try {
       const baseUrl = model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
       const result = await window.electronAPI.compileWiki(avatarId, model.apiKey, baseUrl)
-      showStatus(`✓ 百科编译完成：${result.entityCount} 个实体，${result.conceptPageCount} 个概念页`)
+      showStatus(`✓ 已生成 ${result.conceptPageCount} 个百科词条 · 前往「设置 → 知识百科」开启后，AI 回答时会自动参考`, 10000)
     } catch (err) {
       console.error('百科编译失败:', err)
-      showStatus('✗ 百科编译失败')
+      showStatus('✗ 百科生成失败，请检查 API Key 配置')
     } finally {
       setIsCompiling(false)
     }
@@ -461,14 +484,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       return
     }
     setIsLinting(true)
-    showStatus('知识自检中（矛盾检测 + 重复检测）...', false)
+    showStatus('正在检查知识一致性...', false)
     try {
       const baseUrl = model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
       const report = await window.electronAPI.lintKnowledge(avatarId, model.apiKey, baseUrl)
       if (report.issueCount === 0) {
-        showStatus(`✓ 自检通过：${report.totalFiles} 个文件，${report.totalChunks} 个片段，未发现问题`)
+        showStatus(`✓ 自检通过：${report.totalFiles} 个文件，${report.totalChunks} 个片段，未发现问题`, 8000)
       } else {
-        showStatus(`⚠ 发现 ${report.issueCount} 个问题（${report.issues.filter(i => i.type === 'contradiction').length} 矛盾，${report.issues.filter(i => i.type === 'duplicate').length} 重复）`)
+        showStatus(`⚠ 发现 ${report.issueCount} 个问题（${report.issues.filter(i => i.type === 'contradiction').length} 矛盾，${report.issues.filter(i => i.type === 'duplicate').length} 重复）`, 10000)
       }
     } catch (err) {
       console.error('知识自检失败:', err)
@@ -544,20 +567,34 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         </div>
       )}
 
-      {/* 导入进度条 */}
-      {(isImporting || isDetectingEvolution) && statusMsg && (
+      {/* 进度条（导入 / 百科编译 / 知识自检） */}
+      {isBusy && statusMsg && (
         <div className="px-6 py-3 border-b-2 border-px-primary/30 bg-px-primary/5">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-4 h-4 border-2 border-px-primary border-t-transparent rounded-full animate-spin" />
-            <span className="font-game text-[13px] text-px-primary tracking-wider">{statusMsg}</span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 border-2 border-px-primary border-t-transparent rounded-full animate-spin" />
+              <span className="font-game text-[13px] text-px-primary tracking-wider">{statusMsg}</span>
+            </div>
+            <span className="font-game text-[12px] text-px-text-dim tracking-wider">{elapsedDisplay}</span>
           </div>
-          {importProgress && (
+          {importProgress ? (
             <div className="w-full h-1.5 bg-px-border rounded-none overflow-hidden">
               <div
                 className="h-full bg-px-primary transition-all duration-300"
                 style={{ width: `${Math.round((importProgress.current / importProgress.total) * 100)}%` }}
               />
             </div>
+          ) : (
+            <div className="w-full h-1.5 bg-px-border rounded-none overflow-hidden">
+              <div className="h-full bg-px-primary pixel-progress-indeterminate" />
+            </div>
+          )}
+          {(isCompiling || isLinting) && (
+            <p className="font-game text-[12px] text-px-text-dim mt-2">
+              {isCompiling
+                ? '正在从知识库中提取关键概念并生成百科词条，通常需要 30 秒 ~ 2 分钟，取决于知识库大小'
+                : '正在检查知识文件间是否存在矛盾或重复内容，完成后会显示检查结果'}
+            </p>
           )}
         </div>
       )}

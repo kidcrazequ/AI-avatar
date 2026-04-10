@@ -57,6 +57,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeSkillFile: (avatarId: string, fileName: string, content: string) =>
     ipcRenderer.invoke('write-skill-file', avatarId, fileName, content),
   deleteAvatar: (id: string) => ipcRenderer.invoke('delete-avatar', id),
+  saveAvatarImage: (avatarId: string, dataUrl: string) =>
+    ipcRenderer.invoke('save-avatar-image', avatarId, dataUrl),
+  getAvatarImage: (avatarId: string) =>
+    ipcRenderer.invoke('get-avatar-image', avatarId),
 
   // 测试管理
   getTestCases: (avatarId: string) => ipcRenderer.invoke('get-test-cases', avatarId),

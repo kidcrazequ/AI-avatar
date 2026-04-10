@@ -1,5 +1,51 @@
 # 更新日志
 
+## v0.3.0 (2026-04-10)
+
+### 新功能
+
+- **提示词模板库** — 创建/编辑/填充模板，一键套用到输入框（`PromptTemplatePanel`）
+- **用户画像面板** — 管理分身对用户的了解（`UserProfilePanel`）
+- **技能建议卡片** — 技能创建建议确认交互（`SkillProposalCard`）
+- **定时任务调度器** — 统一调度记忆整理、知识检查、定时自检（`CronScheduler`）
+- **LLM 工厂** — 抽取 LLM/Embedding 调用为可复用工厂（`llm-factory.ts`）
+- **记忆管理器** — 容量统计、LLM 自动整理、阈值预警（`memory-manager.ts`）
+- **子代理管理** — 任务委派与并行执行（`sub-agent-manager.ts`）
+- **数据库自动备份** — 定期备份 SQLite 数据文件
+- **对话导出** — 支持导出会话为文件
+- **消息全文搜索** — SQLite FTS5 全文索引 + 触发器自动同步
+- **虚拟滚动** — react-virtuoso 优化长对话渲染性能
+
+### 重构
+
+- 删除 `deepseek.ts`，统一走 LLM Service（OpenAI 兼容接口）
+- 面板状态从多个 boolean 重构为单一 `activePanel` 枚举
+- Zustand 使用 `useShallow` 避免不必要的重渲染
+- DB schema 升级至 v4：预编译 Statement 缓存、提示词模板表、WAL 模式
+- 抽取公共工具到 `@soul/core`：`fetchWithTimeout` / `assertSafeSegment` / `resolveUnderRoot` / `localDateString`
+
+### 代码质量
+
+- 新增 ESLint + TypeScript-eslint 配置（`desktop-app` & `packages/core`）
+- 新增 `typecheck` / `lint` / `quality` npm scripts
+- 新增 `CONVENTIONS.md` 编码约定 + `.cursor/rules` 工作区规则
+- IPC 敏感参数日志脱敏（apiKey 等不再写入日志）
+- 错误处理增强：初始化失败弹窗提示、统一 Error 类型守卫
+
+### 清理
+
+- 删除 `desktop-app/build/ios-icons/`（Electron 不使用的 iOS 图标）
+- 删除 `PHASE*_VERIFICATION_REPORT.md`（5 个过时的阶段验证报告）
+- 删除 `TEST_PLAN.md`、`auto-test-fix-loop.js`、`main.d.ts` 等过时文件
+- 删除根目录旧版 CLI 测试脚本（`test-avatar.sh` / `generate-knowledge-tests.sh` / `batch-generate-knowledge-tests.sh`），已被桌面端测试系统替代
+- 删除 `docs/phases/`（已完成的开发阶段计划）和 `docs/desktop-app-implementation-plan.md`（初始实施方案）
+
+### 文档
+
+- 架构设计文档更新至 v1.2：同步代码实际状态，补充提示词模板/用户画像/定时任务/数据备份/对话导出/子代理委派等模块
+
+---
+
 ## v0.2.0 (2026-04-09)
 
 ### 新功能：知识百科融合（Karpathy Wiki 思想）

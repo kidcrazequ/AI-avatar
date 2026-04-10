@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL } from '../services/llm-service'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
 
 interface Props {
+  activeAvatarId?: string
   onClose: () => void
 }
 
@@ -53,7 +54,7 @@ interface ModelValues {
   showApiKey: boolean
 }
 
-export default function SettingsPanel({ onClose }: Props) {
+export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [activeTab, setActiveTab] = useState(0)
   const [slots, setSlots] = useState<ModelValues[]>(
     MODEL_SLOTS.map(s => ({ apiKey: '', baseUrl: s.defaults.baseUrl, model: s.defaults.model, showApiKey: false }))
@@ -64,31 +65,72 @@ export default function SettingsPanel({ onClose }: Props) {
   // 特殊 Tab 标识
   const LOG_TAB = -1
   const WIKI_TAB = -2
+  const MEMORY_TAB = -3
+  const CRON_TAB = -4
   const [isExporting, setIsExporting] = useState(false)
   const [logMsg, setLogMsg] = useState('')
   // Wiki 设置状态
   const [wikiInjectRag, setWikiInjectRag] = useState(false)
   const [wikiAutoSediment, setWikiAutoSediment] = useState(false)
   const [wikiStatusMsg, setWikiStatusMsg] = useState('')
+  // 记忆设置状态
+  const [nudgeInterval, setNudgeInterval] = useState('5')
+  const [memoryStatusMsg, setMemoryStatusMsg] = useState('')
+  // 定时任务状态
+  const [cronMemoryInterval, setCronMemoryInterval] = useState('0')
+  const [cronKnowledgeInterval, setCronKnowledgeInterval] = useState('0')
+  const [cronStatusMsg, setCronStatusMsg] = useState('')
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const cronStatusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const logMsgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const wikiTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const memoryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => () => {
+    clearTimeout(statusTimerRef.current)
+    clearTimeout(cronStatusTimerRef.current)
+    clearTimeout(logMsgTimerRef.current)
+    clearTimeout(wikiTimerRef.current)
+    clearTimeout(memoryTimerRef.current)
+  }, [])
+
+  const loadSeqRef = useRef(0)
 
   useEffect(() => {
     loadSettings()
   }, [])
 
   const loadSettings = async () => {
-    const newSlots = await Promise.all(MODEL_SLOTS.map(async (slot, i) => {
-      const apiKey = await window.electronAPI.getSetting(`${slot.keyPrefix}_api_key`) ?? ''
-      const baseUrl = await window.electronAPI.getSetting(`${slot.keyPrefix}_base_url`) ?? slot.defaults.baseUrl
-      const model = await window.electronAPI.getSetting(`${slot.keyPrefix}_model`) ?? slot.defaults.model
-      return { apiKey, baseUrl, model, showApiKey: slots[i]?.showApiKey ?? false }
-    }))
-    setSlots(newSlots)
+    const seq = ++loadSeqRef.current
+    try {
+      const loadedSlots = await Promise.all(MODEL_SLOTS.map(async (slot) => {
+        const apiKey = await window.electronAPI.getSetting(`${slot.keyPrefix}_api_key`) ?? ''
+        const baseUrl = await window.electronAPI.getSetting(`${slot.keyPrefix}_base_url`) ?? slot.defaults.baseUrl
+        const model = await window.electronAPI.getSetting(`${slot.keyPrefix}_model`) ?? slot.defaults.model
+        return { apiKey, baseUrl, model }
+      }))
+      if (loadSeqRef.current !== seq) return
+      setSlots(prev => loadedSlots.map((s, i) => ({ ...s, showApiKey: prev[i]?.showApiKey ?? false })))
 
-    // 加载 Wiki 设置
-    const wikiInject = await window.electronAPI.getSetting('wiki_inject_rag')
-    setWikiInjectRag(wikiInject === 'true')
-    const wikiSediment = await window.electronAPI.getSetting('wiki_auto_sediment')
-    setWikiAutoSediment(wikiSediment === 'true')
+      // 并行加载 Wiki / 记忆 / 定时任务设置
+      const [wikiInject, wikiSediment, nudge, cronConfigs] = await Promise.all([
+        window.electronAPI.getSetting('wiki_inject_rag'),
+        window.electronAPI.getSetting('wiki_auto_sediment'),
+        window.electronAPI.getSetting('memory_nudge_interval'),
+        window.electronAPI.getCronConfig(),
+      ])
+      if (loadSeqRef.current !== seq) return
+      setWikiInjectRag(wikiInject === 'true')
+      setWikiAutoSediment(wikiSediment === 'true')
+      setNudgeInterval(nudge ?? '5')
+      for (const cfg of cronConfigs) {
+        if (cfg.type === 'memory-consolidate') setCronMemoryInterval(String(cfg.intervalHours))
+        if (cfg.type === 'knowledge-check') setCronKnowledgeInterval(String(cfg.intervalHours))
+      }
+    } catch (err) {
+      console.error('[Settings] 加载设置失败:', err instanceof Error ? err.message : String(err))
+      window.electronAPI.logEvent('error', 'settings-load-error', err instanceof Error ? err.message : String(err))
+    }
   }
 
   const updateSlot = (idx: number, updates: Partial<ModelValues>) => {
@@ -99,19 +141,21 @@ export default function SettingsPanel({ onClose }: Props) {
     setIsSaving(true)
     setStatusMsg('')
     try {
-      for (let i = 0; i < MODEL_SLOTS.length; i++) {
-        const slot = MODEL_SLOTS[i]
+      await Promise.all(MODEL_SLOTS.flatMap((slot, i) => {
         const values = slots[i]
-        await window.electronAPI.setSetting(`${slot.keyPrefix}_api_key`, values.apiKey)
-        await window.electronAPI.setSetting(`${slot.keyPrefix}_base_url`, values.baseUrl)
-        await window.electronAPI.setSetting(`${slot.keyPrefix}_model`, values.model)
-      }
+        return [
+          window.electronAPI.setSetting(`${slot.keyPrefix}_api_key`, values.apiKey),
+          window.electronAPI.setSetting(`${slot.keyPrefix}_base_url`, values.baseUrl),
+          window.electronAPI.setSetting(`${slot.keyPrefix}_model`, values.model),
+        ]
+      }))
       setStatusMsg('SAVED')
       window.dispatchEvent(new CustomEvent('settings-updated'))
-      setTimeout(() => setStatusMsg(''), 2000)
+      clearTimeout(statusTimerRef.current)
+      statusTimerRef.current = setTimeout(() => setStatusMsg(''), 2000)
     } catch (error) {
-      const msg = (error as Error).message || '未知错误'
-      console.error('[Settings] Save failed:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[Settings] Save failed:', msg)
       setStatusMsg(`FAILED - ${msg}`)
     } finally {
       setIsSaving(false)
@@ -157,7 +201,20 @@ export default function SettingsPanel({ onClose }: Props) {
     setTestingIdx(idx)
     setStatusMsg('TESTING...')
     try {
-      const response = await fetch(`${values.baseUrl}/chat/completions`, {
+      let testUrl: URL
+      try {
+        testUrl = new URL(`${values.baseUrl}/chat/completions`)
+      } catch {
+        setStatusMsg('FAIL - 无效的 Base URL')
+        setTestingIdx(null)
+        return
+      }
+      if (!['https:', 'http:'].includes(testUrl.protocol)) {
+        setStatusMsg('FAIL - 仅支持 http/https 协议')
+        setTestingIdx(null)
+        return
+      }
+      const response = await fetch(testUrl.href, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,6 +225,7 @@ export default function SettingsPanel({ onClose }: Props) {
           messages: buildTestMessages(idx),
           max_tokens: 5,
         }),
+        signal: AbortSignal.timeout(15_000),
       })
       if (response.ok) {
         setStatusMsg(`PASS - ${MODEL_SLOTS[idx].tag}`)
@@ -176,10 +234,11 @@ export default function SettingsPanel({ onClose }: Props) {
         setStatusMsg(`FAIL - ${data.error?.message || response.statusText}`)
       }
     } catch (error) {
-      setStatusMsg(`FAIL - ${(error as Error).message}`)
+      setStatusMsg(`FAIL - ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setTestingIdx(null)
-      setTimeout(() => setStatusMsg(''), 5000)
+      clearTimeout(statusTimerRef.current)
+      statusTimerRef.current = setTimeout(() => setStatusMsg(''), 5000)
     }
   }
 
@@ -191,7 +250,7 @@ export default function SettingsPanel({ onClose }: Props) {
     try {
       await window.electronAPI.openLogsFolder()
     } catch (err) {
-      setLogMsg(`打开失败：${(err as Error).message}`)
+      setLogMsg(`打开失败：${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -207,23 +266,61 @@ export default function SettingsPanel({ onClose }: Props) {
         setLogMsg(result.message ?? '导出失败')
       }
     } catch (err) {
-      setLogMsg(`导出失败：${(err as Error).message}`)
+      setLogMsg(`导出失败：${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setIsExporting(false)
-      setTimeout(() => setLogMsg(''), 6000)
+      clearTimeout(logMsgTimerRef.current)
+      logMsgTimerRef.current = setTimeout(() => setLogMsg(''), 6000)
     }
   }
 
   /** 保存 Wiki 设置 */
   const handleSaveWikiSettings = async () => {
     try {
-      await window.electronAPI.setSetting('wiki_inject_rag', wikiInjectRag ? 'true' : 'false')
-      await window.electronAPI.setSetting('wiki_auto_sediment', wikiAutoSediment ? 'true' : 'false')
+      await Promise.all([
+        window.electronAPI.setSetting('wiki_inject_rag', wikiInjectRag ? 'true' : 'false'),
+        window.electronAPI.setSetting('wiki_auto_sediment', wikiAutoSediment ? 'true' : 'false'),
+      ])
       setWikiStatusMsg('SAVED')
       window.dispatchEvent(new CustomEvent('settings-updated'))
-      setTimeout(() => setWikiStatusMsg(''), 2000)
+      clearTimeout(wikiTimerRef.current)
+      wikiTimerRef.current = setTimeout(() => setWikiStatusMsg(''), 2000)
     } catch (error) {
-      setWikiStatusMsg(`FAILED - ${(error as Error).message}`)
+      setWikiStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /** 保存记忆设置 */
+  const handleSaveMemorySettings = async () => {
+    try {
+      const interval = parseInt(nudgeInterval, 10)
+      if (isNaN(interval) || interval < 0) {
+        setMemoryStatusMsg('INVALID - 请输入非负整数')
+        return
+      }
+      await window.electronAPI.setSetting('memory_nudge_interval', String(interval))
+      setMemoryStatusMsg('SAVED')
+      clearTimeout(memoryTimerRef.current)
+      memoryTimerRef.current = setTimeout(() => setMemoryStatusMsg(''), 2000)
+    } catch (error) {
+      setMemoryStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /** 保存定时任务设置 */
+  const handleSaveCronSettings = async () => {
+    try {
+      const memInterval = Math.max(parseInt(cronMemoryInterval, 10) || 0, 0)
+      const knowledgeInterval = Math.max(parseInt(cronKnowledgeInterval, 10) || 0, 0)
+      await Promise.all([
+        window.electronAPI.scheduleCron('memory-consolidate', memInterval, activeAvatarId),
+        window.electronAPI.scheduleCron('knowledge-check', knowledgeInterval, activeAvatarId),
+      ])
+      setCronStatusMsg('SAVED')
+      clearTimeout(cronStatusTimerRef.current)
+      cronStatusTimerRef.current = setTimeout(() => setCronStatusMsg(''), 2000)
+    } catch (error) {
+      setCronStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -260,6 +357,30 @@ export default function SettingsPanel({ onClose }: Props) {
           >
             <span className="font-game text-[12px] tracking-wider">WIKI</span>
             <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">知识百科</span>
+          </button>
+          {/* 记忆设置 Tab */}
+          <button
+            onClick={() => setActiveTab(MEMORY_TAB)}
+            className={`text-left px-4 py-3 border-l-3 border-t-2 border-t-px-border transition-none
+              ${activeTab === MEMORY_TAB
+                ? 'border-l-px-primary bg-px-surface text-px-text'
+                : 'border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
+              }`}
+          >
+            <span className="font-game text-[12px] tracking-wider">MEMORY</span>
+            <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">记忆设置</span>
+          </button>
+          {/* 定时任务 Tab */}
+          <button
+            onClick={() => setActiveTab(CRON_TAB)}
+            className={`text-left px-4 py-3 border-l-3 border-t-2 border-t-px-border transition-none
+              ${activeTab === CRON_TAB
+                ? 'border-l-px-primary bg-px-surface text-px-text'
+                : 'border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
+              }`}
+          >
+            <span className="font-game text-[12px] tracking-wider">CRON</span>
+            <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">定时任务</span>
           </button>
           {/* 日志与反馈 Tab */}
           <button
@@ -299,7 +420,7 @@ export default function SettingsPanel({ onClose }: Props) {
                         aria-checked={wikiInjectRag}
                         data-checked={wikiInjectRag || undefined}
                         onClick={() => setWikiInjectRag(!wikiInjectRag)}
-                        onKeyDown={(e) => e.key === ' ' && setWikiInjectRag(!wikiInjectRag)}
+                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setWikiInjectRag(!wikiInjectRag) } }}
                         tabIndex={0}
                       />
                       <div>
@@ -320,7 +441,7 @@ export default function SettingsPanel({ onClose }: Props) {
                         aria-checked={wikiAutoSediment}
                         data-checked={wikiAutoSediment || undefined}
                         onClick={() => setWikiAutoSediment(!wikiAutoSediment)}
-                        onKeyDown={(e) => e.key === ' ' && setWikiAutoSediment(!wikiAutoSediment)}
+                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setWikiAutoSediment(!wikiAutoSediment) } }}
                         tabIndex={0}
                       />
                       <div>
@@ -363,6 +484,159 @@ export default function SettingsPanel({ onClose }: Props) {
                 <div className="flex gap-2">
                   <button onClick={onClose} className="pixel-btn-ghost">CANCEL</button>
                   <button onClick={handleSaveWikiSettings} className="pixel-btn-primary">SAVE</button>
+                </div>
+              </div>
+            </>
+          ) : activeTab === MEMORY_TAB ? (
+            /* ── 记忆设置面板 ── */
+            <>
+              <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+                <div className="max-w-lg space-y-6">
+                  <div className="border-l-3 border-px-primary pl-4 py-1">
+                    <h3 className="font-game text-[16px] font-bold text-px-text mb-1">记忆设置</h3>
+                    <p className="font-game text-[14px] text-px-text-sec">管理 AI 分身的长期记忆行为</p>
+                  </div>
+
+                  {/* Nudge 间隔设置 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div>
+                      <div className="font-game text-[14px] text-px-text mb-1">记忆提醒间隔（Nudge）</div>
+                      <div className="font-game text-[12px] text-px-text-dim mb-3">
+                        每隔 N 轮对话，提醒 AI 是否有内容需要用 [MEMORY_UPDATE] 标签记录到长期记忆
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="font-game text-[13px] text-px-text-sec">每</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          value={nudgeInterval}
+                          onChange={(e) => setNudgeInterval(e.target.value)}
+                          className="pixel-input w-20 text-center"
+                        />
+                        <label className="font-game text-[13px] text-px-text-sec">轮触发一次（设为 0 禁用）</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 容量说明 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">记忆容量说明</p>
+                    <ul className="space-y-1.5">
+                      {[
+                        '记忆文件上限为 2200 字符，超出时会自动触发 AI 整理',
+                        '整理会合并重复条目、删除过时信息，但保留纠偏记录',
+                        '也可在 MEMORY 面板中手动点击 CONSOLIDATE 整理',
+                        '用户画像（沟通偏好等）存储在独立的 USER.md 中',
+                      ].map((item, i) => (
+                        <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
+                          <span className="text-px-primary flex-shrink-0">-</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* 底部保存栏 */}
+              <div className="flex items-center justify-between px-6 py-3 border-t-2 border-px-border bg-px-elevated">
+                <span className={`font-game text-[12px] tracking-wider ${
+                  memoryStatusMsg.includes('SAVED') ? 'text-px-success' :
+                  memoryStatusMsg.includes('FAIL') || memoryStatusMsg.includes('INVALID') ? 'text-px-danger' : 'text-px-text-dim'
+                }`}>
+                  {memoryStatusMsg}
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="pixel-btn-ghost">CANCEL</button>
+                  <button onClick={handleSaveMemorySettings} className="pixel-btn-primary">SAVE</button>
+                </div>
+              </div>
+            </>
+          ) : activeTab === CRON_TAB ? (
+            /* ── 定时任务面板 ── */
+            <>
+              <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+                <div className="max-w-lg space-y-6">
+                  <div className="border-l-3 border-px-primary pl-4 py-1">
+                    <h3 className="font-game text-[16px] font-bold text-px-text mb-1">定时任务</h3>
+                    <p className="font-game text-[14px] text-px-text-sec">配置后台自动执行的定期任务（0 = 禁用）</p>
+                  </div>
+
+                  {/* 定时记忆整理 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div>
+                      <div className="font-game text-[14px] text-px-text mb-1">定时记忆整理</div>
+                      <div className="font-game text-[12px] text-px-text-dim mb-3">
+                        每隔 N 小时检查记忆容量，超过 85% 时自动调用 AI 整理
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="font-game text-[13px] text-px-text-sec">每</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="168"
+                          value={cronMemoryInterval}
+                          onChange={(e) => setCronMemoryInterval(e.target.value)}
+                          className="pixel-input w-20 text-center"
+                        />
+                        <label className="font-game text-[13px] text-px-text-sec">小时（0 = 禁用）</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 定时知识库检查 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div>
+                      <div className="font-game text-[14px] text-px-text mb-1">定时知识库检查</div>
+                      <div className="font-game text-[12px] text-px-text-dim mb-3">
+                        每隔 N 小时发送通知，提醒检查知识库是否需要更新
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="font-game text-[13px] text-px-text-sec">每</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="168"
+                          value={cronKnowledgeInterval}
+                          onChange={(e) => setCronKnowledgeInterval(e.target.value)}
+                          className="pixel-input w-20 text-center"
+                        />
+                        <label className="font-game text-[13px] text-px-text-sec">小时（0 = 禁用）</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 说明 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
+                    <p className="font-game text-[12px] text-px-primary tracking-wider">注意事项</p>
+                    <ul className="space-y-1.5">
+                      {[
+                        '定时任务只在应用运行时有效，关闭应用后停止',
+                        '记忆整理任务需要配置对话模型 API Key',
+                        '修改配置后需点击保存才会生效',
+                      ].map((item, i) => (
+                        <li key={i} className="flex gap-2 font-game text-[13px] text-px-text-sec">
+                          <span className="text-px-primary flex-shrink-0">-</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* 底部保存栏 */}
+              <div className="flex items-center justify-between px-6 py-3 border-t-2 border-px-border bg-px-elevated">
+                <span className={`font-game text-[12px] tracking-wider ${
+                  cronStatusMsg.includes('SAVED') ? 'text-px-success' :
+                  cronStatusMsg.includes('FAIL') ? 'text-px-danger' : 'text-px-text-dim'
+                }`}>
+                  {cronStatusMsg}
+                </span>
+                <div className="flex gap-2">
+                  <button onClick={onClose} className="pixel-btn-ghost">CANCEL</button>
+                  <button onClick={handleSaveCronSettings} className="pixel-btn-primary">SAVE</button>
                 </div>
               </div>
             </>

@@ -1,3 +1,4 @@
+/// <reference path="../src/global.d.ts" />
 import { contextBridge, ipcRenderer } from 'electron'
 
 // BUG7 修复：移除 preload.ts 中的内联 ElectronAPI 接口声明，
@@ -13,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConversation: (id: string) => ipcRenderer.invoke('get-conversation', id),
   updateConversationTitle: (id: string, title: string) => ipcRenderer.invoke('update-conversation-title', id, title),
   deleteConversation: (id: string) => ipcRenderer.invoke('delete-conversation', id),
+  searchMessages: (query: string, avatarId?: string) => ipcRenderer.invoke('search-messages', query, avatarId),
 
   // 消息管理
   saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[]) =>
@@ -35,6 +37,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 记忆管理（GAP2）
   readMemory: (avatarId: string) => ipcRenderer.invoke('read-memory', avatarId),
   writeMemory: (avatarId: string, content: string) => ipcRenderer.invoke('write-memory', avatarId, content),
+  getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
+  consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('consolidate-memory', avatarId, content, apiKey, baseUrl),
+
+  // 用户画像管理（Feature 3）
+  readUserProfile: (avatarId: string) => ipcRenderer.invoke('read-user-profile', avatarId),
+  writeUserProfile: (avatarId: string, content: string) => ipcRenderer.invoke('write-user-profile', avatarId, content),
 
   // 人格管理
   readSoul: (avatarId: string) => ipcRenderer.invoke('read-soul', avatarId),
@@ -42,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 分身管理
   listAvatars: () => ipcRenderer.invoke('list-avatars'),
+  getAvatarSoulIntro: (targetAvatarId: string) => ipcRenderer.invoke('get-avatar-soul-intro', targetAvatarId),
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) =>
     ipcRenderer.invoke('create-avatar', id, soulContent, skills, knowledgeFiles),
   writeSkillFile: (avatarId: string, fileName: string, content: string) =>
@@ -51,9 +61,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 测试管理
   getTestCases: (avatarId: string) => ipcRenderer.invoke('get-test-cases', avatarId),
   getTestCase: (avatarId: string, caseId: string) => ipcRenderer.invoke('get-test-case', avatarId, caseId),
-  createTestCase: (avatarId: string, testCase: any) => ipcRenderer.invoke('create-test-case', avatarId, testCase),
+  createTestCase: (avatarId: string, testCase: Omit<TestCase, 'filePath'>) => ipcRenderer.invoke('create-test-case', avatarId, testCase),
   deleteTestCase: (avatarId: string, caseId: string) => ipcRenderer.invoke('delete-test-case', avatarId, caseId),
-  saveTestReport: (avatarId: string, report: any) => ipcRenderer.invoke('save-test-report', avatarId, report),
+  saveTestReport: (avatarId: string, report: TestReport) => ipcRenderer.invoke('save-test-report', avatarId, report),
   getLatestReport: (avatarId: string) => ipcRenderer.invoke('get-latest-report', avatarId),
   getReportList: (avatarId: string) => ipcRenderer.invoke('get-report-list', avatarId),
   // BUG6 修复：移除虚假的 onProgress 回调参数
@@ -124,10 +134,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notifyTestResult: (passed: number, total: number, failed: number) =>
     ipcRenderer.invoke('notify-test-result', passed, total, failed),
   onScheduledTestTrigger: (callback: (avatarId: string) => void) => {
-    ipcRenderer.on('scheduled-test-trigger', (_, avatarId) => callback(avatarId))
+    const handler = (_: unknown, avatarId: string) => callback(avatarId)
+    ipcRenderer.on('scheduled-test-trigger', handler)
+    return () => { ipcRenderer.removeListener('scheduled-test-trigger', handler) }
   },
-  onTestResultBadge: (callback: (data: { passed: boolean; total: number; failed: number }) => void) => {
-    ipcRenderer.on('test-result-badge', (_, data) => callback(data))
+  onTestResultBadge: (callback: (data: { passed: number; total: number; failed: number }) => void) => {
+    const handler = (_: unknown, data: { passed: number; total: number; failed: number }) => callback(data)
+    ipcRenderer.on('test-result-badge', handler)
+    return () => { ipcRenderer.removeListener('test-result-badge', handler) }
+  },
+
+  // 定时任务（Feature 8）
+  scheduleCron: (type: string, intervalHours: number, avatarId?: string) =>
+    ipcRenderer.invoke('schedule-cron', type, intervalHours, avatarId),
+  cancelCron: (type: string) => ipcRenderer.invoke('cancel-cron', type),
+  getCronConfig: () => ipcRenderer.invoke('get-cron-config'),
+  onCronMemoryConsolidate: (callback: (avatarId: string) => void) => {
+    const handler = (_: unknown, avatarId: string) => callback(avatarId)
+    ipcRenderer.on('cron-memory-consolidate', handler)
+    return () => { ipcRenderer.removeListener('cron-memory-consolidate', handler) }
+  },
+  onCronKnowledgeCheck: (callback: (avatarId: string) => void) => {
+    const handler = (_: unknown, avatarId: string) => callback(avatarId)
+    ipcRenderer.on('cron-knowledge-check', handler)
+    return () => { ipcRenderer.removeListener('cron-knowledge-check', handler) }
   },
 
   // 日志系统
@@ -138,4 +168,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGeneratedIndex: () => ipcRenderer.invoke('get-generated-index'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
   exportErrorLog: (days?: number) => ipcRenderer.invoke('export-error-log', days),
+  // 数据库备份
+  dbBackup: () => ipcRenderer.invoke('db-backup'),
+  // 对话导出
+  exportConversation: (conversationId: string, format: 'markdown' | 'pdf') =>
+    ipcRenderer.invoke('export-conversation', conversationId, format),
+  // 提示词模板
+  createPromptTemplate: (avatarId: string, title: string, content: string) =>
+    ipcRenderer.invoke('create-prompt-template', avatarId, title, content),
+  getPromptTemplates: (avatarId: string) =>
+    ipcRenderer.invoke('get-prompt-templates', avatarId),
+  updatePromptTemplate: (id: string, avatarId: string, title: string, content: string) =>
+    ipcRenderer.invoke('update-prompt-template', id, avatarId, title, content),
+  deletePromptTemplate: (id: string, avatarId: string) =>
+    ipcRenderer.invoke('delete-prompt-template', id, avatarId),
 })

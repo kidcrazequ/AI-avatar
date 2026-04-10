@@ -22,6 +22,12 @@ export interface ParsedDocument {
  */
 const IMAGE_PAGE_TEXT_THRESHOLD = 300
 
+/** 图表页截图数量上限，防止大 PDF 全量渲染耗尽内存 */
+const MAX_SCREENSHOT_PAGES = 20
+
+/** 单次导入文件大小上限（约 80MB），防止超大文件拖垮主进程内存 */
+const MAX_PARSE_FILE_BYTES = 80 * 1024 * 1024
+
 /**
  * DocumentParser: 负责解析 PDF / Word / 图片 / 文本文件，提取文字和图片。
  * - PDF → pdf-parse v2 提取文字；文字少的页面同时渲染为截图供 OCR 识别图表内容
@@ -32,6 +38,13 @@ const IMAGE_PAGE_TEXT_THRESHOLD = 300
 export class DocumentParser {
   /** 解析文件，返回文本内容和图片列表 */
   async parseFile(filePath: string): Promise<ParsedDocument> {
+    const stat = await fs.promises.stat(filePath)
+    if (!stat.isFile()) {
+      throw new Error(`路径不是普通文件: ${filePath}`)
+    }
+    if (stat.size > MAX_PARSE_FILE_BYTES) {
+      throw new Error(`文件过大（>${Math.floor(MAX_PARSE_FILE_BYTES / (1024 * 1024))}MB），请拆分后导入: ${path.basename(filePath)}`)
+    }
     const ext = path.extname(filePath).toLowerCase()
     const fileName = path.basename(filePath)
 
@@ -39,8 +52,9 @@ export class DocumentParser {
       case '.pdf':
         return this.parsePdf(filePath, fileName)
       case '.docx':
-      case '.doc':
         return this.parseWord(filePath, fileName)
+      case '.doc':
+        throw new Error('不支持旧版 .doc 格式，请使用 Word 将文件另存为 .docx 后重试')
       case '.jpg':
       case '.jpeg':
       case '.png':
@@ -60,8 +74,8 @@ export class DocumentParser {
   private async parsePdf(filePath: string, fileName: string): Promise<ParsedDocument> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PDFParse } = require('pdf-parse')
-    const buffer = fs.readFileSync(filePath)
-    const data = new Uint8Array(buffer)
+    const buffer = await fs.promises.readFile(filePath)
+    const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
     const parser = new PDFParse({ data })
 
     // 1. 提取全文
@@ -81,9 +95,13 @@ export class DocumentParser {
       })
     }
 
-    // 3. 渲染所有页截图，然后按文字密度筛选（getScreenshot 的 pages 参数在 v2 中无效）
+    // 3. 渲染截图并按文字密度筛选（getScreenshot 的 pages 参数在 v2 中无效），限制最大页数
     const images: string[] = []
     const imagePageNumbers: number[] = []
+    if (imageDensePages.length > MAX_SCREENSHOT_PAGES) {
+      console.warn(`[DocumentParser] 图表页 ${imageDensePages.length} 页超过上限 ${MAX_SCREENSHOT_PAGES}，截取前 ${MAX_SCREENSHOT_PAGES} 页`)
+      imageDensePages.length = MAX_SCREENSHOT_PAGES
+    }
     if (imageDensePages.length > 0) {
       try {
         const imageDenseSet = new Set(imageDensePages)
@@ -121,14 +139,15 @@ export class DocumentParser {
     }
   }
 
-  private parseImage(filePath: string, fileName: string): ParsedDocument {
+  private async parseImage(filePath: string, fileName: string): Promise<ParsedDocument> {
     const ext = path.extname(filePath).toLowerCase().slice(1)
     const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
       : ext === 'png' ? 'image/png'
       : ext === 'gif' ? 'image/gif'
       : ext === 'webp' ? 'image/webp'
-      : 'image/png'
-    const buffer = fs.readFileSync(filePath)
+      : ext === 'bmp' ? 'image/bmp'
+      : 'application/octet-stream'
+    const buffer = await fs.promises.readFile(filePath)
     const base64 = buffer.toString('base64')
     const dataUrl = `data:${mimeType};base64,${base64}`
     return {
@@ -139,8 +158,8 @@ export class DocumentParser {
     }
   }
 
-  private parseText(filePath: string, fileName: string): ParsedDocument {
-    const text = fs.readFileSync(filePath, 'utf-8')
+  private async parseText(filePath: string, fileName: string): Promise<ParsedDocument> {
+    const text = await fs.promises.readFile(filePath, 'utf-8')
     return {
       text,
       images: [],

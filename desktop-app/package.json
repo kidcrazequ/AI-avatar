@@ -23,7 +23,11 @@
     "demo:video": "npx playwright test --config=playwright-demo.config.ts",
     "demo:build-and-record": "npm run build && npx playwright test --config=playwright-demo.config.ts",
     "journey:xiaodu": "npx playwright test --config=playwright-journey.config.ts",
-    "journey:xiaodu:build": "npm run build && npx playwright test --config=playwright-journey.config.ts"
+    "journey:xiaodu:build": "npm run build && npx playwright test --config=playwright-journey.config.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "lint": "eslint src/ electron/ --max-warnings 0",
+    "lint:fix": "eslint src/ electron/ --fix",
+    "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='"
   },
   "keywords": [
     "electron",
@@ -48,12 +52,14 @@
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.1",
+    "react-virtuoso": "^4.18.4",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.2.2",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/better-sqlite3": "^7.6.13",
@@ -70,8 +76,13 @@
     "electron-rebuild": "^3.2.9",
     "esbuild": "^0.27.4",
     "esbuild-plugin-copy": "^2.1.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
     "playwright": "^1.58.2",
     "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1",
     "vite": "^8.0.3",
     "wait-on": "^9.0.4"
   }

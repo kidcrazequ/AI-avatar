@@ -42,10 +42,14 @@ export interface LLMTool {
   }
 }
 
+/** 默认请求超时（5 分钟），防止慢网或挂死连接无限等待 */
+const DEFAULT_TIMEOUT_MS = 300_000
+
 export interface ChatOptions {
   tools?: LLMTool[]
   maxTokens?: number
   temperature?: number
+  signal?: AbortSignal
 }
 
 /** 默认模型配置 */
@@ -93,6 +97,22 @@ export class LLMService {
     this.config = config
   }
 
+  /** 统一 HTTP 错误处理，避免 chat/complete 中重复代码 */
+  private async throwOnHttpError(response: Response): Promise<void> {
+    if (response.ok) return
+    const errorText = await response.text().catch(() => response.statusText)
+    const { status } = response
+    if (status === 401 || status === 403) {
+      throw new Error(`API 密钥无效或已过期，请在设置中检查 (${status})`)
+    } else if (status === 429) {
+      throw new Error(`请求频率超限或额度用尽，请稍后重试 (429)`)
+    } else if (status >= 500) {
+      throw new Error(`服务端暂时不可用，请稍后重试 (${status})`)
+    } else {
+      throw new Error(`API 请求失败 (${status}): ${errorText}`)
+    }
+  }
+
   /**
    * 流式对话，支持工具调用。
    * onChunk: 每收到文本片段时回调
@@ -118,8 +138,13 @@ export class LLMService {
         body.tools = options.tools
         body.tool_choice = 'auto'
       }
-      if (options.maxTokens) body.max_tokens = options.maxTokens
+      if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
       if (options.temperature !== undefined) body.temperature = options.temperature
+
+      const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
+      const mergedSignal = options.signal
+        ? AbortSignal.any([options.signal, timeoutSignal])
+        : timeoutSignal
 
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -128,12 +153,10 @@ export class LLMService {
           'Authorization': `Bearer ${this.config.apiKey}`,
         },
         body: JSON.stringify(body),
+        signal: mergedSignal,
       })
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => response.statusText)
-        throw new Error(`API 请求失败 (${response.status}): ${errorText}`)
-      }
+      await this.throwOnHttpError(response)
 
       const reader = response.body?.getReader()
       if (!reader) throw new Error('无法读取响应流')
@@ -148,17 +171,15 @@ export class LLMService {
 
           try {
             const data = JSON.parse(event.data)
-            const delta = data.choices[0]?.delta
+            const delta = data.choices?.[0]?.delta
 
             if (!delta) return
 
-            // 普通文本内容
             if (delta.content) {
               fullText += delta.content
               onChunk(delta.content)
             }
 
-            // 工具调用（增量拼接）
             if (delta.tool_calls) {
               for (const tc of delta.tool_calls) {
                 const idx = tc.index ?? 0
@@ -174,29 +195,38 @@ export class LLMService {
                 if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
               }
             }
-          } catch {
-            // 忽略解析错误的单个事件
+          } catch (parseErr) {
+            console.warn('[LLMService] SSE 事件解析失败:', event.data?.slice(0, 100), parseErr instanceof Error ? parseErr.message : String(parseErr))
           }
         },
       })
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        parser.feed(decoder.decode(value, { stream: true }))
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          parser.feed(decoder.decode(value, { stream: true }))
+        }
+      } finally {
+        reader.cancel().catch(() => {})
       }
 
       const toolCalls = toolCallsMap.size > 0
-        ? Array.from(toolCallsMap.values()).sort((a, b) => {
-            const ai = parseInt(a.id.replace(/\D/g, '') || '0')
-            const bi = parseInt(b.id.replace(/\D/g, '') || '0')
-            return ai - bi
-          })
+        ? Array.from(toolCallsMap.entries())
+            .sort(([a], [b]) => a - b)
+            .map(([, v]) => v)
         : undefined
 
       onDone(fullText, toolCalls)
     } catch (error) {
-      onError(error as Error)
+      // 区分网络错误和其他错误，给出更友好的提示
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        onError(new Error('网络连接失败，请检查网络和 API 地址'))
+      } else if (error instanceof Error && error.name === 'AbortError') {
+        onError(error)
+      } else {
+        onError(error instanceof Error ? error : new Error(String(error)))
+      }
     }
   }
 
@@ -209,7 +239,13 @@ export class LLMService {
       messages: messages.map(this.serializeMessage),
       stream: false,
     }
-    if (options.maxTokens) body.max_tokens = options.maxTokens
+    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
+    if (options.temperature !== undefined) body.temperature = options.temperature
+
+    const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
+    const mergedSignal = options.signal
+      ? AbortSignal.any([options.signal, timeoutSignal])
+      : timeoutSignal
 
     const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -218,31 +254,26 @@ export class LLMService {
         'Authorization': `Bearer ${this.config.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: mergedSignal,
     })
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText)
-      throw new Error(`API 请求失败 (${response.status}): ${errorText}`)
-    }
+    await this.throwOnHttpError(response)
 
-    const data = await response.json()
-    return data.choices[0]?.message?.content ?? ''
+    let data: { choices?: Array<{ message?: { content?: string } }> }
+    try {
+      data = await response.json()
+    } catch (jsonErr) {
+      throw new Error(`API 响应解析失败：${jsonErr instanceof Error ? jsonErr.message : String(jsonErr)}`)
+    }
+    return data.choices?.[0]?.message?.content ?? ''
   }
 
-  /** 将内部消息格式序列化为 API 请求格式 */
-  private serializeMessage(msg: LLMMessage): Record<string, unknown> {
-    const base: Record<string, unknown> = { role: msg.role }
-
-    if (typeof msg.content === 'string') {
-      base.content = msg.content
-    } else {
-      base.content = msg.content
-    }
-
+  /** 将内部消息格式序列化为 API 请求格式（箭头函数避免 .map 丢失 this） */
+  private serializeMessage = (msg: LLMMessage): Record<string, unknown> => {
+    const base: Record<string, unknown> = { role: msg.role, content: msg.content }
     if (msg.tool_calls) base.tool_calls = msg.tool_calls
     if (msg.tool_call_id) base.tool_call_id = msg.tool_call_id
     if (msg.name) base.name = msg.name
-
     return base
   }
 }

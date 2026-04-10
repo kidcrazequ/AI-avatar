@@ -452,20 +452,20 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
 
   // ── 场景 8：打开知识库面板 + 导入 PDF ────────────────────────────────────────
 
-  test('场景 8：点击「[+] 新对话」进入对话页', async () => {
+  test('场景 8：点击「[+] NEW CHAT」进入对话页', async () => {
     console.log('📸 场景 8：创建新对话')
-    await hoverElement('button:has-text("[+] 新对话")')
-    await page.click('button:has-text("[+] 新对话")')
+    await hoverElement('button:has-text("NEW CHAT")')
+    await page.click('button:has-text("NEW CHAT")')
     // 等待聊天界面 + 顶部导航栏出现
-    await page.locator('button:has-text("知识库")').waitFor({ state: 'visible', timeout: 10000 })
+    await page.locator('button[aria-label="知识库"]').waitFor({ state: 'visible', timeout: 10000 })
     await captureAndWait(2000)
   })
 
   test('场景 9：点击「知识库」按钮并导入 ENS-L262 手册 PDF', async () => {
     console.log('📸 场景 9：打开知识库并导入 PDF')
     // 点击顶栏「知识库」导航按钮
-    await hoverElement('button:has-text("知识库")')
-    await page.click('button:has-text("知识库")')
+    await hoverElement('button[aria-label="知识库"]')
+    await page.click('button[aria-label="知识库"]')
     await captureAndWait(2000)
 
     // 点击「IMPORT」导入按钮，展示导入操作（IPC show-open-dialog 已被拦截）
@@ -517,8 +517,8 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
     // 关闭并重新打开知识库面板，触发文件树刷新（loadTree on mount）
     await closePanel()
     await captureAndWait(800)
-    await hoverElement('button:has-text("知识库")')
-    await page.click('button:has-text("知识库")')
+    await hoverElement('button[aria-label="知识库"]')
+    await page.click('button[aria-label="知识库"]')
 
     // 等待文件出现在知识树中
     await page.waitForFunction(
@@ -551,8 +551,8 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
 
   test('场景 11：点击「技能」面板', async () => {
     console.log('📸 场景 11：技能面板')
-    await hoverElement('button:has-text("技能")')
-    await page.click('button:has-text("技能")')
+    await hoverElement('button[aria-label="技能"]')
+    await page.click('button[aria-label="技能"]')
     await captureAndWait(2500)
     await closePanel()
     await captureAndWait(1000)
@@ -560,8 +560,8 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
 
   test('场景 12：点击「知识库」面板', async () => {
     console.log('📸 场景 12：知识库面板')
-    await hoverElement('button:has-text("知识库")')
-    await page.click('button:has-text("知识库")')
+    await hoverElement('button[aria-label="知识库"]')
+    await page.click('button[aria-label="知识库"]')
     await captureAndWait(2500)
     await closePanel()
     await captureAndWait(1000)
@@ -569,8 +569,8 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
 
   test('场景 13：点击「记忆」面板', async () => {
     console.log('📸 场景 13：记忆面板')
-    await hoverElement('button:has-text("记忆")')
-    await page.click('button:has-text("记忆")')
+    await hoverElement('button[aria-label="记忆"]')
+    await page.click('button[aria-label="记忆"]')
     await captureAndWait(2500)
     await closePanel()
     await captureAndWait(1000)
@@ -578,8 +578,8 @@ test.describe('用户旅程：小堵-工商储专家 从零创建到首次对话
 
   test('场景 14：点击「设置」面板', async () => {
     console.log('📸 场景 14：设置面板')
-    await hoverElement('button:has-text("设置")')
-    await page.click('button:has-text("设置")')
+    await hoverElement('button[aria-label="设置"]')
+    await page.click('button[aria-label="设置"]')
     await captureAndWait(2500)
     await closePanel()
     await captureAndWait(2000)

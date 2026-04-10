@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { localDateString } from '@soul/core'
 
 interface Props {
   conversation: Conversation
@@ -17,7 +18,7 @@ export default function ConversationItem({ conversation, isActive, onClick, onDe
     if (days === 0) return 'TODAY'
     if (days === 1) return 'YESTERDAY'
     if (days < 7) return `${days}D AGO`
-    return date.toLocaleDateString('zh-CN').replace(/\//g, '-')
+    return localDateString(date)
   }
 
   const handleDeleteRequest = (e: React.MouseEvent) => {
@@ -39,6 +40,8 @@ export default function ConversationItem({ conversation, isActive, onClick, onDe
   return (
     <div>
       <div
+        role="button"
+        tabIndex={0}
         className={`group flex items-center justify-between px-4 py-3 cursor-pointer
           border-l-3 transition-none
           ${isActive
@@ -46,6 +49,9 @@ export default function ConversationItem({ conversation, isActive, onClick, onDe
             : 'bg-transparent border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
           }`}
         onClick={onClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+        aria-label={conversation.title}
+        aria-current={isActive ? 'true' : undefined}
       >
         <div className="flex-1 min-w-0">
           <p className="font-game text-[14px] font-medium truncate">{conversation.title}</p>
@@ -57,6 +63,7 @@ export default function ConversationItem({ conversation, isActive, onClick, onDe
         {!confirmingDelete && (
           <button
             onClick={handleDeleteRequest}
+            onKeyDown={(e) => e.stopPropagation()}
             aria-label={`删除 ${conversation.title}`}
             className="ml-2 opacity-0 group-hover:opacity-100 font-game text-[12px] text-px-text-dim hover:text-px-danger px-1 py-0.5 focus:opacity-100"
           >

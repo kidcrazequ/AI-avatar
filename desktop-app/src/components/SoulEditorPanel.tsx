@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Modal from './shared/Modal'
@@ -18,37 +18,55 @@ export default function SoulEditorPanel({ avatarId, onClose, onSoulChanged }: Pr
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [validation, setValidation] = useState<ValidationResult | null>(null)
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    loadSoul()
+    mountedRef.current = true
+    return () => { mountedRef.current = false; clearTimeout(statusTimerRef.current) }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const soulContent = await window.electronAPI.readSoul(avatarId)
+        if (cancelled) return
+        setContent(soulContent)
+        setEditedContent(soulContent)
+        setValidation(null)
+        setIsEditing(false)
+      } catch (err) {
+        if (!cancelled) console.error('[SoulEditorPanel] 加载失败:', err instanceof Error ? err.message : String(err))
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [avatarId])
 
-  const loadSoul = async () => {
-    const soulContent = await window.electronAPI.readSoul(avatarId)
-    setContent(soulContent)
-    setEditedContent(soulContent)
-    setValidation(null)
-  }
-
-  const showStatus = (msg: string) => {
+  const showStatus = useCallback((msg: string) => {
+    if (!mountedRef.current) return
     setStatusMsg(msg)
-    setTimeout(() => setStatusMsg(''), 2500)
-  }
+    clearTimeout(statusTimerRef.current)
+    statusTimerRef.current = setTimeout(() => { if (mountedRef.current) setStatusMsg('') }, 2500)
+  }, [])
 
   const handleSave = async () => {
     setIsSaving(true)
     try {
       await window.electronAPI.writeSoul(avatarId, editedContent)
+      if (!mountedRef.current) return
       setContent(editedContent)
       setIsEditing(false)
       setValidation(null)
       showStatus('SAVED')
       onSoulChanged?.()
     } catch (error) {
+      if (!mountedRef.current) return
       console.error('[SoulEditorPanel] 保存人格文档失败:', error)
       showStatus('FAILED')
     } finally {
-      setIsSaving(false)
+      if (mountedRef.current) setIsSaving(false)
     }
   }
 

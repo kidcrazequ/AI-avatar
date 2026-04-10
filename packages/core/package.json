@@ -8,7 +8,11 @@
     "build": "tsc",
     "test": "node --test dist/tests/core.test.js",
     "test:cleaner": "node --test dist/tests/ocr-html-cleaner.test.js",
-    "test:all": "node --test dist/tests/core.test.js dist/tests/ocr-html-cleaner.test.js"
+    "test:all": "node --test dist/tests/core.test.js dist/tests/ocr-html-cleaner.test.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --max-warnings 0",
+    "lint:fix": "eslint src/ --fix",
+    "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='"
   },
   "keywords": [
     "soul",
@@ -18,8 +22,12 @@
   "author": "zhi.qu",
   "license": "ISC",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
-    "typescript": "^6.0.2"
+    "eslint": "^10.2.0",
+    "globals": "^17.4.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1"
   },
   "dependencies": {
     "segmentit": "^2.0.3"

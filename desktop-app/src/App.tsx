@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 import KnowledgePanel from './components/KnowledgePanel'
@@ -8,21 +8,31 @@ import CreateAvatarWizard from './components/CreateAvatarWizard'
 import TestPanel from './components/TestPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
+import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
+import PromptTemplatePanel from './components/PromptTemplatePanel'
 import Toast from './components/shared/Toast'
+import { useShallow } from 'zustand/react/shallow'
 import { useChatStore } from './stores/chatStore'
+import { MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core'
 import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
 
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  const [showKnowledgePanel, setShowKnowledgePanel] = useState(false)
-  const [showSettingsPanel, setShowSettingsPanel] = useState(false)
-  const [showCreateWizard, setShowCreateWizard] = useState(false)
-  const [showTestPanel, setShowTestPanel] = useState(false)
-  const [showSkillsPanel, setShowSkillsPanel] = useState(false)
-  const [showMemoryPanel, setShowMemoryPanel] = useState(false)
-  const [showSoulEditor, setShowSoulEditor] = useState(false)
+  const [activePanel, setActivePanel] = useState<
+    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'userProfile' | 'soulEditor' | 'promptTemplate' | null
+  >(null)
+  const showKnowledgePanel = activePanel === 'knowledge'
+  const showSettingsPanel = activePanel === 'settings'
+  const showCreateWizard = activePanel === 'createWizard'
+  const showTestPanel = activePanel === 'test'
+  const showSkillsPanel = activePanel === 'skills'
+  const showMemoryPanel = activePanel === 'memory'
+  const showUserProfilePanel = activePanel === 'userProfile'
+  const showSoulEditor = activePanel === 'soulEditor'
+  const showPromptTemplatePanel = activePanel === 'promptTemplate'
+  const [templateFillText, setTemplateFillText] = useState<string | undefined>(undefined)
   const [activeAvatarId, setActiveAvatarId] = useState<string>('')
   const [activeAvatarName, setActiveAvatarName] = useState<string>('')
   const [avatarList, setAvatarList] = useState<Avatar[]>([])
@@ -33,44 +43,78 @@ function App() {
   const [creationModel, setCreationModel] = useState<ModelConfig>(DEFAULT_CREATION_MODEL)
 
   const [testBadge, setTestBadge] = useState<{ failed: number } | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const cronMemoryRunningRef = useRef(false)
+  const cronKnowledgeRunningRef = useRef(false)
+  const avatarSwitchSeqRef = useRef(0)
+  const skipEffectLoadRef = useRef(false)
 
-  const { clearMessages, setSystemPrompt, setChatModel, chatModel, systemPrompt } = useChatStore()
+  const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, chatModel, systemPrompt } = useChatStore(
+    useShallow(s => ({
+      clearMessages: s.clearMessages,
+      resetTransientState: s.resetTransientState,
+      setSystemPrompt: s.setSystemPrompt,
+      setChatModel: s.setChatModel,
+      chatModel: s.chatModel,
+      systemPrompt: s.systemPrompt,
+    }))
+  )
+
+  useEffect(() => () => { clearTimeout(toastTimerRef.current) }, [])
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
-    setTimeout(() => setToast(null), 2500)
+    clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
   }, [])
 
   const loadConversations = useCallback(async () => {
     if (!activeAvatarId) return
-    const convs = await window.electronAPI.getConversations(activeAvatarId)
-    setConversations(convs)
+    try {
+      const convs = await window.electronAPI.getConversations(activeAvatarId)
+      setConversations(convs)
+    } catch (err) {
+      console.error('[App] 加载会话列表失败:', err)
+      window.electronAPI.logEvent('error', 'load-conversations-error', err instanceof Error ? err.message : String(err))
+    }
   }, [activeAvatarId])
 
   const loadAvatarConfig = useCallback(async (avatarId: string) => {
     if (!avatarId) return
-    const config = await window.electronAPI.loadAvatar(avatarId)
-    setSystemPrompt(config.systemPrompt)
-    return config
+    try {
+      const config = await window.electronAPI.loadAvatar(avatarId)
+      setSystemPrompt(config.systemPrompt)
+      return config
+    } catch (err) {
+      console.error('[App] 加载分身配置失败:', err)
+      window.electronAPI.logEvent('error', 'load-avatar-config-error', err instanceof Error ? err.message : String(err))
+    }
   }, [setSystemPrompt])
 
   const loadModelConfigs = useCallback(async () => {
-    const chatApiKey = await window.electronAPI.getSetting('chat_api_key')
-    const chatBaseUrl = await window.electronAPI.getSetting('chat_base_url')
-    const chatModel = await window.electronAPI.getSetting('chat_model')
-    const visionApiKey = await window.electronAPI.getSetting('vision_api_key')
-    const visionBaseUrl = await window.electronAPI.getSetting('vision_base_url')
-    const visionModelName = await window.electronAPI.getSetting('vision_model')
-    const ocrApiKey = await window.electronAPI.getSetting('ocr_api_key')
-    const ocrBaseUrl = await window.electronAPI.getSetting('ocr_base_url')
-    const ocrModelName = await window.electronAPI.getSetting('ocr_model')
-    const creationApiKey = await window.electronAPI.getSetting('creation_api_key')
-    const creationBaseUrl = await window.electronAPI.getSetting('creation_base_url')
-    const creationModelName = await window.electronAPI.getSetting('creation_model')
+    const [
+      chatApiKey, chatBaseUrl, chatModelName,
+      visionApiKey, visionBaseUrl, visionModelName,
+      ocrApiKey, ocrBaseUrl, ocrModelName,
+      creationApiKey, creationBaseUrl, creationModelName,
+    ] = await Promise.all([
+      window.electronAPI.getSetting('chat_api_key'),
+      window.electronAPI.getSetting('chat_base_url'),
+      window.electronAPI.getSetting('chat_model'),
+      window.electronAPI.getSetting('vision_api_key'),
+      window.electronAPI.getSetting('vision_base_url'),
+      window.electronAPI.getSetting('vision_model'),
+      window.electronAPI.getSetting('ocr_api_key'),
+      window.electronAPI.getSetting('ocr_base_url'),
+      window.electronAPI.getSetting('ocr_model'),
+      window.electronAPI.getSetting('creation_api_key'),
+      window.electronAPI.getSetting('creation_base_url'),
+      window.electronAPI.getSetting('creation_model'),
+    ])
 
     setChatModel({
       baseUrl: chatBaseUrl || DEFAULT_CHAT_MODEL.baseUrl,
-      model: chatModel || DEFAULT_CHAT_MODEL.model,
+      model: chatModelName || DEFAULT_CHAT_MODEL.model,
       apiKey: chatApiKey || '',
     })
     setVisionModel({
@@ -97,19 +141,21 @@ function App() {
   }, [])
 
   useEffect(() => {
-    loadModelConfigs()
-    refreshAvatarList()
+    loadModelConfigs().catch(err => console.error('[App] 加载模型配置失败:', err))
+    refreshAvatarList().catch(err => console.error('[App] 加载分身列表失败:', err))
 
     const handleSettingsUpdate = () => {
-      loadModelConfigs()
+      loadModelConfigs().catch(err => console.error('[App] 刷新模型配置失败:', err))
     }
     window.addEventListener('settings-updated', handleSettingsUpdate)
 
-    window.electronAPI.onScheduledTestTrigger((avatarId) => {
-      handleSelectAvatar(avatarId).then(() => setShowTestPanel(true))
+    const removeScheduledTest = window.electronAPI.onScheduledTestTrigger((avatarId) => {
+      handleSelectAvatar(avatarId).then(() => setActivePanel('test')).catch(err => {
+        console.error('[App] 定时自检触发切换分身失败:', err instanceof Error ? err.message : String(err))
+      })
     })
 
-    window.electronAPI.onTestResultBadge((data) => {
+    const removeTestBadge = window.electronAPI.onTestResultBadge((data) => {
       if (data.failed > 0) {
         setTestBadge({ failed: data.failed })
         showToast(`自检完成：${data.failed}/${data.total} 个用例失败`, 'error')
@@ -118,32 +164,90 @@ function App() {
       }
     })
 
-    return () => window.removeEventListener('settings-updated', handleSettingsUpdate)
+    const removeCronMemory = window.electronAPI.onCronMemoryConsolidate(async (avatarId) => {
+      if (cronMemoryRunningRef.current) return
+      cronMemoryRunningRef.current = true
+      try {
+        if (!avatarId) return
+        const apiKey = await window.electronAPI.getSetting('chat_api_key') ?? ''
+        const baseUrl = await window.electronAPI.getSetting('chat_base_url') ?? ''
+        if (!apiKey) return
+        const content = await window.electronAPI.readMemory(avatarId)
+        if (!content || content.length < MEMORY_CHAR_LIMIT * MEMORY_WARN_THRESHOLD) return
+        const consolidated = await window.electronAPI.consolidateMemory(avatarId, content, apiKey, baseUrl)
+        await window.electronAPI.writeMemory(avatarId, consolidated)
+      } catch (err) {
+        console.error('[Cron] 定时记忆整理失败:', err)
+      } finally {
+        cronMemoryRunningRef.current = false
+      }
+    })
+
+    const removeCronKnowledge = window.electronAPI.onCronKnowledgeCheck(async (avatarId) => {
+      if (cronKnowledgeRunningRef.current) return
+      cronKnowledgeRunningRef.current = true
+      try {
+        const apiKey = await window.electronAPI.getSetting('ocr_api_key') ||
+          await window.electronAPI.getSetting('chat_api_key') || ''
+        const baseUrl = await window.electronAPI.getSetting('ocr_base_url') ||
+          'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        if (!apiKey || !avatarId) return
+        await window.electronAPI.buildKnowledgeIndex(avatarId, apiKey, baseUrl)
+      } catch (err) {
+        console.error('[Cron] 定时知识检查失败:', err)
+      } finally {
+        cronKnowledgeRunningRef.current = false
+      }
+    })
+
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdate)
+      removeScheduledTest?.()
+      removeTestBadge?.()
+      removeCronMemory?.()
+      removeCronKnowledge?.()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (activeAvatarId) {
-      loadConversations()
-      loadAvatarConfig(activeAvatarId)
+    if (!activeAvatarId) return
+    // handleSelectAvatar 已完成数据拉取时跳过，避免双重请求竞态
+    if (skipEffectLoadRef.current) {
+      skipEffectLoadRef.current = false
+      return
     }
+    loadConversations()
+    loadAvatarConfig(activeAvatarId)
   }, [activeAvatarId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectAvatar = async (avatarId: string) => {
+    const seq = ++avatarSwitchSeqRef.current
+    resetTransientState()
+    skipEffectLoadRef.current = true
     setActiveAvatarId(avatarId)
-    await loadAvatarConfig(avatarId)
     setActiveConversationId(null)
     clearMessages()
-    const convs = await window.electronAPI.getConversations(avatarId)
-    setConversations(convs)
 
-    const avatars = await window.electronAPI.listAvatars()
-    setAvatarList(avatars)
-    const avatar = avatars.find(a => a.id === avatarId)
-    if (avatar) setActiveAvatarName(avatar.name)
+    try {
+      const [, convs, avatars] = await Promise.all([
+        loadAvatarConfig(avatarId),
+        window.electronAPI.getConversations(avatarId),
+        window.electronAPI.listAvatars(),
+      ])
+
+      if (avatarSwitchSeqRef.current !== seq) return
+      setConversations(convs)
+      setAvatarList(avatars)
+      const avatar = avatars.find(a => a.id === avatarId)
+      if (avatar) setActiveAvatarName(avatar.name)
+    } catch (err) {
+      console.error('[App] 切换分身失败:', err instanceof Error ? err.message : String(err))
+      window.electronAPI.logEvent('error', 'select-avatar-error', err instanceof Error ? err.message : String(err))
+    }
   }
 
   const handleAvatarCreated = async (avatarId: string) => {
-    setShowCreateWizard(false)
+    setActivePanel(null)
     await handleSelectAvatar(avatarId)
   }
 
@@ -164,15 +268,21 @@ function App() {
   }
 
   const handleSelectConversation = (id: string) => {
+    resetTransientState()
     setActiveConversationId(id)
   }
 
   const handleDeleteConversation = async (id: string) => {
-    await window.electronAPI.deleteConversation(id)
-    await loadConversations()
-    if (activeConversationId === id) {
-      setActiveConversationId(null)
-      clearMessages()
+    try {
+      await window.electronAPI.deleteConversation(id)
+      await loadConversations()
+      if (activeConversationId === id) {
+        setActiveConversationId(null)
+        clearMessages()
+      }
+    } catch (err) {
+      console.error('[App] 删除会话失败:', err instanceof Error ? err.message : String(err))
+      window.electronAPI.logEvent('error', 'delete-conversation-error', err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -196,16 +306,18 @@ function App() {
 
   /** 顶栏导航按钮 */
   const navButtons = [
-    { label: '人格', key: 'soul', onClick: () => setShowSoulEditor(true), active: showSoulEditor },
-    { label: '技能', key: 'skills', onClick: () => setShowSkillsPanel(true), active: showSkillsPanel },
+    { label: '人格', key: 'soul', onClick: () => setActivePanel('soulEditor'), active: showSoulEditor },
+    { label: '技能', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     {
       label: '测试', key: 'test',
-      onClick: () => { setShowTestPanel(true); setTestBadge(null) },
+      onClick: () => { setActivePanel('test'); setTestBadge(null) },
       active: showTestPanel, badge: testBadge?.failed,
     },
-    { label: '知识库', key: 'docs', onClick: () => setShowKnowledgePanel(true), active: showKnowledgePanel },
-    { label: '记忆', key: 'mem', onClick: () => setShowMemoryPanel(true), active: showMemoryPanel },
-    { label: '设置', key: 'set', onClick: () => setShowSettingsPanel(true), active: showSettingsPanel },
+    { label: '知识库', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
+    { label: '记忆', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
+    { label: '用户', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
+    { label: '模板', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
+    { label: '设置', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
   /** 未选择分身时的引导页 */
@@ -253,13 +365,13 @@ function App() {
 
         <div className="flex justify-center gap-3">
           <button
-            onClick={() => setShowCreateWizard(true)}
+            onClick={() => setActivePanel('createWizard')}
             className="pixel-btn-primary px-6 py-3"
           >
             [+] 新建分身
           </button>
           <button
-            onClick={() => setShowSettingsPanel(true)}
+            onClick={() => setActivePanel('settings')}
             className="pixel-btn-outline-muted px-6 py-3"
           >
             设置
@@ -277,6 +389,7 @@ function App() {
         <Sidebar
           conversations={conversations}
           activeConversationId={activeConversationId}
+          activeAvatarId={activeAvatarId}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
@@ -290,7 +403,7 @@ function App() {
                   <AvatarSelector
                     activeAvatarId={activeAvatarId}
                     onSelectAvatar={handleSelectAvatar}
-                    onCreateAvatar={() => setShowCreateWizard(true)}
+                    onCreateAvatar={() => setActivePanel('createWizard')}
                   />
                 </div>
                 <div className="flex gap-2">
@@ -326,6 +439,7 @@ function App() {
                   avatarId={activeAvatarId}
                   onConversationUpdate={loadConversations}
                   visionModel={visionModel}
+                  fillText={templateFillText}
                 />
               </div>
             </div>
@@ -366,7 +480,7 @@ function App() {
       {showKnowledgePanel && activeAvatarId && (
         <KnowledgePanel
           avatarId={activeAvatarId}
-          onClose={() => setShowKnowledgePanel(false)}
+          onClose={() => setActivePanel(null)}
           onSaved={handleKnowledgeSaved}
           ocrModel={ocrModel}
           chatModel={chatModel}
@@ -378,14 +492,15 @@ function App() {
         <CreateAvatarWizard
           chatModel={chatModel}
           creationModel={resolveCreationModel(creationModel, chatModel)}
-          onClose={() => setShowCreateWizard(false)}
+          onClose={() => setActivePanel(null)}
           onCreated={handleAvatarCreated}
         />
       )}
 
       {showSettingsPanel && (
         <SettingsPanel
-          onClose={() => setShowSettingsPanel(false)}
+          activeAvatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
         />
       )}
 
@@ -394,14 +509,14 @@ function App() {
           avatarId={activeAvatarId}
           chatModel={chatModel}
           systemPrompt={systemPrompt}
-          onClose={() => setShowTestPanel(false)}
+          onClose={() => setActivePanel(null)}
         />
       )}
 
       {showSkillsPanel && activeAvatarId && (
         <SkillsPanel
           avatarId={activeAvatarId}
-          onClose={() => setShowSkillsPanel(false)}
+          onClose={() => setActivePanel(null)}
           onSkillsChanged={handleSkillsChanged}
         />
       )}
@@ -409,14 +524,48 @@ function App() {
       {showMemoryPanel && activeAvatarId && (
         <MemoryPanel
           avatarId={activeAvatarId}
-          onClose={() => setShowMemoryPanel(false)}
+          onClose={() => setActivePanel(null)}
         />
+      )}
+
+      {showUserProfilePanel && activeAvatarId && (
+        <UserProfilePanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
+        />
+      )}
+
+      {showPromptTemplatePanel && activeAvatarId && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-8">
+          <div className="w-full max-w-lg h-[70vh] bg-px-bg border-2 border-px-border flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-px-border-dim">
+              <span className="font-game text-[13px] text-px-text">提示词模板库</span>
+              <button
+                onClick={() => setActivePanel(null)}
+                className="font-game text-[14px] text-px-text-dim hover:text-px-text transition-none"
+                aria-label="关闭提示词模板库"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <PromptTemplatePanel
+                avatarId={activeAvatarId}
+                onUse={(content) => {
+                  setTemplateFillText(content)
+                  setActivePanel(null)
+                  setTimeout(() => setTemplateFillText(undefined), 0)
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {showSoulEditor && activeAvatarId && (
         <SoulEditorPanel
           avatarId={activeAvatarId}
-          onClose={() => setShowSoulEditor(false)}
+          onClose={() => setActivePanel(null)}
           onSoulChanged={handleSoulChanged}
         />
       )}

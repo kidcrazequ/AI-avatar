@@ -48,7 +48,11 @@ const AVATAR_ID = 'xiaodu-ci-storage'
 const PDF_PATH = '/Users/cnlm007398/Downloads/ENS-L262-01用户手册 -V1.pdf'
 const DOCX_PATH = '/Users/cnlm007398/Downloads/远景能源ENS-L419工商业储能一体机用户手册.docx'
 
-const DASHSCOPE_API_KEY = 'sk-3920e3fa83e94cf7a8a26dedc34a4f21'
+const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY
+if (!DASHSCOPE_API_KEY) {
+  console.error('❌ 请设置环境变量 DASHSCOPE_API_KEY')
+  process.exit(1)
+}
 const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 const VISION_MODEL = 'qwen-vl-max'
 const RESTRUCTURE_MODEL = 'qwen-plus'
@@ -90,6 +94,7 @@ async function callDashScope(model: string, messages: DashScopeMessage[], maxTok
           'Authorization': `Bearer ${DASHSCOPE_API_KEY}`,
         },
         body: JSON.stringify({ model, messages, stream: false, max_tokens: maxTokens }),
+        signal: AbortSignal.timeout(180_000),
       })
 
       if (response.status === 500 || response.status === 503 || response.status === 429) {
@@ -107,8 +112,8 @@ async function callDashScope(model: string, messages: DashScopeMessage[], maxTok
       const data = await response.json() as { choices: Array<{ message: { content: string } }> }
       return data.choices[0]?.message?.content ?? ''
     } catch (err) {
-      const msg = (err as Error).message ?? ''
-      const cause = (err as Error & { cause?: { code?: string } }).cause
+      const msg = err instanceof Error ? err.message : String(err)
+      const cause = (err as Record<string, unknown> & { cause?: { code?: string } }).cause
       const isNetworkRetryable = msg.includes('timed out') || msg.includes('fetch failed')
         || cause?.code === 'ETIMEDOUT' || cause?.code === 'ECONNRESET' || cause?.code === 'ECONNREFUSED'
       if (attempt < retries && isNetworkRetryable) {
@@ -147,6 +152,7 @@ async function callEmbedding(texts: string[], retries = 3): Promise<number[][]> 
           input: texts,
           dimension: 512,
         }),
+        signal: AbortSignal.timeout(180_000),
       })
 
       if (response.status === 500 || response.status === 503 || response.status === 429) {
@@ -166,7 +172,7 @@ async function callEmbedding(texts: string[], retries = 3): Promise<number[][]> 
       }
       return data.data.map(d => d.embedding)
     } catch (err) {
-      const msg = (err as Error).message ?? ''
+      const msg = err instanceof Error ? err.message : String(err)
       if (attempt < retries && (msg.includes('timed out') || msg.includes('fetch failed'))) {
         const wait = attempt * 10000
         log('warn', `Embedding 网络超时（${msg}），${wait / 1000}s 后重试（${attempt}/${retries}）`)
@@ -466,7 +472,7 @@ async function main() {
       const preview = result.split('\n').slice(0, 3).join(' ').slice(0, 80)
       log('ok', `第 ${pageNum} 页：${result.length} 字符 → ${preview}...`)
     } catch (err) {
-      log('error', `第 ${pageNum} 页分析失败：${(err as Error).message}`)
+      log('error', `第 ${pageNum} 页分析失败：${err instanceof Error ? err.message : String(err)}`)
       visionResults.push({ pageNum, content: '' })
     }
   }

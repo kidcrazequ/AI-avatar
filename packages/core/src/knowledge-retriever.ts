@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { collectFilesRecursive } from './utils/common'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { useDefault, Segment } = require('segmentit')
@@ -141,6 +142,19 @@ export class KnowledgeRetriever {
   private contextMap = new Map<string, string>()
   /** 向量 embedding 映射：key = "file::heading" */
   private embeddingMap = new Map<string, number[]>()
+  /** BM25 预计算缓存：df、avgDl，以及倒排索引（token → chunk 索引集合） */
+  private bm25Cache: {
+    df: Map<string, number>
+    avgDl: number
+    totalDocs: number
+    /** 倒排索引：token → 包含该 token 的 chunk 在 allChunks 数组中的索引集合 */
+    invertedIndex: Map<string, Set<number>>
+    /** 关联的 chunksCache 引用，用于快速检测缓存是否仍有效 */
+    sourceChunks: Chunk[]
+  } | null = null
+
+  /** 文档数超过此阈值时启用倒排索引粗筛，小规模下走全量扫描（避免额外开销） */
+  private static readonly BM25_INVERTED_INDEX_THRESHOLD = 200
 
   constructor(knowledgePath: string) {
     this.knowledgePath = knowledgePath
@@ -153,21 +167,51 @@ export class KnowledgeRetriever {
   setContexts(contexts: Map<string, string>): void {
     this.contextMap = contexts
     this.chunksCache = null
+    this.bm25Cache = null
   }
 
   /**
-   * 注入向量 embedding。
+   * 注入向量 embedding（浅拷贝，防止外部修改破坏内部状态）。
    * 启用后 searchChunks 自动执行 BM25 + 向量 的 RRF 融合排序。
+   *
+   * 约定：embedding 与 contexts 须来自同一次索引构建（buildKnowledgeIndex 原子输出）。
+   * 若需仅更新 embedding 格式而保留 chunk 数据，需确保 chunk key 集合不变；
+   * 否则应同时调用 setContexts 触发 chunksCache 和 bm25Cache 失效以保持一致。
    */
   setEmbeddings(embeddings: Map<string, number[]>): void {
-    this.embeddingMap = embeddings
+    this.embeddingMap = new Map(embeddings)
   }
 
   /**
-   * 获取当前 embedding Map 的引用（用于 RAG 时注入 __query__ 向量）。
+   * 获取当前 embedding Map 的浅拷贝，用于 RAG 时注入 __query__ 向量。
+   * 返回副本防止外部意外篡改内部状态。
    */
   getEmbeddings(): Map<string, number[]> {
-    return this.embeddingMap
+    return new Map(this.embeddingMap)
+  }
+
+  /** 是否已注入向量 embedding（用于判断是否启用 RRF 融合检索） */
+  hasEmbeddings(): boolean {
+    return this.embeddingMap.size > 0
+  }
+
+  /**
+   * 直接在内部 embeddingMap 上设置查询向量（零拷贝）。
+   * 必须在 per-retriever 串行锁保护下使用，完成后调用 clearQueryVector 恢复。
+   */
+  injectQueryVector(vec: number[]): void {
+    this.embeddingMap.set('__query__', vec)
+  }
+
+  /** 移除临时注入的查询向量，恢复 embeddingMap 原始状态 */
+  clearQueryVector(): void {
+    this.embeddingMap.delete('__query__')
+  }
+
+  /** 手动失效 BM25 缓存，在知识文件更新后调用 */
+  invalidateCache(): void {
+    this.chunksCache = null
+    this.bm25Cache = null
   }
 
   /**
@@ -201,25 +245,50 @@ export class KnowledgeRetriever {
       }
     }
 
-    // 计算文档频率
-    const df = new Map<string, number>()
-    for (const chunk of allChunks) {
-      const uniqueTokens = new Set(chunk.tokens!)
-      for (const t of uniqueTokens) {
-        df.set(t, (df.get(t) || 0) + 1)
+    // 复用或构建 BM25 统计缓存（通过 chunksCache 引用比对检测内容变化，避免每次构建巨大指纹字符串）
+    const currentChunks = this.chunksCache
+    if (!this.bm25Cache || this.bm25Cache.sourceChunks !== currentChunks) {
+      const df = new Map<string, number>()
+      const invertedIndex = new Map<string, Set<number>>()
+      for (let idx = 0; idx < allChunks.length; idx++) {
+        const chunk = allChunks[idx]
+        const uniqueTokens = new Set(chunk.tokens!)
+        for (const t of uniqueTokens) {
+          df.set(t, (df.get(t) || 0) + 1)
+          // 同时构建倒排索引
+          let set = invertedIndex.get(t)
+          if (!set) { set = new Set(); invertedIndex.set(t, set) }
+          set.add(idx)
+        }
+      }
+      const rawAvgDl = allChunks.reduce((sum, c) => sum + c.tokens!.length, 0) / allChunks.length
+      const avgDl = Math.max(rawAvgDl, 1)
+      this.bm25Cache = { df, avgDl, totalDocs: allChunks.length, invertedIndex, sourceChunks: currentChunks! }
+    }
+
+    const { df, avgDl, invertedIndex } = this.bm25Cache
+
+    // 文档数超过阈值时，用倒排索引取候选集合，避免全量 BM25 扫描
+    let candidateChunks = allChunks
+    if (allChunks.length >= KnowledgeRetriever.BM25_INVERTED_INDEX_THRESHOLD) {
+      const candidateSet = new Set<number>()
+      for (const token of queryTokens) {
+        const matches = invertedIndex.get(token)
+        if (matches) {
+          for (const idx of matches) candidateSet.add(idx)
+        }
+      }
+      if (candidateSet.size > 0) {
+        candidateChunks = [...candidateSet].map(idx => allChunks[idx])
       }
     }
 
-    const avgDl = allChunks.reduce((sum, c) => sum + c.tokens!.length, 0) / allChunks.length
-
-    const bm25Results = allChunks.map(chunk => ({
+    const bm25Results = candidateChunks.map(chunk => ({
       file: chunk.file,
       heading: chunk.heading,
       content: chunk.content,
       score: bm25Score(queryTokens, chunk.tokens!, avgDl, df, allChunks.length),
     }))
-
-    // ── 如果有 embedding → RRF 融合 ──
     if (this.embeddingMap.size > 0) {
       return this.rrfFusion(query, bm25Results, allChunks, topN)
     }
@@ -306,23 +375,32 @@ export class KnowledgeRetriever {
     const vectorRank = new Map<string, number>()
     vectorScored.forEach((r, i) => vectorRank.set(r.key, i + 1))
 
-    // RRF 融合：只考虑 BM25 或向量排名前 N 的候选（避免全量排名噪音）
+    // RRF 融合：取 BM25 和向量排名前 N 的候选的并集，确保不遗漏向量匹配的候选
     const candidateWindow = Math.min(topN * 10, allChunks.length)
     const bm25Candidates = new Set(bm25Sorted.slice(0, candidateWindow).map(r => `${r.file}::${r.heading}`))
     const vectorCandidates = new Set(vectorScored.slice(0, candidateWindow).map(r => r.key))
 
-    const fusedResults = bm25Results
-      .filter(r => {
-        const key = `${r.file}::${r.heading}`
-        return bm25Candidates.has(key) || vectorCandidates.has(key)
-      })
-      .map(r => {
-        const key = `${r.file}::${r.heading}`
-        const br = bm25Rank.get(key) || bm25Sorted.length
-        const vr = vectorRank.get(key) || allChunks.length
-        const rrfScore = 1 / (k + br) + 1 / (k + vr)
-        return { ...r, score: rrfScore }
-      })
+    // 构建 chunk 查找表（用于取回 vector-only 候选的 content）
+    const chunkByKey = new Map<string, Chunk>()
+    for (const chunk of allChunks) {
+      chunkByKey.set(`${chunk.file}::${chunk.heading}`, chunk)
+    }
+
+    // 合并两个候选集的 key
+    const allCandidateKeys = new Set<string>()
+    for (const key of bm25Candidates) allCandidateKeys.add(key)
+    for (const key of vectorCandidates) allCandidateKeys.add(key)
+
+    const fusedResults: Array<{ file: string; heading: string; content: string; score: number }> = []
+    for (const key of allCandidateKeys) {
+      const br = bm25Rank.get(key) ?? (bm25Sorted.length + 1)
+      const vr = vectorRank.get(key) ?? (allChunks.length + 1)
+      const rrfScore = 1 / (k + br) + 1 / (k + vr)
+      const chunk = chunkByKey.get(key)
+      if (chunk) {
+        fusedResults.push({ file: chunk.file, heading: chunk.heading, content: chunk.content, score: rrfScore })
+      }
+    }
 
     return fusedResults
       .sort((a, b) => b.score - a.score)
@@ -349,11 +427,19 @@ export class KnowledgeRetriever {
    * 读取指定相对路径的文件完整内容
    */
   readFile(relativePath: string): string {
-    const fullPath = path.join(this.knowledgePath, relativePath)
+    const resolved = path.resolve(this.knowledgePath, relativePath)
+    const normalizedRoot = path.resolve(this.knowledgePath) + path.sep
+    if (!resolved.startsWith(normalizedRoot) && resolved !== path.resolve(this.knowledgePath)) {
+      throw new Error(`非法路径，禁止访问知识库目录之外的文件: ${relativePath}`)
+    }
     try {
-      return fs.readFileSync(fullPath, 'utf-8')
-    } catch {
-      throw new Error(`文件不存在: ${relativePath}`)
+      return fs.readFileSync(resolved, 'utf-8')
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        throw new Error(`文件不存在: ${relativePath}`)
+      }
+      throw new Error(`读取文件失败 (${code ?? 'UNKNOWN'}): ${relativePath}`)
     }
   }
 
@@ -374,7 +460,7 @@ export class KnowledgeRetriever {
       key: `${c.file}::${c.heading}`,
       file: c.file,
       heading: c.heading,
-      contentPreview: c.content.slice(0, 200),
+      contentPreview: c.content,
     }))
   }
 
@@ -403,7 +489,8 @@ export class KnowledgeRetriever {
       let content: string
       try {
         content = fs.readFileSync(filePath, 'utf-8')
-      } catch {
+      } catch (err) {
+        console.warn(`[KnowledgeRetriever] 跳过文件 ${relativePath}: ${err instanceof Error ? err.message : String(err)}`)
         continue
       }
 
@@ -463,23 +550,9 @@ export class KnowledgeRetriever {
     }
   }
 
-  /** 递归收集 .md 文件路径 */
+  /** 递归收集 .md 文件路径（委托给共享工具函数，避免各模块各自实现） */
   private collectFiles(dirPath: string): string[] {
-    const results: string[] = []
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-      for (const entry of entries) {
-        const fullPath = path.join(dirPath, entry.name)
-        if (entry.isDirectory()) {
-          results.push(...this.collectFiles(fullPath))
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          results.push(fullPath)
-        }
-      }
-    } catch {
-      // 忽略
-    }
-    return results
+    return collectFilesRecursive(dirPath, '.md')
   }
 }
 

@@ -17,6 +17,18 @@ import fs from 'fs'
 import path from 'path'
 import type { LLMCallFn } from './document-formatter'
 import { tokenize } from './knowledge-retriever'
+import { assertSafeSegment } from './utils/path-security'
+import { localDateString } from './utils/common'
+
+/** 异步检测路径是否存在（替代 existsSync） */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.promises.access(p)
+    return true
+  } catch {
+    return false
+  }
+}
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -130,6 +142,13 @@ const LINT_FILE = 'lint-report.json'
 const EVOLUTION_FILE = 'evolution-report.json'
 
 /**
+ * 校验文件名是否安全：复用 path-security 模块的 assertSafeSegment。
+ */
+function assertSafeFileName(name: string): void {
+  assertSafeSegment(name, '文件名')
+}
+
+/**
  * 中文停用词表（通用语法词，不含可能作为实体的技术名词）。
  * 过滤这些词后保留有意义的技术术语用于实体识别。
  */
@@ -162,7 +181,9 @@ const CONCEPT_PAGE_PROMPT = `你是一个知识百科编辑。请为指定实体
  * 知识矛盾检测 Prompt。
  * 要求 LLM 对比不同文件中关于同一实体的描述，发现数值矛盾。
  */
-const LINT_PROMPT = `你是知识库质量审查员。比较以下来自不同文件的段落，检查关于指定实体的矛盾或不一致。
+const LINT_ENTITY_PLACEHOLDER = '{{ENTITY_NAME}}'
+
+const LINT_PROMPT = `你是知识库质量审查员。比较以下来自不同文件的段落，检查关于${LINT_ENTITY_PLACEHOLDER}的矛盾或不一致。
 
 要求：
 1. 只报告明确的数值矛盾（如同一参数在不同文件中给出了不同数值）
@@ -210,16 +231,14 @@ export class WikiCompiler {
   }
 
   /** 确保 wiki 目录结构存在 */
-  private ensureDirs(): void {
+  private async ensureDirs(): Promise<void> {
     const dirs = [
       this.wikiPath,
       path.join(this.wikiPath, CONCEPTS_DIR),
       path.join(this.wikiPath, QA_DIR),
     ]
     for (const dir of dirs) {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-      }
+      await fs.promises.mkdir(dir, { recursive: true })
     }
   }
 
@@ -270,7 +289,7 @@ export class WikiCompiler {
       }
     }
 
-    const entities: EntityInfo[] = []
+    const scoredEntities: Array<EntityInfo & { _score: number }> = []
     for (const [name, data] of termMap) {
       if (data.files.size < 2 && data.total < 6) continue
 
@@ -278,19 +297,18 @@ export class WikiCompiler {
       const score = data.total * Math.log2(data.files.size + 1) * headingBoost
       if (score < 3) continue
 
-      entities.push({
+      scoredEntities.push({
         name,
         frequency: data.total,
         fileCount: data.files.size,
         appearances: data.appearances.slice(0, 20),
+        _score: score,
       })
     }
 
-    entities.sort((a, b) => {
-      const scoreA = a.frequency * Math.log2(a.fileCount + 1)
-      const scoreB = b.frequency * Math.log2(b.fileCount + 1)
-      return scoreB - scoreA
-    })
+    scoredEntities.sort((a, b) => b._score - a._score)
+
+    const entities: EntityInfo[] = scoredEntities.map(({ _score: _, ...rest }) => rest)
 
     return entities.slice(0, 50)
   }
@@ -308,7 +326,7 @@ export class WikiCompiler {
     callLLM: LLMCallFn,
     onProgress?: (progress: WikiCompileProgress) => void,
   ): Promise<ConceptPage[]> {
-    this.ensureDirs()
+    await this.ensureDirs()
 
     const entities = this.extractEntities(chunks)
     if (onProgress) {
@@ -323,6 +341,19 @@ export class WikiCompiler {
     const topEntities = entities.filter(e => e.fileCount >= 2).slice(0, 20)
     const conceptPages: ConceptPage[] = []
 
+    // 预构建实体→chunk 倒排索引，将 O(entities × chunks) 降为 O(chunks + entities)
+    const chunkTexts = chunks.map(c => c.heading + ' ' + c.content)
+    const entityChunkIndex = new Map<string, number[]>()
+    for (const entity of topEntities) {
+      const indices: number[] = []
+      for (let idx = 0; idx < chunkTexts.length; idx++) {
+        if (chunkTexts[idx].includes(entity.name)) {
+          indices.push(idx)
+        }
+      }
+      entityChunkIndex.set(entity.name, indices)
+    }
+
     for (let i = 0; i < topEntities.length; i++) {
       const entity = topEntities[i]
       if (onProgress) {
@@ -334,9 +365,7 @@ export class WikiCompiler {
         })
       }
 
-      const relatedChunks = chunks.filter(c =>
-        (c.heading + ' ' + c.content).includes(entity.name),
-      )
+      const relatedChunks = (entityChunkIndex.get(entity.name) ?? []).map(idx => chunks[idx])
 
       const excerpts = relatedChunks.slice(0, 10).map((c, idx) =>
         `【片段${idx + 1}·来源：${c.file} > ${c.heading}】\n${c.content.slice(0, 800)}`,
@@ -354,7 +383,7 @@ export class WikiCompiler {
           ? relatedMatch[1].split(/[,，、]/).map(s => s.trim()).filter(s => s.length >= 2 && s.length <= 20)
           : []
 
-        const now = new Date().toISOString().slice(0, 10)
+        const now = localDateString()
         const page: ConceptPage = {
           entity: entity.name,
           summary: pageContent,
@@ -382,20 +411,20 @@ export class WikiCompiler {
           '',
         ].join('\n')
 
-        fs.writeFileSync(
+        await fs.promises.writeFile(
           path.join(this.wikiPath, CONCEPTS_DIR, `${safeName}.md`),
           mdContent,
           'utf-8',
         )
       } catch (err) {
-        console.warn(`[WikiCompiler] 概念页生成失败 (${entity.name}): ${(err as Error).message}`)
+        console.warn(`[WikiCompiler] 概念页生成失败 (${entity.name}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 
     // 第二遍：交叉引用（backlinks）
-    this.buildBacklinks(conceptPages)
+    await this.buildBacklinks(conceptPages)
 
-    this.updateMeta({
+    await this.updateMeta({
       entityCount: entities.length,
       conceptPageCount: conceptPages.length,
     })
@@ -415,15 +444,17 @@ export class WikiCompiler {
    * @author zhi.qu
    * @date 2026-04-09
    */
-  private buildBacklinks(conceptPages: ConceptPage[]): void {
+  private async buildBacklinks(conceptPages: ConceptPage[]): Promise<void> {
     const backlinks = new Map<string, Set<string>>()
 
+    // 遍历每个 page，检查其 summary 中包含哪些其他实体（O(pages × entities)，避免双重 includes）
+    const entityNames = conceptPages.map(p => p.entity)
     for (const page of conceptPages) {
-      for (const other of conceptPages) {
-        if (other.entity === page.entity) continue
-        if (other.summary.includes(page.entity)) {
-          if (!backlinks.has(page.entity)) backlinks.set(page.entity, new Set())
-          backlinks.get(page.entity)!.add(other.entity)
+      for (const entityName of entityNames) {
+        if (entityName === page.entity) continue
+        if (page.summary.includes(entityName)) {
+          if (!backlinks.has(entityName)) backlinks.set(entityName, new Set())
+          backlinks.get(entityName)!.add(page.entity)
         }
       }
     }
@@ -431,14 +462,14 @@ export class WikiCompiler {
     for (const [entity, links] of backlinks) {
       const safeName = entity.replace(/[/\\?%*:|"<>]/g, '_')
       const filePath = path.join(this.wikiPath, CONCEPTS_DIR, `${safeName}.md`)
-      if (!fs.existsSync(filePath)) continue
+      if (!(await pathExists(filePath))) continue
 
-      const existing = fs.readFileSync(filePath, 'utf-8')
+      const existing = await fs.promises.readFile(filePath, 'utf-8')
       if (existing.includes('## 相关概念页')) continue
 
       const backlinkSection = '\n## 相关概念页\n\n' +
         [...links].map(l => `- [[${l}]]`).join('\n') + '\n'
-      fs.appendFileSync(filePath, backlinkSection, 'utf-8')
+      await fs.promises.appendFile(filePath, backlinkSection, 'utf-8')
     }
   }
 
@@ -455,17 +486,21 @@ export class WikiCompiler {
     chunks: ChunkData[],
     callLLM: LLMCallFn,
   ): Promise<LintReport> {
-    this.ensureDirs()
+    await this.ensureDirs()
 
     const entities = this.extractEntities(chunks)
     const crossFileEntities = entities.filter(e => e.fileCount >= 2).slice(0, 15)
     const issues: LintIssue[] = []
 
+    // 预构建 chunk 文本缓存，避免每个实体都重新拼接字符串
+    const lintChunkTexts = chunks.map(c => c.heading + ' ' + c.content)
+
     // 矛盾检测：对跨文件实体用 LLM 对比
     for (const entity of crossFileEntities) {
       const fileChunks = new Map<string, ChunkData[]>()
-      for (const chunk of chunks) {
-        if ((chunk.heading + ' ' + chunk.content).includes(entity.name)) {
+      for (let idx = 0; idx < chunks.length; idx++) {
+        if (lintChunkTexts[idx].includes(entity.name)) {
+          const chunk = chunks[idx]
           if (!fileChunks.has(chunk.file)) {
             fileChunks.set(chunk.file, [])
           }
@@ -481,7 +516,7 @@ export class WikiCompiler {
 
       try {
         const result = await callLLM(
-          LINT_PROMPT.replace('指定实体', entity.name),
+          LINT_PROMPT.replace(LINT_ENTITY_PLACEHOLDER, entity.name),
           fileExcerpts.join('\n\n---\n\n'),
           500,
         )
@@ -499,7 +534,7 @@ export class WikiCompiler {
           })
         }
       } catch (err) {
-        console.warn(`[WikiCompiler] Lint 检查失败 (${entity.name}): ${(err as Error).message}`)
+        console.warn(`[WikiCompiler] Lint 检查失败 (${entity.name}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 
@@ -536,7 +571,7 @@ export class WikiCompiler {
       issues,
     }
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       path.join(this.wikiPath, LINT_FILE),
       JSON.stringify(report, null, 2),
       'utf-8',
@@ -551,10 +586,11 @@ export class WikiCompiler {
    *
    * @param qa 问答数据
    */
-  sedimentAnswer(qa: WikiAnswer): void {
-    this.ensureDirs()
+  async sedimentAnswer(qa: WikiAnswer): Promise<void> {
+    await this.ensureDirs()
 
-    const safeName = qa.id.replace(/[/\\?%*:|"<>]/g, '_')
+    assertSafeFileName(qa.id)
+    const safeName = qa.id.replace(/[?%*:|"<>]/g, '_')
     const content = [
       `# Q: ${qa.question}`,
       '',
@@ -566,28 +602,28 @@ export class WikiCompiler {
       '',
     ].join('\n')
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       path.join(this.wikiPath, QA_DIR, `${safeName}.md`),
       content,
       'utf-8',
     )
 
-    const meta = this.getMeta()
-    this.updateMeta({ qaCount: (meta?.qaCount ?? 0) + 1 })
+    const meta = await this.getMeta()
+    await this.updateMeta({ qaCount: (meta?.qaCount ?? 0) + 1 })
   }
 
   /**
    * 获取所有沉淀的问答列表。
    */
-  getAnswers(): WikiAnswer[] {
+  async getAnswers(): Promise<WikiAnswer[]> {
     const qaDir = path.join(this.wikiPath, QA_DIR)
-    if (!fs.existsSync(qaDir)) return []
+    if (!(await pathExists(qaDir))) return []
 
     const answers: WikiAnswer[] = []
     try {
-      const files = fs.readdirSync(qaDir).filter(f => f.endsWith('.md'))
+      const files = (await fs.promises.readdir(qaDir)).filter(f => f.endsWith('.md'))
       for (const file of files) {
-        const raw = fs.readFileSync(path.join(qaDir, file), 'utf-8')
+        const raw = await fs.promises.readFile(path.join(qaDir, file), 'utf-8')
         const questionMatch = raw.match(/^#\s+Q:\s+(.+)$/m)
         const timeMatch = raw.match(/沉淀时间：([^\s|]+)/)
         const sourceMatch = raw.match(/来源：(.+)/)
@@ -601,8 +637,8 @@ export class WikiCompiler {
           savedAt: timeMatch?.[1] ?? '',
         })
       }
-    } catch {
-      // 目录读取失败时返回空
+    } catch (err) {
+      console.warn('[WikiCompiler] 读取问答目录失败:', err instanceof Error ? err.message : String(err))
     }
 
     return answers.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
@@ -611,15 +647,15 @@ export class WikiCompiler {
   /**
    * 获取所有概念页列表。
    */
-  getConceptPages(): Array<{ name: string; entity: string; generatedAt: string }> {
+  async getConceptPages(): Promise<Array<{ name: string; entity: string; generatedAt: string }>> {
     const conceptDir = path.join(this.wikiPath, CONCEPTS_DIR)
-    if (!fs.existsSync(conceptDir)) return []
+    if (!(await pathExists(conceptDir))) return []
 
     const pages: Array<{ name: string; entity: string; generatedAt: string }> = []
     try {
-      const files = fs.readdirSync(conceptDir).filter(f => f.endsWith('.md'))
+      const files = (await fs.promises.readdir(conceptDir)).filter(f => f.endsWith('.md'))
       for (const file of files) {
-        const raw = fs.readFileSync(path.join(conceptDir, file), 'utf-8')
+        const raw = await fs.promises.readFile(path.join(conceptDir, file), 'utf-8')
         const entityMatch = raw.match(/^#\s+(.+)$/m)
         const dateMatch = raw.match(/编译日期：([\d-]+)/)
 
@@ -629,8 +665,8 @@ export class WikiCompiler {
           generatedAt: dateMatch?.[1] ?? '',
         })
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[WikiCompiler] 读取概念页目录失败:', err instanceof Error ? err.message : String(err))
     }
 
     return pages
@@ -641,10 +677,11 @@ export class WikiCompiler {
    *
    * @param name 概念页文件名（不含 .md 后缀）
    */
-  readConceptPage(name: string): string {
+  async readConceptPage(name: string): Promise<string> {
+    assertSafeFileName(name)
     const filePath = path.join(this.wikiPath, CONCEPTS_DIR, `${name}.md`)
     try {
-      return fs.readFileSync(filePath, 'utf-8')
+      return await fs.promises.readFile(filePath, 'utf-8')
     } catch {
       throw new Error(`概念页不存在: ${name}`)
     }
@@ -653,12 +690,12 @@ export class WikiCompiler {
   /**
    * 获取最近的 Lint 报告。
    */
-  getLintReport(): LintReport | null {
+  async getLintReport(): Promise<LintReport | null> {
     const reportPath = path.join(this.wikiPath, LINT_FILE)
-    if (!fs.existsSync(reportPath)) return null
+    if (!(await pathExists(reportPath))) return null
 
     try {
-      return JSON.parse(fs.readFileSync(reportPath, 'utf-8')) as LintReport
+      return JSON.parse(await fs.promises.readFile(reportPath, 'utf-8')) as LintReport
     } catch {
       return null
     }
@@ -667,20 +704,20 @@ export class WikiCompiler {
   /**
    * 获取 wiki 元数据（编译状态）。
    */
-  getMeta(): WikiMeta | null {
+  async getMeta(): Promise<WikiMeta | null> {
     const metaPath = path.join(this.wikiPath, META_FILE)
-    if (!fs.existsSync(metaPath)) return null
+    if (!(await pathExists(metaPath))) return null
 
     try {
-      return JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as WikiMeta
+      return JSON.parse(await fs.promises.readFile(metaPath, 'utf-8')) as WikiMeta
     } catch {
       return null
     }
   }
 
-  /** 更新 wiki 元数据 */
-  private updateMeta(updates: Partial<WikiMeta>): void {
-    const existing = this.getMeta() || {
+  /** 更新 wiki 元数据（原子写入：先写临时文件再 rename，防止并发写入损坏） */
+  private async updateMeta(updates: Partial<WikiMeta>): Promise<void> {
+    const existing = (await this.getMeta()) || {
       lastCompiled: '',
       entityCount: 0,
       conceptPageCount: 0,
@@ -693,11 +730,10 @@ export class WikiCompiler {
       lastCompiled: new Date().toISOString(),
     }
 
-    fs.writeFileSync(
-      path.join(this.wikiPath, META_FILE),
-      JSON.stringify(meta, null, 2),
-      'utf-8',
-    )
+    const metaPath = path.join(this.wikiPath, META_FILE)
+    const tmpPath = metaPath + '.tmp'
+    await fs.promises.writeFile(tmpPath, JSON.stringify(meta, null, 2), 'utf-8')
+    await fs.promises.rename(tmpPath, metaPath)
   }
 
   /**
@@ -720,7 +756,7 @@ export class WikiCompiler {
     existingChunks: ChunkData[],
     callLLM: LLMCallFn,
   ): Promise<EvolutionReport> {
-    this.ensureDirs()
+    await this.ensureDirs()
 
     const report: EvolutionReport = {
       timestamp: new Date().toISOString(),
@@ -742,7 +778,7 @@ export class WikiCompiler {
       .map(([name]) => name)
 
     if (newEntities.length === 0) {
-      fs.writeFileSync(
+      await fs.promises.writeFile(
         path.join(this.wikiPath, EVOLUTION_FILE),
         JSON.stringify(report, null, 2),
         'utf-8',
@@ -776,14 +812,15 @@ export class WikiCompiler {
 
         const jsonMatch = result.match(/\[[\s\S]*\]/)
         if (jsonMatch) {
-          const diffs = JSON.parse(jsonMatch[0]) as Array<{
-            type: 'new' | 'updated' | 'contradiction'
-            description: string
-          }>
-          for (const diff of diffs) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (!Array.isArray(parsed)) continue
+          for (const diff of parsed) {
+            if (!diff || typeof diff.type !== 'string' || typeof diff.description !== 'string') continue
+            const validTypes = ['new', 'updated', 'contradiction']
+            if (!validTypes.includes(diff.type)) continue
             report.diffs.push({
               entity,
-              type: diff.type,
+              type: diff.type as 'new' | 'updated' | 'contradiction',
               description: diff.description,
               oldSource: {
                 file: matchingChunks[0].file,
@@ -794,12 +831,12 @@ export class WikiCompiler {
           }
         }
       } catch (err) {
-        console.warn(`[WikiCompiler] 演化检测失败 (${entity}): ${(err as Error).message}`)
+        console.warn(`[WikiCompiler] 演化检测失败 (${entity}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 
     // 保存报告
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       path.join(this.wikiPath, EVOLUTION_FILE),
       JSON.stringify(report, null, 2),
       'utf-8',
@@ -814,11 +851,11 @@ export class WikiCompiler {
    * @author zhi.qu
    * @date 2026-04-09
    */
-  getEvolutionReport(): EvolutionReport | null {
+  async getEvolutionReport(): Promise<EvolutionReport | null> {
     const filePath = path.join(this.wikiPath, EVOLUTION_FILE)
-    if (!fs.existsSync(filePath)) return null
+    if (!(await pathExists(filePath))) return null
     try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as EvolutionReport
+      return JSON.parse(await fs.promises.readFile(filePath, 'utf-8')) as EvolutionReport
     } catch {
       return null
     }
@@ -833,22 +870,20 @@ export class WikiCompiler {
    * @param originalFilePath 原始文件的绝对路径
    * @returns 保存后的相对路径（相对于 knowledgePath）
    */
-  static preserveRawFile(knowledgePath: string, originalFilePath: string): string {
+  static async preserveRawFile(knowledgePath: string, originalFilePath: string): Promise<string> {
     const rawDir = path.join(knowledgePath, '_raw')
-    if (!fs.existsSync(rawDir)) {
-      fs.mkdirSync(rawDir, { recursive: true })
-    }
+    await fs.promises.mkdir(rawDir, { recursive: true })
 
     const fileName = path.basename(originalFilePath)
     let targetPath = path.join(rawDir, fileName)
 
-    if (fs.existsSync(targetPath)) {
+    if (await pathExists(targetPath)) {
       const ext = path.extname(fileName)
       const base = path.basename(fileName, ext)
       targetPath = path.join(rawDir, `${base}-${Date.now()}${ext}`)
     }
 
-    fs.copyFileSync(originalFilePath, targetPath)
+    await fs.promises.copyFile(originalFilePath, targetPath)
     return path.relative(knowledgePath, targetPath)
   }
 }

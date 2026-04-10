@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { TestRunner } from '../services/test-runner'
 import { ModelConfig } from '../services/llm-service'
 import Modal from './shared/Modal'
@@ -20,20 +20,41 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
   const [showResults, setShowResults] = useState(false)
   const [selectedResult, setSelectedResult] = useState<TestResult | null>(null)
   const [alertMsg, setAlertMsg] = useState('')
+  const alertTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const mountedRef = useRef(true)
+  const loadSeqRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearTimeout(alertTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     loadTestCases()
   }, [avatarId])
 
   const showAlert = (msg: string) => {
+    if (!mountedRef.current) return
     setAlertMsg(msg)
-    setTimeout(() => setAlertMsg(''), 3000)
+    clearTimeout(alertTimerRef.current)
+    alertTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setAlertMsg('')
+    }, 3000)
   }
 
   const loadTestCases = async () => {
-    const cases = await window.electronAPI.getTestCases(avatarId)
-    setTestCases(cases)
-    setSelectedCases(new Set(cases.map(c => c.id)))
+    const seq = ++loadSeqRef.current
+    try {
+      const cases = await window.electronAPI.getTestCases(avatarId)
+      if (loadSeqRef.current !== seq || !mountedRef.current) return
+      setTestCases(cases)
+      setSelectedCases(new Set(cases.map(c => c.id)))
+    } catch (err) {
+      console.error('[TestPanel] 加载测试用例失败:', err instanceof Error ? err.message : String(err))
+    }
   }
 
   const handleToggleCase = (caseId: string) => {
@@ -69,16 +90,17 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
     setShowResults(false)
 
     const casesToRun = testCases.filter(c => selectedCases.has(c.id))
-    const testRunner = new TestRunner(chatModel.apiKey, systemPrompt)
+    const testRunner = new TestRunner(chatModel, systemPrompt)
 
     try {
       const testResults = await testRunner.runTestCases(
         casesToRun,
         (current, total, message) => {
-          setProgress({ current, total, message })
+          if (mountedRef.current) setProgress({ current, total, message })
         }
       )
 
+      if (!mountedRef.current) return
       setResults(testResults)
       setShowResults(true)
 
@@ -87,7 +109,7 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
         totalCases: testResults.length,
         passedCases: testResults.filter(r => r.passed).length,
         failedCases: testResults.filter(r => !r.passed).length,
-        averageScore: testResults.reduce((sum, r) => sum + r.score, 0) / testResults.length,
+        averageScore: testResults.length > 0 ? testResults.reduce((sum, r) => sum + r.score, 0) / testResults.length : 0,
         results: testResults,
         timestamp: Date.now(),
         duration: testResults.reduce((sum, r) => sum + r.duration, 0),
@@ -102,14 +124,19 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
     }
   }
 
-  const passedCount = results.filter(r => r.passed).length
-  const failedCount = results.filter(r => !r.passed).length
+  const { passedCount, failedCount } = useMemo(() => {
+    let passed = 0
+    for (const r of results) { if (r.passed) passed++ }
+    return { passedCount: passed, failedCount: results.length - passed }
+  }, [results])
 
-  const groupedCases = testCases.reduce((acc, tc) => {
-    if (!acc[tc.category]) acc[tc.category] = []
-    acc[tc.category].push(tc)
-    return acc
-  }, {} as Record<string, TestCase[]>)
+  const groupedCases = useMemo(() =>
+    testCases.reduce((acc, tc) => {
+      if (!acc[tc.category]) acc[tc.category] = []
+      acc[tc.category].push(tc)
+      return acc
+    }, {} as Record<string, TestCase[]>),
+  [testCases])
 
   return (
     <Modal isOpen={true} onClose={onClose} size="lg">

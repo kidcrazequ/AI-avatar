@@ -1,0 +1,27 @@
+---
+description: 渲染进程 React 代码规范
+globs:
+  - "desktop-app/src/**/*.tsx"
+  - "desktop-app/src/**/*.ts"
+alwaysApply: false
+---
+
+# 渲染进程规范
+
+## 错误处理
+- 用户可见的操作失败必须显示 Toast 提示
+- 通过 `window.electronAPI.logEvent('error', action, detail)` 上报到主进程日志
+- **禁止**仅 `console.error` 而不通知用户或上报
+
+## 日期显示
+- 从 `@soul/core` 导入 `localDateString()` 统一日期格式
+- 不要直接 `new Date().toLocaleDateString('zh-CN')`
+
+## 状态管理
+- 使用 Zustand store 管理状态
+- 组件内仅保留 UI 临时状态（如表单输入值、modal 开关）
+- 副作用放在 store action 中，组件保持纯展示
+
+## HTTP 请求
+- 渲染进程不直接发 HTTP 请求（除非测试连通性等轻量场景）
+- 业务请求通过 IPC 交给主进程处理

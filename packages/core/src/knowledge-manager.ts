@@ -1,5 +1,7 @@
 import fs from 'fs'
 import path from 'path'
+import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+import { resolveUnderRoot } from './utils/path-security'
 
 export interface FileNode {
   name: string
@@ -44,7 +46,11 @@ export class KnowledgeManager {
     return this.buildTree(this.knowledgePath)
   }
 
-  private buildTree(dirPath: string): FileNode[] {
+  private buildTree(dirPath: string, depth = 0): FileNode[] {
+    if (depth > DEFAULT_MAX_DIR_DEPTH) {
+      console.warn(`[KnowledgeManager] buildTree 递归深度超过上限，跳过: ${dirPath}`)
+      return []
+    }
     const nodes: FileNode[] = []
 
     try {
@@ -62,7 +68,7 @@ export class KnowledgeManager {
             name: entry.name,
             path: relativePath,
             type: 'directory',
-            children: this.buildTree(fullPath),
+            children: this.buildTree(fullPath, depth + 1),
           })
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
           nodes.push({
@@ -88,7 +94,7 @@ export class KnowledgeManager {
   // 读取文件内容
   readFile(relativePath: string): string {
     try {
-      const fullPath = path.join(this.knowledgePath, relativePath)
+      const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
       return fs.readFileSync(fullPath, 'utf-8')
     } catch (error) {
       console.error(`读取文件失败: ${relativePath}`, error)
@@ -99,7 +105,7 @@ export class KnowledgeManager {
   // 写入文件内容
   writeFile(relativePath: string, content: string): void {
     try {
-      const fullPath = path.join(this.knowledgePath, relativePath)
+      const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
       const dir = path.dirname(fullPath)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -114,7 +120,7 @@ export class KnowledgeManager {
   // 创建文件
   createFile(relativePath: string, content: string = ''): void {
     try {
-      const fullPath = path.join(this.knowledgePath, relativePath)
+      const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
       const dir = path.dirname(fullPath)
 
       // 确保目录存在
@@ -132,7 +138,7 @@ export class KnowledgeManager {
   // 删除文件
   deleteFile(relativePath: string): void {
     try {
-      const fullPath = path.join(this.knowledgePath, relativePath)
+      const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
       fs.unlinkSync(fullPath)
     } catch (error) {
       console.error(`删除文件失败: ${relativePath}`, error)
@@ -219,7 +225,11 @@ ${actualFiles}
   /**
    * 扫描目录生成树形结构字符串
    */
-  private scanDirectoryTree(dirPath: string, prefix: string): string {
+  private scanDirectoryTree(dirPath: string, prefix: string, depth = 0): string {
+    if (depth > DEFAULT_MAX_DIR_DEPTH) {
+      console.warn(`[KnowledgeManager] scanDirectoryTree 递归深度超过上限，跳过: ${dirPath}`)
+      return ''
+    }
     const lines: string[] = []
     try {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true })
@@ -237,46 +247,63 @@ ${actualFiles}
         if (entry.isDirectory()) {
           lines.push(`${prefix}${connector}${entry.name}/`)
           const childPath = path.join(dirPath, entry.name)
-          const childTree = this.scanDirectoryTree(childPath, prefix + childPrefix)
+          const childTree = this.scanDirectoryTree(childPath, prefix + childPrefix, depth + 1)
           if (childTree) lines.push(childTree)
         } else {
           lines.push(`${prefix}${connector}${entry.name}`)
         }
       }
-    } catch {
-      // 目录不存在时静默忽略
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`[KnowledgeManager] scanDirectoryTree 读取失败: ${dirPath}`, error instanceof Error ? error.message : String(error))
+      }
     }
     return lines.join('\n')
   }
 
-  // 搜索文件内容
+  /** 搜索结果最大文件数 */
+  private static readonly MAX_SEARCH_RESULTS = 20
+  /** 搜索时跳过超过此大小的文件（512KB），避免大文件拖慢搜索 */
+  private static readonly MAX_SEARCH_FILE_BYTES = 512 * 1024
+
   searchFiles(query: string): Array<{ path: string; matches: string[] }> {
     const results: Array<{ path: string; matches: string[] }> = []
     const searchLower = query.toLowerCase()
 
-    const searchInDirectory = (dirPath: string) => {
+    const searchInDirectory = (dirPath: string, depth = 0) => {
+      if (depth > DEFAULT_MAX_DIR_DEPTH) {
+        console.warn(`[KnowledgeManager] searchInDirectory 递归深度超过上限，跳过: ${dirPath}`)
+        return
+      }
+      if (results.length >= KnowledgeManager.MAX_SEARCH_RESULTS) return
       try {
         const entries = fs.readdirSync(dirPath, { withFileTypes: true })
 
         for (const entry of entries) {
+          if (results.length >= KnowledgeManager.MAX_SEARCH_RESULTS) return
           const fullPath = path.join(dirPath, entry.name)
 
           if (entry.isDirectory()) {
-            searchInDirectory(fullPath)
+            if (!entry.name.startsWith('_')) searchInDirectory(fullPath, depth + 1)
           } else if (entry.isFile() && entry.name.endsWith('.md')) {
+            try {
+              const stat = fs.statSync(fullPath)
+              if (stat.size > KnowledgeManager.MAX_SEARCH_FILE_BYTES) continue
+            } catch { continue }
             const content = fs.readFileSync(fullPath, 'utf-8')
             const lines = content.split('\n')
             const matches: string[] = []
 
-            lines.forEach((line, index) => {
-              if (line.toLowerCase().includes(searchLower)) {
-                matches.push(`${index + 1}: ${line.trim()}`)
+            for (let index = 0; index < lines.length; index++) {
+              if (lines[index].toLowerCase().includes(searchLower)) {
+                matches.push(`${index + 1}: ${lines[index].trim()}`)
+                if (matches.length >= 5) break
               }
-            })
+            }
 
             if (matches.length > 0) {
               const relativePath = path.relative(this.knowledgePath, fullPath)
-              results.push({ path: relativePath, matches: matches.slice(0, 5) }) // 最多返回 5 个匹配
+              results.push({ path: relativePath, matches })
             }
           }
         }

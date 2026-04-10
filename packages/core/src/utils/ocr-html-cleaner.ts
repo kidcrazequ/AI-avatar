@@ -64,6 +64,9 @@ function htmlTableToMarkdown(tableHtml: string): string {
   return lines.join('\n')
 }
 
+/** OCR HTML 和 PDF 全文的最大处理长度（512KB），超出截断防止主线程阻塞 */
+const MAX_CLEAN_LENGTH = 512 * 1024
+
 /**
  * 清洗 OCR HTML 为 Markdown 纯文本
  *
@@ -78,7 +81,10 @@ function htmlTableToMarkdown(tableHtml: string): string {
 export function cleanOcrHtml(html: string): string {
   if (!html || !html.includes('<')) return html
 
-  let text = html
+  // 超大输入截断，防止多轮全局正则阻塞主线程
+  let text = html.length > MAX_CLEAN_LENGTH
+    ? html.slice(0, MAX_CLEAN_LENGTH) + '\n[内容过长，已截断]'
+    : html
 
   // 去除 code fence 包裹
   text = text.replace(/^```html\s*/i, '').replace(/```\s*$/, '')
@@ -148,7 +154,10 @@ export function cleanOcrHtml(html: string): string {
  * 不改变内容结构，仅去噪。
  */
 export function cleanPdfFullText(rawText: string): string {
-  let text = rawText
+  // 超大输入截断
+  let text = rawText.length > MAX_CLEAN_LENGTH
+    ? rawText.slice(0, MAX_CLEAN_LENGTH) + '\n[内容过长，已截断]'
+    : rawText
 
   for (const pattern of PDF_FULLTEXT_NOISE) {
     text = text.replace(pattern, '')
@@ -191,16 +200,18 @@ export function cleanLlmOutput(text: string): string {
   // 去除残留的 Vision 插入注释标记
   cleaned = cleaned.replace(/<!--\s*以下为第\d+页图片中提取的结构化数据.*?-->\n?/g, '')
 
-  // 去除 emoji
-  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/gu, '')
-
-  // 替换常见符号 emoji 为文字
+  // 先替换有语义的 emoji 为文字（必须在广泛删除之前，否则会被先删掉）
   cleaned = cleaned.replace(/⚠️?/g, '注意')
-  cleaned = cleaned.replace(/✅/g, '')
   cleaned = cleaned.replace(/ℹ️?/g, '说明')
+
+  // 再删除装饰性 emoji
+  cleaned = cleaned.replace(/✅/g, '')
   cleaned = cleaned.replace(/❌/g, '')
   cleaned = cleaned.replace(/⚡/g, '')
   cleaned = cleaned.replace(/🔧/g, '')
+
+  // 最后广泛去除剩余 emoji
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/gu, '')
 
   return cleaned.trim()
 }
@@ -400,18 +411,16 @@ export function detectFabricatedNumbers(
   }
 
   const fabricated: string[] = []
+  const normalizedOriginal = originalText.replace(/\s+/g, '')
   for (const num of llmNumbers) {
-    // 提取纯数值部分用于宽松匹配
     const valueMatch = num.match(/[-+]?\d+(?:\.\d+)?/)
     if (!valueMatch) continue
     const value = valueMatch[0]
 
-    // 跳过过于常见的小数值（1、2、3 等容易误报）
     if (parseFloat(value) < 5 && !num.includes('℃') && !num.includes('Ω')) continue
 
-    // 在原文中搜索：完整匹配或数值部分匹配
     const normalizedNum = num.replace(/\s+/g, '')
-    const existsExact = originalText.replace(/\s+/g, '').includes(normalizedNum)
+    const existsExact = normalizedOriginal.includes(normalizedNum)
     const existsValue = originalText.includes(value)
 
     if (!existsExact && !existsValue) {

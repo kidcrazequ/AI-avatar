@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Modal from './shared/Modal'
@@ -17,23 +17,47 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const [editContent, setEditContent] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
+  const saveMsgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  useEffect(() => {
-    loadSkills()
+  const mountedRef = useRef(true)
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; clearTimeout(saveMsgTimerRef.current) } }, [])
+
+  const loadSkills = useCallback(async (preserveSelection = true) => {
+    try {
+      const skillList = await window.electronAPI.getSkills(avatarId)
+      if (!mountedRef.current) return
+      setSkills(skillList)
+      if (preserveSelection) {
+        setSelectedSkill(prev => {
+          if (!prev) return skillList.length > 0 ? skillList[0] : null
+          return skillList.find(s => s.id === prev.id) ?? (skillList.length > 0 ? skillList[0] : null)
+        })
+      } else {
+        setSelectedSkill(skillList.length > 0 ? skillList[0] : null)
+        setIsEditing(false)
+      }
+    } catch (err) {
+      if (mountedRef.current) console.error('[SkillsPanel] 加载技能失败:', err instanceof Error ? err.message : String(err))
+    }
   }, [avatarId])
 
-  const loadSkills = async () => {
-    const skillList = await window.electronAPI.getSkills(avatarId)
-    setSkills(skillList)
-    if (skillList.length > 0 && !selectedSkill) {
-      setSelectedSkill(skillList[0])
-    }
-  }
+  useEffect(() => {
+    loadSkills(false)
+  }, [loadSkills])
 
   const handleToggleSkill = async (skillId: string, enabled: boolean) => {
-    await window.electronAPI.toggleSkill(avatarId, skillId, enabled)
-    await loadSkills()
-    onSkillsChanged?.()
+    try {
+      await window.electronAPI.toggleSkill(avatarId, skillId, enabled)
+      if (!mountedRef.current) return
+      await loadSkills()
+      onSkillsChanged?.()
+    } catch (err) {
+      if (!mountedRef.current) return
+      console.error('[SkillsPanel] 切换技能失败:', err instanceof Error ? err.message : String(err))
+      setSaveMsg('TOGGLE FAILED')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+    }
   }
 
   const handleEdit = () => {
@@ -48,17 +72,22 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
     setIsSaving(true)
     try {
       await window.electronAPI.updateSkill(avatarId, selectedSkill.id, editContent)
+      if (!mountedRef.current) return
       await loadSkills()
+      if (!mountedRef.current) return
       setIsEditing(false)
       setSaveMsg('SAVED')
       onSkillsChanged?.()
-      setTimeout(() => setSaveMsg(''), 2000)
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
     } catch (error) {
+      if (!mountedRef.current) return
       console.error('保存技能失败:', error)
       setSaveMsg('FAILED')
-      setTimeout(() => setSaveMsg(''), 2000)
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
     } finally {
-      setIsSaving(false)
+      if (mountedRef.current) setIsSaving(false)
     }
   }
 
@@ -67,8 +96,11 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
     setEditContent('')
   }
 
-  const enabledCount = skills.filter(s => s.enabled).length
-  const disabledCount = skills.filter(s => !s.enabled).length
+  const { enabledCount, disabledCount } = useMemo(() => {
+    let enabled = 0
+    for (const s of skills) { if (s.enabled) enabled++ }
+    return { enabledCount: enabled, disabledCount: skills.length - enabled }
+  }, [skills])
 
   return (
     <Modal isOpen={true} onClose={onClose} size="lg">

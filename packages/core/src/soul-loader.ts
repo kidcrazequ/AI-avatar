@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { SkillManager } from './skill-manager'
+import { assertSafeSegment } from './utils/path-security'
+import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 
 export interface AvatarConfig {
   id: string
@@ -26,6 +28,7 @@ export class SoulLoader {
   }
 
   loadAvatar(avatarId: string): AvatarConfig {
+    assertSafeSegment(avatarId, '分身ID')
     const avatarPath = path.join(this.avatarsPath, avatarId)
 
     // 读取 CLAUDE.md（入口文件）
@@ -37,6 +40,9 @@ export class SoulLoader {
     // GAP2: 读取 memory/MEMORY.md（长期记忆）
     const memoryContent = this.readFileSafe(path.join(avatarPath, 'memory', 'MEMORY.md'))
 
+    // Feature 3: 读取 memory/USER.md（用户画像）
+    const userProfileContent = this.readFileSafe(path.join(avatarPath, 'memory', 'USER.md'))
+
     // GAP10: 读取 shared/knowledge/ 目录（共享知识库）
     const sharedKnowledgeFiles = this.readDirectory(path.join(this.sharedPath, 'knowledge'))
 
@@ -44,7 +50,8 @@ export class SoulLoader {
     const knowledgeRootFiles = this.readDirectory(path.join(avatarPath, 'knowledge'))
 
     // GAP3: 通过 SkillManager 获取已启用技能内容（而非读取全部 skills/ 文件）
-    const skillsContent = this.skillManager.getEnabledSkillsContent(avatarId)
+    // Feature 5: 渐进式披露——默认只注入摘要，AI 通过 load_skill 工具按需加载完整内容
+    const skillsContent = this.skillManager.getSkillsSummary(avatarId)
 
     // GAP11: 工具调用能力说明（帮助 DeepSeek 等模型更好地使用 function calling）
     const toolsNote = [
@@ -58,8 +65,10 @@ export class SoulLoader {
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
       '- **lookup_policy(province, policy_type)**: 查询省份电价政策或补贴信息',
       '- **compare_products(products)**: 对比多款产品的技术参数',
+      '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤（system prompt 中只含摘要，执行前必须先调用此工具获取完整流程）',
+      '- **delegate_task(task)**: 将独立子任务委派给子代理并行执行，子代理使用相同的知识库但独立对话上下文',
       '',
-      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息，不要凭记忆回答。',
+      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息，不要凭记忆回答。需要执行某项技能时，必须先调用 load_skill 获取完整定义。',
     ].join('\n')
 
     // 构建 system prompt
@@ -85,6 +94,12 @@ export class SoulLoader {
     if (memoryContent.trim()) {
       parts.push('\n\n---\n\n# 长期记忆\n\n')
       parts.push(memoryContent)
+    }
+
+    // Feature 3: 用户画像（沟通风格、偏好等）
+    if (userProfileContent.trim()) {
+      parts.push('\n\n---\n\n# 用户画像\n\n')
+      parts.push(userProfileContent)
     }
 
     // 回答质量规则（确保 LLM 充分利用知识库并保持回答完整性）
@@ -125,47 +140,42 @@ export class SoulLoader {
     }
   }
 
-  /** 安全读取文件，文件不存在时返回空字符串 */
+  /** 安全读取文件，文件不存在时返回空字符串，其他错误打日志 */
   private readFileSafe(filePath: string): string {
     try {
       return fs.readFileSync(filePath, 'utf-8')
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`[SoulLoader] 读取文件失败 (${filePath}):`, error instanceof Error ? error.message : String(error))
+      }
       return ''
     }
   }
 
-  /** 只读取目录根层级的 .md 文件，不递归子目录 */
-  private readRootFilesOnly(dirPath: string): Array<{ path: string; content: string }> {
-    const files: Array<{ path: string; content: string }> = []
-    try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.md')) {
-          const fullPath = path.join(dirPath, entry.name)
-          files.push({ path: fullPath, content: this.readFileSafe(fullPath) })
-        }
-      }
-    } catch {
-      // 目录不存在则跳过
-    }
-    return files
-  }
+  /** 知识目录最大递归深度（使用共享常量，与其他模块保持一致） */
+  private static readonly MAX_DIR_DEPTH = DEFAULT_MAX_DIR_DEPTH
 
   /** 递归读取目录下所有 .md 文件 */
-  private readDirectory(dirPath: string): Array<{ path: string; content: string }> {
+  private readDirectory(dirPath: string, depth = 0): Array<{ path: string; content: string }> {
+    if (depth > SoulLoader.MAX_DIR_DEPTH) {
+      console.warn(`[SoulLoader] 目录递归深度超过上限(${SoulLoader.MAX_DIR_DEPTH})，停止: ${dirPath}`)
+      return []
+    }
     const files: Array<{ path: string; content: string }> = []
     try {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true })
       for (const entry of entries) {
         const fullPath = path.join(dirPath, entry.name)
         if (entry.isDirectory()) {
-          files.push(...this.readDirectory(fullPath))
+          files.push(...this.readDirectory(fullPath, depth + 1))
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
           files.push({ path: fullPath, content: this.readFileSafe(fullPath) })
         }
       }
-    } catch {
-      // 目录不存在则跳过
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`[SoulLoader] 读取目录失败 (${dirPath}):`, error instanceof Error ? error.message : String(error))
+      }
     }
     return files
   }

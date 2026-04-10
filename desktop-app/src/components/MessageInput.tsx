@@ -1,22 +1,89 @@
-import { useState, KeyboardEvent, useRef, useCallback } from 'react'
+import { useState, useEffect, KeyboardEvent, useRef, useCallback } from 'react'
+
+/** 图片最大数量 */
+const MAX_IMAGES = 5
+/** 压缩后最大宽/高（像素），超出时等比缩放 */
+const MAX_IMAGE_DIMENSION = 1920
+/** JPEG 压缩质量 */
+const IMAGE_QUALITY = 0.85
+
+/**
+ * 将 data URL 通过 canvas 压缩到合理分辨率。
+ * 若图片尺寸已在限制内则直接返回原始 data URL。
+ */
+async function compressImage(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const { width, height } = img
+      const needsResize = width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION
+      if (!needsResize) { resolve(dataUrl); return }
+
+      const ratio = Math.min(MAX_IMAGE_DIMENSION / width, MAX_IMAGE_DIMENSION / height)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(width * ratio)
+      canvas.height = Math.round(height * ratio)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { resolve(dataUrl); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', IMAGE_QUALITY))
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
 
 interface Props {
   onSend: (message: string, images?: string[]) => void
   disabled: boolean
+  /** 外部传入文本以填充输入框（用于提示词模板一键填入） */
+  fillText?: string
 }
 
-export default function MessageInput({ onSend, disabled }: Props) {
+export default function MessageInput({ onSend, disabled, fillText }: Props) {
   const [input, setInput] = useState('')
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /** 同步追踪图片数量，用于 FileReader 启动前的提前检查 */
+  const pendingImagesCountRef = useRef(0)
+  /** 组件是否仍挂载，防止异步压缩完成后 setState 到已卸载组件 */
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    if (fillText) setInput(fillText)
+  }, [fillText])
 
   const addImageFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return
+    if (file.size > 20 * 1024 * 1024) {
+      console.warn('[MessageInput] 图片过大，跳过:', file.name, `${(file.size / 1024 / 1024).toFixed(1)}MB`)
+      return
+    }
+    // 用 ref 同步检查数量，提前拒绝，避免对多余图片做无效解码/压缩
+    if (pendingImagesCountRef.current >= MAX_IMAGES) {
+      console.warn(`[MessageInput] 图片数量已达上限 ${MAX_IMAGES} 张，跳过:`, file.name)
+      return
+    }
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const dataUrl = e.target?.result as string
-      if (dataUrl) setPendingImages(prev => [...prev, dataUrl])
+      if (!dataUrl) return
+      const compressed = await compressImage(dataUrl)
+      if (!mountedRef.current) return
+      setPendingImages(prev => {
+        if (prev.length >= MAX_IMAGES) return prev
+        const next = [...prev, compressed]
+        pendingImagesCountRef.current = next.length
+        return next
+      })
+    }
+    reader.onerror = () => {
+      console.error('[MessageInput] 读取图片失败:', file.name)
     }
     reader.readAsDataURL(file)
   }, [])
@@ -26,6 +93,7 @@ export default function MessageInput({ onSend, disabled }: Props) {
     onSend(input.trim(), pendingImages.length > 0 ? pendingImages : undefined)
     setInput('')
     setPendingImages([])
+    pendingImagesCountRef.current = 0
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -61,7 +129,11 @@ export default function MessageInput({ onSend, disabled }: Props) {
   const handleDragLeave = () => setIsDragging(false)
 
   const removeImage = (index: number) => {
-    setPendingImages(prev => prev.filter((_, i) => i !== index))
+    setPendingImages(prev => {
+      const next = prev.filter((_, i) => i !== index)
+      pendingImagesCountRef.current = next.length
+      return next
+    })
   }
 
   return (

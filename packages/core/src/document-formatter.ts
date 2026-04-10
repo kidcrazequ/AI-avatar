@@ -144,11 +144,25 @@ export function splitIntoChapters(text: string): Chapter[] {
     }
 
     if (currentContent.trim()) {
-      result.push({
-        title: partNum > 1 ? `${chapter.title}（第${partNum}部分）` : chapter.title,
-        content: currentContent.trim(),
-        index: globalIndex++,
-      })
+      let remaining = currentContent.trim()
+      while (remaining.length > MAX_CHAPTER_CHARS) {
+        const splitAt = remaining.lastIndexOf('\n', MAX_CHAPTER_CHARS)
+        const cutPos = splitAt > MAX_CHAPTER_CHARS / 2 ? splitAt : MAX_CHAPTER_CHARS
+        result.push({
+          title: `${chapter.title}（第${partNum}部分）`,
+          content: remaining.slice(0, cutPos).trim(),
+          index: globalIndex++,
+        })
+        remaining = remaining.slice(cutPos).trim()
+        partNum++
+      }
+      if (remaining) {
+        result.push({
+          title: partNum > 1 ? `${chapter.title}（第${partNum}部分）` : chapter.title,
+          content: remaining,
+          index: globalIndex++,
+        })
+      }
     }
   }
 
@@ -176,10 +190,13 @@ ${chapter.content}`
   return cleanLlmOutput(raw)
 }
 
+/** LLM 并发上限，避免请求过多被限流 */
+const FORMAT_CONCURRENCY = 3
+
 /**
- * 将文档全文拆成章节后逐章 LLM 格式化，最终拼接成完整知识文档。
+ * 将文档全文拆成章节后并发 LLM 格式化（受限并发），最终按原序拼接成完整知识文档。
  *
- * 流程：程序化章节切分 → 逐章格式化 → 拼接全文
+ * 流程：程序化章节切分 → 并发格式化（最多 3 路） → 按序拼接全文
  * LLM 只做排版，严禁删减内容，实现零信息丢失。
  *
  * @param rawText     清洗后的文档全文
@@ -196,16 +213,30 @@ export async function formatDocument(
   onProgress?: (progress: FormatProgress) => void,
 ): Promise<string> {
   const chapters = splitIntoChapters(rawText)
+  const formatted = new Array<string>(chapters.length)
 
-  const formatted: string[] = []
-  for (let i = 0; i < chapters.length; i++) {
-    const ch = chapters[i]
-    if (onProgress) {
-      onProgress({ current: i + 1, total: chapters.length, chapterTitle: ch.title })
+  let completedCount = 0
+  let cursor = 0
+
+  async function worker(): Promise<void> {
+    while (cursor < chapters.length) {
+      const idx = cursor++
+      const ch = chapters[idx]
+      try {
+        formatted[idx] = await formatChapter(ch, callLLM)
+      } catch (err) {
+        console.error(`[formatDocument] 章节 "${ch.title}" 格式化失败，使用原文:`, err instanceof Error ? err.message : String(err))
+        formatted[idx] = ch.content
+      }
+      completedCount++
+      if (onProgress) {
+        onProgress({ current: completedCount, total: chapters.length, chapterTitle: ch.title })
+      }
     }
-    const result = await formatChapter(ch, callLLM)
-    formatted.push(result)
   }
+
+  const workerCount = Math.min(FORMAT_CONCURRENCY, chapters.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
   const header = `# ${title}\n\n**来源文档**：\`${source}\`\n\n---\n\n`
   return header + formatted.join('\n\n---\n\n')

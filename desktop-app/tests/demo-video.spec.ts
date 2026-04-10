@@ -138,8 +138,28 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
     await captureAndWait(3000)
   })
 
-  // ── 场景 2：创建新对话 ──
+  // ── 场景 2：选择分身并创建新对话 ──
   test('场景 2：创建新对话', async () => {
+    // 先选择第一个分身（欢迎页 → 进入主界面）
+    const avatarBtns = page.locator('.animate-fade-in button:has(.w-10)')
+    if (await avatarBtns.count() > 0) {
+      await avatarBtns.first().click()
+      await captureAndWait(1500)
+    } else {
+      // 无分身时通过 API 创建一个，然后刷新页面
+      await page.evaluate(async () => {
+        await window.electronAPI.createAvatar('demo-test-avatar', '# Demo 分身\n\n录制演示用。', [], [])
+      })
+      await page.reload()
+      await page.waitForLoadState('domcontentloaded')
+      await captureAndWait(1500)
+      const newBtns = page.locator('.animate-fade-in button:has(.w-10)')
+      if (await newBtns.count() > 0) {
+        await newBtns.first().click()
+        await captureAndWait(1500)
+      }
+    }
+
     await hoverElement('button:has-text("NEW CHAT")')
     await page.click('button:has-text("NEW CHAT")')
     await captureAndWait(2000)
@@ -167,8 +187,8 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 4：设置面板 ──
   test('场景 4：设置面板 - 多模型配置', async () => {
-    await hoverElement('button:has-text("SET")')
-    await page.click('button:has-text("SET")')
+    await hoverElement('button[aria-label="设置"]')
+    await page.click('button[aria-label="设置"]')
     await captureAndWait(2500)
 
     const settingsScroll = page.locator('.overflow-y-auto').first()
@@ -185,8 +205,8 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 5：知识库面板 ──
   test('场景 5：知识库 - 文件树浏览', async () => {
-    await hoverElement('button:has-text("DOCS")')
-    await page.click('button:has-text("DOCS")')
+    await hoverElement('button[aria-label="知识库"]')
+    await page.click('button[aria-label="知识库"]')
     await captureAndWait(2500)
 
     const treeItems = page.locator('.cursor-pointer').filter({ hasText: /\.md|\.txt|knowledge/ })
@@ -209,8 +229,8 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 6：技能面板 ──
   test('场景 6：技能管理 - 查看与切换', async () => {
-    await hoverElement('button:has-text("SKILLS")')
-    await page.click('button:has-text("SKILLS")')
+    await hoverElement('button[aria-label="技能"]')
+    await page.click('button[aria-label="技能"]')
     await captureAndWait(2500)
 
     const skillItem = page.locator('.cursor-pointer, button').filter({ hasText: /\.md/ }).first()
@@ -225,8 +245,8 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 7：测试中心 ──
   test('场景 7：测试中心 - 质量保障', async () => {
-    await hoverElement('button:has-text("TEST")')
-    await page.click('button:has-text("TEST")')
+    await hoverElement('button[aria-label="测试"]')
+    await page.click('button[aria-label="测试"]')
     await captureAndWait(2500)
 
     const checkboxes = page.locator('input[type="checkbox"]')
@@ -249,8 +269,8 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 8：记忆面板 ──
   test('场景 8：长期记忆 - 持续学习', async () => {
-    await hoverElement('button:has-text("MEM")')
-    await page.click('button:has-text("MEM")')
+    await hoverElement('button[aria-label="记忆"]')
+    await page.click('button[aria-label="记忆"]')
     await captureAndWait(2500)
 
     await closePanel()
@@ -259,7 +279,7 @@ test.describe('小堵桌面端 - 产品演示录制', () => {
 
   // ── 场景 9：分身选择器 ──
   test('场景 9：分身选择器 - 多专家切换', async () => {
-    const avatarBtn = page.locator('button').filter({ has: page.locator('.rounded-full') }).first()
+    const avatarBtn = page.locator('button[aria-haspopup="listbox"]').first()
     if (await avatarBtn.isVisible().catch(() => false)) {
       await avatarBtn.hover({ force: true }).catch(() => {})
       await captureAndWait(1000)

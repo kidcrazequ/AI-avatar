@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { extractTitle, extractMetadata } from './utils/markdown-parser'
+import { assertSafeSegment } from './utils/path-security'
 
 export interface Skill {
   id: string
@@ -25,6 +26,7 @@ export class SkillManager {
   }
 
   getSkills(avatarId: string): Skill[] {
+    assertSafeSegment(avatarId, '分身ID')
     const skillsPath = path.join(this.avatarsPath, avatarId, 'skills')
 
     if (!fs.existsSync(skillsPath)) {
@@ -53,6 +55,8 @@ export class SkillManager {
   }
 
   getSkill(avatarId: string, skillId: string): Skill | undefined {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
     const skillsPath = path.join(this.avatarsPath, avatarId, 'skills')
     const filePath = path.join(skillsPath, `${skillId}.md`)
 
@@ -76,6 +80,8 @@ export class SkillManager {
   }
 
   updateSkill(avatarId: string, skillId: string, content: string): void {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
     const skill = this.getSkill(avatarId, skillId)
     if (!skill) {
       throw new Error(`技能不存在: ${skillId}`)
@@ -85,6 +91,8 @@ export class SkillManager {
   }
 
   toggleSkill(avatarId: string, skillId: string, enabled: boolean): void {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
     const config = this.getSkillConfig(avatarId)
 
     if (enabled) {
@@ -100,8 +108,8 @@ export class SkillManager {
     this.saveSkillConfig(avatarId, config)
   }
 
-  // 获取技能配置
   private getSkillConfig(avatarId: string): SkillConfig {
+    assertSafeSegment(avatarId, '分身ID')
     const configPath = path.join(this.avatarsPath, avatarId, 'skills', '.config.json')
 
     if (!fs.existsSync(configPath)) {
@@ -110,17 +118,29 @@ export class SkillManager {
 
     try {
       const content = fs.readFileSync(configPath, 'utf-8')
-      return JSON.parse(content) as SkillConfig
+      const parsed = JSON.parse(content)
+      if (!parsed || !Array.isArray(parsed.disabledSkills)) {
+        console.warn('[SkillManager] 技能配置格式异常，使用默认配置')
+        return { disabledSkills: [] }
+      }
+      const safeDisabled = parsed.disabledSkills.filter((id: unknown) => typeof id === 'string')
+      return { disabledSkills: safeDisabled }
     } catch (error) {
-      console.error('读取技能配置失败:', error)
+      console.error('[SkillManager] 读取技能配置失败:', error)
       return { disabledSkills: [] }
     }
   }
 
-  // 保存技能配置
   private saveSkillConfig(avatarId: string, config: SkillConfig): void {
+    assertSafeSegment(avatarId, '分身ID')
     const configPath = path.join(this.avatarsPath, avatarId, 'skills', '.config.json')
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('[SkillManager] 保存技能配置失败:', msg)
+      throw new Error(`保存技能配置失败: ${msg}`)
+    }
   }
 
   // 解析技能文件
@@ -149,6 +169,7 @@ export class SkillManager {
 
   // 获取启用的技能内容（用于生成 systemPrompt）
   getEnabledSkillsContent(avatarId: string): string {
+    assertSafeSegment(avatarId, '分身ID')
     const skills = this.getSkills(avatarId).filter(s => s.enabled)
 
     if (skills.length === 0) {
@@ -157,5 +178,22 @@ export class SkillManager {
 
     const skillsContent = skills.map(s => s.content).join('\n\n---\n\n')
     return `\n\n# 技能定义\n\n${skillsContent}`
+  }
+
+  /**
+   * 获取启用技能的摘要列表（用于渐进式披露）。
+   * 只返回技能名称和说明，不包含完整实现内容，减少 token 占用。
+   * AI 在需要使用某技能时，通过 load_skill 工具加载完整内容。
+   */
+  getSkillsSummary(avatarId: string): string {
+    assertSafeSegment(avatarId, '分身ID')
+    const skills = this.getSkills(avatarId).filter(s => s.enabled)
+
+    if (skills.length === 0) {
+      return ''
+    }
+
+    const lines = skills.map(s => `- **${s.name}** (id: \`${s.id}\`)：${s.description || '无描述'}`)
+    return `\n\n# 可用技能（摘要）\n\n以下是可用的技能列表。需要使用某技能时，请调用 \`load_skill\` 工具加载完整定义。\n\n${lines.join('\n')}`
   }
 }

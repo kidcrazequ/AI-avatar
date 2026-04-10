@@ -1,4 +1,5 @@
-import Editor from '@monaco-editor/react'
+import Editor, { Monaco } from '@monaco-editor/react'
+import { useRef, useEffect } from 'react'
 
 interface Props {
   content: string
@@ -7,6 +8,9 @@ interface Props {
 }
 
 export default function KnowledgeEditor({ content, onChange, onSave }: Props) {
+  const onSaveRef = useRef(onSave)
+  useEffect(() => { onSaveRef.current = onSave }, [onSave])
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between px-4 py-2 bg-px-elevated border-b-2 border-px-border">
@@ -35,10 +39,10 @@ export default function KnowledgeEditor({ content, onChange, onSave }: Props) {
             renderLineHighlight: 'all',
             lineHeight: 24,
           }}
-          onMount={(editor) => {
+          onMount={(editor, monaco: Monaco) => {
             editor.addCommand(
-              window.navigator.platform.match('Mac') ? 2097 : 2048 + 49,
-              onSave
+              monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+              () => onSaveRef.current()
             )
           }}
         />

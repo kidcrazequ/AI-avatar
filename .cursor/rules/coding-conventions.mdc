@@ -1,0 +1,44 @@
+---
+description: Soul 项目编码约定 — 所有代码修改必须遵循
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+alwaysApply: true
+---
+
+# Soul 项目编码约定
+
+修改任何 `.ts` / `.tsx` 文件时，必须遵循以下规则。完整约定见根目录 `CONVENTIONS.md`。
+
+## 强制规则
+
+### 日期格式化
+- 生成 YYYY-MM-DD 日历日字符串时，**必须**使用 `localDateString()`（来自 `@soul/core`）
+- **禁止** `new Date().toISOString().slice(0, 10)`（UTC 偏移导致日期差一天）
+- **禁止** 在业务代码中散用 `toLocaleDateString('zh-CN')` 等各自不同的格式化方式
+
+### HTTP 请求
+- **必须**使用 `fetchWithTimeout()`（来自 `@soul/core`）发起 HTTP 请求
+- **禁止**直接 `fetch(url)` 或 `fetch(url, { signal: AbortSignal.timeout(...) })`
+- 每个请求必须有明确的超时设置
+
+### 路径安全
+- 用户输入的 ID / 文件名必须用 `assertSafeSegment()` 校验
+- 目录穿越防护使用 `resolveUnderRoot()`，不要自行实现 `path.resolve + startsWith` 检查
+- 递归扫描目录使用 `collectFilesRecursive()`，不要自行实现递归遍历
+
+### 错误处理
+- `@soul/core` 中：抛出带语义的 Error
+- Electron 主进程：使用 `Logger` 实例，不要直接 `console.error`
+- 渲染进程：`try/catch` + Toast + `window.electronAPI.logEvent()`
+- **禁止**空 `catch {}`，至少记录日志
+
+### 文件头
+- 新建文件必须添加 JSDoc 文件头，包含 `@author zhi.qu` 和 `@date YYYY-MM-DD`
+- `@date` 使用文件创建日期
+
+### 代码质量
+- 禁止重复实现：相同逻辑出现在两处以上必须抽取为 `@soul/core` 共享函数
+- 禁止 `any`：使用 `unknown` + 类型守卫
+- 禁止 `var`：使用 `const` 优先，必要时 `let`
+- 所有比较使用 `===` / `!==`

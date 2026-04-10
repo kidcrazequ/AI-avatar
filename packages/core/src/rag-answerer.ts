@@ -26,6 +26,15 @@ export interface RAGConfig {
 }
 
 /**
+ * per-retriever 串行锁：防止并发 RAG 调用交替修改同一 retriever 的 embeddings 导致竞态。
+ * 每次 retrieveAndBuildPrompt 会临时注入 __query__ 向量，完成后恢复；
+ * 并发调用同一 retriever 时必须串行执行以保持内部状态一致。
+ *
+ * 使用 WeakMap 保证不同 retriever 实例相互独立，不跨分身串行化。
+ */
+const retrieverLocks = new WeakMap<object, Promise<unknown>>()
+
+/**
  * 实体提取 Prompt：从检索结果中提取设备/组件/系统名。
  */
 export const ENTITY_EXTRACT_PROMPT = `从以下文档片段中提取所有设备名称、组件名称和技术系统名称。
@@ -72,70 +81,80 @@ export async function retrieveAndBuildPrompt(
   embeddingMap?: Map<string, number[]>,
   wikiChunks?: Array<{ file: string; heading: string; content: string; score: number }>,
 ): Promise<string> {
+  // 串行执行：等待同一 retriever 前一个 RAG 调用完成，防止并发修改 embeddings 竞态
+  // 使用 WeakMap per-retriever 锁，不同分身之间互不阻塞
+  const prev = retrieverLocks.get(retriever) ?? Promise.resolve()
+  let releaseLock!: () => void
+  retrieverLocks.set(retriever, new Promise<void>(r => { releaseLock = r }))
+  await prev
+
   const keywords = tokenize(question)
   const query = keywords.join(' ')
 
   // 注入查询向量（用于 RRF 融合）
-  if (embeddingMap) {
+  // 在 per-retriever 串行锁保护下，直接操作内部 embeddingMap（零拷贝），完成后清除恢复
+  let injectedQueryVector = false
+  if (embeddingMap || retriever.hasEmbeddings()) {
     try {
       const [queryEmb] = await config.callEmbedding([question])
-      embeddingMap.set('__query__', queryEmb)
-      retriever.setEmbeddings(embeddingMap)
-    } catch {
-      // embedding 失败时退回纯 BM25，不中断流程
+      retriever.injectQueryVector(queryEmb)
+      injectedQueryVector = true
+    } catch (err) {
+      console.warn('[RAG] 查询 embedding 失败，退回纯 BM25:', err instanceof Error ? err.message : String(err))
     }
   }
 
-  // 第一跳检索
-  const hop1Chunks = retriever.searchChunks(query, 8)
-  if (hop1Chunks.length === 0) {
-    return question
-  }
-
-  // 实体提取：从第一跳结果中提取组件/设备名
-  const hop1Text = hop1Chunks
-    .slice(0, 5)
-    .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
-    .join('\n\n')
-
-  let entities: string[] = []
   try {
-    const entityResponse = await config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
-    entities = entityResponse
-      .split('\n')
-      .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
-      .filter(e => e.length >= 2 && e.length <= 20)
-  } catch {
-    // 实体提取失败时跳过多跳
-  }
+    // 第一跳检索
+    const hop1Chunks = retriever.searchChunks(query, 8)
+    if (hop1Chunks.length === 0) {
+      return question
+    }
 
-  // 多跳检索
-  const allChunks = entities.length > 0
-    ? retriever.multiHopSearch(query, entities, 15)
-    : hop1Chunks.map(c => ({ ...c, hop: 1 }))
+    // 实体提取：从第一跳结果中提取组件/设备名
+    const hop1Text = hop1Chunks
+      .slice(0, 5)
+      .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
+      .join('\n\n')
 
-  // 构建参考资料
-  const refText = allChunks
-    .slice(0, 12)
-    .map(
-      (c, idx) =>
-        `【参考${idx + 1}·${c.hop === 1 ? '直接匹配' : '关联参数'}】来源：${c.file} > ${c.heading}\n${c.content.trim().slice(0, 2000)}`,
-    )
-    .join('\n\n---\n\n')
+    let entities: string[] = []
+    try {
+      const entityResponse = await config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
+      entities = entityResponse
+        .split('\n')
+        .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
+        .filter(e => e.length >= 2 && e.length <= 20)
+    } catch (err) {
+      console.warn('[RAG] 实体提取失败，跳过多跳检索:', err instanceof Error ? err.message : String(err))
+    }
 
-  // 百科参考：来自 wiki/concepts/ 的补充性概念聚合页（可选）
-  let wikiRefText = ''
-  if (wikiChunks && wikiChunks.length > 0) {
-    wikiRefText = '\n\n---\n\n百科参考（概念聚合页，仅供补充，以知识库原文为准）：\n' +
-      wikiChunks
-        .slice(0, 3)
-        .map((c, idx) =>
-          `【百科${idx + 1}】来源：${c.file} > ${c.heading}\n${c.content.trim().slice(0, 1500)}`,
-        )
-        .join('\n\n---\n\n')
-  }
+    // 多跳检索
+    const allChunks = entities.length > 0
+      ? retriever.multiHopSearch(query, entities, 15)
+      : hop1Chunks.map(c => ({ ...c, hop: 1 }))
 
-  return `用户问题：${question}
+    // 构建参考资料
+    const refText = allChunks
+      .slice(0, 12)
+      .map(
+        (c, idx) =>
+          `【参考${idx + 1}·${c.hop === 1 ? '直接匹配' : '关联参数'}】来源：${c.file} > ${c.heading}\n${c.content.trim().slice(0, 2000)}`,
+      )
+      .join('\n\n---\n\n')
+
+    // 百科参考：来自 wiki/concepts/ 的补充性概念聚合页（可选）
+    let wikiRefText = ''
+    if (wikiChunks && wikiChunks.length > 0) {
+      wikiRefText = '\n\n---\n\n百科参考（概念聚合页，仅供补充，以知识库原文为准）：\n' +
+        wikiChunks
+          .slice(0, 3)
+          .map((c, idx) =>
+            `【百科${idx + 1}】来源：${c.file} > ${c.heading}\n${c.content.trim().slice(0, 1500)}`,
+          )
+          .join('\n\n---\n\n')
+    }
+
+    return `用户问题：${question}
 
 以下检索结果是回答的起点，但不是你的全部知识。你的完整知识库在 system prompt 中，请同时使用检索结果和 system prompt 中的所有相关章节来回答。
 
@@ -143,4 +162,10 @@ ${ANSWER_RULES}
 
 检索起点：
 ${refText}${wikiRefText}`
+  } finally {
+    if (injectedQueryVector) {
+      retriever.clearQueryVector()
+    }
+    releaseLock!()
+  }
 }

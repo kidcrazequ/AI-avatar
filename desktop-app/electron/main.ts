@@ -8,15 +8,20 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, retrieveAndBuildPrompt, WikiCompiler } from '@soul/core'
-import type { LLMCallFn, EmbeddingCallFn, WikiAnswer } from '@soul/core'
+import os from 'os'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString } from '@soul/core'
+import type { WikiAnswer } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager } from './test-manager'
 import { DocumentParser } from './document-parser'
 import { ScheduledTester } from './scheduled-tester'
+import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger } from './logger'
+import { createEmbeddingFn, createLLMFn } from './llm-factory'
 
 let mainWindow: BrowserWindow | null = null
+
+// assertSafeSegment 已从 @soul/core 统一导入
 
 /**
  * 解析分身目录路径。
@@ -46,6 +51,7 @@ function resolveTemplatesPath(): string {
 // ─── 单例 ────────────────────────────────────────────────────────────────────
 
 const knowledgeManagers = new Map<string, KnowledgeManager>()
+const wikiCompilers = new Map<string, WikiCompiler>()
 
 let avatarsPath: string
 let soulLoader: SoulLoader
@@ -56,7 +62,9 @@ let skillManager: SkillManager
 let toolRouter: ToolRouter
 const documentParser = new DocumentParser()
 const scheduledTester = new ScheduledTester()
+const cronScheduler = new CronScheduler()
 let templateLoader: TemplateLoader
+let backupIntervalId: ReturnType<typeof setInterval> | null = null
 
 /** Logger 使用 userData 路径，需在 app ready 之后才能获取；先声明再赋值 */
 let logger: Logger
@@ -76,21 +84,31 @@ function getDb(): DatabaseManager {
  * IPC 包装器：统一记录操作日志和错误日志。
  * 所有 ipcMain.handle 调用改由此函数注册，不改变业务逻辑。
  */
+/** 含敏感参数（apiKey）的 channel，日志需脱敏 */
+const SENSITIVE_CHANNELS = new Set([
+  'consolidate-memory', 'build-knowledge-index', 'rag-retrieve',
+  'compile-wiki', 'lint-knowledge', 'detect-evolution',
+])
+
 function wrapHandler(
   channel: string,
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
   ipcMain.handle(channel, async (event, ...args) => {
-    // 对 save-message 等高频 channel 仅记录精简信息，避免日志膨胀
     const isHighFreq = ['save-message', 'get-messages', 'get-conversations', 'get-knowledge-tree'].includes(channel)
     if (!isHighFreq && logger) {
-      const preview = JSON.stringify(args).slice(0, 200)
+      let preview: string
+      if (SENSITIVE_CHANNELS.has(channel)) {
+        preview = `avatarId=${typeof args[0] === 'string' ? args[0] : '?'}`
+      } else {
+        preview = JSON.stringify(args).slice(0, 200)
+      }
       logger.activity(channel, preview)
     }
     try {
       return await handler(event, ...args)
     } catch (err) {
-      if (logger) logger.error(channel, err as Error)
+      if (logger) logger.error(channel, err instanceof Error ? err : new Error(String(err)))
       throw err
     }
   })
@@ -136,6 +154,7 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
     scheduledTester.stop()
+    cronScheduler.cancelAll()
     if (logger) logger.activity('app-window-closed')
   })
 }
@@ -159,9 +178,40 @@ app.whenReady().then(() => {
     initManagers()
   } catch (error) {
     console.error('[Main] initManagers failed:', error)
+    dialog.showErrorBox('初始化失败', `核心模块初始化失败：${error instanceof Error ? error.message : String(error)}\n\n应用将退出。`)
+    app.quit()
+    return
   }
   createWindow()
-  scheduledTester.setWindow(mainWindow!)
+  if (mainWindow) {
+    scheduledTester.setWindow(mainWindow)
+    cronScheduler.setWindow(mainWindow)
+  }
+
+  // 从 DB 恢复已配置的 cron 定时任务（重启后自动续期）
+  try {
+    const cronTypes = ['memory-consolidate', 'knowledge-check', 'scheduled-test'] as const
+    for (const type of cronTypes) {
+      const intervalHours = parseInt(getDb().getSetting(`cron_${type}_interval`) ?? '0', 10) || 0
+      if (intervalHours > 0) {
+        const avatarId = getDb().getSetting(`cron_${type}_avatar`) ?? undefined
+        if (!avatarId) continue
+        cronScheduler.schedule({ type, intervalHours, avatarId, enabled: true })
+      }
+    }
+  } catch (err) {
+    console.error('[Main] 恢复 cron 任务失败:', err)
+  }
+
+  // 每日自动备份（每 24 小时一次，启动时立即执行一次）
+  performDatabaseBackup().catch(err => {
+    console.warn('[Main] 启动时备份失败:', err instanceof Error ? err.message : String(err))
+  })
+  backupIntervalId = setInterval(() => {
+    performDatabaseBackup().catch(err => {
+      console.warn('[Main] 定时备份失败:', err instanceof Error ? err.message : String(err))
+    })
+  }, 24 * 60 * 60 * 1000)
 }).catch((error) => {
   console.error('[Main] app.whenReady() rejected:', error)
 })
@@ -172,23 +222,81 @@ app.on('window-all-closed', () => {
   }
 })
 
+app.on('before-quit', () => {
+  if (backupIntervalId) {
+    clearInterval(backupIntervalId)
+    backupIntervalId = null
+  }
+  scheduledTester.stop()
+  cronScheduler.cancelAll()
+  if (db) {
+    try { db.close() } catch (e) { console.error('[Main] db.close() failed:', e) }
+  }
+  if (logger) logger.activity('app-quit')
+})
+
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     if (!db) {
       try { initManagers() } catch (e) { console.error('[Main] re-init failed:', e) }
     }
     createWindow()
+    if (mainWindow) {
+      scheduledTester.setWindow(mainWindow)
+      cronScheduler.setWindow(mainWindow)
+    }
   }
 })
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
+const VALID_CRON_TYPES: readonly CronTaskType[] = ['memory-consolidate', 'knowledge-check', 'scheduled-test']
+
+function isCronTaskType(type: string): type is CronTaskType {
+  return VALID_CRON_TYPES.includes(type as CronTaskType)
+}
+
+/**
+ * 原子写文件：先写临时文件再 rename，防止进程崩溃导致目标文件损坏。
+ * 对记忆文件（MEMORY.md / USER.md）等关键数据使用此函数代替 writeFile。
+ *
+ * @param filePath  目标文件的绝对路径
+ * @param content   文件内容
+ */
+async function atomicWriteFile(filePath: string, content: string): Promise<void> {
+  const dir = path.dirname(filePath)
+  const tmpPath = path.join(dir, `.tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`)
+  try {
+    await fs.promises.writeFile(tmpPath, content, 'utf-8')
+    await fs.promises.rename(tmpPath, filePath)
+  } catch (err) {
+    // 确保临时文件不会残留
+    await fs.promises.unlink(tmpPath).catch(() => {})
+    throw err
+  }
+}
+
 const getKnowledgeManager = (avatarId: string): KnowledgeManager => {
+  assertSafeSegment(avatarId, '分身ID')
   if (!knowledgeManagers.has(avatarId)) {
     const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
     knowledgeManagers.set(avatarId, new KnowledgeManager(knowledgePath))
   }
   return knowledgeManagers.get(avatarId)!
+}
+
+/**
+ * 获取或创建分身的 WikiCompiler 实例（缓存复用）。
+ *
+ * @author zhi.qu
+ * @date 2026-04-10
+ */
+const getWikiCompiler = (avatarId: string): WikiCompiler => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (!wikiCompilers.has(avatarId)) {
+    wikiCompilers.set(avatarId, new WikiCompiler(path.join(avatarsPath, avatarId)))
+  }
+  return wikiCompilers.get(avatarId)!
 }
 
 // ─── IPC 处理器 ──────────────────────────────────────────────────────────────
@@ -197,17 +305,31 @@ ipcMain.handle('ping', () => 'pong')
 
 // 加载分身配置（GAP3/GAP6: 重新调用后 systemPrompt 会根据最新技能/知识/记忆重建）
 wrapHandler('load-avatar', (_, avatarId: string) => {
-  return soulLoader.loadAvatar(avatarId)
+  assertSafeSegment(avatarId, '分身ID')
+  const config = soulLoader.loadAvatar(avatarId)
+  // Feature 7: 缓存 system prompt 供子代理委派使用
+  toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
+  return config
 })
 
 // ─── 会话管理 ────────────────────────────────────────────────────────────────
 
 wrapHandler('create-conversation', (_, title: string, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return getDb().createConversation(title, avatarId)
 })
 
 wrapHandler('get-conversations', (_, avatarId?: string) => {
+  if (avatarId) assertSafeSegment(avatarId, '分身ID')
   return getDb().getConversations(avatarId)
+})
+
+/**
+ * search-messages: FTS5 全文搜索消息，返回匹配的片段和会话信息。
+ */
+wrapHandler('search-messages', (_, query: string, avatarId?: string) => {
+  if (avatarId) assertSafeSegment(avatarId, '分身ID')
+  return getDb().searchMessages(query, avatarId)
 })
 
 wrapHandler('get-conversation', (_, id: string) => {
@@ -249,13 +371,13 @@ wrapHandler('get-knowledge-tree', (_, avatarId: string) => {
 })
 
 wrapHandler('read-knowledge-file', (_, avatarId: string, relativePath: string) => {
+  // KnowledgeManager.assertSafePath() 已做完整的 path.resolve 前缀校验
   return getKnowledgeManager(avatarId).readFile(relativePath)
 })
 
 wrapHandler('write-knowledge-file', (_, avatarId: string, relativePath: string, content: string) => {
   const km = getKnowledgeManager(avatarId)
   km.writeFile(relativePath, content)
-  // 归档生成的知识文件（仅非 README 文件）
   if (!relativePath.toLowerCase().includes('readme')) {
     const fullPath = path.join(avatarsPath, avatarId, 'knowledge', relativePath)
     if (logger) logger.recordGenerated('knowledge', avatarId, fullPath, { relativePath })
@@ -266,7 +388,6 @@ wrapHandler('search-knowledge', (_, avatarId: string, query: string) => {
   return getKnowledgeManager(avatarId).searchFiles(query)
 })
 
-// GAP7 修复：注册缺失的知识文件 CRUD IPC
 wrapHandler('create-knowledge-file', (_, avatarId: string, relativePath: string, content?: string) => {
   getKnowledgeManager(avatarId).createFile(relativePath, content ?? '')
   const fullPath = path.join(avatarsPath, avatarId, 'knowledge', relativePath)
@@ -279,39 +400,92 @@ wrapHandler('delete-knowledge-file', (_, avatarId: string, relativePath: string)
 
 // ─── 记忆管理（GAP2）────────────────────────────────────────────────────────
 
-wrapHandler('read-memory', (_, avatarId: string) => {
+wrapHandler('read-memory', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const memoryPath = path.join(avatarsPath, avatarId, 'memory', 'MEMORY.md')
   try {
-    return fs.readFileSync(memoryPath, 'utf-8')
+    return await fs.promises.readFile(memoryPath, 'utf-8')
   } catch {
     return ''
   }
 })
 
-wrapHandler('write-memory', (_, avatarId: string, content: string) => {
+wrapHandler('write-memory', async (_, avatarId: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const memoryPath = path.join(avatarsPath, avatarId, 'memory', 'MEMORY.md')
   const memoryDir = path.dirname(memoryPath)
-  if (!fs.existsSync(memoryDir)) {
-    fs.mkdirSync(memoryDir, { recursive: true })
-  }
-  fs.writeFileSync(memoryPath, content, 'utf-8')
+  await fs.promises.mkdir(memoryDir, { recursive: true })
+  await atomicWriteFile(memoryPath, content)
   if (logger) logger.recordGenerated('memory', avatarId, memoryPath)
+})
+
+/**
+ * get-memory-stats: 返回 MEMORY.md 的容量统计信息。
+ */
+wrapHandler('get-memory-stats', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const memoryPath = path.join(avatarsPath, avatarId, 'memory', 'MEMORY.md')
+  let content = ''
+  try {
+    content = await fs.promises.readFile(memoryPath, 'utf-8')
+  } catch {
+    content = ''
+  }
+  return getMemoryStats(content)
+})
+
+/**
+ * consolidate-memory: 调用 LLM 整理记忆内容，精简到关键信息。
+ * 只返回整理后内容，不写入文件——由调用方决定写入 MEMORY.md 还是 USER.md。
+ */
+wrapHandler('consolidate-memory', async (_, avatarId: string, content: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  const callLLM = createLLMFn(apiKey, baseUrl, chatModel)
+  const consolidated = await consolidateMemory(content, callLLM)
+  if (logger) logger.activity('consolidate-memory', `chars: ${content.length} → ${consolidated.length}`)
+  return consolidated
+})
+
+// ─── 用户画像管理（Feature 3）────────────────────────────────────────────────
+
+/** read-user-profile: 读取 memory/USER.md 用户画像文件 */
+wrapHandler('read-user-profile', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const profilePath = path.join(avatarsPath, avatarId, 'memory', 'USER.md')
+  try {
+    return await fs.promises.readFile(profilePath, 'utf-8')
+  } catch {
+    return ''
+  }
+})
+
+/** write-user-profile: 写入 memory/USER.md 用户画像文件 */
+wrapHandler('write-user-profile', async (_, avatarId: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const profilePath = path.join(avatarsPath, avatarId, 'memory', 'USER.md')
+  const profileDir = path.dirname(profilePath)
+  await fs.promises.mkdir(profileDir, { recursive: true })
+  await atomicWriteFile(profilePath, content)
+  if (logger) logger.recordGenerated('memory', avatarId, profilePath, { action: 'user-profile' })
 })
 
 // ─── 人格管理 ────────────────────────────────────────────────────────────────
 
-wrapHandler('read-soul', (_, avatarId: string) => {
+wrapHandler('read-soul', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const soulPath = path.join(avatarsPath, avatarId, 'soul.md')
   try {
-    return fs.readFileSync(soulPath, 'utf-8')
+    return await fs.promises.readFile(soulPath, 'utf-8')
   } catch {
     return ''
   }
 })
 
-wrapHandler('write-soul', (_, avatarId: string, content: string) => {
+wrapHandler('write-soul', async (_, avatarId: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const soulPath = path.join(avatarsPath, avatarId, 'soul.md')
-  fs.writeFileSync(soulPath, content, 'utf-8')
+  await fs.promises.writeFile(soulPath, content, 'utf-8')
   if (logger) logger.recordGenerated('soul', avatarId, soulPath)
 })
 
@@ -319,6 +493,24 @@ wrapHandler('write-soul', (_, avatarId: string, content: string) => {
 
 wrapHandler('list-avatars', () => {
   return avatarManager.listAvatars()
+})
+
+/**
+ * get-avatar-soul-intro: 获取指定分身的 soul.md 前 500 字简介。
+ * 用于多分身 @提及功能，在当前对话中引入目标分身的身份上下文。
+ *
+ * @author zhi.qu
+ * @date 2026-04-10
+ */
+wrapHandler('get-avatar-soul-intro', async (_, targetAvatarId: string) => {
+  assertSafeSegment(targetAvatarId, '分身ID')
+  const soulPath = path.join(avatarsPath, targetAvatarId, 'soul.md')
+  try {
+    const content = await fs.promises.readFile(soulPath, 'utf-8')
+    return content.slice(0, 500)
+  } catch {
+    return null
+  }
 })
 
 wrapHandler('create-avatar', (_, id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => {
@@ -329,6 +521,8 @@ wrapHandler('create-avatar', (_, id: string, soulContent: string, skills: string
 })
 
 wrapHandler('write-skill-file', (_, avatarId: string, fileName: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(fileName, '技能文件名')
   avatarManager.writeSkillFile(avatarId, fileName, content)
   const skillPath = path.join(avatarsPath, avatarId, 'skills', fileName)
   if (logger) logger.recordGenerated('skill', avatarId, skillPath, { fileName })
@@ -336,30 +530,37 @@ wrapHandler('write-skill-file', (_, avatarId: string, fileName: string, content:
 
 // BUG4 修复：删除分身时同步清理 DB 中的会话和消息记录
 wrapHandler('delete-avatar', (_, id: string) => {
+  assertSafeSegment(id, '分身ID')
   getDb().deleteConversationsByAvatar(id)
   avatarManager.deleteAvatar(id)
   knowledgeManagers.delete(id)
+  wikiCompilers.delete(id)
 })
 
 // ─── 测试管理 ────────────────────────────────────────────────────────────────
 
 wrapHandler('get-test-cases', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.getTestCases(avatarId)
 })
 
 wrapHandler('get-test-case', (_, avatarId: string, caseId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.getTestCase(avatarId, caseId)
 })
 
-wrapHandler('create-test-case', (_, avatarId: string, testCase: any) => {
+wrapHandler('create-test-case', (_, avatarId: string, testCase: Omit<TestCase, 'filePath'>) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.createTestCase(avatarId, testCase)
 })
 
 wrapHandler('delete-test-case', (_, avatarId: string, caseId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   testManager.deleteTestCase(avatarId, caseId)
 })
 
-wrapHandler('save-test-report', (_, avatarId: string, report: any) => {
+wrapHandler('save-test-report', (_, avatarId: string, report: TestReport) => {
+  assertSafeSegment(avatarId, '分身ID')
   const reportPath = testManager.saveTestReport(avatarId, report)
   // reportPath 可能是字符串路径，也可能 undefined（取决于实现），容错处理
   if (reportPath && logger) {
@@ -371,29 +572,37 @@ wrapHandler('save-test-report', (_, avatarId: string, report: any) => {
 })
 
 wrapHandler('get-latest-report', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.getLatestReport(avatarId)
 })
 
 wrapHandler('get-report-list', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.getReportList(avatarId)
 })
 
 // BUG6 修复：runTests 仅返回测试用例数据，实际执行在渲染进程的 TestRunner 中完成
 wrapHandler('run-tests', async (_, avatarId: string, caseIds: string[]) => {
+  assertSafeSegment(avatarId, '分身ID')
   return testManager.getTestCases(avatarId).filter(c => caseIds.includes(c.id))
 })
 
 // ─── 技能管理 ────────────────────────────────────────────────────────────────
 
 wrapHandler('get-skills', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   return skillManager.getSkills(avatarId)
 })
 
 wrapHandler('get-skill', (_, avatarId: string, skillId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(skillId, '技能ID')
   return skillManager.getSkill(avatarId, skillId)
 })
 
 wrapHandler('update-skill', (_, avatarId: string, skillId: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(skillId, '技能ID')
   skillManager.updateSkill(avatarId, skillId, content)
   // 归档更新后的技能文件
   const skillPath = path.join(avatarsPath, avatarId, 'skills', `${skillId}.md`)
@@ -401,6 +610,8 @@ wrapHandler('update-skill', (_, avatarId: string, skillId: string, content: stri
 })
 
 wrapHandler('toggle-skill', (_, avatarId: string, skillId: string, enabled: boolean) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(skillId, '技能ID')
   skillManager.toggleSkill(avatarId, skillId, enabled)
 })
 
@@ -411,7 +622,13 @@ wrapHandler('toggle-skill', (_, avatarId: string, skillId: string, enabled: bool
  * avatarId 用于定位该分身的知识库路径。
  */
 wrapHandler('execute-tool-call', async (_, avatarId: string, name: string, args: Record<string, unknown>) => {
-  return toolRouter.execute(avatarId, { name, arguments: args })
+  assertSafeSegment(avatarId, '分身ID')
+  // Feature 7: 子代理委派时需要 LLM 调用函数
+  const apiKey = getDb().getSetting('chat_api_key') ?? ''
+  const baseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  const callLLM = apiKey ? createLLMFn(apiKey, baseUrl, chatModel) : undefined
+  return toolRouter.execute(avatarId, { name, arguments: args }, callLLM)
 })
 
 /**
@@ -419,85 +636,35 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, name: string, args:
  * 返回按相关度排序的知识片段，供 UI 展示或注入上下文。
  */
 wrapHandler('search-knowledge-chunks', (_, avatarId: string, query: string, topN?: number) => {
-  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const retriever = new KnowledgeRetriever(knowledgePath)
+  assertSafeSegment(avatarId, '分身ID')
+  const retriever = toolRouter.getRetriever(avatarId)
   return retriever.searchChunks(query, topN ?? 5)
 })
 
 // ─── 知识索引与 RAG 检索 ────────────────────────────────────────────────────
 
 /**
- * DashScope Embedding API 调用（text-embedding-v3，512 维）。
- * apiKey 和 baseUrl 从渲染进程传入的 modelConfig 获取。
- */
-function createEmbeddingFn(apiKey: string, baseUrl: string): EmbeddingCallFn {
-  return async (texts: string[]): Promise<number[][]> => {
-    const response = await fetch(`${baseUrl}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-v3',
-        input: texts,
-        dimension: 512,
-      }),
-    })
-    if (!response.ok) {
-      throw new Error(`Embedding API 失败 (${response.status})`)
-    }
-    const data = await response.json() as { data: Array<{ embedding: number[] }> }
-    return data.data.map(d => d.embedding)
-  }
-}
-
-/**
- * 创建 LLMCallFn 适配器，用于索引构建和 RAG 中的 LLM 调用。
- */
-function createLLMFn(apiKey: string, baseUrl: string, model: string): LLMCallFn {
-  return async (systemPrompt: string, userPrompt: string, maxTokens = 200): Promise<string> => {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        stream: false,
-        max_tokens: maxTokens,
-      }),
-    })
-    if (!response.ok) {
-      throw new Error(`LLM API 失败 (${response.status})`)
-    }
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> }
-    return data.choices?.[0]?.message?.content ?? ''
-  }
-}
-
-/**
  * build-knowledge-index: 为指定分身的知识库构建检索索引（上下文摘要 + 向量嵌入）。
  * 索引持久化到 knowledge/_index/，并刷新 ToolRouter 中的缓存。
  */
 wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   const retriever = new KnowledgeRetriever(knowledgePath)
 
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
 
-  const { contexts, embeddings } = await buildKnowledgeIndex(
+  // 加载已有索引用于增量更新，未存在时全量构建
+  const existingIndex = loadIndex(knowledgePath)
+  const { contexts, embeddings, hashes } = await buildKnowledgeIndex(
     retriever,
     { callLLM, callEmbedding },
+    undefined,
+    existingIndex,
   )
 
-  saveIndex(knowledgePath, contexts, embeddings)
+  saveIndex(knowledgePath, contexts, embeddings, hashes)
   toolRouter.invalidateRetriever(avatarId)
 
   return { contextCount: contexts.size, embeddingCount: embeddings.size }
@@ -508,12 +675,11 @@ wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string,
  * 返回增强后的 user 消息文本。
  */
 wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const retriever = toolRouter.getRetriever(avatarId)
 
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
-
-  const embeddingMap = retriever.getEmbeddings()
 
   // Phase 2: 可选注入 wiki/concepts/ 百科内容（设置开关控制，默认关闭）
   let wikiChunks: Array<{ file: string; heading: string; content: string; score: number }> | undefined
@@ -530,7 +696,7 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
     // wiki 注入失败不影响正常 RAG
   }
 
-  return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, embeddingMap, wikiChunks)
+  return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, undefined, wikiChunks)
 })
 
 // ─── 知识百科（Wiki 融合层）───────────────────────────────────────────────────
@@ -543,34 +709,32 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
  * @date 2026-04-09
  */
 wrapHandler('compile-wiki', async (_, avatarId: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const avatarPath = path.join(avatarsPath, avatarId)
-  const knowledgePath = path.join(avatarPath, 'knowledge')
-  const retriever = new KnowledgeRetriever(knowledgePath)
+  const retriever = toolRouter.getRetriever(avatarId)
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
   const wiki = new WikiCompiler(avatarPath)
   const chunks = retriever.getFullChunks()
 
   const pages = await wiki.compileConceptPages(chunks, callLLM)
   if (logger) logger.activity('compile-wiki', `avatarId=${avatarId}, pages=${pages.length}`)
-  return { entityCount: wiki.getMeta()?.entityCount ?? 0, conceptPageCount: pages.length }
+  const meta = await wiki.getMeta()
+  return { entityCount: meta?.entityCount ?? 0, conceptPageCount: pages.length }
 })
 
 /** get-wiki-status: 获取 wiki 编译状态 */
-wrapHandler('get-wiki-status', (_, avatarId: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.getMeta()
+wrapHandler('get-wiki-status', async (_, avatarId: string) => {
+  return getWikiCompiler(avatarId).getMeta()
 })
 
 /** get-concept-pages: 列出所有概念页 */
-wrapHandler('get-concept-pages', (_, avatarId: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.getConceptPages()
+wrapHandler('get-concept-pages', async (_, avatarId: string) => {
+  return getWikiCompiler(avatarId).getConceptPages()
 })
 
 /** read-concept-page: 读取指定概念页内容 */
-wrapHandler('read-concept-page', (_, avatarId: string, name: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.readConceptPage(name)
+wrapHandler('read-concept-page', async (_, avatarId: string, name: string) => {
+  return getWikiCompiler(avatarId).readConceptPage(name)
 })
 
 /**
@@ -581,9 +745,9 @@ wrapHandler('read-concept-page', (_, avatarId: string, name: string) => {
  * @date 2026-04-09
  */
 wrapHandler('lint-knowledge', async (_, avatarId: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const avatarPath = path.join(avatarsPath, avatarId)
-  const knowledgePath = path.join(avatarPath, 'knowledge')
-  const retriever = new KnowledgeRetriever(knowledgePath)
+  const retriever = toolRouter.getRetriever(avatarId)
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')
   const wiki = new WikiCompiler(avatarPath)
   const chunks = retriever.getFullChunks()
@@ -594,22 +758,20 @@ wrapHandler('lint-knowledge', async (_, avatarId: string, apiKey: string, baseUr
 })
 
 /** get-lint-report: 获取最近的自检报告 */
-wrapHandler('get-lint-report', (_, avatarId: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.getLintReport()
+wrapHandler('get-lint-report', async (_, avatarId: string) => {
+  return getWikiCompiler(avatarId).getLintReport()
 })
 
 /** save-wiki-answer: 沉淀优质问答到 wiki/qa/ */
-wrapHandler('save-wiki-answer', (_, avatarId: string, qa: WikiAnswer) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  wiki.sedimentAnswer(qa)
+wrapHandler('save-wiki-answer', async (_, avatarId: string, qa: WikiAnswer) => {
+  assertSafeSegment(avatarId, '分身ID')
+  await getWikiCompiler(avatarId).sedimentAnswer(qa)
   if (logger) logger.activity('save-wiki-answer', `avatarId=${avatarId}, question=${qa.question.slice(0, 50)}`)
 })
 
 /** get-wiki-answers: 获取所有沉淀的问答 */
-wrapHandler('get-wiki-answers', (_, avatarId: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.getAnswers()
+wrapHandler('get-wiki-answers', async (_, avatarId: string) => {
+  return getWikiCompiler(avatarId).getAnswers()
 })
 
 /**
@@ -620,9 +782,9 @@ wrapHandler('get-wiki-answers', (_, avatarId: string) => {
  * @date 2026-04-09
  */
 wrapHandler('detect-evolution', async (_, avatarId: string, newContent: string, newFileName: string, apiKey: string, baseUrl: string) => {
+  assertSafeSegment(avatarId, '分身ID')
   const avatarPath = path.join(avatarsPath, avatarId)
-  const knowledgePath = path.join(avatarPath, 'knowledge')
-  const retriever = new KnowledgeRetriever(knowledgePath)
+  const retriever = toolRouter.getRetriever(avatarId)
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')
   const wiki = new WikiCompiler(avatarPath)
   const existingChunks = retriever.getFullChunks()
@@ -633,9 +795,8 @@ wrapHandler('detect-evolution', async (_, avatarId: string, newContent: string, 
 })
 
 /** get-evolution-report: 获取最近的知识演化检测报告 */
-wrapHandler('get-evolution-report', (_, avatarId: string) => {
-  const wiki = new WikiCompiler(path.join(avatarsPath, avatarId))
-  return wiki.getEvolutionReport()
+wrapHandler('get-evolution-report', async (_, avatarId: string) => {
+  return getWikiCompiler(avatarId).getEvolutionReport()
 })
 
 /**
@@ -645,9 +806,18 @@ wrapHandler('get-evolution-report', (_, avatarId: string) => {
  * @author zhi.qu
  * @date 2026-04-09
  */
-wrapHandler('preserve-raw-file', (_, avatarId: string, originalFilePath: string) => {
+wrapHandler('preserve-raw-file', async (_, avatarId: string, originalFilePath: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const resolved = path.resolve(originalFilePath)
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+    throw new Error(`文件不存在或不是文件: ${originalFilePath}`)
+  }
+  const homedir = os.homedir()
+  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
+    throw new Error(`安全限制：仅允许保存用户主目录下的文件`)
+  }
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const relativePath = WikiCompiler.preserveRawFile(knowledgePath, originalFilePath)
+  const relativePath = await WikiCompiler.preserveRawFile(knowledgePath, resolved)
   if (logger) logger.activity('preserve-raw-file', `avatarId=${avatarId}, file=${relativePath}`)
   return relativePath
 })
@@ -656,7 +826,9 @@ wrapHandler('preserve-raw-file', (_, avatarId: string, originalFilePath: string)
 
 /** 打开系统文件选择对话框，返回用户选中的文件路径 */
 wrapHandler('show-open-dialog', async (_, options: Electron.OpenDialogOptions) => {
-  return dialog.showOpenDialog(mainWindow!, options)
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  if (!win) return { canceled: true, filePaths: [] }
+  return dialog.showOpenDialog(win, options)
 })
 
 /**
@@ -664,6 +836,10 @@ wrapHandler('show-open-dialog', async (_, options: Electron.OpenDialogOptions) =
  * 返回提取的文本和图片（base64 data URL），图片由渲染进程进一步 OCR。
  */
 wrapHandler('parse-document', async (_, filePath: string) => {
+  if (!path.isAbsolute(filePath)) {
+    throw new Error(`非法文件路径（必须为绝对路径）: ${filePath}`)
+  }
+  // parseFile 内部已有 fs.promises.stat 校验，无需重复同步检查
   return documentParser.parseFile(filePath)
 })
 
@@ -674,6 +850,11 @@ wrapHandler('parse-document', async (_, filePath: string) => {
  * intervalHours = 0 表示停止。
  */
 wrapHandler('start-scheduled-test', (_, avatarId: string, intervalHours: number) => {
+  assertSafeSegment(avatarId, '分身ID')
+  // 与 CronScheduler 的 scheduled-test 互斥，避免双重触发
+  cronScheduler.cancel('scheduled-test')
+  getDb().setSetting('cron_scheduled-test_interval', '0')
+
   scheduledTester.start(avatarId, intervalHours)
   getDb().setSetting(`scheduled_test_avatar`, avatarId)
   getDb().setSetting(`scheduled_test_interval`, String(intervalHours))
@@ -684,10 +865,176 @@ wrapHandler('stop-scheduled-test', () => {
   getDb().setSetting(`scheduled_test_interval`, '0')
 })
 
+// ─── 定时任务（Feature 8）────────────────────────────────────────────────────
+
+/**
+ * schedule-cron: 启动或更新定时任务。
+ * type: 'memory-consolidate' | 'knowledge-check' | 'scheduled-test'
+ * intervalHours: 0 表示禁用
+ */
+wrapHandler('schedule-cron', (_, type: string, intervalHours: number, avatarId?: string) => {
+  if (!isCronTaskType(type)) {
+    throw new Error(`无效的定时任务类型: ${type}`)
+  }
+  if (avatarId) assertSafeSegment(avatarId, '分身ID')
+  if (intervalHours > 0 && type !== 'scheduled-test' && !avatarId) {
+    throw new Error(`任务 ${type} 启用时必须提供分身ID`)
+  }
+  // 与 ScheduledTester 的 scheduled-test 互斥，避免双重触发
+  if (type === 'scheduled-test') {
+    scheduledTester.stop()
+    getDb().setSetting('scheduled_test_interval', '0')
+  }
+  cronScheduler.schedule({
+    type,
+    intervalHours,
+    avatarId,
+    enabled: intervalHours > 0,
+  })
+  getDb().setSetting(`cron_${type}_interval`, String(intervalHours))
+  if (avatarId) getDb().setSetting(`cron_${type}_avatar`, avatarId)
+})
+
+/** cancel-cron: 取消指定类型的定时任务 */
+wrapHandler('cancel-cron', (_, type: string) => {
+  if (!isCronTaskType(type)) {
+    throw new Error(`无效的定时任务类型: ${type}`)
+  }
+  cronScheduler.cancel(type)
+  getDb().setSetting(`cron_${type}_interval`, '0')
+  getDb().setSetting(`cron_${type}_avatar`, '')
+})
+
+/** get-cron-config: 读取定时任务配置 */
+wrapHandler('get-cron-config', () => {
+  const types: CronTaskType[] = ['memory-consolidate', 'knowledge-check', 'scheduled-test']
+  return types.map(type => ({
+    type,
+    intervalHours: parseInt(getDb().getSetting(`cron_${type}_interval`) ?? '0', 10) || 0,
+    avatarId: getDb().getSetting(`cron_${type}_avatar`),
+    enabled: cronScheduler.getRunningTypes().includes(type),
+  }))
+})
+
+// ─── 数据库备份 ────────────────────────────────────────────────────────────────
+
+/**
+ * db-backup: 手动触发数据库备份，或由定时任务调用。
+ * 备份文件保存到 userData/backups/soul-YYYY-MM-DD.db，最多保留 7 份。
+ *
+ * @author zhi.qu
+ * @date 2026-04-10
+ */
+wrapHandler('db-backup', async () => {
+  await performDatabaseBackup()
+})
+
+/**
+ * 执行数据库备份并清理过期备份（内部工具函数，供 IPC 和定时任务复用）。
+ * 每日一份，超过 7 份则删除最旧的文件。
+ */
+async function performDatabaseBackup(): Promise<string> {
+  const backupDir = path.join(app.getPath('userData'), 'backups')
+  await fs.promises.mkdir(backupDir, { recursive: true })
+
+  const today = localDateString() // YYYY-MM-DD 本地时区
+  const destPath = path.join(backupDir, `soul-${today}.db`)
+  await getDb().backup(destPath)
+
+  // 清理超出保留数量（7份）的旧备份
+  try {
+    const files = (await fs.promises.readdir(backupDir))
+      .filter(f => f.startsWith('soul-') && f.endsWith('.db'))
+      .sort() // 按文件名升序（日期升序），最旧在前
+    const MAX_BACKUPS = 7
+    if (files.length > MAX_BACKUPS) {
+      const toDelete = files.slice(0, files.length - MAX_BACKUPS)
+      for (const f of toDelete) {
+        await fs.promises.unlink(path.join(backupDir, f)).catch(() => { /* 忽略删除失败 */ })
+      }
+    }
+  } catch (cleanErr) {
+    console.warn('[Main] 清理旧备份失败:', cleanErr instanceof Error ? cleanErr.message : String(cleanErr))
+  }
+
+  if (logger) logger.activity('db-backup', `dest=${destPath}`)
+  return destPath
+}
+
+/**
+ * export-conversation: 将会话导出为 Markdown 文件，通过系统保存对话框让用户选择路径。
+ *
+ * @author zhi.qu
+ * @date 2026-04-10
+ */
+wrapHandler('export-conversation', async (_, conversationId: string, format: 'markdown' | 'pdf') => {
+  const messages = getDb().getMessages(conversationId)
+  const conversation = getDb().getConversation(conversationId)
+  const title = conversation?.title ?? '对话'
+
+  if (format === 'markdown') {
+    const lines: string[] = [
+      `# ${title}`,
+      '',
+      `> 导出时间：${new Date().toLocaleString('zh-CN')}`,
+      '',
+      '---',
+      '',
+    ]
+    // 过滤 tool/system 角色，只导出 user 和 assistant 消息
+    for (const msg of messages.filter(m => m.role === 'user' || m.role === 'assistant')) {
+      const role = msg.role === 'user' ? '你' : '专家'
+      lines.push(`## ${role}`, '', msg.content, '')
+    }
+    const content = lines.join('\n')
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出对话为 Markdown',
+      defaultPath: `${title}.md`,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (canceled || !filePath) return
+    await fs.promises.writeFile(filePath, content, 'utf-8')
+    if (logger) logger.activity('export-conversation', `format=markdown file=${filePath}`)
+    await shell.openPath(path.dirname(filePath))
+  } else {
+    throw new Error('PDF 导出暂不支持，请使用 Markdown 格式')
+  }
+})
+
+// ─── 提示词模板库 ─────────────────────────────────────────────────────────────
+
+/**
+ * 提示词模板 CRUD IPC 处理器。
+ *
+ * @author zhi.qu
+ * @date 2026-04-10
+ */
+wrapHandler('create-prompt-template', (_, avatarId: string, title: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDb().createPromptTemplate(avatarId, title, content)
+})
+
+wrapHandler('get-prompt-templates', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDb().getPromptTemplates(avatarId)
+})
+
+wrapHandler('update-prompt-template', (_, id: string, avatarId: string, title: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  getDb().updatePromptTemplate(id, avatarId, title, content)
+})
+
+wrapHandler('delete-prompt-template', (_, id: string, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  getDb().deletePromptTemplate(id, avatarId)
+})
+
 // ─── 模板管理 ────────────────────────────────────────────────────────────────
 
 /** 获取指定模板文件的原始内容 */
 wrapHandler('get-template', (_, templateName: string) => {
+  assertSafeSegment(templateName, '模板名称')
   return templateLoader.getTemplate(templateName)
 })
 
@@ -713,38 +1060,32 @@ wrapHandler('list-templates', () => {
 
 /** notify-test-result: 渲染进程测试完成后通知主进程更新红点状态 */
 wrapHandler('notify-test-result', (_, passed: number, total: number, failed: number) => {
-  scheduledTester.notifyTestResult(passed > 0 && failed === 0, total, failed)
+  scheduledTester.notifyTestResult(passed, total, failed)
 })
 
 // ─── 日志系统 IPC ─────────────────────────────────────────────────────────────
 
 /**
  * log-event: 渲染进程主动上报日志（LLM 调用、面板操作等无法在主进程捕获的事件）
+ * 使用 ipcMain.handle 避免 wrapHandler 循环记录日志
  */
 ipcMain.handle('log-event', (_, level: 'info' | 'warn' | 'error', action: string, detail?: string) => {
   if (logger) logger.logEvent(level, action, detail)
 })
 
-/** 读取指定日期（默认今天）的操作时间线日志 */
-ipcMain.handle('get-activity-logs', (_, date?: string) => {
+wrapHandler('get-activity-logs', (_, date?: string) => {
   return logger ? logger.readActivityLog(date) : ''
 })
 
-/** 读取指定日期（默认今天）的错误日志 */
-ipcMain.handle('get-error-logs', (_, date?: string) => {
+wrapHandler('get-error-logs', (_, date?: string) => {
   return logger ? logger.readErrorLog(date) : ''
 })
 
-/** 读取生成文档归档索引 */
-ipcMain.handle('get-generated-index', () => {
+wrapHandler('get-generated-index', () => {
   return logger ? logger.readGeneratedIndex() : []
 })
 
-/**
- * open-logs-folder: 用系统文件管理器打开日志目录。
- * Windows 用户可直接定位到文件夹后发送给开发者。
- */
-ipcMain.handle('open-logs-folder', async () => {
+wrapHandler('open-logs-folder', async () => {
   const logsDir = path.join(app.getPath('userData'), 'logs')
   if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true })
@@ -753,25 +1094,22 @@ ipcMain.handle('open-logs-folder', async () => {
   return logsDir
 })
 
-/**
- * export-error-log: 将最近 N 天的错误日志合并后复制到用户桌面，
- * 文件名带时间戳，方便用户直接发送给开发者排查问题。
- * @param days 导出最近几天（默认 3 天）
- */
-ipcMain.handle('export-error-log', async (_, days = 3) => {
+wrapHandler('export-error-log', async (_, days = 3) => {
+  const normalizedDays = Number.isFinite(days) ? Math.max(1, Math.min(30, Math.floor(days))) : 3
   const logsDir = path.join(app.getPath('userData'), 'logs')
   const desktopDir = app.getPath('desktop')
   const lines: string[] = []
 
-  // 收集最近 N 天的错误日志
-  for (let i = 0; i < days; i++) {
-    const date = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)
+  for (let i = 0; i < normalizedDays; i++) {
+    const date = localDateString(new Date(Date.now() - i * 86400000))
     const errorFile = path.join(logsDir, `error-${date}.log`)
-    if (fs.existsSync(errorFile)) {
-      const content = fs.readFileSync(errorFile, 'utf-8').trim()
+    try {
+      const content = (await fs.promises.readFile(errorFile, 'utf-8')).trim()
       if (content) {
         lines.push(`\n========== ${date} ==========\n${content}`)
       }
+    } catch {
+      // 文件不存在，跳过
     }
   }
 
@@ -779,7 +1117,6 @@ ipcMain.handle('export-error-log', async (_, days = 3) => {
     return { success: false, message: '最近没有错误日志' }
   }
 
-  // 添加设备信息头部，方便定位问题
   const header = [
     `AI 分身 - 错误日志导出`,
     `导出时间：${new Date().toLocaleString('zh-CN')}`,
@@ -794,11 +1131,9 @@ ipcMain.handle('export-error-log', async (_, days = 3) => {
   const content = header + lines.join('\n')
   const ts = Date.now()
   const exportFile = path.join(desktopDir, `AI分身-错误日志-${ts}.txt`)
-  fs.writeFileSync(exportFile, content, 'utf-8')
+  await fs.promises.writeFile(exportFile, content, 'utf-8')
 
-  // 打开桌面目录让用户看到文件
   await shell.openPath(desktopDir)
 
-  if (logger) logger.activity('export-error-log', `exported to ${exportFile}`)
   return { success: true, filePath: exportFile }
 })

@@ -1,12 +1,12 @@
-import { DeepSeekService, Message } from './deepseek'
+import { LLMService, LLMMessage, ModelConfig } from './llm-service'
 
 export class TestRunner {
   private systemPrompt: string
-  private deepseek: DeepSeekService
+  private llm: LLMService
 
-  constructor(apiKey: string, systemPrompt: string) {
+  constructor(modelConfig: ModelConfig, systemPrompt: string) {
     this.systemPrompt = systemPrompt
-    this.deepseek = new DeepSeekService(apiKey)
+    this.llm = new LLMService(modelConfig)
   }
 
   // 运行单个测试用例
@@ -40,7 +40,8 @@ export class TestRunner {
       }
     } catch (error) {
       const duration = Date.now() - startTime
-      onProgress?.(`测试失败: ${(error as Error).message}`)
+      const errMsg = error instanceof Error ? error.message : String(error)
+      onProgress?.(`测试失败: ${errMsg}`)
 
       return {
         caseId: testCase.id,
@@ -48,66 +49,83 @@ export class TestRunner {
         passed: false,
         score: 0,
         response: '',
-        feedback: `测试执行失败: ${(error as Error).message}`,
+        feedback: `测试执行失败: ${errMsg}`,
         timestamp: Date.now(),
         duration,
       }
     }
   }
 
-  // 运行多个测试用例（并发执行）
+  /**
+   * 运行多个测试用例（顺序执行，避免并发计数竞态）。
+   *
+   * @author zhi.qu
+   * @date 2026-04-09
+   */
   async runTestCases(
     testCases: TestCase[],
     onProgress?: (current: number, total: number, message: string) => void
   ): Promise<TestResult[]> {
-    let completedCount = 0
     const total = testCases.length
+    const results: TestResult[] = []
 
-    // 并发运行所有测试用例
-    const promises = testCases.map(async (testCase) => {
-      const result = await this.runTestCase(testCase, (msg) => {
-        onProgress?.(completedCount, total, msg)
+    for (let i = 0; i < testCases.length; i++) {
+      const result = await this.runTestCase(testCases[i], (msg) => {
+        onProgress?.(i, total, msg)
       })
+      results.push(result)
+      onProgress?.(i + 1, total, `已完成 ${i + 1}/${total}`)
+    }
 
-      completedCount++
-      onProgress?.(completedCount, total, `已完成 ${completedCount}/${total}`)
-
-      return result
-    })
-
-    // 等待所有测试完成
-    return Promise.all(promises)
+    return results
   }
 
-  // 获取 AI 回复
+  /**
+   * 获取 AI 回复，使用 settled 标志防止超时后双重结算。
+   *
+   * @author zhi.qu
+   * @date 2026-04-09
+   */
   private async getAIResponse(prompt: string, timeout: number): Promise<string> {
+    const abortController = new AbortController()
+
     return new Promise((resolve, reject) => {
       let response = ''
-      let timeoutId: ReturnType<typeof setTimeout>
+      let settled = false
 
-      const messages: Message[] = [
+      const messages: LLMMessage[] = [
         { role: 'system', content: this.systemPrompt },
         { role: 'user', content: prompt },
       ]
 
-      // 设置超时
-      timeoutId = setTimeout(() => {
-        reject(new Error(`测试超时 (${timeout}秒)`))
+      const timeoutId = setTimeout(() => {
+        if (!settled) {
+          settled = true
+          abortController.abort()
+          reject(new Error(`测试超时 (${timeout}秒)`))
+        }
       }, timeout * 1000)
 
-      this.deepseek.chat(
+      this.llm.chat(
         messages,
         (chunk) => {
-          response += chunk
+          if (!settled) response += chunk
         },
-        () => {
-          clearTimeout(timeoutId)
-          resolve(response)
+        (fullText) => {
+          if (!settled) {
+            settled = true
+            clearTimeout(timeoutId)
+            resolve(fullText || response)
+          }
         },
         (error) => {
-          clearTimeout(timeoutId)
-          reject(error)
-        }
+          if (!settled) {
+            settled = true
+            clearTimeout(timeoutId)
+            reject(error)
+          }
+        },
+        { signal: abortController.signal }
       )
     })
   }
@@ -136,11 +154,17 @@ export class TestRunner {
       }
     }
 
-    // 使用 AI 评估 RUBRICS
+    // 使用 AI 评估 RUBRICS（失败时保留关键词评分结果，不丢弃整个测试）
     if (testCase.rubrics.length > 0) {
-      const rubricEvaluation = await this.evaluateRubrics(testCase, response)
-      feedbackParts.push(...rubricEvaluation.feedback)
-      score = Math.min(score, rubricEvaluation.score)
+      try {
+        const rubricEvaluation = await this.evaluateRubrics(testCase, response)
+        feedbackParts.push(...rubricEvaluation.feedback)
+        score = Math.min(score, rubricEvaluation.score)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        feedbackParts.push(`⚠️ AI 评估失败: ${msg}`)
+        score = Math.min(score, 50)
+      }
     }
 
     score = Math.max(0, score)
@@ -182,19 +206,39 @@ ${testCase.rubrics.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 总分: XX分`
 
     let evaluationResult = ''
+    const evalAbort = new AbortController()
+    const evalTimeout = setTimeout(() => evalAbort.abort(), 120_000)
 
-    await new Promise<void>((resolve, reject) => {
-      this.deepseek.chat(
-        [{ role: 'user', content: evaluationPrompt }],
-        (chunk) => { evaluationResult += chunk },
-        () => resolve(),
-        (error) => reject(error)
-      )
-    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        this.llm.chat(
+          [{ role: 'user', content: evaluationPrompt }],
+          (chunk) => { if (!settled) evaluationResult += chunk },
+          (fullText) => {
+            if (settled) return
+            settled = true
+            clearTimeout(evalTimeout)
+            evaluationResult = fullText || evaluationResult
+            resolve()
+          },
+          (error) => {
+            if (settled) return
+            settled = true
+            clearTimeout(evalTimeout)
+            reject(error)
+          },
+          { signal: evalAbort.signal }
+        )
+      })
+    } finally {
+      clearTimeout(evalTimeout)
+    }
 
-    // 解析评估结果
+    // 解析评估结果；若无法提取评分则标记为评估失败而非默认高分
     const lines = evaluationResult.split('\n')
-    let totalScore = 80 // 默认分数
+    let totalScore = -1
+    let scoreExtracted = false
 
     for (const line of lines) {
       if (line.includes('未通过') || line.includes('不满足') || line.includes('缺少')) {
@@ -203,8 +247,17 @@ ${testCase.rubrics.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
       const scoreMatch = line.match(/总分[：:]\s*(\d+)/i)
       if (scoreMatch) {
-        totalScore = parseInt(scoreMatch[1], 10)
+        const parsed = parseInt(scoreMatch[1], 10)
+        if (Number.isFinite(parsed)) {
+          totalScore = Math.min(Math.max(parsed, 0), 100)
+          scoreExtracted = true
+        }
       }
+    }
+
+    if (!scoreExtracted) {
+      feedback.push('⚠️ AI 评估结果解析失败，无法提取总分')
+      totalScore = 50
     }
 
     return { score: totalScore, feedback }

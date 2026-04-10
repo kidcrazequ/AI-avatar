@@ -1,25 +1,38 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage } from '../stores/chatStore'
 
+const REMARK_PLUGINS = [remarkGfm]
+
 interface Props {
   message: ChatMessage
-  /** 上一条用户消息内容（用于 SAVE 时作为 question） */
   previousUserMessage?: string
-  /** 沉淀回答到 wiki/qa/ 的回调 */
   onSaveAnswer?: (question: string, answer: string) => void
 }
 
-export default function MessageBubble({ message, previousUserMessage, onSaveAnswer }: Props) {
+/** 仅允许安全协议的链接 */
+function safeUrlTransform(url: string): string {
+  try {
+    const parsed = new URL(url)
+    if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return url
+  } catch { /* 非法 URL */ }
+  return ''
+}
+
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => () => { clearTimeout(savedTimerRef.current) }, [])
 
   const handleSave = () => {
     if (!onSaveAnswer || !previousUserMessage || saved) return
     onSaveAnswer(previousUserMessage, message.content)
     setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    clearTimeout(savedTimerRef.current)
+    savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
   }
 
   return (
@@ -48,8 +61,10 @@ export default function MessageBubble({ message, previousUserMessage, onSaveAnsw
                 font-game text-[10px] tracking-wider px-2 py-0.5
                 border border-px-border bg-px-elevated text-px-text-dim
                 hover:text-px-primary hover:border-px-primary
+                focus:opacity-100
                 disabled:text-px-success disabled:border-px-success
                 transition-opacity"
+              aria-label={saved ? '已沉淀' : '沉淀到知识百科'}
               title="沉淀到知识百科"
             >
               {saved ? 'SAVED' : 'SAVE'}
@@ -70,7 +85,7 @@ export default function MessageBubble({ message, previousUserMessage, onSaveAnsw
               prose-strong:font-bold prose-strong:text-px-text
               prose-a:text-px-primary prose-a:no-underline hover:prose-a:underline
               prose-li:text-px-text-sec prose-li:marker:text-px-primary prose-li:font-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={REMARK_PLUGINS} urlTransform={safeUrlTransform}>
                 {message.content}
               </ReactMarkdown>
             </div>
@@ -79,4 +94,6 @@ export default function MessageBubble({ message, previousUserMessage, onSaveAnsw
       </div>
     </div>
   )
-}
+})
+
+export default MessageBubble

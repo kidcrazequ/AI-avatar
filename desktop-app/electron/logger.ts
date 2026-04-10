@@ -16,6 +16,7 @@
 
 import fs from 'fs'
 import path from 'path'
+import { localDateString } from '@soul/core'
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -35,6 +36,8 @@ export class Logger {
   private readonly logsDir: string
   private readonly generatedDir: string
   private readonly indexFile: string
+  /** 防止并发写 index.json 导致数据丢失 */
+  private indexWriteQueue: Promise<void> = Promise.resolve()
 
   constructor(userDataPath: string) {
     this.logsDir = path.join(userDataPath, 'logs')
@@ -54,7 +57,8 @@ export class Logger {
   /** 记录错误到独立错误日志 */
   error(source: string, err: Error | unknown): void {
     const e = err instanceof Error ? err : new Error(String(err))
-    const detail = `${e.message}${e.stack ? ' | ' + e.stack.split('\n')[1]?.trim() : ''}`
+    const stackLine = e.stack?.split('\n')[1]?.trim()
+    const detail = `${e.message}${stackLine ? ' | ' + stackLine : ''}`
     const line = this.formatLine('ERR', source, detail)
     this.append(this.errorFile(), line)
     // 同时在活动日志中记录一条错误标记，方便时间线查看
@@ -126,8 +130,19 @@ export class Logger {
   readGeneratedIndex(): GeneratedRecord[] {
     try {
       const raw = fs.readFileSync(this.indexFile, 'utf-8')
-      return JSON.parse(raw) as GeneratedRecord[]
-    } catch {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        console.warn(`[Logger] 生成文档索引格式异常（非数组），重置为空`)
+        return []
+      }
+      return parsed.filter((item): item is GeneratedRecord =>
+        item && typeof item === 'object' && typeof item.type === 'string' && typeof item.avatarId === 'string'
+      )
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT') {
+        console.warn(`[Logger] 生成文档索引读取失败: ${err instanceof Error ? err.message : String(err)}`)
+      }
       return []
     }
   }
@@ -150,7 +165,8 @@ export class Logger {
   }
 
   private today(): string {
-    return new Date().toISOString().slice(0, 10)
+    // 使用本地时区日期，避免跨时区时日期文件名不符合用户直觉
+    return localDateString()
   }
 
   private now(): string {
@@ -162,11 +178,33 @@ export class Logger {
     return `[${this.now()}] ${tag.padEnd(5)} ${action}${d}\n`
   }
 
+  /** 日志文件大小超过此阈值（字节）时轮转 */
+  private static readonly MAX_LOG_SIZE = 5 * 1024 * 1024 // 5MB
+  /** 每 N 次写入才检查一次文件大小，减少主线程 statSync 系统调用频率 */
+  private static readonly SIZE_CHECK_INTERVAL = 50
+  private appendCounters = new Map<string, number>()
+
   private append(file: string, line: string): void {
     try {
+      const count = (this.appendCounters.get(file) ?? 0) + 1
+      this.appendCounters.set(file, count)
+      if (count % Logger.SIZE_CHECK_INTERVAL === 0) {
+        try {
+          const stat = fs.statSync(file)
+          if (stat.size > Logger.MAX_LOG_SIZE) {
+            const rotated1 = file.replace(/\.log$/, '.1.log')
+            const rotated2 = file.replace(/\.log$/, '.2.log')
+            try { fs.renameSync(rotated1, rotated2) } catch { /* .1.log 不存在时忽略 */ }
+            try { fs.renameSync(file, rotated1) } catch { /* 重命名失败忽略 */ }
+            this.appendCounters.set(file, 0)
+          }
+        } catch {
+          // 文件不存在时 stat 会抛错，忽略即可
+        }
+      }
       fs.appendFileSync(file, line, 'utf-8')
-    } catch {
-      // 日志写失败不能影响主流程
+    } catch (err) {
+      console.warn('[Logger] 写入日志失败:', err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -179,12 +217,19 @@ export class Logger {
   }
 
   private appendIndex(record: GeneratedRecord): void {
-    const records = this.readGeneratedIndex()
-    records.push(record)
-    try {
-      fs.writeFileSync(this.indexFile, JSON.stringify(records, null, 2), 'utf-8')
-    } catch (e) {
-      this.error('appendIndex', e)
-    }
+    this.indexWriteQueue = this.indexWriteQueue.then(() => {
+      const records = this.readGeneratedIndex()
+      records.push(record)
+      try {
+        // 原子写入：先写临时文件再 rename，防止崩溃时 index.json 损坏导致历史丢失
+        const tmpFile = this.indexFile + '.tmp'
+        fs.writeFileSync(tmpFile, JSON.stringify(records, null, 2), 'utf-8')
+        fs.renameSync(tmpFile, this.indexFile)
+      } catch (e) {
+        this.error('appendIndex', e)
+      }
+    }).catch((err) => {
+      console.error('[Logger] appendIndex 写入失败:', err instanceof Error ? err.message : String(err))
+    })
   }
 }

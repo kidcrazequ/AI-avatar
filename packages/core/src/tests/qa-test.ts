@@ -13,7 +13,7 @@ import fs from 'fs'
 import path from 'path'
 import { KnowledgeRetriever, tokenize } from '../knowledge-retriever'
 
-const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || 'sk-3920e3fa83e94cf7a8a26dedc34a4f21'
+const DASHSCOPE_API_KEY = process.env.DASHSCOPE_API_KEY || ''
 const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 
 const OUTPUT_DIR = path.resolve(__dirname, '../../../../test-output/xiaodu-sim-v11')
@@ -49,6 +49,7 @@ async function callLLM(
           stream: false,
           max_tokens: maxTokens,
         }),
+        signal: AbortSignal.timeout(180_000),
       })
 
       if (response.status === 429 || response.status >= 500) {
@@ -56,6 +57,11 @@ async function callLLM(
         console.log(`  ⚠️ API ${response.status}，${wait / 1000}s 后重试 (${attempt}/${retries})`)
         await new Promise(r => setTimeout(r, wait))
         continue
+      }
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText)
+        throw new Error(`LLM API 失败 (${response.status}): ${errText}`)
       }
 
       const data = (await response.json()) as {
@@ -87,7 +93,12 @@ async function callEmbedding(texts: string[], retries = 3): Promise<number[][]> 
           input: texts,
           dimensions: 512,
         }),
+        signal: AbortSignal.timeout(180_000),
       })
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText)
+        throw new Error(`Embedding API 失败 (${response.status}): ${errText}`)
+      }
       const data = (await response.json()) as {
         data?: Array<{ embedding: number[] }>
       }
@@ -122,12 +133,14 @@ async function main() {
   const retriever = new KnowledgeRetriever(KNOWLEDGE_PATH)
   console.log(`✓ 知识库加载完成`)
 
-  // 2. 加载上下文
+  // 2. 加载上下文（按空行分隔的块解析，兼容 simulate-xiaodu 的 \n\n 分隔格式）
   const contextMap = new Map<string, string>()
-  const lines = fs.readFileSync(CONTEXT_FILE, 'utf-8').split('\n')
-  for (let i = 0; i < lines.length - 1; i += 2) {
-    const key = lines[i].trim()
-    const ctx = lines[i + 1].replace(/^\s*→\s*/, '').trim()
+  const blocks = fs.readFileSync(CONTEXT_FILE, 'utf-8').split('\n\n')
+  for (const block of blocks) {
+    const [keyLine, ctxLine] = block.split('\n')
+    if (!keyLine || !ctxLine) continue
+    const key = keyLine.trim()
+    const ctx = ctxLine.replace(/^\s*→\s*/, '').trim()
     if (key && ctx) contextMap.set(key, ctx)
   }
   retriever.setContexts(contextMap)
@@ -152,7 +165,7 @@ async function main() {
       const embeddings = await callEmbedding(texts)
       embeddings.forEach((emb, idx) => embeddingMap.set(batch[idx].key, emb))
     } catch (err) {
-      console.log(`  ⚠️ Embedding 批次失败：${(err as Error).message}`)
+      console.log(`  ⚠️ Embedding 批次失败：${err instanceof Error ? err.message : String(err)}`)
     }
   }
   retriever.setEmbeddings(embeddingMap)

@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { assertSafeSegment } from './utils/path-security'
 
 /**
  * TemplateLoader: 从 templates/ 目录读取模板文件。
@@ -27,11 +28,17 @@ export class TemplateLoader {
    * @returns 模板文件内容；文件不存在时返回空字符串
    */
   getTemplate(templateName: string): string {
+    assertSafeSegment(templateName, '模板文件名')
     const filePath = path.join(this.templatesPath, templateName)
     try {
       return fs.readFileSync(filePath, 'utf-8')
-    } catch {
-      console.error(`[TemplateLoader] 模板文件不存在: ${filePath}`)
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        console.warn(`[TemplateLoader] 模板文件不存在: ${filePath}`)
+      } else {
+        console.error(`[TemplateLoader] 读取模板文件失败 (${code}): ${filePath}`, err instanceof Error ? err.message : String(err))
+      }
       return ''
     }
   }

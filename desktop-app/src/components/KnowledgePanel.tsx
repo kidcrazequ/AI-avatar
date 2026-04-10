@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
@@ -39,36 +39,58 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   const [isCompiling, setIsCompiling] = useState(false)
   const [isLinting, setIsLinting] = useState(false)
   const [isDetectingEvolution, setIsDetectingEvolution] = useState(false)
+  /** 导入进度：current/total 用于进度条百分比，phase 用于文本描述 */
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; phase: string } | null>(null)
   const newFileInputRef = useRef<HTMLInputElement>(null)
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const fileSelectSeqRef = useRef(0)
+  /** 组件挂载状态，防止卸载后的异步操作触发 setState */
+  const mountedRef = useRef(true)
 
   useEffect(() => {
-    loadTree()
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearTimeout(statusTimerRef.current)
+    }
+  }, [])
+
+  const loadTree = useCallback(async () => {
+    try {
+      const knowledgeTree = await window.electronAPI.getKnowledgeTree(avatarId)
+      setTree(knowledgeTree)
+    } catch (err) {
+      console.error('[KnowledgePanel] 加载知识树失败:', err instanceof Error ? err.message : String(err))
+    }
   }, [avatarId])
 
   useEffect(() => {
+    loadTree()
+  }, [loadTree])
+
+  useEffect(() => {
     if (showNewFileDialog) {
-      setTimeout(() => newFileInputRef.current?.focus(), 50)
+      const t = setTimeout(() => newFileInputRef.current?.focus(), 50)
+      return () => clearTimeout(t)
     }
   }, [showNewFileDialog])
 
-  const loadTree = async () => {
-    const knowledgeTree = await window.electronAPI.getKnowledgeTree(avatarId)
-    setTree(knowledgeTree)
-  }
-
-  const handleSelectFile = async (path: string) => {
-    setSelectedPath(path)
+  const handleSelectFile = async (filePath: string) => {
+    const seq = ++fileSelectSeqRef.current
+    setSelectedPath(filePath)
     setIsEditMode(false)
     setSearchResults([])
-    const content = await window.electronAPI.readKnowledgeFile(avatarId, path)
+    const content = await window.electronAPI.readKnowledgeFile(avatarId, filePath)
+    if (fileSelectSeqRef.current !== seq) return
     setFileContent(content)
     setEditedContent(content)
   }
 
   const showStatus = (msg: string, autoClear = true) => {
     setStatusMsg(msg)
+    clearTimeout(statusTimerRef.current)
     if (autoClear) {
-      setTimeout(() => setStatusMsg(''), 2500)
+      statusTimerRef.current = setTimeout(() => setStatusMsg(''), 2500)
     }
   }
 
@@ -95,9 +117,15 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       return
     }
     setIsSearching(true)
-    const results = await window.electronAPI.searchKnowledge(avatarId, searchQuery)
-    setSearchResults(results)
-    setIsSearching(false)
+    try {
+      const results = await window.electronAPI.searchKnowledge(avatarId, searchQuery)
+      setSearchResults(results)
+    } catch (err) {
+      console.error('[KnowledgePanel] 搜索失败:', err instanceof Error ? err.message : String(err))
+      setSearchResults([])
+    } finally {
+      setIsSearching(false)
+    }
   }
 
   const handleCreateFile = async () => {
@@ -149,6 +177,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (result.canceled || result.filePaths.length === 0) return
 
       setIsImporting(true)
+      setImportProgress({ current: 0, total: 5, phase: '准备中' })
       const filePath = result.filePaths[0]
 
       // 保留原始文件到 knowledge/_raw/（Karpathy 融合：source of truth 不丢失）
@@ -159,11 +188,13 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
 
       showStatus('解析文档中...', false)
+      setImportProgress({ current: 1, total: 5, phase: '解析文档' })
 
       const parsed = await window.electronAPI.parseDocument(filePath)
 
-      let rawText = parsed.text || ''
+      if (!mountedRef.current) return
 
+      let rawText = parsed.text || ''
       const visionResults: string[] = []
       if (parsed.images.length > 0 && ocrModel?.apiKey) {
         const visionConfig: ModelConfig = {
@@ -183,6 +214,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
         for (let i = 0; i < parsed.images.length; i++) {
           showStatus(`图纸解读 ${i + 1} / ${parsed.images.length}...`, false)
+          setImportProgress({ current: 2, total: 5, phase: `图纸解读 ${i + 1}/${parsed.images.length}` })
           try {
             const visionText = await vision.complete([
               {
@@ -228,6 +260,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
       if (baseModel?.apiKey && cleanedText.length > 500) {
         showStatus('LLM 逐章格式化中...', false)
+        setImportProgress({ current: 3, total: 5, phase: 'LLM 格式化' })
 
         const restructureModel: ModelConfig = { ...baseModel, model: 'qwen-plus' }
         const llm = new LLMService(restructureModel)
@@ -305,12 +338,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (indexApiKey) {
         try {
           showStatus('构建检索索引（上下文摘要 + 向量嵌入）...', false)
+          setImportProgress({ current: 4, total: 5, phase: '构建检索索引' })
           const indexResult = await window.electronAPI.buildKnowledgeIndex(avatarId, indexApiKey, indexBaseUrl)
           console.log(`检索索引构建完成：${indexResult.contextCount} 上下文，${indexResult.embeddingCount} 向量`)
         } catch (indexErr) {
           console.warn('检索索引构建失败（不影响导入）:', indexErr)
         }
       }
+      if (!mountedRef.current) return
 
       // Phase 2: 知识演化检测（导入后自动检测与已有知识的差异）
       const evolutionModel = creationModel?.apiKey ? creationModel : chatModel
@@ -318,6 +353,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         try {
           setIsDetectingEvolution(true)
           showStatus('知识演化检测中...', false)
+          setImportProgress({ current: 5, total: 5, phase: '演化检测' })
           const evoBaseUrl = evolutionModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
           const evoReport = await window.electronAPI.detectEvolution(
             avatarId, finalContent, parsed.fileName, evolutionModel.apiKey, evoBaseUrl,
@@ -350,6 +386,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       showStatus('✗ 导入失败')
     } finally {
       setIsImporting(false)
+      setImportProgress(null)
     }
   }
 
@@ -510,10 +547,18 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       {/* 导入进度条 */}
       {(isImporting || isDetectingEvolution) && statusMsg && (
         <div className="px-6 py-3 border-b-2 border-px-primary/30 bg-px-primary/5">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mb-2">
             <div className="w-4 h-4 border-2 border-px-primary border-t-transparent rounded-full animate-spin" />
             <span className="font-game text-[13px] text-px-primary tracking-wider">{statusMsg}</span>
           </div>
+          {importProgress && (
+            <div className="w-full h-1.5 bg-px-border rounded-none overflow-hidden">
+              <div
+                className="h-full bg-px-primary transition-all duration-300"
+                style={{ width: `${Math.round((importProgress.current / importProgress.total) * 100)}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 

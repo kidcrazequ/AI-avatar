@@ -19,6 +19,8 @@ export class ScheduledTester {
     this.stop()
     if (intervalHours <= 0) return
 
+    // 立即触发第一次测试，之后按间隔重复
+    this.triggerTest(avatarId)
     const intervalMs = intervalHours * 60 * 60 * 1000
     this.timer = setInterval(() => {
       this.triggerTest(avatarId)
@@ -33,7 +35,7 @@ export class ScheduledTester {
   }
 
   private triggerTest(avatarId: string) {
-    if (!this.mainWindow) return
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
 
     // 通知渲染进程执行测试
     this.mainWindow.webContents.send('scheduled-test-trigger', avatarId)
@@ -49,8 +51,8 @@ export class ScheduledTester {
   }
 
   /** 向渲染进程发送红点状态更新 */
-  notifyTestResult(passed: boolean, total: number, failed: number) {
-    if (!this.mainWindow) return
+  notifyTestResult(passed: number, total: number, failed: number) {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return
     this.mainWindow.webContents.send('test-result-badge', { passed, total, failed })
   }
 }

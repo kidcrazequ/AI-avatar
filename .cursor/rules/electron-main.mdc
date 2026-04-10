@@ -1,0 +1,24 @@
+---
+description: Electron 主进程编码规范
+globs:
+  - "desktop-app/electron/**/*.ts"
+alwaysApply: false
+---
+
+# Electron 主进程规范
+
+## 日志
+- **必须**使用 `Logger` 实例记录日志，不要直接 `console.log` / `console.error`
+- Logger 已处理按天轮转、文件大小限制、原子写入
+- 只有 Logger 自身的兜底代码允许使用 `console.warn`
+
+## 错误处理
+- IPC handler 中的错误必须 `logger.error(source, err)` 后再返回错误信息给渲染进程
+- 不要在 catch 中同时 `console.error` 和 `logger.error`（只用后者）
+
+## 路径安全
+- 所有来自渲染进程的路径参数必须用 `assertSafeSegment()` 或 `resolveUnderRoot()` 校验
+- 不要信任渲染进程传入的绝对路径
+
+## HTTP 请求
+- 使用 `fetchWithTimeout()` 而非直接 `fetch()`

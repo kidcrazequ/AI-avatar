@@ -4,6 +4,7 @@ import ConversationList from './ConversationList'
 interface Props {
   conversations: Conversation[]
   activeConversationId: string | null
+  activeAvatarId?: string
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
   onNewConversation: () => void
@@ -14,6 +15,7 @@ interface Props {
 export default function Sidebar({
   conversations,
   activeConversationId,
+  activeAvatarId,
   onSelectConversation,
   onDeleteConversation,
   onNewConversation,
@@ -26,6 +28,7 @@ export default function Sidebar({
         <ConversationList
           conversations={conversations}
           activeConversationId={activeConversationId}
+          activeAvatarId={activeAvatarId}
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}

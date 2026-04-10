@@ -15,7 +15,8 @@ export function extractTitle(content: string): string {
  * 提取 Markdown 元数据（> **键**：值 格式）
  */
 export function extractMetadata(content: string, key: string): string {
-  const pattern = new RegExp(`>\\s*\\*\\*${key}\\*\\*[：:]\\s*(.+)$`, 'm')
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`>\\s*\\*\\*${escaped}\\*\\*[：:]\\s*(.+)$`, 'm')
   const match = content.match(pattern)
   return match ? match[1].trim() : ''
 }
@@ -24,7 +25,8 @@ export function extractMetadata(content: string, key: string): string {
  * 提取 Markdown 章节内容
  */
 export function extractSection(content: string, sectionName: string): string {
-  const pattern = new RegExp(`##\\s+${sectionName}\\s+([\\s\\S]*?)(?=\\n##|$)`, 'm')
+  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`##\\s+${escaped}\\s+([\\s\\S]*?)(?=\\n##|$)`, 'm')
   const match = content.match(pattern)
   return match ? match[1].trim() : ''
 }
@@ -44,7 +46,11 @@ export function extractFrontmatter(content: string): Record<string, string> {
     const colonIndex = line.indexOf(':')
     if (colonIndex > 0) {
       const key = line.slice(0, colonIndex).trim()
-      const value = line.slice(colonIndex + 1).trim()
+      let value = line.slice(colonIndex + 1).trim()
+      // 去除 YAML 引号包裹
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
       result[key] = value
     }
   }
@@ -70,6 +76,11 @@ export function extractListItems(content: string): string[] {
     .map(line => line.trim().slice(2).trim())
 }
 
+/** 转义正则特殊字符 */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 /**
  * 提取指定分隔符之间的内容
  */
@@ -78,7 +89,9 @@ export function extractBetweenDelimiters(
   startDelimiter: string,
   endDelimiter: string
 ): string {
-  const pattern = new RegExp(`${startDelimiter}\\s*([\\s\\S]*?)(?=${endDelimiter}|$)`, 'm')
+  const escapedStart = escapeRegex(startDelimiter)
+  const escapedEnd = endDelimiter ? escapeRegex(endDelimiter) : ''
+  const pattern = new RegExp(`${escapedStart}\\s*([\\s\\S]*?)(?=${escapedEnd || '$'})`, 'm')
   const match = content.match(pattern)
   return match ? match[1].trim() : ''
 }

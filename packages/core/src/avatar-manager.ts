@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { TemplateLoader } from './template-loader'
+import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 
 export interface Avatar {
   id: string
@@ -28,6 +29,7 @@ export class AvatarManager {
     this.avatarsPath = avatarsPath
     this.templateLoader = new TemplateLoader(templatesPath)
   }
+
 
   /** 列出所有分身 */
   listAvatars(): Avatar[] {
@@ -63,9 +65,20 @@ export class AvatarManager {
     return avatars.sort((a, b) => b.createdAt - a.createdAt)
   }
 
-  /** 创建新分身 */
+  /**
+   * 创建新分身。
+   * skills 参数会写入 skills/ 目录下的对应 .md 文件。
+   *
+   * @author zhi.qu
+   * @date 2026-04-09
+   */
   createAvatar(id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>): void {
+    assertSafeSegment(id, '分身 ID')
     const avatarPath = path.join(this.avatarsPath, id)
+
+    if (fs.existsSync(avatarPath)) {
+      throw new Error(`分身 "${id}" 已存在，无法重复创建`)
+    }
 
     // 创建目录结构
     fs.mkdirSync(path.join(avatarPath, 'knowledge'), { recursive: true })
@@ -77,9 +90,17 @@ export class AvatarManager {
     // 写入 soul.md
     fs.writeFileSync(path.join(avatarPath, 'soul.md'), soulContent, 'utf-8')
 
+    // 写入技能文件
+    for (const skillContent of skills) {
+      const skillId = this.extractSkillId(skillContent)
+      const skillPath = path.join(avatarPath, 'skills', `${skillId}.md`)
+      fs.writeFileSync(skillPath, skillContent, 'utf-8')
+    }
+
     // 写入知识文件
     for (const file of knowledgeFiles) {
-      const filePath = path.join(avatarPath, 'knowledge', file.name)
+      const knowledgeRoot = path.join(avatarPath, 'knowledge')
+      const filePath = resolveUnderRoot(knowledgeRoot, file.name)
       const dir = path.dirname(filePath)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -121,12 +142,15 @@ export class AvatarManager {
 
   /** 写入自定义技能文件 */
   writeSkillFile(avatarId: string, fileName: string, content: string): void {
+    assertSafeSegment(avatarId, '分身 ID')
+    assertSafeSegment(fileName, '技能文件名')
     const filePath = path.join(this.avatarsPath, avatarId, 'skills', fileName)
     fs.writeFileSync(filePath, content, 'utf-8')
   }
 
   /** 删除分身 */
   deleteAvatar(id: string): void {
+    assertSafeSegment(id, '分身 ID')
     const avatarPath = path.join(this.avatarsPath, id)
     if (fs.existsSync(avatarPath)) {
       fs.rmSync(avatarPath, { recursive: true, force: true })
@@ -214,9 +238,14 @@ ${skillsList || '（暂无技能）'}
 `
   }
 
+  /** 从 markdown 内容提取第一个一级标题作为名称 */
+  private extractFirstHeading(content: string, fallback: string = '未命名分身'): string {
+    const match = content.match(/^#\s+(.+)$/m)
+    return match ? match[1] : fallback
+  }
+
   private extractName(claudeMd: string): string {
-    const match = claudeMd.match(/^#\s+(.+)$/m)
-    return match ? match[1] : '未命名分身'
+    return this.extractFirstHeading(claudeMd)
   }
 
   private extractDescription(claudeMd: string): string {
@@ -230,7 +259,15 @@ ${skillsList || '（暂无技能）'}
   }
 
   private extractNameFromSoul(soulContent: string): string {
-    const match = soulContent.match(/^#\s+(.+)$/m)
-    return match ? match[1] : '未命名分身'
+    return this.extractFirstHeading(soulContent)
+  }
+
+  /** 从技能内容中提取技能 ID（基于一级标题，降级为时间戳） */
+  private extractSkillId(skillContent: string): string {
+    const heading = this.extractFirstHeading(skillContent, '')
+    if (heading) {
+      return heading.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, '-').replace(/^-|-$/g, '')
+    }
+    return `skill-${Date.now()}`
   }
 }

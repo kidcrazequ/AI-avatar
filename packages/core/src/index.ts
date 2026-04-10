@@ -48,3 +48,16 @@ export type {
 } from './wiki-compiler'
 
 export { tokenize } from './knowledge-retriever'
+
+export { consolidateMemory, getMemoryStats, shouldConsolidate, shouldWarnMemory, MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from './memory-manager'
+export type { MemoryStats } from './memory-manager'
+
+export { SubAgentManager } from './sub-agent-manager'
+export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'
+
+export { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
+
+export { localDateString, collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+
+export { fetchWithTimeout, HttpError } from './utils/http'
+export type { FetchWithTimeoutOptions } from './utils/http'

@@ -1,6 +1,9 @@
 import path from 'path'
+import fs from 'fs'
 import { KnowledgeRetriever } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
+import { SubAgentManager } from './sub-agent-manager'
+import { assertSafeSegment } from './utils/path-security'
 
 /**
  * 工具调用路由器（GAP4）
@@ -20,6 +23,10 @@ export interface ToolCallResult {
 export class ToolRouter {
   private avatarsPath: string
   private retrievers = new Map<string, KnowledgeRetriever>()
+  /** Feature 7: 子代理管理器 */
+  readonly subAgentManager = new SubAgentManager()
+  /** 主代理 system prompt（用于子代理共享上下文） */
+  private systemPromptCache = new Map<string, string>()
 
   constructor(avatarsPath: string) {
     this.avatarsPath = avatarsPath
@@ -29,6 +36,7 @@ export class ToolRouter {
    * 获取或创建分身的 KnowledgeRetriever，自动加载持久化索引（contexts + embeddings）。
    */
   getRetriever(avatarId: string): KnowledgeRetriever {
+    assertSafeSegment(avatarId, '分身ID')
     if (!this.retrievers.has(avatarId)) {
       const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
       const retriever = new KnowledgeRetriever(knowledgePath)
@@ -49,8 +57,16 @@ export class ToolRouter {
     this.retrievers.delete(avatarId)
   }
 
+  /**
+   * 设置主代理 system prompt 缓存，供子代理委派时共享。
+   */
+  setSystemPrompt(avatarId: string, systemPrompt: string): void {
+    this.systemPromptCache.set(avatarId, systemPrompt)
+  }
+
   /** 执行工具调用 */
-  async execute(avatarId: string, request: ToolCallRequest): Promise<ToolCallResult> {
+  async execute(avatarId: string, request: ToolCallRequest, callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>): Promise<ToolCallResult> {
+    assertSafeSegment(avatarId, '分身ID')
     const { name, arguments: args } = request
 
     try {
@@ -67,11 +83,15 @@ export class ToolRouter {
           return this.lookupPolicy(avatarId, args)
         case 'compare_products':
           return this.compareProducts(avatarId, args)
+        case 'load_skill':
+          return this.loadSkill(avatarId, args)
+        case 'delegate_task':
+          return await this.delegateTask(avatarId, args, callLLM)
         default:
           return { content: '', error: `未知工具: ${name}` }
       }
     } catch (error) {
-      return { content: '', error: (error as Error).message }
+      return { content: '', error: error instanceof Error ? error.message : String(error) }
     }
   }
 
@@ -110,29 +130,38 @@ export class ToolRouter {
    * 计算峰谷套利、需量管理收益
    */
   private calculateRoi(args: Record<string, unknown>): ToolCallResult {
-    const {
-      capacity_kwh = 0,          // 储能容量 (kWh)
-      power_kw = 0,               // 充放电功率 (kW)
-      peak_price = 1.2,           // 峰时电价 (元/kWh)
-      valley_price = 0.4,         // 谷时电价 (元/kWh)
-      daily_cycles = 1,           // 日充放电次数
-      dod = 0.9,                  // 放电深度 (%)
-      efficiency = 0.9,           // 系统效率（充放双向）
-      annual_degradation = 0.03,  // 年容量衰减率
-      project_life_years = 10,    // 项目寿命
-      investment_per_kwh = 1800,  // 投资成本 (元/kWh)
-      demand_charge_saving = 0,   // 需量管理年节省 (元)
-      annual_opex = 0,            // 年运维成本 (元)
-    } = args as Record<string, number>
+    const toNum = (v: unknown, fallback: number): number => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : fallback
+    }
 
-    const investmentTotal = (capacity_kwh as number) * investment_per_kwh
+    const capacity_kwh = toNum(args.capacity_kwh, 0)
+    const power_kw = toNum(args.power_kw, 0)
+    const peak_price = toNum(args.peak_price, 1.2)
+    const valley_price = toNum(args.valley_price, 0.4)
+    const daily_cycles = toNum(args.daily_cycles, 1)
+    const dod = toNum(args.dod, 0.9)
+    const efficiency = toNum(args.efficiency, 0.9)
+    const annual_degradation = toNum(args.annual_degradation, 0.03)
+    const project_life_years = Math.min(toNum(args.project_life_years, 10), 50)
+    const investment_per_kwh = toNum(args.investment_per_kwh, 1800)
+    const demand_charge_saving = toNum(args.demand_charge_saving, 0)
+    const annual_opex = toNum(args.annual_opex, 0)
+
+    if (capacity_kwh <= 0) {
+      return { content: '', error: '储能容量 capacity_kwh 必须大于 0' }
+    }
+    if (power_kw <= 0) {
+      return { content: '', error: '充放电功率 power_kw 必须大于 0' }
+    }
+    const investmentTotal = capacity_kwh * investment_per_kwh
     const results: string[] = []
     results.push(`## 储能收益测算报告`)
     results.push(`\n### 基础参数`)
     results.push(`- 储能容量: ${capacity_kwh} kWh`)
     results.push(`- 充放功率: ${power_kw} kW`)
-    results.push(`- 峰谷电价差: ${(peak_price as number) - (valley_price as number)} 元/kWh`)
-    results.push(`- 放电深度: ${(dod as number) * 100}%，系统效率: ${(efficiency as number) * 100}%`)
+    results.push(`- 峰谷电价差: ${peak_price - valley_price} 元/kWh`)
+    results.push(`- 放电深度: ${dod * 100}%，系统效率: ${efficiency * 100}%`)
     results.push(`- 总投资: ${investmentTotal.toFixed(0)} 元`)
 
     results.push(`\n### 逐年收益预测`)
@@ -140,13 +169,13 @@ export class ToolRouter {
     let paybackYear: number | null = null
     let cumulativeCashflow = -investmentTotal
 
-    for (let year = 1; year <= (project_life_years as number); year++) {
-      const degradedCapacity = (capacity_kwh as number) * Math.pow(1 - annual_degradation, year - 1)
-      const dailyEnergy = degradedCapacity * (dod as number) * (efficiency as number)
-      const dailyArbitrage = dailyEnergy * ((peak_price as number) - (valley_price as number)) * (daily_cycles as number)
-      const annualArbitrage = dailyArbitrage * 330  // 约330个工作日
-      const annualRevenue = annualArbitrage + (demand_charge_saving as number)
-      const netRevenue = annualRevenue - (annual_opex as number)
+    for (let year = 1; year <= project_life_years; year++) {
+      const degradedCapacity = capacity_kwh * Math.pow(1 - annual_degradation, year - 1)
+      const dailyEnergy = degradedCapacity * dod * efficiency
+      const dailyArbitrage = dailyEnergy * (peak_price - valley_price) * daily_cycles
+      const annualArbitrage = dailyArbitrage * 330
+      const annualRevenue = annualArbitrage + demand_charge_saving
+      const netRevenue = annualRevenue - annual_opex
       totalRevenue += netRevenue
       cumulativeCashflow += netRevenue
 
@@ -156,9 +185,9 @@ export class ToolRouter {
     }
 
     const roi = (totalRevenue / investmentTotal) * 100
-    const irr = estimateIRR(investmentTotal, project_life_years as number,
-      (capacity_kwh as number), peak_price as number, valley_price as number,
-      dod as number, efficiency as number, daily_cycles as number, demand_charge_saving as number, annual_opex as number, annual_degradation as number)
+    const irr = estimateIRR(investmentTotal, project_life_years,
+      capacity_kwh, peak_price, valley_price,
+      dod, efficiency, daily_cycles, demand_charge_saving, annual_opex, annual_degradation)
 
     results.push(`\n### 汇总`)
     results.push(`- 总投资: **${investmentTotal.toFixed(0)} 元**`)
@@ -191,8 +220,11 @@ export class ToolRouter {
    * 产品参数对比（从 knowledge/products/ 检索）
    */
   private compareProducts(avatarId: string, args: Record<string, unknown>): ToolCallResult {
-    const products = (args.products as string[]) || []
-    if (products.length === 0) return { content: '', error: '缺少 products 参数' }
+    const raw = args.products
+    const products: string[] = Array.isArray(raw)
+      ? raw.filter((p): p is string => typeof p === 'string')
+      : typeof raw === 'string' ? [raw] : []
+    if (products.length === 0) return { content: '', error: '缺少 products 参数（需为字符串数组）' }
 
     const results: string[] = [`## 产品对比\n`]
     for (const productName of products) {
@@ -204,6 +236,66 @@ export class ToolRouter {
       }
     }
     return { content: results.join('\n\n---\n\n') }
+  }
+
+  /**
+   * Feature 5: 按需加载技能完整内容（渐进式披露）。
+   * system prompt 中只注入技能摘要，AI 在需要执行技能时调用此工具获取完整定义。
+   */
+  private loadSkill(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const skillId = args.skill_id as string
+    if (!skillId) return { content: '', error: '缺少 skill_id 参数' }
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    const skillPath = path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`)
+    try {
+      const content = fs.readFileSync(skillPath, 'utf-8')
+      return { content: `## 技能：${skillId}\n\n${content}` }
+    } catch {
+      return { content: '', error: `技能不存在: ${skillId}` }
+    }
+  }
+
+  /**
+   * Feature 7: 委派子任务给独立子代理。
+   * 若提供 callLLM，子代理会立即执行；否则返回任务 ID 供后续轮询。
+   */
+  private async delegateTask(
+    avatarId: string,
+    args: Record<string, unknown>,
+    callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>
+  ): Promise<ToolCallResult> {
+    const task = args.task as string
+    if (!task) return { content: '', error: '缺少 task 参数' }
+
+    if (!callLLM) {
+      return { content: `[子任务已记录] 任务描述：${task}\n\n由于当前无 LLM 调用权限，请在主对话中直接完成此任务。` }
+    }
+
+    const systemPrompt = this.systemPromptCache.get(avatarId) || `你是一个专业 AI 助手，请独立完成分配的任务。`
+    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM)
+
+    // 等待最多 30 秒
+    const TIMEOUT_MS = 30000
+    const POLL_INTERVAL = 500
+    const deadline = Date.now() + TIMEOUT_MS
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL))
+      const t = this.subAgentManager.getTask(agentTask.id)
+      if (!t) {
+        return { content: '', error: '子任务丢失（可能已被清理），请重试。' }
+      }
+      if (t.status === 'done') {
+        return { content: t.result ?? '子任务完成，无结果输出。' }
+      }
+      if (t.status === 'error') {
+        return { content: '', error: `子任务失败: ${t.error}` }
+      }
+    }
+    return { content: `子任务执行超时（ID: ${agentTask.id}），请稍后查询结果。` }
   }
 }
 
@@ -224,6 +316,7 @@ function estimateIRR(
   }
 
   let rate = 0.1
+  let converged = false
   for (let i = 0; i < 50; i++) {
     let npv = 0
     let dnpv = 0
@@ -231,12 +324,18 @@ function estimateIRR(
       npv += cashflows[t] / Math.pow(1 + rate, t)
       if (t > 0) dnpv -= t * cashflows[t] / Math.pow(1 + rate, t + 1)
     }
-    if (Math.abs(dnpv) < 1e-10) break
+    if (Math.abs(dnpv) < 1e-10) {
+      converged = Math.abs(npv) < 1e-6
+      break
+    }
     const newRate = rate - npv / dnpv
-    if (Math.abs(newRate - rate) < 1e-6) { rate = newRate; break }
+    if (Math.abs(newRate - rate) < 1e-6) { rate = newRate; converged = true; break }
     rate = newRate
     if (rate < -0.99) { rate = -0.99; break }
     if (rate > 5) { rate = 5; break }
+  }
+  if (!converged) {
+    console.warn(`[IRR] 牛顿迭代未收敛，返回估算值 ${(rate * 100).toFixed(2)}%`)
   }
   return rate
 }

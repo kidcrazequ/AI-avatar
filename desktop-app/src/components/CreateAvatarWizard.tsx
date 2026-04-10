@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { LLMService, ModelConfig } from '../services/llm-service'
 import { generateSoulStepByStep, StepProgress } from '../services/soul-step-generator'
 import { validateSoulContent, ValidationResult } from '../services/soul-validator'
@@ -46,10 +46,24 @@ export default function CreateAvatarWizard({ chatModel, creationModel, onClose, 
   const [isGeneratingSkill, setIsGeneratingSkill] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+  const mountedRef = useRef(true)
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearTimeout(statusTimerRef.current)
+    }
+  }, [])
 
   const showStatus = (msg: string) => {
+    if (!mountedRef.current) return
     setStatusMsg(msg)
-    setTimeout(() => setStatusMsg(''), 3000)
+    clearTimeout(statusTimerRef.current)
+    statusTimerRef.current = setTimeout(() => {
+      if (mountedRef.current) setStatusMsg('')
+    }, 3000)
   }
 
   const handleGenerateSoul = async () => {
@@ -64,21 +78,23 @@ export default function CreateAvatarWizard({ chatModel, creationModel, onClose, 
         avatarName,
         `${personalityInput}\n${avatarDescription ? `补充说明：${avatarDescription}` : ''}`,
         soulModel,
-        (progress) => setSoulProgress(progress),
-        (content) => setSoulContent(content),
+        (progress) => { if (mountedRef.current) setSoulProgress(progress) },
+        (content) => { if (mountedRef.current) setSoulContent(content) },
       )
 
+      if (!mountedRef.current) return
       setSoulValidation(result.validation)
 
       if (result.supplemented) {
         showStatus(`已自动补全 ${result.validation.missing.length > 0 ? '部分' : '全部'}缺失项`)
       }
     } catch (error) {
-      const err = error as Error
-      showStatus(`生成失败: ${err.message}`)
+      showStatus(`生成失败: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
-      setIsGeneratingSoul(false)
-      setSoulProgress(null)
+      if (mountedRef.current) {
+        setIsGeneratingSoul(false)
+        setSoulProgress(null)
+      }
     }
   }
 
@@ -116,6 +132,7 @@ ${skillInput}`
       messages,
       (chunk) => { result += chunk },
       () => {
+        if (!mountedRef.current) return
         const nameMatch = result.match(/^#\s+(.+)$/m)
         const skillName = nameMatch ? nameMatch[1].trim() : '自定义技能'
         const fileName = skillName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5-]/g, '-').toLowerCase() + '.md'
@@ -123,7 +140,11 @@ ${skillInput}`
         setSkillInput('')
         setIsGeneratingSkill(false)
       },
-      (error) => { showStatus(`生成失败: ${error.message}`); setIsGeneratingSkill(false) }
+      (error) => {
+        if (!mountedRef.current) return
+        showStatus(`生成失败: ${error.message}`)
+        setIsGeneratingSkill(false)
+      }
     )
   }
 
@@ -146,17 +167,20 @@ ${skillInput}`
         || `avatar-${Date.now()}`
 
       await window.electronAPI.createAvatar(avatarId, soulContent, [], knowledgeFiles)
+      if (!mountedRef.current) return
 
       for (const skill of customSkills) {
         await window.electronAPI.writeSkillFile(avatarId, skill.name, skill.content)
+        if (!mountedRef.current) return
       }
 
-      onCreated(avatarId)
+      if (mountedRef.current) onCreated(avatarId)
     } catch (error) {
+      if (!mountedRef.current) return
       console.error('创建分身失败:', error)
       showStatus('创建失败，请重试')
     } finally {
-      setIsCreating(false)
+      if (mountedRef.current) setIsCreating(false)
     }
   }
 

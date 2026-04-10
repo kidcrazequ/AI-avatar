@@ -38,6 +38,7 @@ desktop-app/test-results/
 desktop-app/build/icon.png
 desktop-app/build/icon.icns
 desktop-app/build/icon.ico
+desktop-app/build/ios-icons/
 
 # 本地测试输出（视频、截图、临时报告，勿提交）
 test-output/

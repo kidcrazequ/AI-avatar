@@ -149,6 +149,14 @@ function assertSafeFileName(name: string): void {
 }
 
 /**
+ * 将任意字符串转为安全的文件名（去除路径分隔符、特殊字符和 ..）。
+ * 用于从实体名/QA ID 等生成文件名，统一替代各处散落的 replace 调用。
+ */
+function sanitizeFileName(name: string): string {
+  return name.replace(/[/\\?%*:|"<>]/g, '_').replace(/\.\./g, '_')
+}
+
+/**
  * 中文停用词表（通用语法词，不含可能作为实体的技术名词）。
  * 过滤这些词后保留有意义的技术术语用于实体识别。
  */
@@ -393,7 +401,7 @@ export class WikiCompiler {
         }
         conceptPages.push(page)
 
-        const safeName = entity.name.replace(/[/\\?%*:|"<>]/g, '_')
+        const safeName = sanitizeFileName(entity.name)
         const mdContent = [
           `# ${entity.name}`,
           '',
@@ -460,7 +468,7 @@ export class WikiCompiler {
     }
 
     for (const [entity, links] of backlinks) {
-      const safeName = entity.replace(/[/\\?%*:|"<>]/g, '_')
+      const safeName = sanitizeFileName(entity)
       const filePath = path.join(this.wikiPath, CONCEPTS_DIR, `${safeName}.md`)
       if (!(await pathExists(filePath))) continue
 
@@ -590,7 +598,7 @@ export class WikiCompiler {
     await this.ensureDirs()
 
     assertSafeFileName(qa.id)
-    const safeName = qa.id.replace(/[?%*:|"<>]/g, '_')
+    const safeName = sanitizeFileName(qa.id)
     const content = [
       `# Q: ${qa.question}`,
       '',

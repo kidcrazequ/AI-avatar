@@ -81,7 +81,13 @@ export class SoulLoader {
     }
 
     // 知识库文件（递归读取所有 knowledge/ 子目录文件）
+    // 注意：全量注入到 system prompt，大知识库会导致 prompt 过长。
+    // 搭配 RAG 检索使用时，可考虑仅注入文件列表摘要，按需检索全文。
     if (knowledgeRootFiles.length > 0) {
+      const totalKnowledgeChars = knowledgeRootFiles.reduce((sum, f) => sum + f.content.length, 0)
+      if (totalKnowledgeChars > 100_000) {
+        console.warn(`[SoulLoader] 知识库总字符数 ${totalKnowledgeChars} 超过 100K，system prompt 可能过长，建议启用 RAG 检索模式`)
+      }
       parts.push('\n\n---\n\n# 知识库\n\n')
       const knowledgeBase = path.join(avatarPath, 'knowledge')
       knowledgeRootFiles.forEach(f => {

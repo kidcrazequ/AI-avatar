@@ -216,6 +216,9 @@ export async function formatDocument(
   const formatted = new Array<string>(chapters.length)
 
   let completedCount = 0
+  // cursor++ 在 JS 单线程 + async/await 下是安全的：每次 await 让出执行权时
+  // cursor 已经完成自增，不会被其他 worker 读到相同值。
+  // 如果未来改为 worker_threads 多线程，需改用 Atomics 或任务队列。
   let cursor = 0
 
   async function worker(): Promise<void> {

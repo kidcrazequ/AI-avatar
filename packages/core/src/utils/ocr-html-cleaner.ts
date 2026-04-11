@@ -8,19 +8,25 @@
  * @date 2026-04-02
  */
 
-/** 重复出现的 PDF 页眉/页脚模式，清洗时直接移除 */
-const NOISE_PATTERNS = [
+/**
+ * 通用的噪音模式（页码、分隔线等，适用于所有文档）。
+ * 厂商特定的模式通过 cleanOcrHtml / cleanPdfFullText 的 extraPatterns 参数传入。
+ */
+const COMMON_NOISE_PATTERNS: RegExp[] = [
+  /^\s*\d+\s*\/\s*\d+\s*$/gm,           // "12 / 42" 页码
+  /^--\s*\d+\s+of\s+\d+\s*--$/gm,       // "-- 12 of 42 --"
+]
+
+/** 远景能源默认噪音模式（向后兼容，不传 extraPatterns 时使用） */
+const ENVISION_OCR_NOISE: RegExp[] = [
   /©远景能源有限公司/g,
   /Envision/gi,
-  /^\s*\d+\s*\/\s*\d+\s*$/gm,           // "12 / 42" 页码
   /^远景能源\s*ENS-L\d+.*用户手册\s*$/gm, // 页眉
 ]
 
-/** PDF 全文中的噪音模式（适用于 pdf-parse 提取的原始文本） */
-const PDF_FULLTEXT_NOISE = [
+const ENVISION_PDF_NOISE: RegExp[] = [
   /^©远景能源有限公司\s*\d+\s*\/\s*\d+\s*$/gm,        // "©远景能源有限公司 12 / 42"
   /^远景能源\s+ENS-L\d+\s+工商业储能一体机用户手册$/gm, // 页眉
-  /^--\s*\d+\s+of\s+\d+\s*--$/gm,                     // "-- 12 of 42 --"
   /^©远景能源有限公司$/gm,                               // 独立页脚
   /^Envision$/gm,                                       // 独立品牌名
 ]
@@ -78,7 +84,7 @@ const MAX_CLEAN_LENGTH = 512 * 1024
  * - <img>    → 移除（无实际图片数据）
  * - 页眉/页脚噪音 → 移除
  */
-export function cleanOcrHtml(html: string): string {
+export function cleanOcrHtml(html: string, extraPatterns?: RegExp[]): string {
   if (!html || !html.includes('<')) return html
 
   // 超大输入截断，防止多轮全局正则阻塞主线程
@@ -126,8 +132,9 @@ export function cleanOcrHtml(html: string): string {
   // 剥离所有剩余 HTML 标签
   text = text.replace(/<[^>]+>/g, '')
 
-  // 去除页眉页脚噪音
-  for (const pattern of NOISE_PATTERNS) {
+  // 去除页眉页脚噪音（通用 + 厂商特定）
+  const noisePatterns = [...COMMON_NOISE_PATTERNS, ...(extraPatterns ?? ENVISION_OCR_NOISE)]
+  for (const pattern of noisePatterns) {
     text = text.replace(pattern, '')
   }
 
@@ -153,13 +160,14 @@ export function cleanOcrHtml(html: string): string {
  * 移除 pdf-parse 提取中夹带的页眉、页脚、页码等噪音。
  * 不改变内容结构，仅去噪。
  */
-export function cleanPdfFullText(rawText: string): string {
+export function cleanPdfFullText(rawText: string, extraPatterns?: RegExp[]): string {
   // 超大输入截断
   let text = rawText.length > MAX_CLEAN_LENGTH
     ? rawText.slice(0, MAX_CLEAN_LENGTH) + '\n[内容过长，已截断]'
     : rawText
 
-  for (const pattern of PDF_FULLTEXT_NOISE) {
+  const noisePatterns = [...COMMON_NOISE_PATTERNS, ...(extraPatterns ?? ENVISION_PDF_NOISE)]
+  for (const pattern of noisePatterns) {
     text = text.replace(pattern, '')
   }
 

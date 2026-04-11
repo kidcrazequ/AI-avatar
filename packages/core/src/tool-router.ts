@@ -278,22 +278,17 @@ export class ToolRouter {
     const systemPrompt = this.systemPromptCache.get(avatarId) || `你是一个专业 AI 助手，请独立完成分配的任务。`
     const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM)
 
-    // 等待最多 30 秒
+    // 基于事件通知等待完成，无轮询
     const TIMEOUT_MS = 30000
-    const POLL_INTERVAL = 500
-    const deadline = Date.now() + TIMEOUT_MS
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL))
-      const t = this.subAgentManager.getTask(agentTask.id)
-      if (!t) {
-        return { content: '', error: '子任务丢失（可能已被清理），请重试。' }
-      }
-      if (t.status === 'done') {
-        return { content: t.result ?? '子任务完成，无结果输出。' }
-      }
-      if (t.status === 'error') {
-        return { content: '', error: `子任务失败: ${t.error}` }
-      }
+    const t = await this.subAgentManager.waitForTask(agentTask.id, TIMEOUT_MS)
+    if (!t) {
+      return { content: '', error: '子任务丢失（可能已被清理），请重试。' }
+    }
+    if (t.status === 'done') {
+      return { content: t.result ?? '子任务完成，无结果输出。' }
+    }
+    if (t.status === 'error') {
+      return { content: '', error: `子任务失败: ${t.error}` }
     }
     return { content: `子任务执行超时（ID: ${agentTask.id}），请稍后查询结果。` }
   }

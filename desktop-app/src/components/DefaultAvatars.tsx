@@ -1,10 +1,10 @@
 /**
- * @file DefaultAvatars.tsx — 预置像素风 SVG 头像集（职场版）
+ * @file DefaultAvatars.tsx — 预置像素风 SVG 头像集（职场版 · 大头贴）
  * @author zhi.qu
  * @date 2026-04-10
  *
- * 所有头像基于 16×16 像素网格，使用 Pixel Luxe 色板绘制。
- * 主题涵盖现代职场常见工种。
+ * 16×16 网格，头部占画面主体（类似圆角方块内只露头肩），每人一种底色。
+ * 色板：Pixel Luxe。
  */
 
 import { ReactNode } from 'react'
@@ -15,6 +15,7 @@ const C = {
   sur:     '#1B1B26',
   ele:     '#232332',
   bdr:     '#353548',
+  out:     '#2A2A38',
   gold:    '#E8A830',
   goldD:   '#C08820',
   mint:    '#50D8A0',
@@ -23,311 +24,234 @@ const C = {
   textSec: '#A0A0AC',
   red:     '#E84848',
   blue:    '#5080E8',
+  blueD:   '#3048A8',
   purple:  '#9050E8',
   skin:    '#F0B880',
   skinD:   '#D09060',
   brown:   '#805030',
   white:   '#EAEAE8',
   gray:    '#68687A',
+  black:   '#181820',
 } as const
 
-/** 像素 rect 辅助函数：生成单个像素块 */
+/** 像素 rect */
 function px(x: number, y: number, color: string, w = 1, h = 1) {
-  return <rect key={`${x}-${y}-${color}`} x={x} y={y} width={w} height={h} fill={color} />
+  return <rect key={`${x}-${y}-${w}-${h}-${color}`} x={x} y={y} width={w} height={h} fill={color} />
 }
 
-// ── 12 个预置职场头像 SVG ─────────────────────────────────────────────────────
+// ── 各职业底色（大头贴圆角方块感：整格铺色）──────────────────────────────────
 
-/** 程序员 — 灰色连帽衫 + 笔记本电脑 */
+/** 程序员 — 琥珀底 · 大眼镜头戴耳机感 */
 const DeveloperSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {px(4, 3, C.brown, 1, 2)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 连帽衫 */}
-    {px(4, 7, C.ele, 8, 1)}
-    {px(3, 8, C.ele, 10, 4)}
-    {px(6, 7, C.bdr, 4, 1)}
-    {/* 笔记本电脑 */}
-    {px(1, 9, C.blue, 2, 2)}{px(1, 11, C.textSec, 2, 1)}
-    {/* 牛仔裤 */}
-    {px(4, 12, C.blue, 3, 3)}{px(9, 12, C.blue, 3, 3)}
-    {/* 运动鞋 */}
-    {px(3, 15, C.white, 4, 1)}{px(9, 15, C.white, 4, 1)}
+    <rect width="16" height="16" fill={C.goldD} />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 9)}
+    {px(4, 3, C.ele, 8, 2)}
+    {px(5, 4, C.gray, 6, 1)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(4, 5, C.skinD)}{px(11, 5, C.skinD)}
+    {px(6, 6, C.black)}{px(9, 6, C.black)}
+    {px(5, 7, C.blue, 2, 1)}{px(9, 7, C.blue, 2, 1)}{px(7, 7, C.blue)}
+    {px(7, 9, C.brown, 2, 1)}
+    {px(5, 10, C.skinD, 6, 1)}
+    {px(6, 11, C.ele, 4, 1)}
+    {px(5, 12, C.out, 6, 2)}
+    {px(6, 12, C.white, 4, 1)}
   </svg>
 )
 
-/** 产品经理 — 蓝色 Polo 衫 + 便签墙 */
+/** 产品经理 — 紫底 · 短发干练 */
 const ProductManagerSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* Polo 衫 */}
-    {px(4, 7, C.blue, 8, 1)}
-    {px(3, 8, C.blue, 10, 4)}
-    {px(6, 7, C.white, 4, 1)}
-    {/* 便签墙 */}
-    {px(13, 8, C.gold, 2, 2)}{px(13, 10, C.mint, 2, 2)}{px(13, 12, C.purple, 2, 1)}
-    {/* 休闲裤 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 皮鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    <rect width="16" height="16" fill="#7040B0" />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 8)}
+    {px(4, 3, C.brown, 8, 2)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(6, 6, C.black)}{px(9, 6, C.black)}
+    {px(7, 8, C.brown, 2, 1)}
+    {px(5, 10, C.skinD, 6, 1)}
+    {px(6, 11, C.blue, 4, 1)}
+    {px(5, 12, C.out, 6, 2)}
+    {px(6, 12, C.white, 4, 1)}
   </svg>
 )
 
-/** 设计师 — 贝雷帽 + 调色板 */
+/** 设计师 — 玫粉底 · 贝雷帽 */
 const DesignerSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 贝雷帽 */}
-    {px(5, 1, C.purple, 6, 1)}
-    {px(4, 2, C.purple, 8, 1)}
-    {px(3, 3, C.purple, 9, 1)}
-    {/* 头部 */}
-    {px(5, 3, C.skin, 6, 1)}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 黑色高领衫 */}
-    {px(4, 7, C.ele, 8, 1)}
-    {px(3, 8, C.ele, 10, 4)}
-    {px(6, 7, C.bdr, 4, 2)}
-    {/* 调色板 */}
-    {px(1, 9, C.skinD, 2, 3)}
-    {px(1, 9, C.red)}{px(2, 9, C.blue)}
-    {px(1, 11, C.gold)}{px(2, 11, C.mint)}
-    {/* 裤子 */}
-    {px(4, 12, C.ele, 3, 3)}{px(9, 12, C.ele, 3, 3)}
-    {/* 鞋 */}
-    {px(3, 15, C.bdr, 4, 1)}{px(9, 15, C.bdr, 4, 1)}
+    <rect width="16" height="16" fill="#B84878" />
+    {px(3, 1, C.out, 10, 1)}
+    {px(2, 2, C.out, 12, 2)}
+    {px(3, 2, C.purple, 10, 2)}
+    {px(3, 4, C.out, 10, 8)}
+    {px(4, 4, C.skin, 8, 5)}
+    {px(6, 5, C.black)}{px(9, 5, C.black)}
+    {px(5, 6, C.purple, 2, 1)}{px(9, 6, C.mint, 2, 1)}
+    {px(7, 8, C.red, 2, 1)}
+    {px(5, 9, C.skinD, 6, 1)}
+    {px(6, 10, C.ele, 4, 1)}
+    {px(5, 11, C.out, 6, 2)}
   </svg>
 )
 
-/** 数据分析师 — 眼镜 + 柱状图 */
+/** 数据分析师 — 绿底 · 粗框眼镜 */
 const DataAnalystSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {/* 眼镜 */}
-    {px(5, 5, C.blue, 2, 1)}{px(9, 5, C.blue, 2, 1)}{px(7, 5, C.gray)}
-    {/* 薄荷绿毛衫 */}
-    {px(4, 7, C.mint, 8, 1)}
-    {px(3, 8, C.mint, 10, 4)}
-    {/* 柱状图 */}
-    {px(13, 11, C.blue, 1, 2)}{px(14, 10, C.gold, 1, 3)}{px(15, 9, C.mint, 1, 4)}
-    {/* 裤子 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 鞋 */}
-    {px(4, 15, C.brown, 3, 1)}{px(9, 15, C.brown, 3, 1)}
+    <rect width="16" height="16" fill={C.mintD} />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 9)}
+    {px(4, 3, C.brown, 8, 2)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(5, 6, C.blueD, 2, 2)}{px(9, 6, C.blueD, 2, 2)}{px(7, 6, C.blueD)}
+    {px(6, 7, C.white)}{px(9, 7, C.white)}
+    {px(6, 9, C.brown, 4, 1)}
+    {px(12, 7, C.blue)}{px(13, 5, C.blue, 1, 4)}{px(14, 6, C.gold, 1, 2)}
+    {px(5, 11, C.ele, 6, 1)}
+    {px(4, 12, C.out, 8, 2)}
   </svg>
 )
 
-/** 项目经理 — 灰色西装 + 蓝色领带 */
+/** 项目经理 — 深蓝底 · 正装领 */
 const ProjectManagerSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 西装 */}
-    {px(4, 7, C.bdr, 8, 1)}
-    {px(3, 8, C.bdr, 10, 4)}
-    {/* 衬衫 + 领带 */}
-    {px(6, 7, C.white, 4, 2)}
-    {px(7, 7, C.blue, 2, 5)}
-    {/* 西裤 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 皮鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    <rect width="16" height="16" fill={C.blueD} />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 8)}
+    {px(4, 3, C.brown, 8, 2)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(6, 6, C.black)}{px(9, 6, C.black)}
+    {px(7, 8, C.brown, 2, 1)}
+    {px(5, 10, C.white, 6, 1)}
+    {px(7, 10, C.blue, 2, 2)}
+    {px(4, 11, C.bdr, 8, 2)}
+    {px(5, 12, C.bdr, 6, 1)}
   </svg>
 )
 
-/** 市场营销 — 暖金色休闲西装 + 扩音器 */
+/** 市场营销 — 橙底 · 开朗表情 */
 const MarketerSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 时尚发型 */}
-    {px(5, 1, C.brown, 6, 1)}
-    {px(5, 2, C.brown, 7, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 暖金色休闲西装 */}
-    {px(4, 7, C.gold, 8, 1)}
-    {px(3, 8, C.gold, 10, 4)}
+    <rect width="16" height="16" fill="#D07030" />
+    {px(4, 1, C.out, 8, 1)}
+    {px(3, 2, C.out, 10, 9)}
+    {px(4, 2, C.brown, 8, 2)}
+    {px(5, 4, C.skin, 6, 5)}
+    {px(6, 5, C.black)}{px(9, 5, C.black)}
     {px(6, 7, C.white, 4, 2)}
-    {/* 扩音器 */}
-    {px(13, 8, C.textSec)}{px(14, 7, C.textSec, 1, 3)}{px(15, 6, C.textSec, 1, 5)}
-    {/* 裤子 */}
-    {px(4, 12, C.ele, 3, 3)}{px(9, 12, C.ele, 3, 3)}
-    {/* 鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    {px(5, 9, C.skinD, 6, 1)}
+    {px(11, 6, C.textSec, 1, 3)}{px(12, 5, C.textSec, 1, 5)}
+    {px(5, 10, C.gold, 6, 1)}
+    {px(5, 11, C.out, 6, 2)}
   </svg>
 )
 
-/** 财务 — 马甲衬衫 + 计算器 */
+/** 财务 — 灰蓝底 · 圆眼镜 */
 const AccountantSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {/* 眼镜 */}
-    {px(5, 5, C.gray, 2, 1)}{px(9, 5, C.gray, 2, 1)}{px(7, 5, C.gray)}
-    {/* 白衬衫 + 马甲 */}
-    {px(4, 7, C.white, 8, 1)}
-    {px(3, 8, C.white, 10, 4)}
-    {px(4, 8, C.bdr, 3, 4)}{px(9, 8, C.bdr, 3, 4)}
-    {/* 计算器 */}
-    {px(13, 8, C.textSec, 2, 4)}{px(13, 9, C.mint)}{px(14, 9, C.red)}
-    {/* 西裤 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 皮鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    <rect width="16" height="16" fill="#485870" />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 8)}
+    {px(4, 3, C.gray, 8, 2)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(5, 6, C.white, 2, 2)}{px(9, 6, C.white, 2, 2)}{px(7, 6, C.gray)}
+    {px(6, 7, C.black)}{px(9, 7, C.black)}
+    {px(7, 9, C.brown, 2, 1)}
+    {px(5, 10, C.white, 6, 1)}
+    {px(4, 11, C.bdr, 8, 2)}
+    {px(6, 11, C.bdr, 4, 2)}
   </svg>
 )
 
-/** 人力资源 — 知性职业装 + 简历文档 */
+/** 人力资源 — 粉底 · 长发框脸 */
 const HRSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 长发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {px(4, 4, C.brown, 1, 4)}{px(11, 4, C.brown, 1, 4)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 薄荷绿西装 */}
-    {px(4, 7, C.mintD, 8, 1)}
-    {px(3, 8, C.mintD, 10, 4)}
-    {px(6, 7, C.white, 4, 2)}
-    {/* 简历文档 */}
-    {px(1, 9, C.white, 2, 4)}{px(1, 10, C.gray, 1, 2)}
-    {/* 裤子 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 鞋 */}
-    {px(4, 15, C.brown, 3, 1)}{px(9, 15, C.brown, 3, 1)}
+    <rect width="16" height="16" fill="#C86080" />
+    {px(3, 1, C.out, 10, 1)}
+    {px(2, 2, C.out, 12, 10)}
+    {px(2, 2, C.brown, 3, 8)}
+    {px(11, 2, C.brown, 3, 8)}
+    {px(5, 2, C.brown, 6, 2)}
+    {px(5, 4, C.skin, 6, 5)}
+    {px(6, 5, C.black)}{px(9, 5, C.black)}
+    {px(7, 7, C.red, 2, 1)}
+    {px(5, 9, C.skinD, 6, 1)}
+    {px(6, 10, C.mintD, 4, 1)}
+    {px(5, 11, C.out, 6, 2)}
   </svg>
 )
 
-/** 法务 — 深色正装 + 红色领带 + 法律书 */
+/** 法务 — 深紫底 · 严肃眉 */
 const LegalSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.gray, 4, 1)}
-    {px(5, 3, C.gray, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {px(6, 5, C.bg)}{px(9, 5, C.bg)}
-    {/* 深色西装 */}
-    {px(4, 7, C.ele, 8, 1)}
-    {px(3, 8, C.ele, 10, 4)}
-    {/* 衬衫 + 红色领带 */}
-    {px(6, 7, C.white, 4, 2)}
-    {px(7, 7, C.red, 2, 5)}
-    {/* 法律书籍 */}
-    {px(1, 8, C.goldD, 2, 5)}{px(1, 8, C.gold, 1, 5)}
-    {/* 西裤 */}
-    {px(4, 12, C.ele, 3, 3)}{px(9, 12, C.ele, 3, 3)}
-    {/* 皮鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    <rect width="16" height="16" fill="#503070" />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 8)}
+    {px(4, 3, C.gray, 8, 2)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(5, 6, C.black, 2, 1)}{px(9, 6, C.black, 2, 1)}
+    {px(6, 7, C.black, 4, 1)}
+    {px(7, 9, C.brown, 2, 1)}
+    {px(5, 10, C.white, 6, 1)}
+    {px(7, 10, C.red, 2, 2)}
+    {px(4, 11, C.ele, 8, 2)}
   </svg>
 )
 
-/** 医生 — 白大褂 + 听诊器 */
+/** 医生 — 浅蓝底 · 听诊器颈圈 + 十字帽 */
 const DoctorSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(5, 2, C.brown, 6, 1)}
-    {px(4, 3, C.brown, 1, 2)}{px(11, 3, C.brown, 1, 2)}
-    {/* 头部 */}
-    {px(5, 3, C.skin, 6, 4)}
-    {px(6, 4, C.bg)}{px(9, 4, C.bg)}
-    {/* 白大褂 */}
-    {px(4, 7, C.white, 8, 1)}
-    {px(3, 8, C.white, 10, 5)}
-    {/* 听诊器 */}
+    <rect width="16" height="16" fill="#6090C8" />
+    {px(4, 1, C.out, 8, 1)}
+    {px(4, 1, C.white, 8, 1)}
+    {px(7, 1, C.red, 2, 1)}
+    {px(3, 2, C.out, 10, 9)}
+    {px(4, 2, C.white, 8, 2)}
+    {px(5, 4, C.skin, 6, 5)}
+    {px(6, 5, C.black)}{px(9, 5, C.black)}
+    {px(7, 7, C.skinD, 2, 1)}
     {px(5, 8, C.blue)}{px(10, 8, C.blue)}
-    {px(6, 9, C.blue, 4, 1)}{px(7, 10, C.blue, 2, 1)}
-    {/* 口袋 + 笔 */}
-    {px(10, 9, C.bdr, 2, 2)}{px(11, 8, C.red)}
-    {/* 裤子 */}
-    {px(4, 13, C.blue, 3, 2)}{px(9, 13, C.blue, 3, 2)}
-    {/* 白鞋 */}
-    {px(4, 15, C.white, 3, 1)}{px(9, 15, C.white, 3, 1)}
+    {px(6, 9, C.blue, 4, 1)}
+    {px(5, 10, C.white, 6, 2)}
+    {px(4, 11, C.out, 8, 2)}
   </svg>
 )
 
-/** 教师 — 眼镜 + 教鞭 + 书本 */
+/** 教师 — 棕底 · 眼镜 + 中分 */
 const TeacherSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 头发 */}
-    {px(6, 2, C.brown, 4, 1)}
-    {px(5, 3, C.brown, 6, 1)}
-    {/* 头部 */}
-    {px(5, 4, C.skin, 6, 3)}
-    {/* 眼镜 */}
-    {px(5, 5, C.gray, 2, 1)}{px(9, 5, C.gray, 2, 1)}{px(7, 5, C.gray)}
-    {/* 棕色休闲西装 */}
-    {px(4, 7, C.brown, 8, 1)}
-    {px(3, 8, C.brown, 10, 4)}
-    {px(6, 7, C.white, 4, 2)}
-    {/* 教鞭 */}
-    {px(14, 5, C.goldD, 1, 8)}
-    {/* 书本 */}
-    {px(1, 9, C.blue, 2, 4)}{px(1, 9, C.gold)}
-    {/* 裤子 */}
-    {px(4, 12, C.bdr, 3, 3)}{px(9, 12, C.bdr, 3, 3)}
-    {/* 皮鞋 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    <rect width="16" height="16" fill="#886040" />
+    {px(4, 2, C.out, 8, 1)}
+    {px(3, 3, C.out, 10, 9)}
+    {px(4, 3, C.brown, 8, 2)}
+    {px(7, 4, C.skin, 2, 1)}
+    {px(5, 5, C.skin, 6, 5)}
+    {px(5, 6, C.gray, 2, 1)}{px(9, 6, C.gray, 2, 1)}{px(7, 6, C.gray)}
+    {px(6, 7, C.black)}{px(9, 7, C.black)}
+    {px(7, 9, C.white, 2, 1)}
+    {px(5, 10, C.brown, 6, 1)}
+    {px(5, 11, C.out, 6, 2)}
   </svg>
 )
 
-/** 工程师 — 安全帽 + 蓝色工装 + 图纸 */
+/** 工程师 — 金黄底 · 安全帽占上半脸 */
 const EngineerSvg = () => (
   <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-    <rect width="16" height="16" fill={C.bg} />
-    {/* 安全帽 */}
-    {px(5, 1, C.gold, 6, 1)}
+    <rect width="16" height="16" fill={C.gold} />
+    {px(3, 0, C.out, 10, 1)}
+    {px(2, 1, C.out, 12, 4)}
+    {px(3, 1, C.goldD, 10, 3)}
     {px(4, 2, C.gold, 8, 2)}
-    {px(3, 4, C.gold, 10, 1)}
-    {/* 头部 */}
-    {px(5, 5, C.skin, 6, 3)}
-    {px(6, 6, C.bg)}{px(9, 6, C.bg)}
-    {/* 蓝色工装 */}
-    {px(4, 8, C.blue, 8, 1)}
-    {px(3, 9, C.blue, 10, 4)}
-    {/* 反光条 */}
-    {px(3, 10, C.gold, 10, 1)}
-    {/* 图纸 */}
-    {px(1, 8, C.white, 2, 5)}{px(1, 8, C.blue, 2, 1)}
-    {/* 工装裤 */}
-    {px(4, 13, C.blue, 3, 2)}{px(9, 13, C.blue, 3, 2)}
-    {/* 工靴 */}
-    {px(3, 15, C.brown, 4, 1)}{px(9, 15, C.brown, 4, 1)}
+    {px(3, 4, C.out, 10, 1)}
+    {px(3, 5, C.out, 10, 7)}
+    {px(4, 5, C.skin, 8, 4)}
+    {px(6, 6, C.black)}{px(9, 6, C.black)}
+    {px(5, 7, C.skinD, 6, 1)}
+    {px(7, 9, C.brown, 2, 1)}
+    {px(5, 10, C.blue, 6, 2)}
+    {px(4, 11, C.out, 8, 2)}
+    {px(5, 12, C.blueD, 6, 1)}
   </svg>
 )
 

@@ -1,7 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 import { collectFilesRecursive } from './utils/common'
+import { resolveUnderRoot } from './utils/path-security'
 
+// segmentit 仅发布 CJS 格式，不支持 ESM import
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { useDefault, Segment } = require('segmentit')
 
@@ -427,11 +429,7 @@ export class KnowledgeRetriever {
    * 读取指定相对路径的文件完整内容
    */
   readFile(relativePath: string): string {
-    const resolved = path.resolve(this.knowledgePath, relativePath)
-    const normalizedRoot = path.resolve(this.knowledgePath) + path.sep
-    if (!resolved.startsWith(normalizedRoot) && resolved !== path.resolve(this.knowledgePath)) {
-      throw new Error(`非法路径，禁止访问知识库目录之外的文件: ${relativePath}`)
-    }
+    const resolved = resolveUnderRoot(this.knowledgePath, relativePath)
     try {
       return fs.readFileSync(resolved, 'utf-8')
     } catch (error) {

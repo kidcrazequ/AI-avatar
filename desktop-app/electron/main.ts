@@ -12,7 +12,7 @@ import os from 'os'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString } from '@soul/core'
 import type { WikiAnswer } from '@soul/core'
 import { DatabaseManager } from './database'
-import { TestManager } from './test-manager'
+import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
 import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
@@ -823,6 +823,13 @@ wrapHandler('preserve-raw-file', async (_, avatarId: string, originalFilePath: s
   const homedir = os.homedir()
   if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
     throw new Error(`安全限制：仅允许保存用户主目录下的文件`)
+  }
+  // 排除敏感目录，防止泄露密钥、凭证等
+  const SENSITIVE_DIRS = ['.ssh', '.gnupg', '.aws', '.env', '.credentials']
+  const relToHome = path.relative(homedir, resolved)
+  const firstSegment = relToHome.split(path.sep)[0]
+  if (SENSITIVE_DIRS.includes(firstSegment)) {
+    throw new Error(`安全限制：禁止访问敏感目录 ${firstSegment}`)
   }
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   const relativePath = await WikiCompiler.preserveRawFile(knowledgePath, resolved)

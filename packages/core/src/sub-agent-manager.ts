@@ -34,6 +34,8 @@ export class SubAgentManager {
   private tasks = new Map<string, SubAgentTask>()
   private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private destroyed = false
+  /** 任务完成通知：taskId → resolve 回调列表 */
+  private completionWaiters = new Map<string, Array<(task: SubAgentTask) => void>>()
 
   /**
    * 委派任务给子代理。
@@ -78,6 +80,49 @@ export class SubAgentManager {
     return Array.from(this.tasks.values()).map(t => ({ ...t }))
   }
 
+  /**
+   * 等待任务完成（基于事件通知，无轮询）。
+   * 返回完成/失败的任务副本，超时则返回当前状态。
+   */
+  waitForTask(id: string, timeoutMs: number): Promise<SubAgentTask | undefined> {
+    const task = this.tasks.get(id)
+    if (!task) return Promise.resolve(undefined)
+    if (task.status === 'done' || task.status === 'error') {
+      return Promise.resolve({ ...task })
+    }
+    return new Promise<SubAgentTask | undefined>((resolve) => {
+      const timer = setTimeout(() => {
+        // 超时：移除 waiter，返回当前状态
+        const waiters = this.completionWaiters.get(id)
+        if (waiters) {
+          const idx = waiters.indexOf(onDone)
+          if (idx >= 0) waiters.splice(idx, 1)
+          if (waiters.length === 0) this.completionWaiters.delete(id)
+        }
+        resolve(this.getTask(id))
+      }, timeoutMs)
+
+      const onDone = (t: SubAgentTask) => {
+        clearTimeout(timer)
+        resolve({ ...t })
+      }
+
+      if (!this.completionWaiters.has(id)) {
+        this.completionWaiters.set(id, [])
+      }
+      this.completionWaiters.get(id)!.push(onDone)
+    })
+  }
+
+  /** 通知等待者任务已完成 */
+  private notifyCompletion(id: string, task: SubAgentTask): void {
+    const waiters = this.completionWaiters.get(id)
+    if (waiters) {
+      for (const waiter of waiters) waiter(task)
+      this.completionWaiters.delete(id)
+    }
+  }
+
   /** 清除已完成的任务 */
   clearDone(): void {
     for (const [id, task] of this.tasks.entries()) {
@@ -99,6 +144,7 @@ export class SubAgentManager {
       clearTimeout(timer)
     }
     this.cleanupTimers.clear()
+    this.completionWaiters.clear()
     this.tasks.clear()
   }
 
@@ -127,6 +173,7 @@ export class SubAgentManager {
         agentTask.status = 'done'
         agentTask.result = result
         agentTask.finishedAt = Date.now()
+        this.notifyCompletion(id, agentTask)
       }
     } catch (error) {
       const agentTask = this.tasks.get(id)
@@ -134,6 +181,7 @@ export class SubAgentManager {
         agentTask.status = 'error'
         agentTask.error = error instanceof Error ? error.message : String(error)
         agentTask.finishedAt = Date.now()
+        this.notifyCompletion(id, agentTask)
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle)

@@ -9,7 +9,7 @@ export interface ParsedDocument {
   /** 原始文件名 */
   fileName: string
   /** 文件类型 */
-  fileType: 'pdf' | 'word' | 'image' | 'text' | 'excel'
+  fileType: 'pdf' | 'word' | 'pptx' | 'image' | 'text' | 'excel'
   /** Excel sheet 名称列表（Excel 专属，用于 UI 展示） */
   sheetNames?: string[]
   /** 每页的字符数，用于定位 Vision 数据在原文中的位置（PDF 专属） */
@@ -263,7 +263,7 @@ export class DocumentParser {
       text: header + '\n' + (sections.length > 0 ? sections.join('\n\n---\n\n') : '_（幻灯片中无文本内容）_'),
       images: [],
       fileName,
-      fileType: 'text',
+      fileType: 'pptx',
     }
   }
 

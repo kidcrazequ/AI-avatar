@@ -322,6 +322,21 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         return
       }
 
+      // ── pptx 快速路径（跳过 LLM 格式化，文本已按幻灯片页分好结构）──
+      if (parsed.fileType === 'pptx') {
+        const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+        const targetPath = `${baseName}.md`
+        const frontmatter = `---\nrag_only: true\nsource: pptx\n---\n\n`
+        const finalContent = frontmatter + `# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
+        setImportProgress({ current: 3, total: 4, phase: '写入知识库' })
+        await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)
+        setImportProgress({ current: 4, total: 4, phase: '刷新上下文' })
+        await loadTree()
+        await onSaved?.()
+        showStatus(`✓ 已导入 PowerPoint: ${targetPath}`)
+        return
+      }
+
       let rawText = parsed.text || ''
       const visionResults: string[] = []
       if (parsed.images.length > 0 && ocrModel?.apiKey) {

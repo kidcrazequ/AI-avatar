@@ -20,6 +20,7 @@
   - 新增 `src/lib/echarts-pixel-theme.ts` — 从 tailwind `px` 色板构建 ECharts 主题（暖金/薄荷/绿/红/灰 5 色 60-30-10 palette、像素方块 symbol、暗底透明背景、color-decal 色盲友好）
   - 错误处理：JSON 解析失败降级为带红框的原 `<pre>`；渲染异常由 ErrorBoundary 兜底
   - 依赖：`echarts` 5.5 + `echarts-for-react` 3.0
+- **对话消息折叠** — 助手消息超过 600 字符时自动显示 `[▼] 收起` / `[▶] 展开` 按钮，折叠态只展示前 ~300 字符（按段落/行/中文标点优先次序智能断开），附字数统计。用户消息通常较短不折叠；折叠状态仅本地 useState，不跨会话持久化（`MessageBubble.tsx` 新增 `truncateAtBoundary()` 和 `collapsed` 本地状态）。
 
 ### 改进
 

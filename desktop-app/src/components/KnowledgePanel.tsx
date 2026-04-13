@@ -633,7 +633,11 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     if (importedFiles.length === 0) return
     // 不在此处检查 model（会被闭包捕获变成 stale），handleEnhanceKnowledge 内部会实时获取
     setTimeout(() => {
-      if (mountedRef.current) handleEnhanceKnowledge(importedFiles)
+      if (mountedRef.current) {
+        handleEnhanceKnowledge(importedFiles).catch(err => {
+          console.error('自动优化失败:', err)
+        })
+      }
     }, 300)
   }
 
@@ -876,12 +880,18 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                 {hiddenCount > 0 && (
                   <div className="text-px-text-dim">... 另有 {hiddenCount} 个成功文件未显示</div>
                 )}
-                {batchResult.skipped.map((item, i) => (
+                {batchResult.skipped.slice(0, MAX_SHOW).map((item, i) => (
                   <div key={`skip-${i}`} className="text-px-text-dim">○ {item.path.split('/').pop()} — {item.reason}</div>
                 ))}
-                {batchResult.failed.map((item, i) => (
+                {batchResult.skipped.length > MAX_SHOW && (
+                  <div className="text-px-text-dim">... 另有 {batchResult.skipped.length - MAX_SHOW} 个跳过文件未显示</div>
+                )}
+                {batchResult.failed.slice(0, MAX_SHOW).map((item, i) => (
                   <div key={`fail-${i}`} className="text-px-danger">✗ {item.path.split('/').pop()} — {item.error}</div>
                 ))}
+                {batchResult.failed.length > MAX_SHOW && (
+                  <div className="text-px-danger">... 另有 {batchResult.failed.length - MAX_SHOW} 个失败文件未显示</div>
+                )}
               </div>
             )
           })()}

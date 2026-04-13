@@ -105,12 +105,19 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
  * - 纯文本 → 直接读取
  */
 export class DocumentParser {
+  /** 超时标志：parseFile 超时后置 true，_parseFileImpl 中的耗时操作检查此标志提前退出 */
+  private _aborted = false
+
   /** 解析文件，返回文本内容和图片列表。带超时保护。 */
   async parseFile(filePath: string): Promise<ParsedDocument> {
+    this._aborted = false
     return Promise.race([
       this._parseFileImpl(filePath),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`)), PARSE_TIMEOUT_MS)
+        setTimeout(() => {
+          this._aborted = true
+          reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`))
+        }, PARSE_TIMEOUT_MS)
       ),
     ])
   }
@@ -193,7 +200,7 @@ export class DocumentParser {
       imageDensePages.length = 0
       imageDensePages.push(...sampled)
     }
-    if (imageDensePages.length > 0) {
+    if (imageDensePages.length > 0 && !this._aborted) {
       try {
         const imageDenseSet = new Set(imageDensePages)
         const screenshotResult = await parser.getScreenshot({ scale: 2 })

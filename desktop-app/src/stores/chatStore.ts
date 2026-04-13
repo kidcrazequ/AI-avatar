@@ -590,11 +590,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         )
       })
 
-    /** 带超时的 runRound，防止 LLM 流式响应挂死 */
+    /** 带超时的 runRound，防止 LLM 流式响应挂死。超时时同时 abort 底层 fetch。 */
     const runRoundWithTimeout = () => Promise.race([
       runRound(),
       new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('LLM 响应超时，请重试')), ROUND_TIMEOUT_MS)
+        setTimeout(() => {
+          abortController.abort()
+          reject(new Error('LLM 响应超时，请重试'))
+        }, ROUND_TIMEOUT_MS)
       ),
     ])
 

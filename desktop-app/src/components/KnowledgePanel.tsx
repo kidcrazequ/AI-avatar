@@ -35,6 +35,8 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
   const [isImporting, setIsImporting] = useState(false)
   const [isBatchImporting, setIsBatchImporting] = useState(false)
+  const [isEnhancing, setIsEnhancing] = useState(false)
+  const [enhanceProgress, setEnhanceProgress] = useState<{ current: number; total: number; fileName: string; phase: string } | null>(null)
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
   const [isLinting, setIsLinting] = useState(false)
@@ -82,7 +84,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     return () => unsub()
   }, [])
 
-  const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting
+  // 订阅知识库增强进度事件
+  useEffect(() => {
+    const unsub = window.electronAPI.onEnhanceProgress((data) => {
+      if (!mountedRef.current) return
+      setEnhanceProgress(data)
+    })
+    return () => unsub()
+  }, [])
+
+  const isBusy = isImporting || isBatchImporting || isEnhancing || isDetectingEvolution || isCompiling || isLinting
   useEffect(() => {
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
     if (!isBusy && taskStartTime) setTaskStartTime(null)
@@ -593,6 +604,39 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
+  const handleEnhanceKnowledge = async () => {
+    const model = creationModel?.apiKey ? creationModel : chatModel
+    if (!model?.apiKey) {
+      showStatus('✗ 需要先配置 API Key')
+      return
+    }
+    setIsEnhancing(true)
+    setEnhanceProgress(null)
+    showStatus('知识库质量优化中（LLM 格式化）...', false)
+    try {
+      const result = await window.electronAPI.enhanceKnowledgeFiles(
+        avatarId,
+        model.apiKey,
+        model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        model.model || 'qwen-plus',
+      )
+      if (!mountedRef.current) return
+      if (result.total === 0) {
+        showStatus('没有需要优化的文件（仅处理批量导入的未格式化文件）')
+      } else {
+        showStatus(`✓ 优化完成：${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total} 个`, 10000)
+      }
+      await loadTree()
+      onSaved?.()
+    } catch (err) {
+      console.error('知识库优化失败:', err)
+      showStatus('✗ 优化失败: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsEnhancing(false)
+      setEnhanceProgress(null)
+    }
+  }
+
   const handleGenerateTests = async () => {
     const testModel = creationModel?.apiKey ? creationModel : chatModel
     if (!selectedPath || !fileContent || !testModel?.apiKey) {
@@ -715,6 +759,15 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               title="支持 zip / tar.gz / 7z / rar"
             >
               {isBatchImporting ? '...' : '[📦] ARCHIVE'}
+            </button>
+            <button
+              onClick={handleEnhanceKnowledge}
+              disabled={isBusy}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="优化知识库质量"
+              title="对批量导入的文件补跑 LLM 格式化，提升检索质量"
+            >
+              {isEnhancing ? (enhanceProgress ? `${enhanceProgress.current}/${enhanceProgress.total}` : '...') : '[✨] ENHANCE'}
             </button>
             <button
               onClick={() => setShowNewFileDialog(true)}

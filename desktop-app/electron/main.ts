@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, type WikiAnswer } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, type WikiAnswer, type LLMCallFn } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
@@ -1031,6 +1031,111 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
   } finally {
     await cleanupTempDir(tempDir)
   }
+})
+
+/**
+ * enhance-knowledge-files: 对批量导入的知识文件逐个补跑 LLM 格式化。
+ * 识别条件：文件含 `rag_only: true` frontmatter + `批量导入` 标记。
+ * 格式化完成后保留 rag_only frontmatter（大文件不适合塞 system prompt）。
+ * 通过 knowledge-enhance-progress 事件上报进度。
+ */
+wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: string, baseUrl: string, model: string): Promise<{ enhanced: number; failed: number; total: number }> => {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  if (!fs.existsSync(knowledgePath)) {
+    throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
+  }
+
+  // 扫描所有需要增强的文件（含 rag_only + 批量导入标记）
+  const allFiles: string[] = []
+  function scanDir(dir: string): void {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory() && !entry.name.startsWith('_')) {
+        scanDir(full)
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const content = fs.readFileSync(full, 'utf-8')
+        if (content.includes('rag_only: true') && content.includes('批量导入')) {
+          allFiles.push(full)
+        }
+      }
+    }
+  }
+  scanDir(knowledgePath)
+
+  if (allFiles.length === 0) {
+    return { enhanced: 0, failed: 0, total: 0 }
+  }
+
+  const callLLM: LLMCallFn = createLLMFn(apiKey, baseUrl, model)
+  let enhanced = 0
+  let failed = 0
+  const total = allFiles.length
+
+  for (let i = 0; i < allFiles.length; i++) {
+    const filePath = allFiles[i]
+    const fileName = path.basename(filePath)
+    const relPath = path.relative(knowledgePath, filePath)
+
+    mainWindow?.webContents.send('knowledge-enhance-progress', {
+      current: i,
+      total,
+      fileName,
+      phase: 'formatting',
+    })
+
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8')
+      // 去掉 frontmatter 和 header，取纯文本内容
+      const bodyMatch = raw.match(/^---[\s\S]*?---\s*\n([\s\S]*)$/)
+      const body = bodyMatch ? bodyMatch[1] : raw
+      // 去掉批量导入 header（# 标题 + > 导入自 + ---）
+      const contentMatch = body.match(/---\s*\n\n([\s\S]*)$/)
+      const plainText = contentMatch ? contentMatch[1] : body
+
+      if (!plainText || plainText.trim().length < 50) {
+        // 内容太少，跳过
+        mainWindow?.webContents.send('knowledge-enhance-progress', {
+          current: i + 1, total, fileName, phase: 'skipped',
+        })
+        continue
+      }
+
+      const docTitle = fileName.replace(/\.md$/, '')
+      const formatted = await formatDocument(
+        plainText,
+        docTitle,
+        fileName,
+        callLLM,
+        (progress) => {
+          mainWindow?.webContents.send('knowledge-enhance-progress', {
+            current: i,
+            total,
+            fileName,
+            phase: `formatting (${progress.current}/${progress.total})`,
+          })
+        },
+      )
+
+      // 写回：保留 rag_only frontmatter，替换内容
+      const newContent = `---\nrag_only: true\nsource: enhanced\n---\n\n${formatted}`
+      fs.writeFileSync(filePath, newContent, 'utf-8')
+      enhanced++
+
+      mainWindow?.webContents.send('knowledge-enhance-progress', {
+        current: i + 1, total, fileName, phase: 'done',
+      })
+    } catch (err) {
+      failed++
+      console.error(`[enhance] ${relPath} 格式化失败:`, err instanceof Error ? err.message : String(err))
+      mainWindow?.webContents.send('knowledge-enhance-progress', {
+        current: i + 1, total, fileName, phase: 'failed',
+      })
+    }
+  }
+
+  return { enhanced, failed, total }
 })
 
 /**

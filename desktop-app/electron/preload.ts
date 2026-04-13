@@ -145,6 +145,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('knowledge-import-progress', handler)
     return () => { ipcRenderer.removeListener('knowledge-import-progress', handler) }
   },
+  enhanceKnowledgeFiles: (avatarId: string, apiKey: string, baseUrl: string, model: string) =>
+    ipcRenderer.invoke('enhance-knowledge-files', avatarId, apiKey, baseUrl, model),
+  onEnhanceProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => {
+    const handler = (_: unknown, data: { current: number; total: number; fileName: string; phase: string }) => callback(data)
+    ipcRenderer.on('knowledge-enhance-progress', handler)
+    return () => { ipcRenderer.removeListener('knowledge-enhance-progress', handler) }
+  },
 
   // 定时自检（GAP14）
   startScheduledTest: (avatarId: string, intervalHours: number) =>

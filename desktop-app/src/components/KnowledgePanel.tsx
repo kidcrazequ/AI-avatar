@@ -549,6 +549,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
       await loadTree()
       onSaved?.()
+      // 导入成功后自动询问是否优化质量
+      if (batch.imported.length > 0) {
+        promptEnhanceAfterBatch(batch.imported.length)
+      }
     } catch (err) {
       console.error('批量导入文件夹失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -595,6 +599,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
       await loadTree()
       onSaved?.()
+      // 导入成功后自动询问是否优化质量
+      if (batch.imported.length > 0) {
+        promptEnhanceAfterBatch(batch.imported.length)
+      }
     } catch (err) {
       console.error('批量导入归档失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -602,6 +610,23 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       setIsBatchImporting(false)
       setImportProgress(null)
     }
+  }
+
+  /** 批量导入完成后自动弹窗询问是否优化质量 */
+  const promptEnhanceAfterBatch = (importedCount: number) => {
+    const model = creationModel?.apiKey ? creationModel : chatModel
+    if (!model?.apiKey) return // 没有 API Key 就不提示
+    setTimeout(() => {
+      if (!mountedRef.current) return
+      const yes = window.confirm(
+        `已成功导入 ${importedCount} 个文件。\n\n` +
+        `批量导入为了速度跳过了 LLM 格式化，知识检索质量可能不如单个导入。\n\n` +
+        `是否现在优化？（后台逐个跑 LLM 格式化，耗时较长但可挂后台）`
+      )
+      if (yes && mountedRef.current) {
+        handleEnhanceKnowledge()
+      }
+    }, 500)
   }
 
   const handleEnhanceKnowledge = async () => {

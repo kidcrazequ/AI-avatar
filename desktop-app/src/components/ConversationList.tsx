@@ -72,8 +72,11 @@ export default function ConversationList({
         console.error('[ConversationList] 全文搜索失败:', err instanceof Error ? err.message : String(err))
         setFtsResults([])
       } finally {
-        if (seq !== searchSeq.current) return
-        setIsSearching(false)
+        // 反转条件避免 `return in finally` 触发 no-unsafe-finally 规则；
+        // 语义等价：只有在请求未被后来者抢占时才关闭 loading 态
+        if (seq === searchSeq.current) {
+          setIsSearching(false)
+        }
       }
     }, 300)
 

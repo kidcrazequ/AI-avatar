@@ -43,6 +43,8 @@ export default function PromptTemplatePanel({ avatarId, onClose, onUse }: Props)
   }, [avatarId])
 
   useEffect(() => {
+    // 初始加载 + avatarId 切换时重载；loadTemplates 由 useCallback memo，依赖 avatarId
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTemplates()
   }, [loadTemplates])
 

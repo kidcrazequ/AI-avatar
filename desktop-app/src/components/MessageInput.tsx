@@ -55,6 +55,8 @@ export default function MessageInput({ onSend, disabled, fillText }: Props) {
   }, [])
 
   useEffect(() => {
+    // 外部 fillText prop 变化时同步到内部输入框（快捷问题点击注入）；不是级联渲染
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (fillText) setInput(fillText)
   }, [fillText])
 

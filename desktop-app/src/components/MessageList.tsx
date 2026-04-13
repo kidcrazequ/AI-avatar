@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import MessageBubble from './MessageBubble'
 import { ChatMessage } from '../stores/chatStore'
@@ -22,11 +22,11 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
   /**
    * 预计算 previousUserMessage Map（单次线性扫描），避免在 itemContent 内 O(n) 查找。
    * 仅在 messages 引用变更时重建。
+   *
+   * 原实现用两个 useRef + 在渲染中比对更新，触发 react-hooks/refs 规则；
+   * 改用 useMemo 语义等价且更符合 React 心智模型。
    */
-  const prevUserMap = useRef<Map<string, string>>(new Map())
-  const prevMessagesRef = useRef<ChatMessage[]>([])
-  if (prevMessagesRef.current !== messages) {
-    prevMessagesRef.current = messages
+  const prevUserMap = useMemo<Map<string, string>>(() => {
     let lastUserContent = ''
     const map = new Map<string, string>()
     for (const msg of messages) {
@@ -37,8 +37,8 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
         lastUserContent = msg.content
       }
     }
-    prevUserMap.current = map
-  }
+    return map
+  }, [messages])
 
   const itemContent = useCallback((index: number) => {
     const message = messages[index]
@@ -46,14 +46,14 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
       <div className="px-6 py-3">
         <MessageBubble
           message={message}
-          previousUserMessage={prevUserMap.current.get(message.id)}
+          previousUserMessage={prevUserMap.get(message.id)}
           onSaveAnswer={onSaveAnswer}
           avatarImage={avatarImage}
           avatarName={avatarName}
         />
       </div>
     )
-  }, [messages, onSaveAnswer, avatarImage, avatarName])
+  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

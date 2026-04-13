@@ -7,6 +7,10 @@
  * 色板：Pixel Luxe。
  */
 
+/* eslint-disable react-refresh/only-export-components -- 该文件是头像资源集合，
+   导出 DEFAULT_AVATARS 配置数组和 getDefaultAvatarSvg 工厂函数，local 的
+   *Svg 组件仅供内部使用，不拆分文件 */
+
 import { ReactNode } from 'react'
 
 // ── Pixel Luxe 色板 ──────────────────────────────────────────────────────────

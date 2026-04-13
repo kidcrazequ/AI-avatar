@@ -939,8 +939,11 @@ async function batchImportFiles(
       const parsed = await documentParser.parseFile(filePath)
       // 批量导入跳过 LLM formatDocument：直接用 parsed.text 作为内容
       // 图片在批量模式下跳过 OCR（渲染进程才有 ocrModel）
+      // 批量导入的文件默认标记 rag_only，不塞进 system prompt（防止 2.9M 字符撑爆上下文）
+      // 只通过 search_knowledge / query_excel 按需检索
+      const frontmatter = `---\nrag_only: true\nsource: ${parsed.fileType}\n---\n\n`
       const header = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}\n> 类型: ${parsed.fileType}\n> 批量导入（未经 LLM 格式化）\n\n---\n\n`
-      const finalContent = header + (parsed.text || '_（无文本内容）_')
+      const finalContent = frontmatter + header + (parsed.text || '_（无文本内容）_')
 
       // 目标文件名：清理非法字符后 + .md
       const baseName = fileName

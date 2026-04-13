@@ -62,7 +62,7 @@ export interface ExcelStructuredData {
 const IMAGE_PAGE_TEXT_THRESHOLD = 300
 
 /** 图表页截图数量上限，防止大 PDF 全量渲染耗尽内存 */
-const MAX_SCREENSHOT_PAGES = 20
+const MAX_SCREENSHOT_PAGES = 50
 
 /** 单次导入文件大小上限（约 80MB），防止超大文件拖垮主进程内存 */
 export const MAX_PARSE_FILE_BYTES = 80 * 1024 * 1024
@@ -163,8 +163,15 @@ export class DocumentParser {
     const images: string[] = []
     const imagePageNumbers: number[] = []
     if (imageDensePages.length > MAX_SCREENSHOT_PAGES) {
-      console.warn(`[DocumentParser] 图表页 ${imageDensePages.length} 页超过上限 ${MAX_SCREENSHOT_PAGES}，截取前 ${MAX_SCREENSHOT_PAGES} 页`)
-      imageDensePages.length = MAX_SCREENSHOT_PAGES
+      // 均匀采样而非只取前 N 页，确保 PDF 首/中/尾的图表页都被覆盖
+      const step = imageDensePages.length / MAX_SCREENSHOT_PAGES
+      const sampled: number[] = []
+      for (let i = 0; i < MAX_SCREENSHOT_PAGES; i++) {
+        sampled.push(imageDensePages[Math.floor(i * step)])
+      }
+      console.warn(`[DocumentParser] 图表页 ${imageDensePages.length} 页超过上限 ${MAX_SCREENSHOT_PAGES}，均匀采样 ${sampled.length} 页`)
+      imageDensePages.length = 0
+      imageDensePages.push(...sampled)
     }
     if (imageDensePages.length > 0) {
       try {

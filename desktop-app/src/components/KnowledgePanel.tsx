@@ -567,7 +567,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       onSaved?.()
       // 导入成功后自动询问是否优化质量
       if (batch.imported.length > 0) {
-        promptEnhanceAfterBatch()
+        promptEnhanceAfterBatch(batch.imported.map(f => f.targetPath))
       }
     } catch (err) {
       console.error('批量导入文件夹失败:', err)
@@ -617,7 +617,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       onSaved?.()
       // 导入成功后自动询问是否优化质量
       if (batch.imported.length > 0) {
-        promptEnhanceAfterBatch()
+        promptEnhanceAfterBatch(batch.imported.map(f => f.targetPath))
       }
     } catch (err) {
       console.error('批量导入归档失败:', err)
@@ -628,16 +628,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
-  /** 批量导入完成后自动开始质量优化 */
-  const promptEnhanceAfterBatch = () => {
+  /** 批量导入完成后自动开始质量优化（只处理本次导入的文件） */
+  const promptEnhanceAfterBatch = (importedFiles: string[]) => {
     const model = creationModel?.apiKey ? creationModel : chatModel
-    if (!model?.apiKey) return
+    if (!model?.apiKey || importedFiles.length === 0) return
     setTimeout(() => {
-      if (mountedRef.current) handleEnhanceKnowledge()
+      if (mountedRef.current) handleEnhanceKnowledge(importedFiles)
     }, 300)
   }
 
-  const handleEnhanceKnowledge = async () => {
+  const handleEnhanceKnowledge = async (targetFiles?: string[]) => {
     const model = creationModel?.apiKey ? creationModel : chatModel
     if (!model?.apiKey) {
       showStatus('✗ 需要先配置 API Key')
@@ -652,6 +652,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         model.apiKey,
         model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         model.model || 'qwen-plus',
+        targetFiles,
       )
       if (!mountedRef.current) return
       if (result.total === 0) {

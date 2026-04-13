@@ -238,7 +238,7 @@ interface ElectronAPI {
   importArchive: (avatarId: string, archivePath: string) => Promise<BatchImportResult>
   installDefaultSkills: (avatarId: string) => Promise<string[]>
   onImportProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
-  enhanceKnowledgeFiles: (avatarId: string, apiKey: string, baseUrl: string, model: string) => Promise<{ enhanced: number; failed: number; total: number }>
+  enhanceKnowledgeFiles: (avatarId: string, apiKey: string, baseUrl: string, model: string, targetFiles?: string[]) => Promise<{ enhanced: number; failed: number; total: number }>
   onEnhanceProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
 
   // 定时自检（GAP14）

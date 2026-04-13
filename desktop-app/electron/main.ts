@@ -1039,30 +1039,37 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
  * 格式化完成后保留 rag_only frontmatter（大文件不适合塞 system prompt）。
  * 通过 knowledge-enhance-progress 事件上报进度。
  */
-wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: string, baseUrl: string, model: string): Promise<{ enhanced: number; failed: number; total: number }> => {
+wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: string, baseUrl: string, model: string, targetFiles?: string[]): Promise<{ enhanced: number; failed: number; total: number }> => {
   assertSafeSegment(avatarId, '分身ID')
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   if (!fs.existsSync(knowledgePath)) {
     throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
   }
 
-  // 扫描所有需要增强的文件（含 rag_only + 批量导入标记）
-  const allFiles: string[] = []
-  function scanDir(dir: string): void {
-    const entries = fs.readdirSync(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name)
-      if (entry.isDirectory() && !entry.name.startsWith('_')) {
-        scanDir(full)
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        const content = fs.readFileSync(full, 'utf-8')
-        if (content.includes('rag_only: true') && content.includes('批量导入')) {
-          allFiles.push(full)
+  let allFiles: string[]
+
+  if (targetFiles && targetFiles.length > 0) {
+    // 指定了文件列表（批量导入后自动调用），只处理这些文件
+    allFiles = targetFiles.map(f => path.join(knowledgePath, f)).filter(f => fs.existsSync(f))
+  } else {
+    // 手动点 ENHANCE 按钮，扫描所有需要增强的文件（含 rag_only + 批量导入标记）
+    allFiles = []
+    function scanDir(dir: string): void {
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory() && !entry.name.startsWith('_')) {
+          scanDir(full)
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          const content = fs.readFileSync(full, 'utf-8')
+          if (content.includes('rag_only: true') && content.includes('批量导入')) {
+            allFiles.push(full)
+          }
         }
       }
     }
+    scanDir(knowledgePath)
   }
-  scanDir(knowledgePath)
 
   if (allFiles.length === 0) {
     return { enhanced: 0, failed: 0, total: 0 }

@@ -1,55 +1,51 @@
 /**
- * echarts-pixel-theme.ts — 为 ECharts 构建 Pixel Luxe 主题。
+ * echarts-pixel-theme.ts — 为 ECharts 构建 Pixel LED 主题。
  *
  * 色值直接来自 desktop-app/tailwind.config.js 的 px 色板（keep in sync）。
  * 该文件是 single source of truth，如果 tailwind.config.js 变更，这里必须同步。
  *
- * 设计融合 UED 数据可视化规范（ued-agent/knowledge/design-practice/）：
- *   - 调色板 5 色（60-30-10 规则），去饱和 + 提亮适配暗底
- *   - 暗底透明背景，让像素卡片边框透出
- *   - 折线图默认渐变面积填充（areaStyle gradient）
- *   - 柱状图圆角顶部（borderRadius: [4,4,0,0]）
- *   - 毛玻璃 tooltip（backdrop-filter blur + 圆角 8px）
- *   - 网格弱化虚线，极简风
+ * 设计风格：粉色点阵 LED × void-black
+ *   - 调色板 5 色，粉色主色调
+ *   - 暗底透明背景
+ *   - 折线图渐变面积填充
+ *   - 柱状图圆角顶部
+ *   - 毛玻璃 tooltip
  *   - aria decal 色盲友好
- *
- * @author zhi.qu
- * @date 2026-04-13
  */
 
 import * as echarts from 'echarts/core'
 
 // ─── 与 tailwind.config.js 同步的 px 色板（keep in sync!）──
 const PIXEL_COLORS = {
-  bg: '#13131B',
-  surface: '#1B1B26',
-  elevated: '#232332',
-  border: '#353548',
-  text: '#EAEAE8',
-  textSec: '#A0A0AC',
-  textDim: '#68687A',
-  primary: '#E8A830', // 暖金琥珀
-  primaryDim: '#C08820',
-  accent: '#50D8A0', // 柔和薄荷绿
+  bg: '#0A0A0F',
+  surface: '#12121A',
+  elevated: '#1A1A25',
+  border: '#2A2A3A',
+  text: '#E8E8EC',
+  textSec: '#9898A8',
+  textDim: '#5A5A6E',
+  primary: '#FFB0C8',    // LED 粉
+  primaryDim: '#D890A8',
+  accent: '#50D8A0',     // 薄荷绿
   accentDim: '#38B880',
   success: '#50D888',
-  warning: '#E8A830',
-  danger: '#E84848',
+  warning: '#F0C060',
+  danger: '#E85858',
 } as const
 
 /**
- * 主题 palette（5 色，去饱和 + 提亮适配暗底）：
- *   - primary (暖金)   主序列
- *   - accent (薄荷)    对比序列
- *   - #5E9FD6 (柔蓝)  第三序列（UED 推荐暗底数据蓝）
- *   - danger (红)      下降/错误
- *   - #B89AE8 (淡紫)  第五序列（补充冷暖平衡）
+ * 主题 palette（5 色）：
+ *   - primary (LED 粉)  主序列
+ *   - accent (薄荷绿)   对比序列
+ *   - #7EB8E8 (柔蓝)   第三序列
+ *   - #F0C060 (暖黄)   第四序列
+ *   - #B89AE8 (淡紫)   第五序列
  */
 const SERIES_PALETTE = [
   PIXEL_COLORS.primary,
   PIXEL_COLORS.accent,
-  '#5E9FD6',
-  PIXEL_COLORS.danger,
+  '#7EB8E8',
+  PIXEL_COLORS.warning,
   '#B89AE8',
 ]
 
@@ -125,10 +121,10 @@ const PIXEL_THEME = {
     },
   },
 
-  // 毛玻璃 tooltip（UED visual-craft §4.2 glassmorphism）
+  // 毛玻璃 tooltip
   tooltip: {
-    backgroundColor: 'rgba(27, 27, 38, 0.85)',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(18, 18, 26, 0.88)',
+    borderColor: 'rgba(255, 176, 200, 0.15)',
     borderWidth: 1,
     textStyle: { color: PIXEL_COLORS.text, fontSize: 12 },
     padding: [10, 14],
@@ -136,11 +132,10 @@ const PIXEL_THEME = {
       'backdrop-filter: blur(12px)',
       '-webkit-backdrop-filter: blur(12px)',
       'border-radius: 8px',
-      'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 1px rgba(255, 255, 255, 0.1)',
+      'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 176, 200, 0.1)',
     ].join(';'),
   },
 
-  // 色盲友好：自动叠加图案
   aria: {
     enabled: true,
     decal: { show: true },
@@ -158,15 +153,14 @@ const PIXEL_THEME = {
       lineStyle: { width: 3.5 },
       itemStyle: { borderWidth: 2 },
     },
-    // 默认渐变面积填充（UED data-visualization §5.1）
     areaStyle: {
       opacity: 1,
       color: {
         type: 'linear',
         x: 0, y: 0, x2: 0, y2: 1,
         colorStops: [
-          { offset: 0, color: 'rgba(232, 168, 48, 0.25)' },
-          { offset: 1, color: 'rgba(232, 168, 48, 0.02)' },
+          { offset: 0, color: 'rgba(255, 176, 200, 0.25)' },
+          { offset: 1, color: 'rgba(255, 176, 200, 0.02)' },
         ],
       },
     },
@@ -174,16 +168,14 @@ const PIXEL_THEME = {
 
   bar: {
     itemStyle: {
-      // 圆角顶部（UED data-visualization §5.2）
       borderRadius: [4, 4, 0, 0],
     },
     barMaxWidth: 40,
     barGap: '30%',
     emphasis: {
       itemStyle: {
-        // hover 时微微提亮
         shadowBlur: 8,
-        shadowColor: 'rgba(232, 168, 48, 0.3)',
+        shadowColor: 'rgba(255, 176, 200, 0.3)',
       },
     },
   },
@@ -213,7 +205,7 @@ const PIXEL_THEME = {
       itemStyle: {
         opacity: 1,
         shadowBlur: 10,
-        shadowColor: 'rgba(232, 168, 48, 0.4)',
+        shadowColor: 'rgba(255, 176, 200, 0.4)',
       },
     },
   },
@@ -228,9 +220,6 @@ const PIXEL_THEME = {
 
 let _registered = false
 
-/**
- * 在第一次渲染前调用一次。幂等。
- */
 export function registerPixelTheme(): void {
   if (_registered) return
   echarts.registerTheme('pixel', PIXEL_THEME)

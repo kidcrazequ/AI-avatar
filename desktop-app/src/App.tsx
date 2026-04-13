@@ -394,7 +394,7 @@ function App() {
   )
 
   return (
-    <>
+    <div className="crt-scanlines">
       {!activeAvatarId ? (
         renderAvatarSelectPage()
       ) : (
@@ -574,7 +574,7 @@ function App() {
       {toast && (
         <Toast message={toast.message} type={toast.type} />
       )}
-    </>
+    </div>
   )
 }
 

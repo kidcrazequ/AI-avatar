@@ -1,4 +1,4 @@
-/* Pixel Luxe — 暖金琥珀 × 像素风设计系统 */
+/* Pixel LED — 粉色点阵 × void-black CRT 设计系统 */
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -33,34 +33,82 @@
     font-family: 'Fusion Pixel', 'JetBrains Mono', 'Courier New', monospace;
     font-size: 14px;
     line-height: 1.7;
-    background-color: #13131B;
-    color: #EAEAE8;
+    background-color: #0A0A0F;
+    color: #E8E8EC;
     overflow: hidden;
   }
 
   ::selection {
-    background-color: #E8A830;
-    color: #13131B;
+    background-color: #FFB0C8;
+    color: #0A0A0F;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: #1B1B26; }
-  ::-webkit-scrollbar-thumb { background: #353548; border: 1px solid #1B1B26; }
-  ::-webkit-scrollbar-thumb:hover { background: #E8A830; }
+  ::-webkit-scrollbar-track { background: #12121A; }
+  ::-webkit-scrollbar-thumb { background: #2A2A3A; border: 1px solid #12121A; }
+  ::-webkit-scrollbar-thumb:hover { background: #FFB0C8; }
 }
 
 @layer components {
+  /* ═══════════════════════════════════════
+     CRT / LED 纹理效果
+     ═══════════════════════════════════════ */
+
+  /** 全局 CRT 扫描线叠加层 — 加在最外层容器上 */
+  .crt-scanlines::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(255, 176, 200, 0.02) 2px,
+      rgba(255, 176, 200, 0.02) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /** LED 点阵网格纹理 */
+  .pixel-grid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,176,200,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,176,200,0.012) 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
+  }
+
+  /** 扫描线效果（侧栏用）*/
+  .scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,176,200,0.015) 2px,
+      rgba(255,176,200,0.015) 4px
+    );
+    pointer-events: none;
+  }
+
   /* ═══════════════════════════════════════
      按钮 —— 像素字体 + 英文大写
      ═══════════════════════════════════════ */
 
   .pixel-btn-primary {
-    @apply px-5 py-2.5 bg-px-primary text-white border-2 border-px-primary
+    @apply px-5 py-2.5 bg-px-primary text-px-bg border-2 border-px-primary
            font-game text-[12px] tracking-wider uppercase
            shadow-pixel-brand transition-none select-none cursor-pointer;
   }
   .pixel-btn-primary:hover:not(:disabled) {
     @apply bg-px-primary-hover border-px-primary-hover;
+    box-shadow: 0 0 12px rgba(255,176,200,0.25);
   }
   .pixel-btn-primary:active:not(:disabled) {
     @apply shadow-none translate-x-[2px] translate-y-[2px];
@@ -94,6 +142,9 @@
     @apply px-4 py-2 bg-transparent text-px-text border-2 border-px-border
            font-game text-[12px] tracking-wider uppercase
            hover:border-px-primary hover:text-px-primary transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-outline-light:hover:not(:disabled) {
+    text-shadow: 0 0 8px rgba(255,176,200,0.3);
   }
   .pixel-btn-outline-light:active:not(:disabled) {
     @apply bg-px-primary text-px-bg border-px-primary shadow-none translate-x-[2px] translate-y-[2px];
@@ -136,6 +187,16 @@
     @apply translate-x-[1px] translate-y-[1px];
   }
 
+  .pixel-btn-sm {
+    @apply px-3 py-1.5 bg-px-primary text-px-bg border-2 border-px-primary
+           font-game text-[11px] tracking-wider uppercase
+           transition-none select-none cursor-pointer;
+  }
+  .pixel-btn-sm:hover:not(:disabled) {
+    @apply bg-px-primary-hover border-px-primary-hover;
+    box-shadow: 0 0 8px rgba(255,176,200,0.2);
+  }
+
   /* ═══════════════════════════════════════
      输入框
      ═══════════════════════════════════════ */
@@ -144,18 +205,24 @@
     @apply px-4 py-2.5 bg-px-surface text-px-text border-2 border-px-border
            font-game text-[14px]
            placeholder:text-px-text-dim
-           focus:border-px-primary focus:outline-none focus:shadow-glow-sm;
+           focus:border-px-primary focus:outline-none;
+  }
+  .pixel-input:focus {
+    box-shadow: 0 0 8px rgba(255,176,200,0.15);
   }
 
   .pixel-input-dark {
     @apply px-4 py-3 bg-px-bg text-px-text border-2 border-px-border
            font-game text-[14px]
            placeholder:text-px-text-dim
-           focus:border-px-primary focus:outline-none focus:shadow-glow-sm;
+           focus:border-px-primary focus:outline-none;
+  }
+  .pixel-input-dark:focus {
+    box-shadow: 0 0 8px rgba(255,176,200,0.15);
   }
 
   /* ═══════════════════════════════════════
-     标签 / 分割线 / 纹理
+     标签 / 分割线
      ═══════════════════════════════════════ */
 
   .pixel-label {
@@ -166,35 +233,9 @@
     @apply h-[2px];
     background: repeating-linear-gradient(
       90deg,
-      #353548 0px, #353548 4px,
+      #2A2A3A 0px, #2A2A3A 4px,
       transparent 4px, transparent 8px
     );
-  }
-
-  .pixel-grid::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(232,168,48,0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(232,168,48,0.015) 1px, transparent 1px);
-    background-size: 16px 16px;
-    pointer-events: none;
-  }
-
-  /** 扫描线效果（侧栏用）*/
-  .scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(232,168,48,0.015) 2px,
-      rgba(232,168,48,0.015) 4px
-    );
-    pointer-events: none;
   }
 
   /* ═══════════════════════════════════════
@@ -225,7 +266,7 @@
   }
 
   /* ═══════════════════════════════════════
-     导航标签 —— 像素 RPG 菜单风格
+     导航标签 —— LED 显示屏菜单风格
      ═══════════════════════════════════════ */
 
   .pixel-nav-tab {
@@ -238,18 +279,18 @@
   }
   .pixel-nav-tab:hover {
     @apply text-px-text;
-    background: rgba(232,168,48,0.10);
-    border-bottom-color: rgba(232,168,48,0.35);
+    background: rgba(255,176,200,0.06);
+    border-bottom-color: rgba(255,176,200,0.30);
   }
   .pixel-nav-tab--active {
     @apply text-px-primary;
-    border-bottom-color: #E8A830;
-    text-shadow: 0 0 8px rgba(232,168,48,0.25);
+    border-bottom-color: #FFB0C8;
+    text-shadow: 0 0 10px rgba(255,176,200,0.35);
   }
   .pixel-nav-tab--active:hover {
     @apply text-px-primary;
-    background: rgba(232,168,48,0.12);
-    border-bottom-color: #E8A830;
+    background: rgba(255,176,200,0.08);
+    border-bottom-color: #FFB0C8;
   }
 
   .pixel-nav-cursor {
@@ -261,7 +302,7 @@
     @apply text-[13px] leading-none;
   }
   .pixel-nav-tab--active .pixel-nav-icon {
-    text-shadow: 0 0 6px rgba(232,168,48,0.4);
+    text-shadow: 0 0 8px rgba(255,176,200,0.5);
   }
 
   .pixel-nav-label {
@@ -279,7 +320,7 @@
     @apply block w-[2px] h-4 mx-2;
     background: repeating-linear-gradient(
       180deg,
-      #353548 0px, #353548 2px,
+      #2A2A3A 0px, #2A2A3A 2px,
       transparent 2px, transparent 4px
     );
   }
@@ -302,7 +343,7 @@
   display: inline-block;
   width: 2px;
   height: 1em;
-  background-color: #E8A830;
+  background-color: #FFB0C8;
   animation: blink 1s step-end infinite;
   vertical-align: text-bottom;
 }
@@ -324,8 +365,8 @@
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 8px rgba(232,168,48,0.08); }
-  50%      { box-shadow: 0 0 16px rgba(232,168,48,0.20); }
+  0%, 100% { box-shadow: 0 0 8px rgba(255,176,200,0.08); }
+  50%      { box-shadow: 0 0 20px rgba(255,176,200,0.25); }
 }
 
 @keyframes fadeIn {
@@ -343,20 +384,20 @@
    ═══════════════════════════════════════ */
 
 .prose-pixel {
-  --tw-prose-body: #EAEAE8;
-  --tw-prose-headings: #EAEAE8;
-  --tw-prose-lead: #A0A0AC;
-  --tw-prose-links: #E8A830;
-  --tw-prose-bold: #EAEAE8;
-  --tw-prose-counters: #A0A0AC;
-  --tw-prose-bullets: #E8A830;
-  --tw-prose-hr: #353548;
-  --tw-prose-quotes: #A0A0AC;
-  --tw-prose-quote-borders: #E8A830;
-  --tw-prose-captions: #68687A;
+  --tw-prose-body: #E8E8EC;
+  --tw-prose-headings: #E8E8EC;
+  --tw-prose-lead: #9898A8;
+  --tw-prose-links: #FFB0C8;
+  --tw-prose-bold: #E8E8EC;
+  --tw-prose-counters: #9898A8;
+  --tw-prose-bullets: #FFB0C8;
+  --tw-prose-hr: #2A2A3A;
+  --tw-prose-quotes: #9898A8;
+  --tw-prose-quote-borders: #FFB0C8;
+  --tw-prose-captions: #5A5A6E;
   --tw-prose-code: #50D8A0;
-  --tw-prose-pre-code: #EAEAE8;
-  --tw-prose-pre-bg: #13131B;
-  --tw-prose-th-borders: #353548;
-  --tw-prose-td-borders: #353548;
+  --tw-prose-pre-code: #E8E8EC;
+  --tw-prose-pre-bg: #0A0A0F;
+  --tw-prose-th-borders: #2A2A3A;
+  --tw-prose-td-borders: #2A2A3A;
 }

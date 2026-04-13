@@ -7,30 +7,30 @@ module.exports = {
   theme: {
     extend: {
       /**
-       * Pixel Luxe 设计 Token
-       * 暖金琥珀 × 深邃暗底 —— 经典像素游戏质感
+       * Pixel LED 设计 Token
+       * 粉色点阵 × void-black —— CRT 显示屏 / LED 点阵质感
        */
       colors: {
         px: {
-          // ── 背景层次（4 层暖灰梯度）──
-          bg:       '#13131B',   // Layer 0: 最深底板
-          surface:  '#1B1B26',   // Layer 1: 面板/卡片
-          elevated: '#232332',   // Layer 2: 工具栏/浮层
-          hover:    '#2C2C3E',   // Layer 3: 悬停/选中
+          // ── 背景层次（4 层 void-black 梯度）──
+          bg:       '#0A0A0F',   // Layer 0: void-black 底板
+          surface:  '#12121A',   // Layer 1: 面板/卡片
+          elevated: '#1A1A25',   // Layer 2: 工具栏/浮层
+          hover:    '#222230',   // Layer 3: 悬停/选中
 
           // ── 边框 ──
-          border:     '#353548',
-          'border-dim': '#2A2A3C',
+          border:     '#2A2A3A',
+          'border-dim': '#1E1E2C',
 
           // ── 文字 ──
-          text:       '#EAEAE8',  // 主文字（暖白）
-          'text-sec':  '#A0A0AC', // 次要
-          'text-dim':  '#68687A', // 弱化
+          text:       '#E8E8EC',  // 主文字（LED 白）
+          'text-sec':  '#9898A8', // 次要
+          'text-dim':  '#5A5A6E', // 弱化
 
-          // ── 主色：暖金琥珀（经典像素游戏 UI 色）──
-          primary:       '#E8A830',
-          'primary-hover': '#F0B840',
-          'primary-dim':   '#C08820',
+          // ── 主色：LED 粉（点阵显示屏粉色）──
+          primary:       '#FFB0C8',
+          'primary-hover': '#FFC0D4',
+          'primary-dim':   '#D890A8',
 
           // ── 辅色：柔和薄荷绿 ──
           accent:      '#50D8A0',
@@ -38,18 +38,18 @@ module.exports = {
 
           // ── 功能色 ──
           success:  '#50D888',
-          warning:  '#E8A830',
-          danger:   '#E84848',
+          warning:  '#F0C060',
+          danger:   '#E85858',
 
           // ── 兼容旧名 ──
-          black:   '#13131B',
-          white:   '#EAEAE8',
-          warm:    '#F0ECE6',
-          muted:   '#68687A',
-          subtle:  '#A0A0AC',
-          dark:    '#1B1B26',
-          mid:     '#232332',
-          line:    '#353548',
+          black:   '#0A0A0F',
+          white:   '#E8E8EC',
+          warm:    '#FFB0C8',
+          muted:   '#5A5A6E',
+          subtle:  '#9898A8',
+          dark:    '#12121A',
+          mid:     '#1A1A25',
+          line:    '#2A2A3A',
         }
       },
       fontFamily: {
@@ -67,14 +67,15 @@ module.exports = {
         'px-xl':   ['20px', { lineHeight: '32px' }],
       },
       boxShadow: {
-        'pixel-sm':    '2px 2px 0 0 #13131B',
-        'pixel':       '3px 3px 0 0 #13131B',
-        'pixel-lg':    '4px 4px 0 0 #13131B',
-        'pixel-xl':    '6px 6px 0 0 #13131B',
-        'pixel-brand': '3px 3px 0 0 #C08820',
-        'pixel-white': '3px 3px 0 0 rgba(234,234,232,0.15)',
-        'pixel-glow':  '0 0 20px rgba(232,168,48,0.12)',
-        'glow-sm':     '0 0 8px rgba(232,168,48,0.10)',
+        'pixel-sm':    '2px 2px 0 0 #0A0A0F',
+        'pixel':       '3px 3px 0 0 #0A0A0F',
+        'pixel-lg':    '4px 4px 0 0 #0A0A0F',
+        'pixel-xl':    '6px 6px 0 0 #0A0A0F',
+        'pixel-brand': '3px 3px 0 0 #D890A8',
+        'pixel-white': '3px 3px 0 0 rgba(232,232,236,0.10)',
+        'pixel-glow':  '0 0 20px rgba(255,176,200,0.15)',
+        'glow-sm':     '0 0 8px rgba(255,176,200,0.12)',
+        'glow-pink':   '0 0 12px rgba(255,176,200,0.20)',
       },
       animation: {
         'blink':        'blink 1s step-end infinite',
@@ -83,6 +84,7 @@ module.exports = {
         'pulse-glow':   'pulseGlow 2s ease-in-out infinite',
         'fade-in':      'fadeIn 0.15s ease-out forwards',
         'slide-up':     'slideUp 0.2s steps(4) forwards',
+        'scanline':     'scanline 8s linear infinite',
       },
       keyframes: {
         blink: {
@@ -99,8 +101,8 @@ module.exports = {
           '100%': { transform: 'scale(1)',    opacity: '1' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 8px rgba(232,168,48,0.08)' },
-          '50%':      { boxShadow: '0 0 16px rgba(232,168,48,0.20)' },
+          '0%, 100%': { boxShadow: '0 0 8px rgba(255,176,200,0.08)' },
+          '50%':      { boxShadow: '0 0 20px rgba(255,176,200,0.25)' },
         },
         fadeIn: {
           from: { opacity: '0' },
@@ -109,6 +111,10 @@ module.exports = {
         slideUp: {
           from: { transform: 'translateY(8px)', opacity: '0' },
           to:   { transform: 'translateY(0)',    opacity: '1' },
+        },
+        scanline: {
+          '0%':   { backgroundPosition: '0 0' },
+          '100%': { backgroundPosition: '0 100%' },
         },
       },
     },

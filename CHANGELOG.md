@@ -10,6 +10,11 @@
   - 口头禅从"根据我的经验"改为"根据知识库数据"
   - 现在与 CLAUDE.md 的回答规范完全一致（`avatars/小堵-工商储专家/soul.md`）
 
+- **图表视觉升级：融入 UED 高级审美** — 融合 ued-agent 数据可视化规范，全面提升图表视觉品质：
+  - ECharts 主题升级（`echarts-pixel-theme.ts`）：折线图平滑曲线 + 渐变面积填充、柱状图圆角顶部、毛玻璃 tooltip（`backdrop-filter: blur(12px)` + 圆角 8px）、配色新增暗底蓝 `#5E9FD6` 和淡紫 `#B89AE8` 冷暖平衡、Y 轴隐藏轴线极简风、圆形 symbol 替代方块、hover 发光效果
+  - draw-chart 技能升级：新增"高级视觉"章节，指导 LLM 配合主题内置效果（不手写 areaStyle/borderRadius/tooltip）、饼图默认环形、markPoint 标注极值
+  - 模板同步更新
+
 - **修复多轮工具调用时重复输出** — 倒数第 2 轮 LLM 拿到 query_excel 数据后输出半成品分析 + tool_call，最终轮又重复一遍相同分析。修复：工具调用中间轮次不实时显示 assistant 文字，只在最终轮（无 tool_calls）才渲染完整回答，中间轮用 toolCallStatus 指示器代替（`chatStore.ts`）。
 
 - **修复图表流式输出时红框闪烁 + Y 轴标题重叠** — 流式输出 chart 代码块时，JSON 未写完就触发 JSON.parse 导致红框"解析失败"闪烁，完成后又消失。修复：检测到 JSON 未闭合时显示"图表生成中..."加载态，不报错。Y 轴 name 和 title/subtext 重叠：ChartRenderer 注入默认 grid `{top: 80, left: 80}` 防止重叠（`MessageBubble.tsx` + `ChartRenderer.tsx`）。

@@ -4,6 +4,13 @@
 
 ### Bug 修复
 
+- **`query_excel` 返回值大小硬限制（防 context 炸）** — 用户问"215 机型..."报 187k token 错误（context 上限 131k）。诊断后发现 system prompt 实际只有 41k 字符 ≈ 10k token（rag_only 工作正常），187k 是因为 LLM 多次调 `query_excel` 不带 filter dump 出大量数据进 chat history 累积起来。修复：
+  - 默认 limit `100 → 50`，硬上限 `1000 → 200`
+  - 新增**返回内容字符数硬上限 8000 字符**（约 2k token），超出按行二次截断，附 `truncated_by_size: true` 和明确提示
+  - 不传 filter + 不传 columns + 不传 limit 时 → **直接拒绝执行**并报错"会一次性返回整张表 N 行污染 context"
+  - 工具描述强化警告：「**Excel 数据必须用此工具，禁止用 search_knowledge**」「必须用 filter 把结果缩小到几行到几十行」「画图通常 12-30 行就够了」
+  - 三个新常量集中在 tool-router.ts 顶部：`QUERY_EXCEL_DEFAULT_LIMIT` / `QUERY_EXCEL_HARD_LIMIT` / `QUERY_EXCEL_MAX_CONTENT_CHARS`
+
 - **`MAX_TOOL_ROUNDS` 5 → 10** — 修复用户提问 "215 机型 2026 年 1~3 月设备侧效率折线图" 后看到 `[系统提示] 工具调用轮数达到上限，已提前结束本轮` 但没有真正的图表回答。`query_excel` + `draw-chart` 这类组合流程典型需要 5+ 轮（load_skill 1-2 轮 + query_excel 1-2 轮 + 容错修正 1-2 轮 + 最终带 ```chart 代码块的回答），原来 5 轮上限留 0 容错就被吃完。改为 10 轮给探索和容错留余量，仍能兜底防真死循环（`chatStore.ts:MAX_TOOL_ROUNDS`）。
 
 - **Excel 导入后 UI 卡死 / 上下文未刷新** — 修复 v0.5.0 方案 C 落地后用户反馈的 3 个连锁问题：

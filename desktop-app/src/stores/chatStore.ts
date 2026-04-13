@@ -143,31 +143,31 @@ const AVATAR_TOOLS: LLMTool[] = [
     type: 'function',
     function: {
       name: 'query_excel',
-      description: '精确查询已导入的 Excel / CSV 数据源。支持按列值、范围、IN 等条件过滤行。**当用户问题涉及 Excel 数据（表格、按条件筛选、生成图表）时必须用这个工具而不是 search_knowledge**，因为 Excel 数据不在 system prompt 里，也不适合 RAG 模糊检索。system prompt 顶部的"可查询 Excel 数据源"列出了可用 file 名、sheet 名、列名和数据范围。',
+      description: '精确查询已导入的 Excel / CSV 数据源。**Excel 数据必须用此工具，禁止用 search_knowledge**。⚠️ 严格规则：必须用 filter 把结果缩小到几行到几十行，禁止 dump 整张表（会撞破 LLM context 上限）。如果不确定数据格式，先用一个小 filter 试探（如 limit:5），看清字段后再做完整查询。一次返回硬上限：200 行 / 8000 字符，超过会被截断且 truncated_by_size=true。',
       parameters: {
         type: 'object',
         properties: {
           file: {
             type: 'string',
-            description: 'Excel 文件的 basename（不含后缀），对应 knowledge/_excel/<file>.json',
+            description: 'Excel 文件 basename（不含后缀），见 system prompt 的"可查询 Excel 数据源"列表',
           },
           sheet: {
             type: 'string',
-            description: 'sheet 名，如 "月度" / "品类"',
+            description: 'sheet 名，从 system prompt 的 schema 摘要里挑',
           },
           filter: {
             type: 'object',
-            description: 'MongoDB 风格过滤条件。示例: {"机型": "215", "月份": {"$gte": "2026-01", "$lte": "2026-03"}}。支持 $eq(默认)/$ne/$gt/$gte/$lt/$lte/$in。',
+            description: '【强烈建议】MongoDB 风格过滤。示例: {"机型":"215","月份":{"$gte":"2026-01","$lte":"2026-03"}}。支持 $eq(默认)/$ne/$gt/$gte/$lt/$lte/$in。不传 filter 又不传 columns 又不传 limit 会被工具拒绝执行（防止 dump 全表）。',
           },
           columns: {
             type: 'array',
             items: { type: 'string' },
-            description: '只返回指定列（可选，默认返回所有列）',
+            description: '只返回指定列（强烈推荐：把要画图的 X 轴 + Y 轴列名列出来，避免拉无关字段）',
           },
           limit: {
             type: 'number',
-            description: '最多返回行数，默认 100，硬上限 1000',
-            default: 100,
+            description: '最多返回行数，默认 50，硬上限 200。画图通常 12-30 行就够了。',
+            default: 50,
           },
         },
         required: ['file', 'sheet'],

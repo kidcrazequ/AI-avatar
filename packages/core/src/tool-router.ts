@@ -20,6 +20,20 @@ export interface ToolCallResult {
   error?: string
 }
 
+// ─── query_excel 限流常量 ─────────────────────────────────────────────────────
+// 防止单次工具调用 dump 几百行 × 几十列 × 几十字符 = 几十 KB 数据进 chat history
+// 累积起来撞破 LLM context 上限。
+
+/** 单次 query_excel 默认返回行数 */
+const QUERY_EXCEL_DEFAULT_LIMIT = 50
+/** 单次 query_excel 硬上限行数（即使 LLM 显式传 1000 也会被截断） */
+const QUERY_EXCEL_HARD_LIMIT = 200
+/**
+ * 单次 query_excel 返回 content 的字符数硬上限（约 2k token）。
+ * 即使在 limit 范围内，如果列数太多导致 JSON 太大也会被按行二次截断。
+ */
+const QUERY_EXCEL_MAX_CONTENT_CHARS = 8000
+
 export class ToolRouter {
   private avatarsPath: string
   private retrievers = new Map<string, KnowledgeRetriever>()
@@ -129,14 +143,19 @@ export class ToolRouter {
 
   /**
    * query_excel: 按 MongoDB 风格 filter 精确过滤 Excel 行，返回 JSON。
-   * 避免把整个表塞进 system prompt 或通过 RAG 模糊匹配丢行。
+   *
+   * 严格保护：返回值不能太大，否则会污染 chat history 引发 context overflow。
+   *   - 返回内容硬上限 QUERY_EXCEL_MAX_CONTENT_CHARS 字符
+   *   - 默认 limit 50，硬上限 QUERY_EXCEL_HARD_LIMIT
+   *   - 不传 filter 且不传 columns 时，要求加 limit 否则报错（防止 dump 全表）
+   *   - 超出 content 上限时按行数截断，附 truncated_by_size 标志和提示
    *
    * 参数：
    *   file    — _excel/ 目录下的 basename（不含 .json）
    *   sheet   — sheet 名
    *   filter? — 列名 → 值（$eq 默认）或 {$gte/$lte/$gt/$lt/$ne/$in: ...}
    *   columns? — 只返回这些列
-   *   limit?   — 最多返回行数，默认 100，硬上限 1000
+   *   limit?   — 最多返回行数，默认 50，硬上限 200
    */
   private queryExcel(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const file = args.file as string
@@ -183,17 +202,29 @@ export class ToolRouter {
     const columns = args.columns as string[] | undefined
     const limitRaw = args.limit
     const limit = Math.min(
-      1000,
-      typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 100,
+      QUERY_EXCEL_HARD_LIMIT,
+      typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.floor(limitRaw)
+        : QUERY_EXCEL_DEFAULT_LIMIT,
     )
+
+    // 防 dump：没 filter 没 columns 时强制要求显式 limit，且 limit 必须很小
+    const hasFilter = Object.keys(filter).length > 0
+    const hasColumns = Array.isArray(columns) && columns.length > 0
+    if (!hasFilter && !hasColumns && typeof limitRaw !== 'number') {
+      return {
+        content: '',
+        error: `查询过宽：没有 filter、没有 columns、也没有 limit，会一次性返回整张表 ${sheet.rowCount} 行污染 context。请至少指定 filter（推荐）、columns 或显式 limit≤50。`,
+      }
+    }
 
     // 执行过滤
     const matched: Array<Record<string, string | number | null>> = []
     for (const row of sheet.rows) {
       if (matchFilter(row, filter)) {
-        if (columns && columns.length > 0) {
+        if (hasColumns) {
           const picked: Record<string, string | number | null> = {}
-          for (const col of columns) {
+          for (const col of columns!) {
             if (col in row) picked[col] = row[col]
           }
           matched.push(picked)
@@ -204,19 +235,36 @@ export class ToolRouter {
       }
     }
 
-    // 统计总匹配数（用于告诉 LLM 是否被 limit 截断）—— 但如果数据大，
-    // 重新扫一遍浪费；只在早退时返回 truncated=true 让 LLM 自己决定是否加 limit
-    const truncated = matched.length >= limit
+    const truncatedByLimit = matched.length >= limit
 
-    return {
-      content: JSON.stringify({
-        file,
-        sheet: sheetName,
-        count: matched.length,
-        truncated,
-        rows: matched,
-      }, null, 2),
+    // 二级保护：返回内容字符数上限。若 JSON serialize 后超过阈值，按行截断。
+    let resultRows = matched
+    let truncatedBySize = false
+    let serialized = JSON.stringify(resultRows)
+    while (serialized.length > QUERY_EXCEL_MAX_CONTENT_CHARS && resultRows.length > 1) {
+      // 砍一半重试
+      resultRows = resultRows.slice(0, Math.max(1, Math.floor(resultRows.length / 2)))
+      truncatedBySize = true
+      serialized = JSON.stringify(resultRows)
     }
+
+    const payload = {
+      file,
+      sheet: sheetName,
+      count: resultRows.length,
+      total_matched: matched.length,
+      truncated: truncatedByLimit || truncatedBySize,
+      truncated_by_limit: truncatedByLimit,
+      truncated_by_size: truncatedBySize,
+      hint: truncatedBySize
+        ? `数据被按 content size (${QUERY_EXCEL_MAX_CONTENT_CHARS} chars) 截断，请加更精细的 filter 或减少 columns 重新查询`
+        : truncatedByLimit
+          ? `数据被按 limit=${limit} 截断，原匹配 ${matched.length} 行，请加 filter 缩小或翻页`
+          : undefined,
+      rows: resultRows,
+    }
+
+    return { content: JSON.stringify(payload, null, 2) }
   }
 
   // ─── 计算工具（GAP4 计算引擎）────────────────────────────────────────────────

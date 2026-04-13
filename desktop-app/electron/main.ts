@@ -1049,11 +1049,21 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
 
   let allFiles: string[]
 
+  /** 检查文件是否已经被增强过（source: enhanced），支持断点续跑 */
+  function isAlreadyEnhanced(filePath: string): boolean {
+    try {
+      const head = fs.readFileSync(filePath, 'utf-8').slice(0, 200)
+      return head.includes('source: enhanced')
+    } catch { return false }
+  }
+
   if (targetFiles && targetFiles.length > 0) {
-    // 指定了文件列表（批量导入后自动调用），只处理这些文件
-    allFiles = targetFiles.map(f => path.join(knowledgePath, f)).filter(f => fs.existsSync(f))
+    // 指定了文件列表（批量导入后自动调用），跳过已增强的（断点续跑）
+    allFiles = targetFiles
+      .map(f => path.join(knowledgePath, f))
+      .filter(f => fs.existsSync(f) && !isAlreadyEnhanced(f))
   } else {
-    // 手动点 ENHANCE 按钮，扫描所有需要增强的文件（含 rag_only + 批量导入标记）
+    // 手动点 ENHANCE 按钮，扫描所有需要增强的文件（含 rag_only + 批量导入标记，排除已增强的）
     allFiles = []
     function scanDir(dir: string): void {
       const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -1063,7 +1073,7 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
           scanDir(full)
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
           const content = fs.readFileSync(full, 'utf-8')
-          if (content.includes('rag_only: true') && content.includes('批量导入')) {
+          if (content.includes('rag_only: true') && content.includes('批量导入') && !content.includes('source: enhanced')) {
             allFiles.push(full)
           }
         }

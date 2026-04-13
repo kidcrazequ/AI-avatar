@@ -75,6 +75,12 @@ interface ChatStore {
   toolCallStatus: string
   /** Feature 6: 待确认的技能创建建议 */
   skillProposals: string[]
+  /**
+   * 已折叠的助手消息 id 集合。
+   * 放在 store 中是因为 react-virtuoso 会把滚出视窗的 MessageBubble 卸载，
+   * 组件级 useState 会丢失；store 的状态跨组件卸载/HMR 持久。
+   */
+  collapsedMessageIds: Set<string>
 
   setSystemPrompt: (prompt: string) => void
   setChatModel: (config: ModelConfig) => void
@@ -84,6 +90,8 @@ interface ChatStore {
   resetTransientState: () => void
   /** Feature 6: 清除技能创建建议 */
   clearSkillProposals: () => void
+  /** 切换某条消息的折叠状态 */
+  toggleMessageCollapsed: (id: string) => void
 }
 
 /**
@@ -255,6 +263,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chatModel: DEFAULT_CHAT_MODEL,
   toolCallStatus: '',
   skillProposals: [],
+  collapsedMessageIds: new Set<string>(),
 
   setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
 
@@ -263,6 +272,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setMessages: (messages) => set({ messages }),
 
   clearSkillProposals: () => set({ skillProposals: [] }),
+
+  toggleMessageCollapsed: (id) => set((state) => {
+    const next = new Set(state.collapsedMessageIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return { collapsedMessageIds: next }
+  }),
 
   resetTransientState: () => {
     activeChatRequest = null

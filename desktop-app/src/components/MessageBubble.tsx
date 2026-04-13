@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, memo, type ComponentPropsWithoutRef, type ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ChatMessage } from '../stores/chatStore'
+import { ChatMessage, useChatStore } from '../stores/chatStore'
 import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
 
@@ -60,13 +60,6 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
-  /**
-   * 折叠状态：由父组件 MessageList 统一管理，避免 Virtuoso 虚拟化
-   * 卸载本组件时 local useState 丢失导致"滑动后自动展开"。
-   */
-  isCollapsed?: boolean
-  /** 折叠状态切换回调（传入本消息 id） */
-  onToggleCollapsed?: (id: string) => void
 }
 
 /**
@@ -104,15 +97,17 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, isCollapsed, onToggleCollapsed }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => { clearTimeout(savedTimerRef.current) }, [])
 
-  // 折叠状态从父组件 props 读取（避免 Virtuoso 卸载导致本地 state 丢失）
-  const collapsed = isCollapsed ?? false
+  // 折叠状态从 chatStore 读取，跨 Virtuoso 卸载/HMR 持久
+  // 用 selector 只订阅自己这条消息的折叠态，避免其他消息 toggle 时被无谓重渲染
+  const collapsed = useChatStore((s) => s.collapsedMessageIds.has(message.id))
+  const toggleMessageCollapsed = useChatStore((s) => s.toggleMessageCollapsed)
   // 助手消息超过阈值时允许折叠（用户消息通常很短，不折叠）
   const canCollapse = !isUser && message.content.length > COLLAPSE_THRESHOLD
   // 折叠态展示前 N 字符（尽量在段落边界切断，避免切到 markdown 语法中间）
@@ -201,7 +196,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   </span>
                   <button
                     type="button"
-                    onClick={() => onToggleCollapsed?.(message.id)}
+                    onClick={() => toggleMessageCollapsed(message.id)}
                     className="font-game text-[10px] tracking-wider px-2 py-0.5
                       border border-px-border bg-px-elevated text-px-text-dim
                       hover:text-px-primary hover:border-px-primary

@@ -146,7 +146,16 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
     instanceRef.current = _echartsCore.init(containerRef.current, 'pixel', {
       renderer: 'canvas',
     })
-    instanceRef.current.setOption(option, true)
+    // 注入默认 grid 间距，防止 Y 轴 name 和 title/subtext 重叠
+    const safeOption = { ...option }
+    if (!safeOption.grid) {
+      safeOption.grid = { top: 80, left: 80 }
+    } else if (typeof safeOption.grid === 'object' && !Array.isArray(safeOption.grid)) {
+      const g = safeOption.grid as Record<string, unknown>
+      if (g.top === undefined) g.top = 80
+      if (g.left === undefined) g.left = 80
+    }
+    instanceRef.current.setOption(safeOption, true)
 
     const handleResize = () => instanceRef.current?.resize()
     window.addEventListener('resize', handleResize)
@@ -160,7 +169,15 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
   // option 变化时更新（只有 instance 已存在才 setOption）
   useEffect(() => {
     if (instanceRef.current) {
-      instanceRef.current.setOption(option, true)
+      const safeOpt = { ...option }
+      if (!safeOpt.grid) {
+        safeOpt.grid = { top: 80, left: 80 }
+      } else if (typeof safeOpt.grid === 'object' && !Array.isArray(safeOpt.grid)) {
+        const g = safeOpt.grid as Record<string, unknown>
+        if (g.top === undefined) g.top = 80
+        if (g.left === undefined) g.left = 80
+      }
+      instanceRef.current.setOption(safeOpt, true)
     }
   }, [option])
 

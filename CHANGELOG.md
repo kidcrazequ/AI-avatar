@@ -10,6 +10,8 @@
   - 口头禅从"根据我的经验"改为"根据知识库数据"
   - 现在与 CLAUDE.md 的回答规范完全一致（`avatars/小堵-工商储专家/soul.md`）
 
+- **修复图表流式输出时红框闪烁 + Y 轴标题重叠** — 流式输出 chart 代码块时，JSON 未写完就触发 JSON.parse 导致红框"解析失败"闪烁，完成后又消失。修复：检测到 JSON 未闭合时显示"图表生成中..."加载态，不报错。Y 轴 name 和 title/subtext 重叠：ChartRenderer 注入默认 grid `{top: 80, left: 80}` 防止重叠（`MessageBubble.tsx` + `ChartRenderer.tsx`）。
+
 - **修复图表 JSON 解析失败 + 图表类型不遵从用户指定** — LLM 在 chart JSON 中输出 JavaScript 函数（如 `"color": function()`），导致前端 JSON.parse 失败显示红框。根因是 draw-chart 技能示例中含 `"valueFormatter": "(v) => v + ' 万'"`，LLM 模仿后输出真正的 JS 函数。同时用户明确要"折线图"但 LLM 自行选了柱状图。修复：
   - 删除示例中的 `valueFormatter` 函数字符串
   - 禁止列表新增"严禁 `function` 关键字"，明确 formatter/color 等字段只能用 ECharts 字符串模板

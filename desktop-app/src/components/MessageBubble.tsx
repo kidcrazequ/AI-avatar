@@ -20,6 +20,20 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
     return <code className={className} {...rest}>{children}</code>
   }
 
+  // 流式输出检测：JSON 还没写完时（缺少闭合花括号），静默显示加载态，不报错
+  const trimmed = raw.trim()
+  const isIncomplete = !trimmed.endsWith('}')
+  if (isIncomplete) {
+    return (
+      <pre className="my-3 border-2 border-px-primary/30 bg-px-bg p-3 overflow-x-auto animate-pulse">
+        <div className="font-game text-[11px] tracking-wider text-px-text-dim mb-2">
+          ⏳ 图表生成中...
+        </div>
+        <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
+      </pre>
+    )
+  }
+
   // 尝试解析 chart JSON（JSON.parse 独立于 JSX，规避 react-hooks/error-boundaries 规则）
   let parsedOption: Record<string, unknown> | null = null
   let parseError: string | null = null

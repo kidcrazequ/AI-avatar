@@ -544,7 +544,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           (chunk) => {
             if (isStale()) return
             assistantText += chunk
-            if (pendingChunkUpdate === null) {
+            // 工具调用中间轮次（round > 0）不实时显示文字给用户，
+            // 避免 LLM 在中间轮输出半成品分析后最终轮又重复一遍。
+            // 只在第一轮（用户刚发消息）和最终轮（下面 resolve 后判断无 tool_calls 再刷新）时显示。
+            if (round === 0 && pendingChunkUpdate === null) {
               pendingChunkUpdate = requestAnimationFrame(() => {
                 pendingChunkUpdate = null
                 if (isStale()) return
@@ -563,6 +566,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               return
             }
             pendingToolCalls = toolCalls
+            // 本轮没有 tool_calls → 最终轮，立即刷新显示最终文字
+            if (!toolCalls || toolCalls.length === 0) {
+              const text = assistantText
+              set((state) => ({
+                messages: upsertLastAssistant(state.messages, assistantMsgId, text),
+              }))
+            }
             resolve()
           },
           (error) => {

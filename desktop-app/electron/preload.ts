@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference -- 保留三斜线让 global 类型在 preload 沙箱生效
 /// <reference path="../src/global.d.ts" />
 import { contextBridge, ipcRenderer } from 'electron'
 

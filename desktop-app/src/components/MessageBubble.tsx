@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect, memo } from 'react'
-import type { ComponentPropsWithoutRef, ReactElement } from 'react'
+import { useState, useRef, useEffect, memo, type ComponentPropsWithoutRef, type ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage } from '../stores/chatStore'
@@ -21,22 +20,29 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
     return <code className={className} {...rest}>{children}</code>
   }
 
-  // 尝试解析 chart JSON
+  // 尝试解析 chart JSON（JSON.parse 独立于 JSX，规避 react-hooks/error-boundaries 规则）
+  let parsedOption: Record<string, unknown> | null = null
+  let parseError: string | null = null
   try {
-    const option = JSON.parse(raw) as Record<string, unknown>
-    return <ChartRenderer option={option} rawJson={raw} />
+    parsedOption = JSON.parse(raw) as Record<string, unknown>
   } catch (err) {
-    // JSON 解析失败：降级为带红框的原始代码块，提示用户图表数据格式错误
-    console.warn('[MessageBubble] chart JSON 解析失败:', (err as Error).message)
-    return (
-      <pre className="my-3 border-2 border-px-danger bg-px-bg p-3 overflow-x-auto">
-        <div className="font-game text-[11px] tracking-wider text-px-danger mb-2">
-          ⚠ CHART JSON 解析失败
-        </div>
-        <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
-      </pre>
-    )
+    parseError = (err as Error).message
+    console.warn('[MessageBubble] chart JSON 解析失败:', parseError)
   }
+
+  if (parsedOption) {
+    return <ChartRenderer option={parsedOption} rawJson={raw} />
+  }
+
+  // JSON 解析失败：降级为带红框的原始代码块，提示用户图表数据格式错误
+  return (
+    <pre className="my-3 border-2 border-px-danger bg-px-bg p-3 overflow-x-auto">
+      <div className="font-game text-[11px] tracking-wider text-px-danger mb-2">
+        ⚠ CHART JSON 解析失败{parseError ? `: ${parseError}` : ''}
+      </div>
+      <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
+    </pre>
+  )
 }
 
 const MARKDOWN_COMPONENTS = { code: ChartCodeBlock }
@@ -56,7 +62,10 @@ function safeUrlTransform(url: string): string {
   try {
     const parsed = new URL(url)
     if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return url
-  } catch { /* 非法 URL */ }
+  } catch (parseErr) {
+    // 非法 URL 是常见的 markdown 输入，静默降级为空字符串
+    void parseErr
+  }
   return ''
 }
 

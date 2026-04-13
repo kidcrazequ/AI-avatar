@@ -9,8 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString } from '@soul/core'
-import type { WikiAnswer } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, type WikiAnswer } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
@@ -98,6 +97,7 @@ const SENSITIVE_CHANNELS = new Set([
 
 function wrapHandler(
   channel: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic IPC dispatcher, 参数类型由各 handler 自行约束
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
   ipcMain.handle(channel, async (event, ...args) => {
@@ -277,6 +277,7 @@ async function atomicWriteFile(filePath: string, content: string): Promise<void>
     await fs.promises.rename(tmpPath, filePath)
   } catch (err) {
     // 确保临时文件不会残留
+    // eslint-disable-next-line @typescript-eslint/no-empty-function -- 临时文件清理失败无需记录
     await fs.promises.unlink(tmpPath).catch(() => {})
     throw err
   }
@@ -712,8 +713,9 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
         wikiChunks = wikiRetriever.searchChunks(question, 3)
       }
     }
-  } catch {
+  } catch (wikiErr) {
     // wiki 注入失败不影响正常 RAG
+    void wikiErr
   }
 
   return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, undefined, wikiChunks)
@@ -1316,8 +1318,9 @@ wrapHandler('export-error-log', async (_, days = 3) => {
       if (content) {
         lines.push(`\n========== ${date} ==========\n${content}`)
       }
-    } catch {
+    } catch (readErr) {
       // 文件不存在，跳过
+      void readErr
     }
   }
 

@@ -3,8 +3,7 @@ import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
 import { LLMService, ModelConfig } from '../services/llm-service'
-import { cleanOcrHtml, cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument } from '@soul/core'
-import type { LLMCallFn } from '@soul/core'
+import { cleanOcrHtml, cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, type LLMCallFn } from '@soul/core'
 import { generateTestCasesFromContent } from '../services/test-generator'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
@@ -87,7 +86,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   useEffect(() => {
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
     if (!isBusy && taskStartTime) setTaskStartTime(null)
-  }, [isBusy])
+  }, [isBusy, taskStartTime])
 
   const elapsedDisplay = useMemo(() => {
     if (elapsedSeconds < 60) return `${elapsedSeconds}s`
@@ -350,8 +349,9 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         let existingReadme = ''
         try {
           existingReadme = await window.electronAPI.readKnowledgeFile(avatarId, 'README.md')
-        } catch {
-          // README 不存在
+        } catch (readErr) {
+          // README 不存在是合法状态（新分身），不记日志
+          void readErr
         }
 
         const fileEntry = `| \`${targetPath}\` | ${parsed.fileName} | 导入自 ${parsed.fileType.toUpperCase()} 文件 |`
@@ -385,7 +385,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           showStatus('构建检索索引（上下文摘要 + 向量嵌入）...', false)
           setImportProgress({ current: 4, total: 5, phase: '构建检索索引' })
           const indexResult = await window.electronAPI.buildKnowledgeIndex(avatarId, indexApiKey, indexBaseUrl)
-          console.log(`检索索引构建完成：${indexResult.contextCount} 上下文，${indexResult.embeddingCount} 向量`)
+          console.warn(`检索索引构建完成：${indexResult.contextCount} 上下文，${indexResult.embeddingCount} 向量`)
         } catch (indexErr) {
           console.warn('检索索引构建失败（不影响导入）:', indexErr)
         }

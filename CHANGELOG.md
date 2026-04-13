@@ -1,5 +1,44 @@
 # 更新日志
 
+## v0.5.0 (2026-04-13)
+
+### 新功能
+
+- **Excel / CSV 知识库导入** — 知识库现在吃 `.xlsx` 和 `.csv` 文件；每个 sheet 自动转 GFM markdown 表格（表头识别、5000 行/sheet 截断、单元格 `|` 换行转义），写入 `avatars/<id>/knowledge/<name>.md`。Excel 导入绕过 LLM 重格式化管线，因为源数据已是结构化。依赖：SheetJS (`xlsx` 0.20.3) 纯 JS 无原生模块（`document-parser.ts`：`parseExcel()` + `rowsToMarkdownTable()`）。
+- **批量 / 归档导入** — KnowledgePanel 新增 `FOLDER` 和 `ARCHIVE` 按钮：
+  - **文件夹** — 选一个文件夹后 BFS 递归遍历，自动过滤支持的扩展名、跳过 `node_modules`/`.git`/`.DS_Store` 等噪声、硬上限（深度 8、文件数 500、总字节 2 GB、单文件 80 MB），一把梭式在主进程批量 parse + 写入，渲染进程通过 `knowledge-import-progress` 事件实时收进度
+  - **归档** — 自动识别 `.zip` / `.tar.gz` / `.tgz` / `.7z` / `.rar`，解压到 `$TMPDIR/soul-import-<uuid>`，`try/finally` 清理 temp，全链路 zip 炸弹防护（解压后总大小 > 1 GB 拒绝）和 zip slip 防护（`..`/绝对路径拒绝）
+  - 批量结果抽屉展示每个文件的成功/跳过/失败明细，继续执行不因单文件失败中断
+  - 批量导入跳过 LLM 格式化（保证速度，单文件导入仍享受完整管线）
+  - 依赖：`adm-zip`（zip，纯 JS）、`tar`（tar.gz，纯 JS）、`node-7z` + `7zip-bin`（7z，平台二进制 asar 外打包）、`node-unrar-js`（rar，WASM 端口）
+  - 新模块：`desktop-app/electron/folder-importer.ts`
+- **ECharts 图表技能（draw-chart）** — 聊天中直接内联渲染高级感图表：
+  - 新增 `templates/skills/draw-chart.md`，含 UED 设计硬约束（禁 3D、Y 轴从 0、标题副标题必填、系列 ≤5 色、X 类目 >12 改横向、不得硬编码颜色、KPI 单值必须带对比）+ 3 组 few-shot 示例（月度折线、品类饼图、站点横向对比）
+  - 新增 `templates/skills/chart-from-knowledge.md` 串联 `search_knowledge` + `draw-chart` 的高阶技能
+  - 自动安装到**所有现有分身**（通过 `scripts/retrofit-skills.ts` 幂等回填）和**未来分身**（`create-avatar` IPC 自动调 `installDefaultSkillsSync` 复制模板）
+  - LLM 输出 ` ```chart ` 代码块（JSON 格式 ECharts option）由 `MessageBubble.tsx` 的 `ChartCodeBlock` 拦截，JSON 解析后交给 `ChartRenderer.tsx` 懒加载 `echarts/core` + `charts` + `components` + `renderers` 子模块渲染（首次加载后缓存）
+  - 新增 `src/lib/echarts-pixel-theme.ts` — 从 tailwind `px` 色板构建 ECharts 主题（暖金/薄荷/绿/红/灰 5 色 60-30-10 palette、像素方块 symbol、暗底透明背景、color-decal 色盲友好）
+  - 错误处理：JSON 解析失败降级为带红框的原 `<pre>`；渲染异常由 ErrorBoundary 兜底
+  - 依赖：`echarts` 5.5 + `echarts-for-react` 3.0
+
+### 改进
+
+- **分身创建流程** — `CreateAvatarWizard` 创建新分身时，`create-avatar` IPC 在写完用户自定义技能后自动把 `templates/skills/*.md` 复制到新分身的 `skills/`，不覆盖同名文件（保护用户自定义）
+- **electron-builder 打包配置** — 新增 `asarUnpack` 规则把 `7zip-bin` 平台二进制和 `node-unrar-js` WASM 文件从 asar 包内解出，让运行时可正常执行
+- **ESLint 配置修复** — `eslint.config.js` 重命名为 `eslint.config.mjs`，修复 `"type": "commonjs"` 下 ESM import 无法加载的问题，`npm run lint` 现在可以正常运行
+
+### 代码质量
+
+- 新增 IPC 通道：`import-folder` / `import-archive` / `install-default-skills`
+- 新增 IPC 事件：`knowledge-import-progress`
+- `ParsedDocument.fileType` 扩展 `'excel'` 类型 + 新增 `sheetNames?: string[]` 字段
+- `SUPPORTED_PARSE_EXTENSIONS` 从 `document-parser.ts` 导出供 `folder-importer.ts` 复用，作为文件过滤 single source of truth
+- `installDefaultSkillsSync()` 幂等：已存在的技能不会被覆盖
+- 所有新增 `.ts`/`.tsx` 文件通过 `npm run typecheck` 和 `npm run lint` 零错误零警告
+- 修复触及的既有文件中几处历史 lint 问题（`main.ts` 合并 `import type`、空 catch 块加 void 标记；`KnowledgePanel.tsx` 合并 `import type`、补 useEffect 依赖；`MessageBubble.tsx` 合并 react import）
+
+---
+
 ## v0.4.0 (2026-04-10)
 
 ### 新功能

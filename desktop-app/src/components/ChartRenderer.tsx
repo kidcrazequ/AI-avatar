@@ -15,8 +15,7 @@
  * @date 2026-04-13
  */
 
-import { Component, useEffect, useRef, useState } from 'react'
-import type { ReactElement, ReactNode } from 'react'
+import { Component, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 
 interface ChartRendererProps {
   /** ECharts option 对象（由 LLM 输出的 ```chart JSON 解析得来） */

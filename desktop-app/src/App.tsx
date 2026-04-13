@@ -39,6 +39,7 @@ function App() {
   const [activeAvatarName, setActiveAvatarName] = useState<string>('')
   const [avatarList, setAvatarList] = useState<Avatar[]>([])
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string; releaseNotes?: string } | null>(null)
 
   const [visionModel, setVisionModel] = useState<ModelConfig>(DEFAULT_VISION_MODEL)
   const [ocrModel, setOcrModel] = useState<ModelConfig>(DEFAULT_OCR_MODEL)
@@ -63,6 +64,19 @@ function App() {
   )
 
   useEffect(() => () => { clearTimeout(toastTimerRef.current) }, [])
+
+  // 启动时检查更新（静默，失败不影响使用）
+  useEffect(() => {
+    window.electronAPI.checkUpdate().then(result => {
+      if (result.hasUpdate && result.downloadUrl && result.latestVersion) {
+        setUpdateInfo({
+          latestVersion: result.latestVersion,
+          downloadUrl: result.downloadUrl,
+          releaseNotes: result.releaseNotes,
+        })
+      }
+    }).catch(() => { /* 静默 */ })
+  }, [])
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
@@ -395,6 +409,29 @@ function App() {
         >
           {activeConversationId ? (
             <div className="flex flex-col h-screen">
+              {/* ── 更新提示横幅 ── */}
+              {updateInfo && (
+                <div className="flex items-center justify-between px-4 py-2 bg-px-primary/10 border-b border-px-primary/30 text-[12px]">
+                  <span className="text-px-primary font-game tracking-wider">
+                    NEW v{updateInfo.latestVersion} 可用
+                    {updateInfo.releaseNotes && ` — ${updateInfo.releaseNotes.split('\n')[0].slice(0, 60)}`}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => window.open(updateInfo.downloadUrl, '_blank')}
+                      className="pixel-btn-sm text-[11px]"
+                    >
+                      下载更新
+                    </button>
+                    <button
+                      onClick={() => setUpdateInfo(null)}
+                      className="text-px-text-dim hover:text-px-text text-[11px]"
+                    >
+                      忽略
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* ── 顶部操作栏 ── */}
               <div className="flex items-center justify-between px-5 py-2.5 bg-px-surface border-b-2 border-px-border">
                 <div className="flex items-center gap-4">

@@ -209,4 +209,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-prompt-template', id, avatarId, title, content),
   deletePromptTemplate: (id: string, avatarId: string) =>
     ipcRenderer.invoke('delete-prompt-template', id, avatarId),
+
+  // 检查更新
+  checkUpdate: () => ipcRenderer.invoke('check-update'),
 })

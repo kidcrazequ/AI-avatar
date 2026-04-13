@@ -1474,3 +1474,62 @@ wrapHandler('export-error-log', async (_, days = 3) => {
 
   return { success: true, filePath: exportFile }
 })
+
+/**
+ * check-update: 从 GitHub Releases 获取最新版本号，与本地版本比较。
+ * 轻量实现：只检查版本号 + 返回下载链接，不自动下载安装。
+ */
+wrapHandler('check-update', async (): Promise<{
+  hasUpdate: boolean
+  currentVersion: string
+  latestVersion?: string
+  downloadUrl?: string
+  releaseNotes?: string
+}> => {
+  const currentVersion = app.getVersion()
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10000)
+    const res = await fetch(
+      'https://api.github.com/repos/kidcrazequ/AI-avatar/releases/latest',
+      {
+        headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Soul-Desktop' },
+        signal: controller.signal,
+      },
+    )
+    clearTimeout(timeout)
+    if (!res.ok) {
+      console.warn(`[check-update] GitHub API 返回 ${res.status}`)
+      return { hasUpdate: false, currentVersion }
+    }
+    const data = await res.json() as { tag_name?: string; html_url?: string; body?: string }
+    const latestVersion = (data.tag_name || '').replace(/^v/, '')
+    if (!latestVersion) return { hasUpdate: false, currentVersion }
+
+    const hasUpdate = compareVersions(latestVersion, currentVersion) > 0
+    return {
+      hasUpdate,
+      currentVersion,
+      latestVersion,
+      downloadUrl: hasUpdate ? data.html_url : undefined,
+      releaseNotes: hasUpdate ? (data.body || '').slice(0, 500) : undefined,
+    }
+  } catch (err) {
+    // 网络失败静默，不影响启动
+    console.warn('[check-update] 检查更新失败:', err instanceof Error ? err.message : String(err))
+    return { hasUpdate: false, currentVersion }
+  }
+})
+
+/** 简单语义化版本比较：返回 1(a>b) / 0(a==b) / -1(a<b) */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0
+    const nb = pb[i] || 0
+    if (na > nb) return 1
+    if (na < nb) return -1
+  }
+  return 0
+}

@@ -269,6 +269,7 @@ interface ElectronAPI {
   getPromptTemplates: (avatarId: string) => Promise<PromptTemplate[]>
   updatePromptTemplate: (id: string, avatarId: string, title: string, content: string) => Promise<void>
   deletePromptTemplate: (id: string, avatarId: string) => Promise<void>
+  checkUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion?: string; downloadUrl?: string; releaseNotes?: string }>
   /** 用系统文件管理器打开日志目录，返回目录路径 */
   openLogsFolder: () => Promise<string>
   /** 将最近 N 天错误日志导出到桌面，返回导出结果 */

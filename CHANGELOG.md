@@ -1,5 +1,26 @@
 # 更新日志
 
+## v0.5.3 (2026-04-13)
+
+### 新功能
+
+- **知识库质量优化（ENHANCE）** — 批量导入完成后自动进入 LLM 格式化优化，逐个对未格式化文件跑 `formatDocument`（章节切分 + 并发 3 路 LLM 排版），质量与单个导入一致。新增 IPC `enhance-knowledge-files` + 进度事件 `knowledge-enhance-progress` + KnowledgePanel `[✨] ENHANCE` 按钮。
+
+- **启动时检查更新** — 启动时静默请求 GitHub Releases 最新版本号，有新版在顶部显示金色横幅（版本号 + 更新说明 + 下载链接），点击跳转 GitHub Release 页面。网络失败静默不影响使用。
+
+- **新增 .pptx / .xls 文件导入** — `.pptx`：解析 slide XML 提取 `<a:t>` 文本节点，按幻灯片编号组织。`.xls`：SheetJS 已支持旧版 Excel 格式，加入扩展名白名单。
+
+### Bug 修复
+
+- **批量导入默认 rag_only** — 批量导入的文件自动加 `rag_only: true` frontmatter，不再塞进 system prompt（之前 405 个文件 2.9M 字符全部 stuff 进去导致 context 溢出）。
+- **zip slip 检测误判** — 文件名中含 `..` 的文件（如 `10..附件十.docx`）被误判为路径穿越攻击。改为按路径段检测，只有段恰好等于 `..` 才拒绝。同步修复 zip/tar/rar 三种格式。
+- **归档导入上限调大** — 单文件 500MB → 2GB，解压上限 1GB → 4GB。
+- **单文件导入上限调大** — 80MB → 200MB。
+- **PDF 图表页截图取消上限** — 不再截取前 20 页，全部图表页都截图。超限时均匀采样改为全量。
+- **工具调用纪律** — draw-chart / chart-from-knowledge 技能加入"最多 2 次 query_excel + 4 轮内必须出图"约束，防止 LLM 浪费轮数找数据不画图。
+
+---
+
 ## v0.5.2 (2026-04-13)
 
 ### Bug 修复

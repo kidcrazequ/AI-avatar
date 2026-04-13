@@ -47,6 +47,11 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
 
 const MARKDOWN_COMPONENTS = { code: ChartCodeBlock }
 
+/** 超过此字符数的助手消息显示折叠按钮 */
+const COLLAPSE_THRESHOLD = 600
+/** 折叠状态下显示的首段字符数 */
+const COLLAPSED_PREVIEW_CHARS = 300
+
 interface Props {
   message: ChatMessage
   previousUserMessage?: string
@@ -55,6 +60,29 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+}
+
+/**
+ * 在不破坏 markdown 结构的前提下把长文本截到 N 字符附近。
+ * 优先在段落（\n\n）或行尾切断，次选在标点处，最后兜底硬切。
+ * 截断后追加省略号，让折叠预览更自然。
+ */
+function truncateAtBoundary(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  const head = text.slice(0, maxChars)
+  // 优先段落边界
+  const paraBreak = head.lastIndexOf('\n\n')
+  if (paraBreak > maxChars * 0.5) return head.slice(0, paraBreak) + '\n\n...'
+  // 其次行尾
+  const lineBreak = head.lastIndexOf('\n')
+  if (lineBreak > maxChars * 0.6) return head.slice(0, lineBreak) + '\n\n...'
+  // 再其次中文标点
+  const punctMatch = head.match(/[。！？；，]\s*(?=[^。！？；，]*$)/)
+  if (punctMatch && punctMatch.index !== undefined && punctMatch.index > maxChars * 0.7) {
+    return head.slice(0, punctMatch.index + 1) + '...'
+  }
+  // 兜底硬切
+  return head + '...'
 }
 
 /** 仅允许安全协议的链接 */
@@ -72,9 +100,17 @@ function safeUrlTransform(url: string): string {
 const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => { clearTimeout(savedTimerRef.current) }, [])
+
+  // 助手消息超过阈值时允许折叠（用户消息通常很短，不折叠）
+  const canCollapse = !isUser && message.content.length > COLLAPSE_THRESHOLD
+  // 折叠态展示前 N 字符（尽量在段落边界切断，避免切到 markdown 语法中间）
+  const displayContent = canCollapse && collapsed
+    ? truncateAtBoundary(message.content, COLLAPSED_PREVIEW_CHARS)
+    : message.content
 
   const handleSave = () => {
     if (!onSaveAnswer || !previousUserMessage || saved) return
@@ -146,8 +182,29 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                 urlTransform={safeUrlTransform}
                 components={MARKDOWN_COMPONENTS}
               >
-                {message.content}
+                {displayContent}
               </ReactMarkdown>
+              {canCollapse && (
+                <div className="mt-3 -mb-1 pt-2 border-t border-px-border/40 flex items-center justify-between">
+                  <span className="font-game text-[10px] text-px-text-dim tracking-wider">
+                    {collapsed
+                      ? `${message.content.length} 字 · 已折叠`
+                      : `${message.content.length} 字`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCollapsed(!collapsed)}
+                    className="font-game text-[10px] tracking-wider px-2 py-0.5
+                      border border-px-border bg-px-elevated text-px-text-dim
+                      hover:text-px-primary hover:border-px-primary
+                      transition-none"
+                    aria-label={collapsed ? '展开完整消息' : '折叠消息'}
+                    aria-expanded={!collapsed}
+                  >
+                    {collapsed ? '[▶] 展开' : '[▼] 收起'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

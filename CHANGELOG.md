@@ -1,6 +1,6 @@
 # 更新日志
 
-## v0.5.4 (2026-04-13)
+## v0.5.5 (2026-04-13)
 
 ### 新功能
 
@@ -8,11 +8,19 @@
 
 - **pptx 快速导入** — pptx 导入走快速路径跳过 LLM 格式化（文本已按幻灯片页分好结构），秒级完成。之前 100 页 pptx 需要 20+ 分钟（每页当作一个章节逐个调 LLM）。
 
+- **ENHANCE 断点续跑** — 格式化中断后重新运行，自动跳过已增强的文件（检测 `source: enhanced` frontmatter），不从头重来。
+
 - **单文件导入 filter 同步** — UI 文件选择器新增 `.pptx`、`.xls`、`.bmp`，去掉不支持的 `.doc`，与后端 `SUPPORTED_PARSE_EXTENSIONS` 保持一致。
+
+### 代码质量（两轮审查 + 14 项修复）
+
+- **CRITICAL 修复**：PDF 截图上限 `Infinity` → 200（防 OOM）；zip/tar/rar slip 检测改用 `path.resolve` 验证目标目录（防路径穿越）；跨轮次 assistant 压缩逻辑重写（用 Set 标记最近 4 条索引）
+- **HIGH 修复**：chart JSON 完整性检测改为花括号计数；enhance body 提取改用 `indexOf` 替代脆弱正则；ChartRenderer grid 注入抽取为 `withSafeGrid()` 去重；`promptEnhanceAfterBatch` 加 `.catch()` 防 unhandled rejection
+- **MEDIUM 修复**：单轮 LLM 调用加 3 分钟超时 + 超时后 `abort()` 底层 fetch；批量日志成功/跳过/失败列表统一限 50 条 DOM；delete-avatar 时清理 retriever 缓存；大文件解析加 5 分钟超时 + `_aborted` 标志跳过截图操作
 
 ### Bug 修复
 
-- **ENHANCE 数量不一致** — 导入 378 个文件但 ENHANCE 显示 424 个。根因：ENHANCE 扫描全部历史文件而非当前批次。改为批量导入后传入本次文件列表，只处理当前批次。手动点 ENHANCE 按钮仍走全扫描。
+- **ENHANCE 数量不一致** — 导入 378 个文件但 ENHANCE 显示 424 个。改为传入本次导入文件列表，只处理当前批次。
 
 ---
 

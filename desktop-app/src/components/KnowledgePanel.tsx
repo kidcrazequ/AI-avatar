@@ -630,8 +630,8 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
   /** 批量导入完成后自动开始质量优化（只处理本次导入的文件） */
   const promptEnhanceAfterBatch = (importedFiles: string[]) => {
-    const model = creationModel?.apiKey ? creationModel : chatModel
-    if (!model?.apiKey || importedFiles.length === 0) return
+    if (importedFiles.length === 0) return
+    // 不在此处检查 model（会被闭包捕获变成 stale），handleEnhanceKnowledge 内部会实时获取
     setTimeout(() => {
       if (mountedRef.current) handleEnhanceKnowledge(importedFiles)
     }, 300)
@@ -862,19 +862,29 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           >
             {showBatchLog ? '▼' : '▶'} 批量导入日志 (成功 {batchResult.imported.length} · 跳过 {batchResult.skipped.length} · 失败 {batchResult.failed.length})
           </button>
-          {showBatchLog && (
-            <div className="mt-3 text-[11px] font-mono text-px-text-sec max-h-48 overflow-y-auto space-y-1">
-              {batchResult.imported.map((item, i) => (
-                <div key={`ok-${i}`} className="text-px-success">✓ {item.fileName}</div>
-              ))}
-              {batchResult.skipped.map((item, i) => (
-                <div key={`skip-${i}`} className="text-px-text-dim">○ {item.path.split('/').pop()} — {item.reason}</div>
-              ))}
-              {batchResult.failed.map((item, i) => (
-                <div key={`fail-${i}`} className="text-px-danger">✗ {item.path.split('/').pop()} — {item.error}</div>
-              ))}
-            </div>
-          )}
+          {showBatchLog && (() => {
+            // 限制 DOM 渲染数量：成功列表超 50 条只显示前 50 + 汇总，跳过/失败全部显示
+            const MAX_SHOW = 50
+            const imported = batchResult.imported
+            const showImported = imported.length > MAX_SHOW ? imported.slice(0, MAX_SHOW) : imported
+            const hiddenCount = imported.length - showImported.length
+            return (
+              <div className="mt-3 text-[11px] font-mono text-px-text-sec max-h-48 overflow-y-auto space-y-1">
+                {showImported.map((item, i) => (
+                  <div key={`ok-${i}`} className="text-px-success">✓ {item.fileName}</div>
+                ))}
+                {hiddenCount > 0 && (
+                  <div className="text-px-text-dim">... 另有 {hiddenCount} 个成功文件未显示</div>
+                )}
+                {batchResult.skipped.map((item, i) => (
+                  <div key={`skip-${i}`} className="text-px-text-dim">○ {item.path.split('/').pop()} — {item.reason}</div>
+                ))}
+                {batchResult.failed.map((item, i) => (
+                  <div key={`fail-${i}`} className="text-px-danger">✗ {item.path.split('/').pop()} — {item.error}</div>
+                ))}
+              </div>
+            )
+          })()}
           <button
             onClick={() => { setBatchResult(null); setShowBatchLog(false) }}
             className="mt-2 font-game text-[10px] text-px-text-dim hover:text-px-primary tracking-wider"

@@ -236,10 +236,10 @@ async function extractZip(archivePath: string, destDir: string): Promise<void> {
         `zip 解压后总大小超过 ${ARCHIVE_MAX_INFLATED_BYTES} 字节，疑似 zip 炸弹，已拒绝`,
       )
     }
-    // 防 zip slip：路径段不得是 ..（上级穿越），但允许文件名中含 .. 如 "10..附件十"
-    const segments = entry.entryName.split(/[/\\]/)
-    if (segments.some((s: string) => s === '..') || path.isAbsolute(entry.entryName)) {
-      throw new Error(`zip 含非法路径条目，已拒绝: ${entry.entryName}`)
+    // 防 zip slip：resolve 后的路径必须在 destDir 内
+    const resolved = path.resolve(destDir, entry.entryName)
+    if (!resolved.startsWith(destDir + path.sep) && resolved !== destDir) {
+      throw new Error(`zip 含非法路径条目（路径穿越），已拒绝: ${entry.entryName}`)
     }
   }
 
@@ -266,8 +266,9 @@ async function extractTarGz(archivePath: string, destDir: string): Promise<void>
             ))
             return
           }
-          if (entry.path.split(/[/\\]/).some((s: string) => s === '..') || path.isAbsolute(entry.path)) {
-            stream.destroy(new Error(`tar 含非法路径条目: ${entry.path}`))
+          const resolvedTar = path.resolve(destDir, entry.path)
+          if (!resolvedTar.startsWith(destDir + path.sep) && resolvedTar !== destDir) {
+            stream.destroy(new Error(`tar 含非法路径条目（路径穿越）: ${entry.path}`))
           }
         },
       }),
@@ -336,8 +337,9 @@ async function extractRar(archivePath: string, destDir: string): Promise<void> {
         `rar 解压后总大小超过 ${ARCHIVE_MAX_INFLATED_BYTES}，疑似炸弹，已拒绝`,
       )
     }
-    if (h.name.split(/[/\\]/).some((s: string) => s === '..') || path.isAbsolute(h.name)) {
-      throw new Error(`rar 含非法路径条目: ${h.name}`)
+    const resolvedRar = path.resolve(destDir, h.name)
+    if (!resolvedRar.startsWith(destDir + path.sep) && resolvedRar !== destDir) {
+      throw new Error(`rar 含非法路径条目（路径穿越）: ${h.name}`)
     }
   }
 

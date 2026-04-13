@@ -20,9 +20,11 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
     return <code className={className} {...rest}>{children}</code>
   }
 
-  // 流式输出检测：JSON 还没写完时（缺少闭合花括号），静默显示加载态，不报错
+  // 流式输出检测：尝试 JSON.parse，失败且花括号未闭合时视为"正在生成"
   const trimmed = raw.trim()
-  const isIncomplete = !trimmed.endsWith('}')
+  const openBraces = (trimmed.match(/{/g) || []).length
+  const closeBraces = (trimmed.match(/}/g) || []).length
+  const isIncomplete = openBraces > closeBraces || !trimmed.endsWith('}')
   if (isIncomplete) {
     return (
       <pre className="my-3 border-2 border-px-primary/30 bg-px-bg p-3 overflow-x-auto animate-pulse">

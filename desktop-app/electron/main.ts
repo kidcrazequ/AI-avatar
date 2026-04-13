@@ -548,6 +548,7 @@ wrapHandler('delete-avatar', (_, id: string) => {
   avatarManager.deleteAvatar(id)
   knowledgeManagers.delete(id)
   wikiCompilers.delete(id)
+  toolRouter.invalidateRetriever(id)
 })
 
 wrapHandler('save-avatar-image', (_, avatarId: string, dataUrl: string) => {
@@ -1094,12 +1095,15 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
 
     try {
       const raw = fs.readFileSync(filePath, 'utf-8')
-      // 去掉 frontmatter 和 header，取纯文本内容
-      const bodyMatch = raw.match(/^---[\s\S]*?---\s*\n([\s\S]*)$/)
-      const body = bodyMatch ? bodyMatch[1] : raw
-      // 去掉批量导入 header（# 标题 + > 导入自 + ---）
-      const contentMatch = body.match(/---\s*\n\n([\s\S]*)$/)
-      const plainText = contentMatch ? contentMatch[1] : body
+      // 去掉 frontmatter：匹配开头的 ---\n...\n---，允许各种空白
+      let body = raw
+      const fmEnd = raw.match(/^---\r?\n[\s\S]*?\r?\n---\s*\r?\n/)
+      if (fmEnd) {
+        body = raw.slice(fmEnd[0].length)
+      }
+      // 去掉批量导入 header（# 标题 + > 导入自... + ---），取 --- 之后的纯内容
+      const headerEnd = body.indexOf('\n---\n')
+      const plainText = headerEnd >= 0 ? body.slice(headerEnd + 5).trim() : body.trim()
 
       if (!plainText || plainText.trim().length < 50) {
         // 内容太少，跳过

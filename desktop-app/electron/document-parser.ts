@@ -62,10 +62,10 @@ export interface ExcelStructuredData {
 const IMAGE_PAGE_TEXT_THRESHOLD = 300
 
 /**
- * 图表页截图数量上限。设为 Infinity 表示全部截取。
- * 每页约 1-3MB base64（scale:2），200 页 ≈ 200-600MB 内存，现代机器可承受。
+ * 图表页截图数量上限。200 页 ≈ 200-600MB 内存，覆盖绝大多数场景。
+ * 超过时均匀采样，确保首/中/尾都覆盖。
  */
-const MAX_SCREENSHOT_PAGES = Infinity
+const MAX_SCREENSHOT_PAGES = 200
 
 /** 单次导入文件大小上限（200MB） */
 export const MAX_PARSE_FILE_BYTES = 200 * 1024 * 1024

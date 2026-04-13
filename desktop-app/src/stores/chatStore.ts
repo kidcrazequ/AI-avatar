@@ -286,6 +286,43 @@ const MAX_TOOL_ROUNDS = 10
 /** 上下文窗口最大消息条数，超出时截取最近的消息 */
 const MAX_CONTEXT_MESSAGES = 40
 
+/**
+ * 工具结果压缩阈值（字符数）。
+ * 当一轮工具调用完成后、进入下一轮 LLM 调用前，
+ * 将 apiMessages 中超过此阈值的旧 tool 结果截断为摘要，
+ * 防止 query_excel 等工具的大 JSON 累积撑爆 context。
+ */
+const TOOL_RESULT_COMPRESS_THRESHOLD = 2000
+
+/**
+ * 压缩 apiMessages 中已完成轮次的 tool 结果。
+ * 只保留最近一轮的 tool 结果原文，更早的 tool 结果截断为摘要。
+ * 这样 LLM 仍能看到最新数据，但不会被历史工具返回值撑爆 context。
+ */
+function compressOldToolResults(messages: LLMMessage[]): void {
+  // 找到最后一个 assistant 消息的位置（即最近一轮工具调用的起点）
+  let lastAssistantIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') {
+      lastAssistantIdx = i
+      break
+    }
+  }
+  if (lastAssistantIdx <= 0) return
+
+  // 压缩 lastAssistantIdx 之前的所有 tool 结果
+  for (let i = 0; i < lastAssistantIdx; i++) {
+    const msg = messages[i]
+    if (msg.role === 'tool' && typeof msg.content === 'string' && msg.content.length > TOOL_RESULT_COMPRESS_THRESHOLD) {
+      // 保留前 500 字符作为摘要 + 截断提示
+      messages[i] = {
+        ...msg,
+        content: msg.content.slice(0, 500) + `\n\n[... 已压缩，原文 ${msg.content.length} 字符。如需完整数据请重新调用工具查询]`,
+      }
+    }
+  }
+}
+
 let activeChatRequest: { id: number; conversationId: string } | null = null
 let chatRequestSeq = 0
 let pendingChunkUpdate: number | null = null
@@ -454,9 +491,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const recentMessages = messages.length > MAX_CONTEXT_MESSAGES
       ? messages.slice(-MAX_CONTEXT_MESSAGES)
       : messages
+
+    // 跨轮次 context 压缩：早期 assistant 消息中含大量数据（如 query_excel 结果的解读）
+    // 的内容会被截断，只保留最近 4 条 assistant 消息的完整内容
+    const RECENT_FULL_ASSISTANT_COUNT = 4
+    const ASSISTANT_COMPRESS_THRESHOLD = 3000
+    let assistantSeen = 0
+    const compressedRecentMessages = [...recentMessages].reverse().map(m => {
+      if (m.role === 'assistant') {
+        assistantSeen++
+        if (assistantSeen > RECENT_FULL_ASSISTANT_COUNT && m.content.length > ASSISTANT_COMPRESS_THRESHOLD) {
+          return { ...m, content: m.content.slice(0, 800) + '\n\n[... 早期回答已压缩]' }
+        }
+      }
+      return m
+    }).reverse()
+
     const apiMessages: LLMMessage[] = [
       { role: 'system', content: effectiveSystemPrompt },
-      ...recentMessages.map(m => ({ role: m.role, content: m.content })),
+      ...compressedRecentMessages.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: nudgedUserContent },
     ]
 
@@ -579,6 +632,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (isStale()) return
         }
         set({ toolCallStatus: '' })
+
+        // 压缩更早轮次的 tool 结果，防止累积撑爆 context
+        compressOldToolResults(apiMessages)
 
         // 继续下一轮对话
         await runRound()

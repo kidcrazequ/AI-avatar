@@ -216,11 +216,12 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const result = await window.electronAPI.showOpenDialog({
         title: '导入文档',
         filters: [
-          { name: '支持的文件', extensions: ['pdf', 'docx', 'doc', 'xlsx', 'csv', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'webp'] },
+          { name: '支持的文件', extensions: ['pdf', 'docx', 'pptx', 'xlsx', 'xls', 'csv', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] },
           { name: 'PDF 文件', extensions: ['pdf'] },
-          { name: 'Word 文档', extensions: ['docx', 'doc'] },
-          { name: 'Excel 表格', extensions: ['xlsx', 'csv'] },
-          { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
+          { name: 'Word 文档', extensions: ['docx'] },
+          { name: 'PowerPoint', extensions: ['pptx'] },
+          { name: 'Excel 表格', extensions: ['xlsx', 'xls', 'csv'] },
+          { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] },
           { name: '文本文件', extensions: ['txt', 'md'] },
         ],
         properties: ['openFile'],

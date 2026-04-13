@@ -1,3 +1,4 @@
+import type React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -29,7 +30,7 @@ export default function KnowledgeViewer({ content }: Props) {
               const match = /language-(\w+)/.exec(className || '')
               return match ? (
                 <SyntaxHighlighter
-                  style={oneDark as any}
+                  style={oneDark as Record<string, React.CSSProperties>}
                   language={match[1]}
                   PreTag="div"
                 >

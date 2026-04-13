@@ -9,7 +9,7 @@
  * @date 2026-04-10
  */
 
-import type { LLMCallFn, EmbeddingCallFn } from '@soul/core'
+import { fetchWithTimeout, type LLMCallFn, type EmbeddingCallFn } from '@soul/core'
 
 /** 索引构建/RAG 等后台 API 调用的超时时间（3 分钟） */
 export const BACKEND_API_TIMEOUT_MS = 180_000
@@ -23,7 +23,9 @@ export const BACKEND_API_TIMEOUT_MS = 180_000
  */
 export function createEmbeddingFn(apiKey: string, baseUrl: string): EmbeddingCallFn {
   return async (texts: string[]): Promise<number[][]> => {
-    const response = await fetch(`${baseUrl}/embeddings`, {
+    // fetchWithTimeout 返回的 response 已经做过 !response.ok 检查（抛 HttpError），
+    // 所以不再需要手动 throw
+    const response = await fetchWithTimeout(`${baseUrl}/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,11 +36,8 @@ export function createEmbeddingFn(apiKey: string, baseUrl: string): EmbeddingCal
         input: texts,
         dimension: 512,
       }),
-      signal: AbortSignal.timeout(BACKEND_API_TIMEOUT_MS),
+      timeoutMs: BACKEND_API_TIMEOUT_MS,
     })
-    if (!response.ok) {
-      throw new Error(`Embedding API 失败 (${response.status})`)
-    }
     const data = await response.json() as { data: Array<{ embedding: number[] }> }
     return data.data.map(d => d.embedding)
   }
@@ -53,7 +52,7 @@ export function createEmbeddingFn(apiKey: string, baseUrl: string): EmbeddingCal
  */
 export function createLLMFn(apiKey: string, baseUrl: string, model: string): LLMCallFn {
   return async (systemPrompt: string, userPrompt: string, maxTokens = 200): Promise<string> => {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -68,11 +67,8 @@ export function createLLMFn(apiKey: string, baseUrl: string, model: string): LLM
         stream: false,
         max_tokens: maxTokens,
       }),
-      signal: AbortSignal.timeout(BACKEND_API_TIMEOUT_MS),
+      timeoutMs: BACKEND_API_TIMEOUT_MS,
     })
-    if (!response.ok) {
-      throw new Error(`LLM API 失败 (${response.status})`)
-    }
     const data = await response.json() as { choices: Array<{ message: { content: string } }> }
     return data.choices?.[0]?.message?.content ?? ''
   }

@@ -214,6 +214,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         setTestingIdx(null)
         return
       }
+      // eslint-disable-next-line no-restricted-globals -- 连接测试需在 !ok 时读取 response.json() 的
+      // error.message，fetchWithTimeout 会在 !ok 时抛出 HttpError 无法拿到响应体，故此处保留原生 fetch。
+      // 超时已通过 AbortSignal.timeout(15_000) 显式控制。
       const response = await fetch(testUrl.href, {
         method: 'POST',
         headers: {

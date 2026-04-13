@@ -146,6 +146,9 @@ export class LLMService {
         ? AbortSignal.any([options.signal, timeoutSignal])
         : timeoutSignal
 
+      // eslint-disable-next-line no-restricted-globals -- 已显式通过 AbortSignal.timeout 做超时控制；
+      // throwOnHttpError 需要读取响应体映射到友好错误信息，fetchWithTimeout 会在 !ok 时直接抛出，
+      // 无法保留错误正文，故此处保留原生 fetch。
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -248,6 +251,9 @@ export class LLMService {
       ? AbortSignal.any([options.signal, timeoutSignal])
       : timeoutSignal
 
+    // eslint-disable-next-line no-restricted-globals -- 已显式通过 AbortSignal.timeout 做超时控制；
+    // throwOnHttpError 需要读取响应体映射到友好错误信息，fetchWithTimeout 会在 !ok 时直接抛出，
+    // 无法保留错误正文，故此处保留原生 fetch。
     const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {

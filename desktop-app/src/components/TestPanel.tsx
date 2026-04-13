@@ -34,6 +34,7 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
 
   useEffect(() => {
     loadTestCases()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTestCases 只依赖 avatarId，avatarId 变化时才需要重载
   }, [avatarId])
 
   const showAlert = (msg: string) => {

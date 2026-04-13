@@ -234,6 +234,50 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
       if (!mountedRef.current) return
 
+      // ── Excel/CSV 快速路径：parsed.text 已是结构化 GFM markdown，跳过
+      // PDF 全文清理 / Vision OCR / LLM 逐章格式化等所有 pdf/word 专属处理
+      if (parsed.fileType === 'excel') {
+        const finalContent = `# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
+        const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+        const targetPath = `${baseName}.md`
+        setImportProgress({ current: 4, total: 5, phase: '写入知识库' })
+        await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)
+
+        // 同步更新 README.md 索引（复用 pdf/word 同样的逻辑）
+        try {
+          let existingReadme = ''
+          try {
+            existingReadme = await window.electronAPI.readKnowledgeFile(avatarId, 'README.md')
+          } catch (readErr) {
+            void readErr
+          }
+          const sheetsLabel = parsed.sheetNames && parsed.sheetNames.length > 0
+            ? `导入自 Excel / CSV（${parsed.sheetNames.length} 个 sheet）`
+            : '导入自 Excel / CSV'
+          const fileEntry = `| \`${targetPath}\` | ${parsed.fileName} | ${sheetsLabel} |`
+          if (existingReadme && existingReadme.includes('_(暂无，待添加)_')) {
+            const updatedReadme = existingReadme.replace('| _(暂无，待添加)_ | | |', fileEntry)
+            await window.electronAPI.writeKnowledgeFile(avatarId, 'README.md', updatedReadme)
+          } else if (existingReadme && !existingReadme.includes(targetPath)) {
+            const tableEndPattern = /(\| .+ \| .+ \| .+ \|)\n\n## 图片/
+            const match = existingReadme.match(tableEndPattern)
+            if (match) {
+              const updatedReadme = existingReadme.replace(tableEndPattern, `$1\n${fileEntry}\n\n## 图片`)
+              await window.electronAPI.writeKnowledgeFile(avatarId, 'README.md', updatedReadme)
+            }
+          }
+        } catch (readmeErr) {
+          console.warn('README.md 回填失败（不影响导入）:', readmeErr)
+        }
+
+        setImportProgress({ current: 5, total: 5, phase: '完成' })
+        showStatus(`✓ 已导入: ${targetPath}`)
+        await loadTree()
+        handleSelectFile(targetPath)
+        onSaved?.()
+        return
+      }
+
       let rawText = parsed.text || ''
       const visionResults: string[] = []
       if (parsed.images.length > 0 && ocrModel?.apiKey) {
@@ -298,11 +342,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const baseModel = creationModel?.apiKey ? creationModel : chatModel
       let finalContent: string
 
-      // Excel 导入：parsed.text 已是结构化 GFM markdown（含 ## sheet + 表格），
-      // 不需要 LLM 重新格式化，直接使用
-      if (parsed.fileType === 'excel') {
-        finalContent = `# ${parsed.fileName}\n\n${parsed.text}\n`
-      } else if (baseModel?.apiKey && cleanedText.length > 500) {
+      if (baseModel?.apiKey && cleanedText.length > 500) {
         showStatus('LLM 逐章格式化中...', false)
         setImportProgress({ current: 3, total: 5, phase: 'LLM 格式化' })
 

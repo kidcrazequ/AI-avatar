@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import MessageBubble from './MessageBubble'
 import { ChatMessage } from '../stores/chatStore'
@@ -18,6 +18,21 @@ interface Props {
 
 export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+
+  /**
+   * 折叠状态提升到 MessageList 级别，避免 react-virtuoso 把消息滚出视窗后
+   * 卸载 MessageBubble 导致 local useState 丢失、视觉上"自动展开"。
+   * 用 Set<messageId> 记录已折叠的助手消息 id。
+   */
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set())
+  const toggleCollapsed = useCallback((id: string) => {
+    setCollapsedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   /**
    * 预计算 previousUserMessage Map（单次线性扫描），避免在 itemContent 内 O(n) 查找。
@@ -50,10 +65,12 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
           onSaveAnswer={onSaveAnswer}
           avatarImage={avatarImage}
           avatarName={avatarName}
+          isCollapsed={collapsedIds.has(message.id)}
+          onToggleCollapsed={toggleCollapsed}
         />
       </div>
     )
-  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName])
+  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, collapsedIds, toggleCollapsed])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

@@ -60,6 +60,13 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+  /**
+   * 折叠状态：由父组件 MessageList 统一管理，避免 Virtuoso 虚拟化
+   * 卸载本组件时 local useState 丢失导致"滑动后自动展开"。
+   */
+  isCollapsed?: boolean
+  /** 折叠状态切换回调（传入本消息 id） */
+  onToggleCollapsed?: (id: string) => void
 }
 
 /**
@@ -97,14 +104,15 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, isCollapsed, onToggleCollapsed }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => { clearTimeout(savedTimerRef.current) }, [])
 
+  // 折叠状态从父组件 props 读取（避免 Virtuoso 卸载导致本地 state 丢失）
+  const collapsed = isCollapsed ?? false
   // 助手消息超过阈值时允许折叠（用户消息通常很短，不折叠）
   const canCollapse = !isUser && message.content.length > COLLAPSE_THRESHOLD
   // 折叠态展示前 N 字符（尽量在段落边界切断，避免切到 markdown 语法中间）
@@ -193,7 +201,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   </span>
                   <button
                     type="button"
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={() => onToggleCollapsed?.(message.id)}
                     className="font-game text-[10px] tracking-wider px-2 py-0.5
                       border border-px-border bg-px-elevated text-px-text-dim
                       hover:text-px-primary hover:border-px-primary

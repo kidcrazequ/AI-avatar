@@ -33,11 +33,11 @@ export const FOLDER_MAX_FILES = 500
 /** 单次批量导入总字节数上限（2 GB） */
 export const FOLDER_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 
-/** 单个归档文件大小上限（500 MB） */
-export const ARCHIVE_MAX_BYTES = 500 * 1024 * 1024
+/** 单个归档文件大小上限（2 GB） */
+export const ARCHIVE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 
-/** 归档解压后总大小上限（1 GB），防止 zip 炸弹 */
-export const ARCHIVE_MAX_INFLATED_BYTES = 1 * 1024 * 1024 * 1024
+/** 归档解压后总大小上限（4 GB），防止 zip 炸弹 */
+export const ARCHIVE_MAX_INFLATED_BYTES = 4 * 1024 * 1024 * 1024
 
 /** 跳过模式：这些路径段出现在任意层级都会被整段 skip */
 const SKIP_PATTERNS = new Set([

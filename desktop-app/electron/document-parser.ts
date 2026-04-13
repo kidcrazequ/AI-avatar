@@ -67,8 +67,8 @@ const IMAGE_PAGE_TEXT_THRESHOLD = 300
  */
 const MAX_SCREENSHOT_PAGES = Infinity
 
-/** 单次导入文件大小上限（约 80MB），防止超大文件拖垮主进程内存 */
-export const MAX_PARSE_FILE_BYTES = 80 * 1024 * 1024
+/** 单次导入文件大小上限（200MB） */
+export const MAX_PARSE_FILE_BYTES = 200 * 1024 * 1024
 
 /** Excel sheet 单表最大行数（防止失控 markdown 输出） */
 const EXCEL_MAX_ROWS_PER_SHEET = 5000
@@ -80,7 +80,9 @@ const EXCEL_MAX_ROWS_PER_SHEET = 5000
 export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
   '.pdf',
   '.docx',
+  '.pptx',
   '.xlsx',
+  '.xls',
   '.csv',
   '.txt',
   '.md',
@@ -119,9 +121,12 @@ export class DocumentParser {
         return this.parseWord(filePath, fileName)
       case '.doc':
         throw new Error('不支持旧版 .doc 格式，请使用 Word 将文件另存为 .docx 后重试')
+      case '.pptx':
+        return this.parsePptx(filePath, fileName)
       case '.xlsx':
+      case '.xls':
       case '.csv':
-        // .csv 走 xlsx 路径，获得 sheet-like 表格识别
+        // .csv / .xls 走 xlsx 路径，SheetJS 支持所有 Excel 格式
         return this.parseExcel(filePath, fileName)
       case '.jpg':
       case '.jpeg':
@@ -210,6 +215,55 @@ export class DocumentParser {
       images: [],
       fileName,
       fileType: 'word',
+    }
+  }
+
+  /**
+   * 解析 PowerPoint (.pptx) 文件。pptx 本质是 zip 包，内含 ppt/slides/slide*.xml。
+   * 提取每张幻灯片的文本内容，按幻灯片编号组织。
+   * 使用已有依赖 adm-zip（批量导入已引入）。
+   */
+  private async parsePptx(filePath: string, fileName: string): Promise<ParsedDocument> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AdmZip = require('adm-zip')
+    const zip = new AdmZip(filePath)
+    const entries = zip.getEntries() as Array<{ entryName: string; getData: () => Buffer }>
+
+    // 收集所有 slide XML 文件并按编号排序
+    const slideEntries = entries
+      .filter((e: { entryName: string }) => /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName))
+      .sort((a: { entryName: string }, b: { entryName: string }) => {
+        const numA = parseInt(a.entryName.match(/slide(\d+)/)?.[1] || '0', 10)
+        const numB = parseInt(b.entryName.match(/slide(\d+)/)?.[1] || '0', 10)
+        return numA - numB
+      })
+
+    if (slideEntries.length === 0) {
+      return { text: '_（pptx 中未找到幻灯片）_', images: [], fileName, fileType: 'text' }
+    }
+
+    const sections: string[] = []
+    for (let i = 0; i < slideEntries.length; i++) {
+      const xml = slideEntries[i].getData().toString('utf-8')
+      // 提取所有 <a:t> 文本节点（PowerPoint XML 中文本存储在 <a:t> 标签内）
+      const texts: string[] = []
+      const regex = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g
+      let match: RegExpExecArray | null
+      while ((match = regex.exec(xml)) !== null) {
+        const t = match[1].trim()
+        if (t) texts.push(t)
+      }
+      if (texts.length > 0) {
+        sections.push(`## 第 ${i + 1} 页\n\n${texts.join('\n')}`)
+      }
+    }
+
+    const header = `> 导入自 PowerPoint: ${fileName} | ${slideEntries.length} 张幻灯片\n\n---\n`
+    return {
+      text: header + '\n' + (sections.length > 0 ? sections.join('\n\n---\n\n') : '_（幻灯片中无文本内容）_'),
+      images: [],
+      fileName,
+      fileType: 'text',
     }
   }
 

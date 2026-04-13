@@ -208,6 +208,7 @@ export class LLMService {
           parser.feed(decoder.decode(value, { stream: true }))
         }
       } finally {
+        // eslint-disable-next-line @typescript-eslint/no-empty-function -- reader 可能已被取消或网络已断，忽略失败
         reader.cancel().catch(() => {})
       }
 

@@ -194,12 +194,13 @@ export class Logger {
           if (stat.size > Logger.MAX_LOG_SIZE) {
             const rotated1 = file.replace(/\.log$/, '.1.log')
             const rotated2 = file.replace(/\.log$/, '.2.log')
-            try { fs.renameSync(rotated1, rotated2) } catch { /* .1.log 不存在时忽略 */ }
-            try { fs.renameSync(file, rotated1) } catch { /* 重命名失败忽略 */ }
+            try { fs.renameSync(rotated1, rotated2) } catch (e1) { void e1 /* .1.log 不存在时忽略 */ }
+            try { fs.renameSync(file, rotated1) } catch (e2) { void e2 /* 重命名失败忽略 */ }
             this.appendCounters.set(file, 0)
           }
-        } catch {
+        } catch (statErr) {
           // 文件不存在时 stat 会抛错，忽略即可
+          void statErr
         }
       }
       fs.appendFileSync(file, line, 'utf-8')

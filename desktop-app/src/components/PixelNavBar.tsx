@@ -55,7 +55,7 @@ function NavTab({ item }: { item: NavItem }) {
       )}
       <span className="pixel-nav-icon" aria-hidden="true">{item.icon}</span>
       <span className="pixel-nav-label">{item.label}</span>
-      {item.badge != null && item.badge > 0 && (
+      {item.badge !== null && item.badge !== undefined && item.badge > 0 && (
         <span className="pixel-nav-badge">{item.badge}</span>
       )}
     </button>

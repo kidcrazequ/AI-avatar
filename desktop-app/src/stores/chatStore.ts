@@ -382,8 +382,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         }
       }
-    } catch {
+    } catch (nudgeErr) {
       // Nudge 失败不影响正常对话
+      void nudgeErr
     }
 
     // 构建 API 消息列表（包含 system prompt），截取最近消息避免 token 超限
@@ -613,8 +614,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             savedAt: localDateString(),
           })
         }
-      } catch {
+      } catch (saveErr) {
         // 自动沉淀失败不影响正常对话
+        void saveErr
       }
 
       if (isStale()) return

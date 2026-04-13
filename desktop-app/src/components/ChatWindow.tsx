@@ -109,8 +109,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       if (testCases.length === 0) {
         const reply = '[ 自检结果 ] 暂无测试用例。请先在「测试中心」添加测试用例，然后再运行 /test-self。'
         setMessages([...useChatStore.getState().messages, { id: nextMessageId(), role: 'assistant', content: reply }])
-        try { await window.electronAPI.saveMessage(startConvId, 'user', '/test-self') } catch { /* best-effort */ }
-        try { await window.electronAPI.saveMessage(startConvId, 'assistant', reply) } catch { /* best-effort */ }
+        try { await window.electronAPI.saveMessage(startConvId, 'user', '/test-self') } catch (e1) { void e1 /* best-effort */ }
+        try { await window.electronAPI.saveMessage(startConvId, 'assistant', reply) } catch (e2) { void e2 /* best-effort */ }
         return
       }
 
@@ -128,8 +128,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       if (!isStale()) {
         setMessages([...useChatStore.getState().messages, { id: nextMessageId(), role: 'assistant', content: summary }])
       }
-      try { await window.electronAPI.saveMessage(startConvId, 'user', '/test-self') } catch { /* best-effort */ }
-      try { await window.electronAPI.saveMessage(startConvId, 'assistant', summary) } catch { /* best-effort */ }
+      try { await window.electronAPI.saveMessage(startConvId, 'user', '/test-self') } catch (e3) { void e3 /* best-effort */ }
+      try { await window.electronAPI.saveMessage(startConvId, 'assistant', summary) } catch (e4) { void e4 /* best-effort */ }
     } catch (err) {
       if (isStale()) return
       const errMsg = err instanceof Error ? err.message : String(err)

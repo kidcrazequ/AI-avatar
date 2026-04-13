@@ -20,7 +20,18 @@
   - 新增 `src/lib/echarts-pixel-theme.ts` — 从 tailwind `px` 色板构建 ECharts 主题（暖金/薄荷/绿/红/灰 5 色 60-30-10 palette、像素方块 symbol、暗底透明背景、color-decal 色盲友好）
   - 错误处理：JSON 解析失败降级为带红框的原 `<pre>`；渲染异常由 ErrorBoundary 兜底
   - 依赖：`echarts` 5.5 + `echarts-for-react` 3.0
-- **对话消息折叠** — 助手消息超过 600 字符时自动显示 `[▼] 收起` / `[▶] 展开` 按钮，折叠态只展示前 ~300 字符（按段落/行/中文标点优先次序智能断开），附字数统计。用户消息通常较短不折叠；折叠状态仅本地 useState，不跨会话持久化（`MessageBubble.tsx` 新增 `truncateAtBoundary()` 和 `collapsed` 本地状态）。
+- **对话消息折叠** — 助手消息超过 600 字符时自动显示 `[▼] 收起` / `[▶] 展开` 按钮，折叠态只展示前 ~300 字符（按段落/行/中文标点优先次序智能断开），附字数统计。用户消息通常较短不折叠；折叠状态放在 `chatStore` 的 `collapsedMessageIds: Set<string>`，跨 react-virtuoso 卸载/重新挂载持久（`MessageBubble.tsx` + `chatStore.ts`）。
+
+- **Excel 作结构化数据源（query_excel 工具）** — 导入 Excel 时同时产出两份资产：
+  - `knowledge/<name>.md` — GFM 表格可视化，顶部加 `rag_only: true` frontmatter，SoulLoader 跳过不拼入 system prompt（避免大 Excel 炸上下文）
+  - `knowledge/_excel/<basename>.json` — 结构化数据（schema + 全量行对象数组），供 `query_excel` 工具使用
+  - `SoulLoader` 在 system prompt 中只拼入 Excel **schema 摘要**（列名 / 类型 / 范围 / samples），不拼入原始行数据
+  - 新增 `query_excel` 工具（`packages/core/src/tool-router.ts`）：支持 MongoDB 风格 filter（`$eq`/`$ne`/`$gt`/`$gte`/`$lt`/`$lte`/`$in`）、列选择、行数上限（默认 100，硬上限 1000）
+  - `chatStore.ts` 的 `AVATAR_TOOLS` 注册 `query_excel` 为新 LLM tool
+  - `templates/skills/draw-chart.md` 与 `chart-from-knowledge.md` 新增 query_excel 用法示例
+  - 新增 frontmatter 解析器（`soul-loader.ts` 内联，~40 行，不引 yaml 依赖）
+  - 新 IPC：`write-excel-data(avatarId, basename, data)` 把结构化 JSON 落盘到 `knowledge/_excel/`
+  - **解决的实际问题**：用户导入 248k 字符的"产品质量指标 dashboard" Excel 后，第一次对话就撞破 Qwen-Plus 131k context 限制（报 173k token invalid_request_error）。方案 C 后，同一份 Excel 在 system prompt 中只占几百字 schema，用户问「215 机型 2026 年 1~3 月设备侧效率折线图」时 LLM 直接 `query_excel` 精确过滤 3 行数据，配合 `draw-chart` 技能生成折线图。
 
 ### 改进
 

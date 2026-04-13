@@ -32,10 +32,24 @@ description: 当用户需要基于知识库数据画图时，先调用 search_kn
 
 ## 执行流程（**严格 3 步**）
 
-### Step 1: 检索数据
+### Step 1: 判断数据源类型 → 选择正确的查询工具
 
-调用 `search_knowledge` 或等效 RAG 工具，查询相关知识片段。
+**优先级**：
 
+1. 看 system prompt 顶部"可查询 Excel 数据源"列表是否有对应的 Excel —— **有 → 用 `query_excel`**（精确过滤，不丢行）
+2. 否则用 `search_knowledge` 做 RAG 模糊检索
+
+**Excel 查询示例**（用户问 "215 机型 2026 年 1~3 月 设备侧效率"）：
+```
+query_excel({
+  file: "00_工商储-产品质量指标dashboard_260303",
+  sheet: "月度",
+  filter: {"机型": "215", "月份": {"$gte": "2026-01", "$lte": "2026-03"}},
+  columns: ["月份", "设备侧效率"]
+})
+```
+
+**非 Excel 检索示例**：
 ```
 search_knowledge("2024 月度销售")
 ```

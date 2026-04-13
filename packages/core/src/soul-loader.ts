@@ -10,6 +10,66 @@ export interface AvatarConfig {
   systemPrompt: string
 }
 
+/** Excel 列 schema（与 document-parser.ts 的 ExcelColumnSchema 对应） */
+interface ExcelColumnSchema {
+  name: string
+  dtype: 'number' | 'date-like' | 'string'
+  uniqueCount: number
+  samples: Array<string | number>
+  min?: string | number
+  max?: string | number
+}
+
+/** Excel sheet（rows 在 SoulLoader 中不加载，仅读 schema） */
+interface ExcelSheetSchema {
+  name: string
+  rowCount: number
+  columns: ExcelColumnSchema[]
+}
+
+/** knowledge/_excel/*.json 的顶层结构（仅 schema 部分） */
+interface ExcelFileSchema {
+  fileName: string
+  basename: string
+  sheets: ExcelSheetSchema[]
+}
+
+/**
+ * 解析简单 YAML frontmatter。只支持 `key: value` 和 `rag_only: true|false` 等基础
+ * 场景，不引入 yaml 依赖。如果 .md 文件第一行不是 `---` 则返回空对象。
+ */
+function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string } {
+  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) {
+    return { data: {}, body: content }
+  }
+  const endMatch = content.match(/\n---\r?\n/)
+  if (!endMatch || endMatch.index === undefined) {
+    return { data: {}, body: content }
+  }
+  const fmText = content.slice(4, endMatch.index)
+  const body = content.slice(endMatch.index + endMatch[0].length)
+  const data: Record<string, unknown> = {}
+  for (const line of fmText.split(/\r?\n/)) {
+    const m = line.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/)
+    if (!m) continue
+    const key = m[1]
+    const raw = m[2].trim()
+    if (raw === 'true') data[key] = true
+    else if (raw === 'false') data[key] = false
+    else if (/^-?\d+$/.test(raw)) data[key] = parseInt(raw, 10)
+    else if (/^-?\d+\.\d+$/.test(raw)) data[key] = parseFloat(raw)
+    else if (raw.startsWith('[') && raw.endsWith(']')) {
+      // 简单数组：[a, b, "c"]，按逗号切，去掉引号
+      data[key] = raw.slice(1, -1).split(',')
+        .map(s => s.trim().replace(/^["']|["']$/g, ''))
+        .filter(s => s.length > 0)
+    } else {
+      data[key] = raw.replace(/^["']|["']$/g, '')
+    }
+  }
+  return { data, body }
+}
+
 /**
  * SoulLoader: 负责将分身的各类配置文件组装为完整的 system prompt。
  * GAP2: 加载 memory/MEMORY.md 并注入 prompt
@@ -62,13 +122,14 @@ export class SoulLoader {
       '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找产品参数、政策文件、项目案例等',
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
+      '- **query_excel(file, sheet, filter, columns, limit)**: **精确**查询已导入的 Excel / CSV 数据。当用户问涉及表格数据、要按条件筛选行、生成图表时，必须用此工具（不要用 search_knowledge 查 Excel）。filter 支持 MongoDB 风格（$eq/$ne/$gt/$gte/$lt/$lte/$in）。系统 prompt 顶部的"可查询 Excel 数据源"列出所有可用 file 和 sheet',
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
       '- **lookup_policy(province, policy_type)**: 查询省份电价政策或补贴信息',
       '- **compare_products(products)**: 对比多款产品的技术参数',
       '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤（system prompt 中只含摘要，执行前必须先调用此工具获取完整流程）',
       '- **delegate_task(task)**: 将独立子任务委派给子代理并行执行，子代理使用相同的知识库但独立对话上下文',
       '',
-      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息，不要凭记忆回答。需要执行某项技能时，必须先调用 load_skill 获取完整定义。',
+      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息，不要凭记忆回答。**涉及 Excel 表格数据必须用 query_excel**，不要用 search_knowledge 模糊匹配表格。需要执行某项技能时，必须先调用 load_skill 获取完整定义。',
     ].join('\n')
 
     // 构建 system prompt
@@ -81,19 +142,54 @@ export class SoulLoader {
     }
 
     // 知识库文件（递归读取所有 knowledge/ 子目录文件）
-    // 注意：全量注入到 system prompt，大知识库会导致 prompt 过长。
-    // 搭配 RAG 检索使用时，可考虑仅注入文件列表摘要，按需检索全文。
+    // rag_only 标记的文件（Excel 导入、超大文档等）不拼入 system prompt，
+    // 只通过 search_knowledge / query_excel 等工具按需检索。
     if (knowledgeRootFiles.length > 0) {
-      const totalKnowledgeChars = knowledgeRootFiles.reduce((sum, f) => sum + f.content.length, 0)
-      if (totalKnowledgeChars > 100_000) {
-        console.warn(`[SoulLoader] 知识库总字符数 ${totalKnowledgeChars} 超过 100K，system prompt 可能过长，建议启用 RAG 检索模式`)
-      }
-      parts.push('\n\n---\n\n# 知识库\n\n')
       const knowledgeBase = path.join(avatarPath, 'knowledge')
-      knowledgeRootFiles.forEach(f => {
+      const stuffEntries: Array<{ relPath: string; body: string }> = []
+      const ragOnlyEntries: Array<{ relPath: string; meta: Record<string, unknown> }> = []
+
+      for (const f of knowledgeRootFiles) {
         const relPath = path.relative(knowledgeBase, f.path)
-        parts.push(`<!-- 文件: knowledge/${relPath} -->\n${f.content}\n\n`)
-      })
+        const { data: fm, body } = parseFrontmatter(f.content)
+        if (fm.rag_only === true) {
+          ragOnlyEntries.push({ relPath, meta: fm })
+        } else {
+          stuffEntries.push({ relPath, body })
+        }
+      }
+
+      const totalStuffChars = stuffEntries.reduce((sum, e) => sum + e.body.length, 0)
+      if (totalStuffChars > 100_000) {
+        console.warn(`[SoulLoader] 知识库 stuff 部分总字符数 ${totalStuffChars} 超过 100K，system prompt 可能过长，建议为大文档加 rag_only: true frontmatter`)
+      }
+
+      if (stuffEntries.length > 0) {
+        parts.push('\n\n---\n\n# 知识库\n\n')
+        stuffEntries.forEach(e => {
+          parts.push(`<!-- 文件: knowledge/${e.relPath} -->\n${e.body}\n\n`)
+        })
+      }
+
+      // RAG-only 文件索引（只告诉 LLM 有哪些文件可通过 search_knowledge 检索）
+      if (ragOnlyEntries.length > 0) {
+        parts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
+        ragOnlyEntries.forEach(e => {
+          const source = typeof e.meta.source === 'string' ? e.meta.source : 'document'
+          parts.push(`- \`knowledge/${e.relPath}\`（${source}）\n`)
+        })
+      }
+
+      // Excel 结构化数据源 schema 摘要（供 query_excel 工具调用）
+      const excelSchemas = this.loadExcelSchemas(path.join(avatarPath, 'knowledge', '_excel'))
+      if (excelSchemas.length > 0) {
+        parts.push('\n\n---\n\n# 可查询 Excel 数据源\n\n')
+        parts.push('以下 Excel 已导入并建立索引，请使用 `query_excel({file, sheet, filter, columns, limit})` 按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
+        excelSchemas.forEach(schema => {
+          parts.push(this.formatExcelSchema(schema))
+          parts.push('\n')
+        })
+      }
     }
 
     // GAP2: 长期记忆（始终注入，用于对话一致性）
@@ -189,5 +285,71 @@ export class SoulLoader {
   private extractAvatarName(claudeMd: string): string {
     const match = claudeMd.match(/^#\s+(.+)$/m)
     return match ? match[1] : '未命名分身'
+  }
+
+  /**
+   * 读 knowledge/_excel/*.json 里每个 Excel 的 schema（不加载 rows）。
+   * 返回用于 system prompt 拼接的 ExcelFileSchema 列表。
+   */
+  private loadExcelSchemas(excelDir: string): ExcelFileSchema[] {
+    if (!fs.existsSync(excelDir) || !fs.statSync(excelDir).isDirectory()) {
+      return []
+    }
+    const schemas: ExcelFileSchema[] = []
+    try {
+      const entries = fs.readdirSync(excelDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+        try {
+          const raw = fs.readFileSync(path.join(excelDir, entry.name), 'utf-8')
+          const parsed = JSON.parse(raw) as {
+            fileName?: string
+            sheets?: Array<{
+              name: string
+              rowCount: number
+              columns: ExcelColumnSchema[]
+            }>
+          }
+          if (!parsed.sheets) continue
+          schemas.push({
+            fileName: parsed.fileName || entry.name,
+            basename: entry.name.replace(/\.json$/, ''),
+            sheets: parsed.sheets.map(s => ({
+              name: s.name,
+              rowCount: s.rowCount,
+              columns: s.columns,
+            })),
+          })
+        } catch (err) {
+          console.warn(`[SoulLoader] Excel schema 解析失败 ${entry.name}:`, err instanceof Error ? err.message : String(err))
+        }
+      }
+    } catch (err) {
+      console.warn(`[SoulLoader] 读取 _excel 目录失败:`, err instanceof Error ? err.message : String(err))
+    }
+    return schemas
+  }
+
+  /** 把单个 Excel 的 schema 格式化为 LLM 可读的 markdown 段。 */
+  private formatExcelSchema(schema: ExcelFileSchema): string {
+    const lines: string[] = []
+    lines.push(`## ${schema.fileName}`)
+    lines.push(`- **file** (query_excel 参数): \`${schema.basename}\``)
+    for (const sheet of schema.sheets) {
+      lines.push(``)
+      lines.push(`### sheet \`${sheet.name}\` — ${sheet.rowCount} 行`)
+      for (const col of sheet.columns) {
+        const parts: string[] = [`  - \`${col.name}\` (${col.dtype}, ${col.uniqueCount} 唯一值)`]
+        if (col.min !== undefined && col.max !== undefined) {
+          parts.push(`范围 ${JSON.stringify(col.min)} ~ ${JSON.stringify(col.max)}`)
+        }
+        if (col.samples.length > 0) {
+          const sample = col.samples.slice(0, 5).map(s => JSON.stringify(s)).join(', ')
+          parts.push(`样例 ${sample}`)
+        }
+        lines.push(parts.join(' · '))
+      }
+    }
+    return lines.join('\n')
   }
 }

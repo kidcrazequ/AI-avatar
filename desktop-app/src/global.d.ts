@@ -66,6 +66,36 @@ interface ParsedDocument {
   imagePageNumbers?: number[]
   /** Excel sheet 名称列表（Excel 专属） */
   sheetNames?: string[]
+  /**
+   * Excel 专属：结构化数据（含 schema + 行），由 write-excel-data IPC
+   * 落盘到 knowledge/_excel/<basename>.json 供 query_excel 工具使用。
+   */
+  structuredData?: ExcelStructuredData
+}
+
+/** Excel 列 schema */
+interface ExcelColumnSchema {
+  name: string
+  dtype: 'number' | 'date-like' | 'string'
+  uniqueCount: number
+  samples: Array<string | number>
+  min?: string | number
+  max?: string | number
+}
+
+/** Excel sheet 结构 */
+interface ExcelSheetData {
+  name: string
+  rowCount: number
+  columns: ExcelColumnSchema[]
+  rows: Array<Record<string, string | number | null>>
+}
+
+/** Excel 导入后产出的结构化数据 */
+interface ExcelStructuredData {
+  fileName: string
+  importedAt: string
+  sheets: ExcelSheetData[]
 }
 
 /** 批量导入结果（2026-04-13） */
@@ -201,6 +231,7 @@ interface ElectronAPI {
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) => Promise<{ canceled: boolean; filePaths: string[] }>
   parseDocument: (filePath: string) => Promise<ParsedDocument>
+  writeExcelData: (avatarId: string, basename: string, data: ExcelStructuredData) => Promise<string>
 
   // 批量 / 归档导入（2026-04-13）
   importFolder: (avatarId: string, folderPath: string) => Promise<BatchImportResult>

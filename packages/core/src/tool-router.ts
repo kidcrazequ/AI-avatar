@@ -77,6 +77,8 @@ export class ToolRouter {
           return this.searchKnowledge(avatarId, args)
         case 'list_knowledge_files':
           return this.listKnowledgeFiles(avatarId)
+        case 'query_excel':
+          return this.queryExcel(avatarId, args)
         case 'calculate_roi':
           return this.calculateRoi(args)
         case 'lookup_policy':
@@ -121,6 +123,100 @@ export class ToolRouter {
   private listKnowledgeFiles(avatarId: string): ToolCallResult {
     const files = this.getRetriever(avatarId).listFiles()
     return { content: files.join('\n') }
+  }
+
+  // ─── Excel 结构化查询（v0.5.x 新增）─────────────────────────────────────────
+
+  /**
+   * query_excel: 按 MongoDB 风格 filter 精确过滤 Excel 行，返回 JSON。
+   * 避免把整个表塞进 system prompt 或通过 RAG 模糊匹配丢行。
+   *
+   * 参数：
+   *   file    — _excel/ 目录下的 basename（不含 .json）
+   *   sheet   — sheet 名
+   *   filter? — 列名 → 值（$eq 默认）或 {$gte/$lte/$gt/$lt/$ne/$in: ...}
+   *   columns? — 只返回这些列
+   *   limit?   — 最多返回行数，默认 100，硬上限 1000
+   */
+  private queryExcel(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const file = args.file as string
+    const sheetName = args.sheet as string
+    if (!file) return { content: '', error: '缺少 file 参数（Excel basename）' }
+    if (!sheetName) return { content: '', error: '缺少 sheet 参数' }
+
+    try {
+      assertSafeSegment(file, 'file')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const jsonPath = path.join(this.avatarsPath, avatarId, 'knowledge', '_excel', `${file}.json`)
+    let raw: string
+    try {
+      raw = fs.readFileSync(jsonPath, 'utf-8')
+    } catch {
+      return { content: '', error: `Excel 数据源不存在: _excel/${file}.json` }
+    }
+
+    let parsed: {
+      fileName?: string
+      sheets?: Array<{
+        name: string
+        rowCount: number
+        columns: Array<{ name: string; dtype: string }>
+        rows: Array<Record<string, string | number | null>>
+      }>
+    }
+    try {
+      parsed = JSON.parse(raw)
+    } catch (e) {
+      return { content: '', error: `Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const sheet = parsed.sheets?.find(s => s.name === sheetName)
+    if (!sheet) {
+      const available = (parsed.sheets ?? []).map(s => s.name).join(', ')
+      return { content: '', error: `sheet 不存在: "${sheetName}"（可用: ${available}）` }
+    }
+
+    const filter = (args.filter as Record<string, unknown>) || {}
+    const columns = args.columns as string[] | undefined
+    const limitRaw = args.limit
+    const limit = Math.min(
+      1000,
+      typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0 ? Math.floor(limitRaw) : 100,
+    )
+
+    // 执行过滤
+    const matched: Array<Record<string, string | number | null>> = []
+    for (const row of sheet.rows) {
+      if (matchFilter(row, filter)) {
+        if (columns && columns.length > 0) {
+          const picked: Record<string, string | number | null> = {}
+          for (const col of columns) {
+            if (col in row) picked[col] = row[col]
+          }
+          matched.push(picked)
+        } else {
+          matched.push(row)
+        }
+        if (matched.length >= limit) break
+      }
+    }
+
+    // 统计总匹配数（用于告诉 LLM 是否被 limit 截断）—— 但如果数据大，
+    // 重新扫一遍浪费；只在早退时返回 truncated=true 让 LLM 自己决定是否加 limit
+    const truncated = matched.length >= limit
+
+    return {
+      content: JSON.stringify({
+        file,
+        sheet: sheetName,
+        count: matched.length,
+        truncated,
+        rows: matched,
+      }, null, 2),
+    }
   }
 
   // ─── 计算工具（GAP4 计算引擎）────────────────────────────────────────────────
@@ -292,6 +388,66 @@ export class ToolRouter {
     }
     return { content: `子任务执行超时（ID: ${agentTask.id}），请稍后查询结果。` }
   }
+}
+
+/**
+ * MongoDB 风格 filter 匹配器。支持：
+ *   - 标量值：{col: "215"} 等价于 $eq
+ *   - 运算符对象：{col: {$gte: "2026-01", $lte: "2026-03"}}
+ *   - 支持 $eq / $ne / $gt / $gte / $lt / $lte / $in
+ *
+ * 字符串/数字统一用 JS 宽松比较（支持 "2026-01" 字典序、数字大小比较）。
+ */
+function matchFilter(
+  row: Record<string, string | number | null>,
+  filter: Record<string, unknown>,
+): boolean {
+  for (const [col, cond] of Object.entries(filter)) {
+    const cell = row[col]
+    if (cond === null || cond === undefined) {
+      if (cell !== null && cell !== undefined) return false
+      continue
+    }
+    if (typeof cond === 'object' && !Array.isArray(cond)) {
+      const ops = cond as Record<string, unknown>
+      for (const [op, val] of Object.entries(ops)) {
+        if (!matchOp(cell, op, val)) return false
+      }
+    } else {
+      // 标量默认 $eq
+      if (!looseEquals(cell, cond)) return false
+    }
+  }
+  return true
+}
+
+function matchOp(cell: string | number | null, op: string, val: unknown): boolean {
+  switch (op) {
+    case '$eq':
+      return looseEquals(cell, val)
+    case '$ne':
+      return !looseEquals(cell, val)
+    case '$gt':
+      return cell !== null && val !== null && val !== undefined && cell > (val as string | number)
+    case '$gte':
+      return cell !== null && val !== null && val !== undefined && cell >= (val as string | number)
+    case '$lt':
+      return cell !== null && val !== null && val !== undefined && cell < (val as string | number)
+    case '$lte':
+      return cell !== null && val !== null && val !== undefined && cell <= (val as string | number)
+    case '$in':
+      if (!Array.isArray(val)) return false
+      return val.some(v => looseEquals(cell, v))
+    default:
+      // 未知运算符 → 不匹配
+      return false
+  }
+}
+
+function looseEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a === null || a === undefined || b === null || b === undefined) return false
+  return String(a) === String(b)
 }
 
 /**

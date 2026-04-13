@@ -142,6 +142,41 @@ const AVATAR_TOOLS: LLMTool[] = [
   {
     type: 'function',
     function: {
+      name: 'query_excel',
+      description: '精确查询已导入的 Excel / CSV 数据源。支持按列值、范围、IN 等条件过滤行。**当用户问题涉及 Excel 数据（表格、按条件筛选、生成图表）时必须用这个工具而不是 search_knowledge**，因为 Excel 数据不在 system prompt 里，也不适合 RAG 模糊检索。system prompt 顶部的"可查询 Excel 数据源"列出了可用 file 名、sheet 名、列名和数据范围。',
+      parameters: {
+        type: 'object',
+        properties: {
+          file: {
+            type: 'string',
+            description: 'Excel 文件的 basename（不含后缀），对应 knowledge/_excel/<file>.json',
+          },
+          sheet: {
+            type: 'string',
+            description: 'sheet 名，如 "月度" / "品类"',
+          },
+          filter: {
+            type: 'object',
+            description: 'MongoDB 风格过滤条件。示例: {"机型": "215", "月份": {"$gte": "2026-01", "$lte": "2026-03"}}。支持 $eq(默认)/$ne/$gt/$gte/$lt/$lte/$in。',
+          },
+          columns: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '只返回指定列（可选，默认返回所有列）',
+          },
+          limit: {
+            type: 'number',
+            description: '最多返回行数，默认 100，硬上限 1000',
+            default: 100,
+          },
+        },
+        required: ['file', 'sheet'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'calculate_roi',
       description: '计算工商业储能项目的收益和投资回报率（ROI/IRR）。根据储能容量、电价、循环次数等参数逐年测算。',
       parameters: {

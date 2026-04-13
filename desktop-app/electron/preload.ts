@@ -130,6 +130,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('show-open-dialog', options),
   parseDocument: (filePath: string) =>
     ipcRenderer.invoke('parse-document', filePath),
+  writeExcelData: (avatarId: string, basename: string, data: unknown) =>
+    ipcRenderer.invoke('write-excel-data', avatarId, basename, data),
 
   // 批量 / 归档导入（2026-04-13）
   importFolder: (avatarId: string, folderPath: string) =>

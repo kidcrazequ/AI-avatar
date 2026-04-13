@@ -235,11 +235,35 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (!mountedRef.current) return
 
       // ── Excel/CSV 快速路径：parsed.text 已是结构化 GFM markdown，跳过
-      // PDF 全文清理 / Vision OCR / LLM 逐章格式化等所有 pdf/word 专属处理
+      // PDF 全文清理 / Vision OCR / LLM 逐章格式化等所有 pdf/word 专属处理。
+      // 同时把 structuredData 写到 knowledge/_excel/<basename>.json 供
+      // query_excel 工具精确过滤行；.md 文件顶部加 rag_only frontmatter
+      // 告诉 SoulLoader 跳过 stuff，避免整个大表塞进 system prompt 炸上下文。
       if (parsed.fileType === 'excel') {
-        const finalContent = `# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
+        const sheetsYaml = parsed.sheetNames && parsed.sheetNames.length > 0
+          ? parsed.sheetNames.map(s => `"${s.replace(/"/g, '\\"')}"`).join(', ')
+          : ''
+        // Frontmatter：rag_only=true 让 SoulLoader 跳过本文件，
+        // source=excel 标记类型，excel_json 指向结构化数据位置
+        const frontmatter = [
+          '---',
+          'rag_only: true',
+          'source: excel',
+          `excel_json: _excel/${baseName}.json`,
+          sheetsYaml ? `sheets: [${sheetsYaml}]` : '',
+          '---',
+        ].filter(Boolean).join('\n')
+        const finalContent = `${frontmatter}\n\n# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
+        setImportProgress({ current: 3, total: 5, phase: '写入结构化数据' })
+        if (parsed.structuredData) {
+          try {
+            await window.electronAPI.writeExcelData(avatarId, baseName, parsed.structuredData)
+          } catch (excelErr) {
+            console.warn('Excel JSON 写入失败（仍继续写 .md）:', excelErr)
+          }
+        }
         setImportProgress({ current: 4, total: 5, phase: '写入知识库' })
         await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)
 

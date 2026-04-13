@@ -872,6 +872,24 @@ wrapHandler('parse-document', async (_, filePath: string) => {
   return documentParser.parseFile(filePath)
 })
 
+/**
+ * write-excel-data: Excel 导入时把结构化 JSON 写到 knowledge/_excel/<basename>.json。
+ * structuredData 随 parseDocument 返回，由渲染进程传回主进程落盘。
+ * 该 JSON 供 tool-router 的 query_excel 工具精确过滤行。
+ */
+wrapHandler('write-excel-data', (_, avatarId: string, basename: string, data: unknown) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(basename, 'Excel 文件名')
+  const excelDir = path.join(avatarsPath, avatarId, 'knowledge', '_excel')
+  if (!fs.existsSync(excelDir)) {
+    fs.mkdirSync(excelDir, { recursive: true })
+  }
+  const jsonPath = path.join(excelDir, `${basename}.json`)
+  fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2), 'utf-8')
+  if (logger) logger.activity('write-excel-data', `avatarId=${avatarId}, file=${basename}.json`)
+  return jsonPath
+})
+
 // ─── 批量 / 归档导入（Feature: 2026-04-13）───────────────────────────────────
 
 /**

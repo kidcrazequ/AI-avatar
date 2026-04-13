@@ -9,7 +9,9 @@ export interface ParsedDocument {
   /** 原始文件名 */
   fileName: string
   /** 文件类型 */
-  fileType: 'pdf' | 'word' | 'image' | 'text'
+  fileType: 'pdf' | 'word' | 'image' | 'text' | 'excel'
+  /** Excel sheet 名称列表（Excel 专属，用于 UI 展示） */
+  sheetNames?: string[]
   /** 每页的字符数，用于定位 Vision 数据在原文中的位置（PDF 专属） */
   perPageChars?: Array<{ num: number; chars: number }>
   /** 图表页截图对应的页码列表（与 images 数组一一对应） */
@@ -26,7 +28,29 @@ const IMAGE_PAGE_TEXT_THRESHOLD = 300
 const MAX_SCREENSHOT_PAGES = 20
 
 /** 单次导入文件大小上限（约 80MB），防止超大文件拖垮主进程内存 */
-const MAX_PARSE_FILE_BYTES = 80 * 1024 * 1024
+export const MAX_PARSE_FILE_BYTES = 80 * 1024 * 1024
+
+/** Excel sheet 单表最大行数（防止失控 markdown 输出） */
+const EXCEL_MAX_ROWS_PER_SHEET = 5000
+
+/**
+ * 本解析器当前支持的文件扩展名（含 . 前缀，小写）。
+ * folder-importer 据此过滤要导入的文件。
+ */
+export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
+  '.pdf',
+  '.docx',
+  '.xlsx',
+  '.csv',
+  '.txt',
+  '.md',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.bmp',
+] as const
 
 /**
  * DocumentParser: 负责解析 PDF / Word / 图片 / 文本文件，提取文字和图片。
@@ -55,6 +79,10 @@ export class DocumentParser {
         return this.parseWord(filePath, fileName)
       case '.doc':
         throw new Error('不支持旧版 .doc 格式，请使用 Word 将文件另存为 .docx 后重试')
+      case '.xlsx':
+      case '.csv':
+        // .csv 走 xlsx 路径，获得 sheet-like 表格识别
+        return this.parseExcel(filePath, fileName)
       case '.jpg':
       case '.jpeg':
       case '.png':
@@ -64,7 +92,6 @@ export class DocumentParser {
         return this.parseImage(filePath, fileName)
       case '.txt':
       case '.md':
-      case '.csv':
         return this.parseText(filePath, fileName)
       default:
         throw new Error(`不支持的文件类型: ${ext}`)
@@ -166,5 +193,119 @@ export class DocumentParser {
       fileName,
       fileType: 'text',
     }
+  }
+
+  /**
+   * 解析 Excel/CSV 文件为 Markdown。每个 sheet 变成一个 `## {sheetName}` section，
+   * 下面跟一个 GFM 表格。第一行当表头；若 sheet 行数超过 EXCEL_MAX_ROWS_PER_SHEET
+   * 则截断并在末尾加提示。
+   *
+   * 无需额外依赖：xlsx（SheetJS 社区版）为纯 JS，同时支持 .xlsx 和 .csv。
+   */
+  private async parseExcel(filePath: string, fileName: string): Promise<ParsedDocument> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const XLSX = require('xlsx')
+    const workbook = XLSX.readFile(filePath, { cellDates: true, cellNF: false })
+    const sheetNames: string[] = workbook.SheetNames || []
+    if (sheetNames.length === 0) {
+      throw new Error(`Excel/CSV 文件不含任何 sheet: ${fileName}`)
+    }
+
+    const sections: string[] = []
+    let totalRows = 0
+    let truncated = false
+
+    for (const name of sheetNames) {
+      const sheet = workbook.Sheets[name]
+      if (!sheet) continue
+      const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: '',
+        blankrows: false,
+        raw: false,
+      })
+      if (rows.length === 0) {
+        sections.push(`## ${name}\n\n_（空 sheet）_\n`)
+        continue
+      }
+
+      const originalRowCount = rows.length
+      let workingRows = rows
+      if (rows.length > EXCEL_MAX_ROWS_PER_SHEET) {
+        workingRows = rows.slice(0, EXCEL_MAX_ROWS_PER_SHEET)
+        truncated = true
+      }
+      totalRows += workingRows.length
+
+      const markdownTable = this.rowsToMarkdownTable(workingRows)
+      const suffix = originalRowCount > workingRows.length
+        ? `\n\n> ⚠️ 已截断至 ${workingRows.length} 行（原 ${originalRowCount} 行）\n`
+        : ''
+      sections.push(`## ${name}\n\n${markdownTable}${suffix}`)
+    }
+
+    const header =
+      `> 导入自 Excel: ${fileName} | ${sheetNames.length} sheet${sheetNames.length > 1 ? 's' : ''} | ${totalRows} row${totalRows !== 1 ? 's' : ''}` +
+      (truncated ? ' | 部分 sheet 已截断' : '') +
+      '\n\n---\n'
+
+    return {
+      text: header + '\n' + sections.join('\n\n'),
+      images: [],
+      fileName,
+      fileType: 'excel',
+      sheetNames,
+    }
+  }
+
+  /**
+   * 将二维数组转为 GFM markdown 表格。第一行若全为字符串则视为表头，
+   * 否则合成 col1..colN 表头。单元格中的 `|`、换行符需转义。
+   */
+  private rowsToMarkdownTable(rows: unknown[][]): string {
+    if (rows.length === 0) return '_（空）_'
+
+    const escapeCell = (v: unknown): string => {
+      if (v === null || v === undefined) return ''
+      const s = String(v)
+      return s
+        .replace(/\\/g, '\\\\')
+        .replace(/\|/g, '\\|')
+        .replace(/\r?\n/g, '<br>')
+        .trim()
+    }
+
+    // 确定列数：取所有行中最大的列数
+    const maxCols = rows.reduce((acc, row) => Math.max(acc, row.length), 0)
+    if (maxCols === 0) return '_（无列）_'
+
+    // 判断首行是否为表头（所有单元格都是非空字符串）
+    const firstRow = rows[0]
+    const firstRowIsHeader =
+      firstRow.length === maxCols &&
+      firstRow.every(cell => typeof cell === 'string' && cell.toString().trim().length > 0)
+
+    let header: string[]
+    let bodyRows: unknown[][]
+    if (firstRowIsHeader) {
+      header = firstRow.map(c => escapeCell(c))
+      bodyRows = rows.slice(1)
+    } else {
+      header = Array.from({ length: maxCols }, (_, i) => `col${i + 1}`)
+      bodyRows = rows
+    }
+
+    // 补齐 header 到 maxCols
+    while (header.length < maxCols) header.push(`col${header.length + 1}`)
+
+    const headerLine = '| ' + header.join(' | ') + ' |'
+    const separatorLine = '| ' + header.map(() => '---').join(' | ') + ' |'
+    const bodyLines = bodyRows.map(row => {
+      const padded = [...row]
+      while (padded.length < maxCols) padded.push('')
+      return '| ' + padded.map(c => escapeCell(c)).join(' | ') + ' |'
+    })
+
+    return [headerLine, separatorLine, ...bodyLines].join('\n')
   }
 }

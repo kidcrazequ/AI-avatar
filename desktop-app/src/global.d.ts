@@ -59,11 +59,20 @@ interface ParsedDocument {
   text: string
   images: string[]
   fileName: string
-  fileType: 'pdf' | 'word' | 'image' | 'text'
+  fileType: 'pdf' | 'word' | 'image' | 'text' | 'excel'
   /** 每页字符数，用于 Vision 数据按页码融入原文（PDF 专属） */
   perPageChars?: Array<{ num: number; chars: number }>
   /** 图表页截图对应的页码列表（与 images 一一对应） */
   imagePageNumbers?: number[]
+  /** Excel sheet 名称列表（Excel 专属） */
+  sheetNames?: string[]
+}
+
+/** 批量导入结果（2026-04-13） */
+interface BatchImportResult {
+  imported: Array<{ fileName: string; targetPath: string }>
+  skipped: Array<{ path: string; reason: string }>
+  failed: Array<{ path: string; error: string }>
 }
 
 /** 统一 LLM 模型配置（OpenAI 兼容接口） */
@@ -192,6 +201,12 @@ interface ElectronAPI {
   // 文档导入（GAP9a）
   showOpenDialog: (options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }) => Promise<{ canceled: boolean; filePaths: string[] }>
   parseDocument: (filePath: string) => Promise<ParsedDocument>
+
+  // 批量 / 归档导入（2026-04-13）
+  importFolder: (avatarId: string, folderPath: string) => Promise<BatchImportResult>
+  importArchive: (avatarId: string, archivePath: string) => Promise<BatchImportResult>
+  installDefaultSkills: (avatarId: string) => Promise<string[]>
+  onImportProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
 
   // 定时自检（GAP14）
   startScheduledTest: (avatarId: string, intervalHours: number) => Promise<void>

@@ -15,6 +15,12 @@ files:
   - dist-electron/**/*
   - "!**/*.map"
 
+# 7zip-bin 的平台二进制必须 unpack 才能从子进程执行
+# node-unrar-js 的 wasm 文件也需要 unpack 才能 fetch
+asarUnpack:
+  - "node_modules/7zip-bin/**/*"
+  - "node_modules/node-unrar-js/**/*"
+
 # 打包模板和共享知识库为只读资源（分身由用户在应用内创建，不预置）
 extraResources:
   - from: ../templates

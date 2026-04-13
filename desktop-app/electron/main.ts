@@ -14,6 +14,12 @@ import type { WikiAnswer } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
+import {
+  walkFolder,
+  extractArchive,
+  makeTempExtractDir,
+  cleanupTempDir,
+} from './folder-importer'
 import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger } from './logger'
@@ -515,6 +521,12 @@ wrapHandler('get-avatar-soul-intro', async (_, targetAvatarId: string) => {
 
 wrapHandler('create-avatar', (_, id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => {
   avatarManager.createAvatar(id, soulContent, skills, knowledgeFiles)
+  // 新分身自动安装默认技能（templates/skills/*.md）— 失败静默，不阻断创建流程
+  try {
+    installDefaultSkillsSync(id)
+  } catch (err) {
+    if (logger) logger.error('install-default-skills', err instanceof Error ? err : new Error(String(err)))
+  }
   // 归档初始 soul.md
   const soulPath = path.join(avatarsPath, id, 'soul.md')
   if (logger) logger.recordGenerated('soul', id, soulPath, { action: 'create-avatar' })
@@ -847,7 +859,7 @@ wrapHandler('show-open-dialog', async (_, options: Electron.OpenDialogOptions) =
 })
 
 /**
- * parse-document: 解析文件（PDF/Word/图片/文本）。
+ * parse-document: 解析文件（PDF/Word/Excel/图片/文本）。
  * 返回提取的文本和图片（base64 data URL），图片由渲染进程进一步 OCR。
  */
 wrapHandler('parse-document', async (_, filePath: string) => {
@@ -857,6 +869,187 @@ wrapHandler('parse-document', async (_, filePath: string) => {
   // parseFile 内部已有 fs.promises.stat 校验，无需重复同步检查
   return documentParser.parseFile(filePath)
 })
+
+// ─── 批量 / 归档导入（Feature: 2026-04-13）───────────────────────────────────
+
+/**
+ * 批量导入返回结果。
+ */
+interface BatchImportResult {
+  imported: Array<{ fileName: string; targetPath: string }>
+  skipped: Array<{ path: string; reason: string }>
+  failed: Array<{ path: string; error: string }>
+}
+
+/**
+ * 批量导入核心：给定候选文件列表，逐个 parse → 写入 knowledge/。
+ * 跳过 LLM 格式化以避免每文件调一次 LLM（批量场景用户要的是快而不是精）。
+ * 单文件导入仍走 KnowledgePanel.handleImportDocument 路径享受 LLM 格式化。
+ */
+async function batchImportFiles(
+  avatarId: string,
+  files: string[],
+): Promise<{
+  imported: Array<{ fileName: string; targetPath: string }>
+  failed: Array<{ path: string; error: string }>
+}> {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  if (!fs.existsSync(knowledgePath)) {
+    throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
+  }
+
+  const imported: Array<{ fileName: string; targetPath: string }> = []
+  const failed: Array<{ path: string; error: string }> = []
+  const total = files.length
+
+  for (let i = 0; i < files.length; i++) {
+    const filePath = files[i]
+    const fileName = path.basename(filePath)
+
+    // 进度事件：解析中
+    mainWindow?.webContents.send('knowledge-import-progress', {
+      current: i,
+      total,
+      fileName,
+      phase: 'parsing',
+    })
+
+    try {
+      const parsed = await documentParser.parseFile(filePath)
+      // 批量导入跳过 LLM formatDocument：直接用 parsed.text 作为内容
+      // 图片在批量模式下跳过 OCR（渲染进程才有 ocrModel）
+      const header = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}\n> 类型: ${parsed.fileType}\n> 批量导入（未经 LLM 格式化）\n\n---\n\n`
+      const finalContent = header + (parsed.text || '_（无文本内容）_')
+
+      // 目标文件名：清理非法字符后 + .md
+      const baseName = fileName
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      const relativePath = `${baseName}.md`
+
+      // 直接调 KnowledgeManager 写入
+      const kmgr = knowledgeManagers.get(avatarId) ?? new KnowledgeManager(knowledgePath)
+      knowledgeManagers.set(avatarId, kmgr)
+      kmgr.writeFile(relativePath, finalContent)
+
+      imported.push({ fileName, targetPath: relativePath })
+
+      // 进度事件：已写入
+      mainWindow?.webContents.send('knowledge-import-progress', {
+        current: i + 1,
+        total,
+        fileName,
+        phase: 'written',
+      })
+    } catch (err) {
+      failed.push({ path: filePath, error: err instanceof Error ? err.message : String(err) })
+      mainWindow?.webContents.send('knowledge-import-progress', {
+        current: i + 1,
+        total,
+        fileName,
+        phase: 'failed',
+      })
+    }
+  }
+
+  return { imported, failed }
+}
+
+/**
+ * import-folder: 导入整个文件夹。walk → batch parse → write。
+ * 所有步骤在主进程完成，避免 N 次 IPC 往返。
+ */
+wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Promise<BatchImportResult> => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (!path.isAbsolute(folderPath)) {
+    throw new Error(`非法文件夹路径（必须为绝对路径）: ${folderPath}`)
+  }
+  // 安全限制：仅允许用户主目录下
+  const homedir = os.homedir()
+  const resolved = path.resolve(folderPath)
+  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
+    throw new Error(`安全限制：仅允许导入用户主目录下的文件夹`)
+  }
+
+  const { files, skipped } = await walkFolder(resolved)
+  const { imported, failed } = await batchImportFiles(avatarId, files)
+  return { imported, skipped, failed }
+})
+
+/**
+ * import-archive: 解压归档到临时目录，然后走 walkFolder + batchImportFiles，最后清理 temp。
+ * 支持 .zip / .tar.gz / .tgz / .7z / .rar。
+ */
+wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): Promise<BatchImportResult> => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (!path.isAbsolute(archivePath)) {
+    throw new Error(`非法归档路径（必须为绝对路径）: ${archivePath}`)
+  }
+  const homedir = os.homedir()
+  const resolved = path.resolve(archivePath)
+  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
+    throw new Error(`安全限制：仅允许导入用户主目录下的归档`)
+  }
+
+  const tempDir = await makeTempExtractDir()
+  try {
+    mainWindow?.webContents.send('knowledge-import-progress', {
+      current: 0,
+      total: 0,
+      fileName: path.basename(archivePath),
+      phase: 'extracting',
+    })
+    await extractArchive(resolved, tempDir)
+
+    const { files, skipped } = await walkFolder(tempDir)
+    const { imported, failed } = await batchImportFiles(avatarId, files)
+    return { imported, skipped, failed }
+  } finally {
+    await cleanupTempDir(tempDir)
+  }
+})
+
+/**
+ * install-default-skills: 把 templates/skills/*.md 拷贝到指定分身的 skills/ 目录。
+ * 跳过已存在的技能文件（不覆盖用户自定义）。用于：
+ *   1. 创建新分身时自动调用（见 create-avatar handler）
+ *   2. 一次性回填脚本（scripts/retrofit-skills.ts）
+ */
+wrapHandler('install-default-skills', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return installDefaultSkillsSync(avatarId)
+})
+
+/**
+ * 同步版本，供 create-avatar handler 内部直接调用。
+ * 返回拷贝的文件名列表。
+ */
+function installDefaultSkillsSync(avatarId: string): string[] {
+  const templatesPath = resolveTemplatesPath()
+  const srcDir = path.join(templatesPath, 'skills')
+  if (!fs.existsSync(srcDir) || !fs.statSync(srcDir).isDirectory()) {
+    return [] // 模板目录不存在，视为无默认技能
+  }
+  const destDir = path.join(avatarsPath, avatarId, 'skills')
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(destDir, { recursive: true })
+  }
+
+  const installed: string[] = []
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+    const destPath = path.join(destDir, entry.name)
+    if (fs.existsSync(destPath)) continue // 不覆盖用户自定义
+    const content = fs.readFileSync(path.join(srcDir, entry.name), 'utf-8')
+    fs.writeFileSync(destPath, content, 'utf-8')
+    installed.push(entry.name)
+  }
+  if (logger && installed.length > 0) {
+    logger.activity('install-default-skills', `avatarId=${avatarId}, installed=${installed.join(',')}`)
+  }
+  return installed
+}
 
 // ─── 定时自检（GAP14）────────────────────────────────────────────────────────
 

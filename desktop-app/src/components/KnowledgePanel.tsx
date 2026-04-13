@@ -35,12 +35,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   const [statusMsg, setStatusMsg] = useState('')
 
   const [isImporting, setIsImporting] = useState(false)
+  const [isBatchImporting, setIsBatchImporting] = useState(false)
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
   const [isLinting, setIsLinting] = useState(false)
   const [isDetectingEvolution, setIsDetectingEvolution] = useState(false)
   /** 导入进度：current/total 用于进度条百分比，phase 用于文本描述 */
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; phase: string } | null>(null)
+  /** 批量导入结果抽屉（成功/跳过/失败明细） */
+  const [batchResult, setBatchResult] = useState<BatchImportResult | null>(null)
+  const [showBatchLog, setShowBatchLog] = useState(false)
   /** 异步任务开始时间，用于显示已用时间 */
   const [taskStartTime, setTaskStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -66,7 +70,20 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     return () => clearInterval(timer)
   }, [taskStartTime])
 
-  const isBusy = isImporting || isDetectingEvolution || isCompiling || isLinting
+  // 订阅主进程批量导入进度事件
+  useEffect(() => {
+    const unsub = window.electronAPI.onImportProgress((data) => {
+      if (!mountedRef.current) return
+      setImportProgress({
+        current: data.current,
+        total: data.total,
+        phase: `${data.phase} · ${data.fileName}`,
+      })
+    })
+    return () => unsub()
+  }, [])
+
+  const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting
   useEffect(() => {
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
     if (!isBusy && taskStartTime) setTaskStartTime(null)
@@ -189,9 +206,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const result = await window.electronAPI.showOpenDialog({
         title: '导入文档',
         filters: [
-          { name: '支持的文件', extensions: ['pdf', 'docx', 'doc', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'webp'] },
+          { name: '支持的文件', extensions: ['pdf', 'docx', 'doc', 'xlsx', 'csv', 'txt', 'md', 'jpg', 'jpeg', 'png', 'gif', 'webp'] },
           { name: 'PDF 文件', extensions: ['pdf'] },
           { name: 'Word 文档', extensions: ['docx', 'doc'] },
+          { name: 'Excel 表格', extensions: ['xlsx', 'csv'] },
           { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
           { name: '文本文件', extensions: ['txt', 'md'] },
         ],
@@ -281,7 +299,11 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const baseModel = creationModel?.apiKey ? creationModel : chatModel
       let finalContent: string
 
-      if (baseModel?.apiKey && cleanedText.length > 500) {
+      // Excel 导入：parsed.text 已是结构化 GFM markdown（含 ## sheet + 表格），
+      // 不需要 LLM 重新格式化，直接使用
+      if (parsed.fileType === 'excel') {
+        finalContent = `# ${parsed.fileName}\n\n${parsed.text}\n`
+      } else if (baseModel?.apiKey && cleanedText.length > 500) {
         showStatus('LLM 逐章格式化中...', false)
         setImportProgress({ current: 3, total: 5, phase: 'LLM 格式化' })
 
@@ -413,6 +435,92 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
+  /**
+   * 批量导入文件夹：选一个文件夹 → 递归 walk → 逐个解析写入。
+   * 跳过 LLM 格式化以保证速度；单文件导入仍享受完整管线。
+   */
+  const handleImportFolder = async () => {
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: '选择要批量导入的文件夹',
+        properties: ['openDirectory'],
+      })
+      if (result.canceled || result.filePaths.length === 0) return
+
+      setIsBatchImporting(true)
+      setBatchResult(null)
+      setImportProgress({ current: 0, total: 0, phase: '正在扫描文件夹...' })
+      showStatus('批量导入中...', false)
+
+      const folderPath = result.filePaths[0]
+      const batch = await window.electronAPI.importFolder(avatarId, folderPath)
+      if (!mountedRef.current) return
+
+      setBatchResult(batch)
+      showStatus(
+        `✓ 成功 ${batch.imported.length} | 跳过 ${batch.skipped.length} | 失败 ${batch.failed.length}`,
+        10000,
+      )
+      if (batch.skipped.length > 0 || batch.failed.length > 0) {
+        setShowBatchLog(true)
+      }
+      await loadTree()
+      onSaved?.()
+    } catch (err) {
+      console.error('批量导入文件夹失败:', err)
+      showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsBatchImporting(false)
+      setImportProgress(null)
+    }
+  }
+
+  /**
+   * 批量导入归档：选一个 .zip/.tar.gz/.7z/.rar → 解压到 temp → walk → 批量写入 → 清理。
+   */
+  const handleImportArchive = async () => {
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: '选择要导入的压缩包',
+        filters: [
+          { name: '压缩包', extensions: ['zip', 'tar.gz', 'tgz', '7z', 'rar'] },
+          { name: 'ZIP', extensions: ['zip'] },
+          { name: 'TAR.GZ', extensions: ['tar.gz', 'tgz'] },
+          { name: '7Z', extensions: ['7z'] },
+          { name: 'RAR', extensions: ['rar'] },
+        ],
+        properties: ['openFile'],
+      })
+      if (result.canceled || result.filePaths.length === 0) return
+
+      setIsBatchImporting(true)
+      setBatchResult(null)
+      setImportProgress({ current: 0, total: 0, phase: '正在解压归档...' })
+      showStatus('解压 + 批量导入中...', false)
+
+      const archivePath = result.filePaths[0]
+      const batch = await window.electronAPI.importArchive(avatarId, archivePath)
+      if (!mountedRef.current) return
+
+      setBatchResult(batch)
+      showStatus(
+        `✓ 成功 ${batch.imported.length} | 跳过 ${batch.skipped.length} | 失败 ${batch.failed.length}`,
+        10000,
+      )
+      if (batch.skipped.length > 0 || batch.failed.length > 0) {
+        setShowBatchLog(true)
+      }
+      await loadTree()
+      onSaved?.()
+    } catch (err) {
+      console.error('批量导入归档失败:', err)
+      showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsBatchImporting(false)
+      setImportProgress(null)
+    }
+  }
+
   const handleGenerateTests = async () => {
     const testModel = creationModel?.apiKey ? creationModel : chatModel
     if (!selectedPath || !fileContent || !testModel?.apiKey) {
@@ -511,11 +619,30 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           <div className="flex items-center gap-2">
             <button
               onClick={handleImportDocument}
-              disabled={isImporting}
+              disabled={isImporting || isBatchImporting}
               className="pixel-btn-outline-light disabled:opacity-40"
-              aria-label="导入文档"
+              aria-label="导入文档（单文件，支持 LLM 格式化）"
+              title="单文件导入，PDF/Word 会经 LLM 重新格式化"
             >
               {isImporting ? '...' : 'IMPORT'}
+            </button>
+            <button
+              onClick={handleImportFolder}
+              disabled={isImporting || isBatchImporting}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="批量导入文件夹"
+              title="批量导入整个文件夹（跳过 LLM 格式化以保证速度）"
+            >
+              {isBatchImporting ? '...' : '[📁] FOLDER'}
+            </button>
+            <button
+              onClick={handleImportArchive}
+              disabled={isImporting || isBatchImporting}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="导入压缩包"
+              title="支持 zip / tar.gz / 7z / rar"
+            >
+              {isBatchImporting ? '...' : '[📦] ARCHIVE'}
             </button>
             <button
               onClick={() => setShowNewFileDialog(true)}
@@ -567,6 +694,37 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         </div>
       )}
 
+      {/* 批量导入结果抽屉：成功/跳过/失败明细 */}
+      {batchResult && (
+        <div className="px-6 py-3 border-b-2 border-px-border bg-px-elevated/30">
+          <button
+            onClick={() => setShowBatchLog(!showBatchLog)}
+            className="font-game text-[12px] text-px-primary tracking-wider hover:underline"
+          >
+            {showBatchLog ? '▼' : '▶'} 批量导入日志 (成功 {batchResult.imported.length} · 跳过 {batchResult.skipped.length} · 失败 {batchResult.failed.length})
+          </button>
+          {showBatchLog && (
+            <div className="mt-3 text-[11px] font-mono text-px-text-sec max-h-48 overflow-y-auto space-y-1">
+              {batchResult.imported.map((item, i) => (
+                <div key={`ok-${i}`} className="text-px-success">✓ {item.fileName}</div>
+              ))}
+              {batchResult.skipped.map((item, i) => (
+                <div key={`skip-${i}`} className="text-px-text-dim">○ {item.path.split('/').pop()} — {item.reason}</div>
+              ))}
+              {batchResult.failed.map((item, i) => (
+                <div key={`fail-${i}`} className="text-px-danger">✗ {item.path.split('/').pop()} — {item.error}</div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => { setBatchResult(null); setShowBatchLog(false) }}
+            className="mt-2 font-game text-[10px] text-px-text-dim hover:text-px-primary tracking-wider"
+          >
+            [✕] 关闭日志
+          </button>
+        </div>
+      )}
+
       {/* 进度条（导入 / 百科编译 / 知识自检） */}
       {isBusy && statusMsg && (
         <div className="px-6 py-3 border-b-2 border-px-primary/30 bg-px-primary/5">
@@ -577,7 +735,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
             </div>
             <span className="font-game text-[12px] text-px-text-dim tracking-wider">{elapsedDisplay}</span>
           </div>
-          {importProgress ? (
+          {importProgress && importProgress.total > 0 ? (
             <div className="w-full h-1.5 bg-px-border rounded-none overflow-hidden">
               <div
                 className="h-full bg-px-primary transition-all duration-300"

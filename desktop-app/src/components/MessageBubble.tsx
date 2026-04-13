@@ -1,10 +1,45 @@
 import { useState, useRef, useEffect, memo } from 'react'
+import type { ComponentPropsWithoutRef, ReactElement } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage } from '../stores/chatStore'
 import AvatarImage from './AvatarImage'
+import ChartRenderer from './ChartRenderer'
 
 const REMARK_PLUGINS = [remarkGfm]
+
+/**
+ * 自定义 code 组件：拦截 `language-chart` 代码块，解析 JSON 后用 ECharts 渲染。
+ * 其它 language 走默认 <code>/<pre> 样式（由 prose-pixel 主题处理）。
+ */
+function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boolean }): ReactElement {
+  const { inline, className, children, ...rest } = props
+  const raw = String(children ?? '').replace(/\n$/, '')
+
+  // inline code / 非 chart language 走默认渲染
+  if (inline || !className || !className.includes('language-chart')) {
+    return <code className={className} {...rest}>{children}</code>
+  }
+
+  // 尝试解析 chart JSON
+  try {
+    const option = JSON.parse(raw) as Record<string, unknown>
+    return <ChartRenderer option={option} rawJson={raw} />
+  } catch (err) {
+    // JSON 解析失败：降级为带红框的原始代码块，提示用户图表数据格式错误
+    console.warn('[MessageBubble] chart JSON 解析失败:', (err as Error).message)
+    return (
+      <pre className="my-3 border-2 border-px-danger bg-px-bg p-3 overflow-x-auto">
+        <div className="font-game text-[11px] tracking-wider text-px-danger mb-2">
+          ⚠ CHART JSON 解析失败
+        </div>
+        <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
+      </pre>
+    )
+  }
+}
+
+const MARKDOWN_COMPONENTS = { code: ChartCodeBlock }
 
 interface Props {
   message: ChatMessage
@@ -97,7 +132,11 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               prose-strong:font-bold prose-strong:text-px-text
               prose-a:text-px-primary prose-a:no-underline hover:prose-a:underline
               prose-li:text-px-text-sec prose-li:marker:text-px-primary prose-li:font-body">
-              <ReactMarkdown remarkPlugins={REMARK_PLUGINS} urlTransform={safeUrlTransform}>
+              <ReactMarkdown
+                remarkPlugins={REMARK_PLUGINS}
+                urlTransform={safeUrlTransform}
+                components={MARKDOWN_COMPONENTS}
+              >
                 {message.content}
               </ReactMarkdown>
             </div>

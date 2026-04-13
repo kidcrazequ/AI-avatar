@@ -130,6 +130,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   parseDocument: (filePath: string) =>
     ipcRenderer.invoke('parse-document', filePath),
 
+  // 批量 / 归档导入（2026-04-13）
+  importFolder: (avatarId: string, folderPath: string) =>
+    ipcRenderer.invoke('import-folder', avatarId, folderPath),
+  importArchive: (avatarId: string, archivePath: string) =>
+    ipcRenderer.invoke('import-archive', avatarId, archivePath),
+  installDefaultSkills: (avatarId: string) =>
+    ipcRenderer.invoke('install-default-skills', avatarId),
+  onImportProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => {
+    const handler = (_: unknown, data: { current: number; total: number; fileName: string; phase: string }) => callback(data)
+    ipcRenderer.on('knowledge-import-progress', handler)
+    return () => { ipcRenderer.removeListener('knowledge-import-progress', handler) }
+  },
+
   // 定时自检（GAP14）
   startScheduledTest: (avatarId: string, intervalHours: number) =>
     ipcRenderer.invoke('start-scheduled-test', avatarId, intervalHours),

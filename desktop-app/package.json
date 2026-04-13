@@ -1,6 +1,6 @@
 {
   "name": "soul-desktop",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "AI分身 - 桌面应用",
   "author": "zhi.qu",
   "main": "dist-electron/main.js",
@@ -26,7 +26,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint src/ electron/ --max-warnings 0",
     "lint:fix": "eslint src/ electron/ --fix",
-    "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='"
+    "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='",
+    "retrofit:skills": "tsx ../scripts/retrofit-skills.ts"
   },
   "keywords": [
     "electron",
@@ -37,14 +38,20 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "@monaco-editor/react": "^4.7.0",
     "@soul/core": "file:../packages/core",
     "@tailwindcss/postcss": "^4.2.2",
+    "adm-zip": "^0.5.16",
     "autoprefixer": "^10.4.27",
     "axios": "^1.14.0",
     "better-sqlite3": "^12.8.0",
+    "echarts": "^5.5.1",
+    "echarts-for-react": "^3.0.2",
     "eventsource-parser": "^3.0.6",
     "mammoth": "^1.12.0",
+    "node-7z": "^3.0.0",
+    "node-unrar-js": "^2.0.2",
     "pdf-parse": "^2.4.5",
     "postcss": "^8.5.8",
     "react": "^19.2.4",
@@ -54,6 +61,8 @@
     "react-virtuoso": "^4.18.4",
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.2.2",
+    "tar": "^7.4.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -61,9 +70,12 @@
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
+    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.5.0",
+    "@types/node-7z": "^2.1.11",
     "@types/pdf-parse": "^1.1.5",
+    "@types/tar": "^6.1.13",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
@@ -80,6 +92,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "playwright": "^1.58.2",
+    "tsx": "^4.19.2",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.1",
     "vite": "^8.0.3",

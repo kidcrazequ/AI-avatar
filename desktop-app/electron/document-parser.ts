@@ -70,6 +70,9 @@ const MAX_SCREENSHOT_PAGES = 200
 /** 单次导入文件大小上限（200MB） */
 export const MAX_PARSE_FILE_BYTES = 200 * 1024 * 1024
 
+/** 单文件解析超时（5 分钟），防止大文件卡死主进程 */
+const PARSE_TIMEOUT_MS = 5 * 60 * 1000
+
 /** Excel sheet 单表最大行数（防止失控 markdown 输出） */
 const EXCEL_MAX_ROWS_PER_SHEET = 5000
 
@@ -102,8 +105,17 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
  * - 纯文本 → 直接读取
  */
 export class DocumentParser {
-  /** 解析文件，返回文本内容和图片列表 */
+  /** 解析文件，返回文本内容和图片列表。带超时保护。 */
   async parseFile(filePath: string): Promise<ParsedDocument> {
+    return Promise.race([
+      this._parseFileImpl(filePath),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`)), PARSE_TIMEOUT_MS)
+      ),
+    ])
+  }
+
+  private async _parseFileImpl(filePath: string): Promise<ParsedDocument> {
     const stat = await fs.promises.stat(filePath)
     if (!stat.isFile()) {
       throw new Error(`路径不是普通文件: ${filePath}`)

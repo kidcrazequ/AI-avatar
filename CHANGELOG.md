@@ -1,5 +1,28 @@
 # 更新日志
 
+## v0.5.1 (2026-04-13)
+
+### Bug 修复
+
+- **Excel 导入后 UI 卡死 / 上下文未刷新** — 修复 v0.5.0 方案 C 落地后用户反馈的 3 个连锁问题：
+  - 导入大 Excel（250 KB+ 含 1000+ 行 markdown 表格）后**无法关闭知识库面板**
+  - 同一文件**无法编辑**
+  - 立刻发问 "生成 215 机型 2026 年 1~3 月设备侧效率折线图" **仍报 context 超限错误**
+
+  根因：导入完成后 `handleSelectFile` 自动加载 250 KB 的 .md 到 `KnowledgeViewer`，react-markdown 渲染巨型表格阻塞渲染器 → UI 操作全部卡死；同时 `onSaved?.()` 是 fire-and-forget，没等 `loadAvatarConfig` 重建 system prompt 就返回，用户立刻发问会用旧的 stale system prompt（仍含 248k 字符的旧 Excel 内容）。
+
+  修复（4 个文件）：
+  - **`KnowledgePanel.tsx`** Excel 快速路径不再 `handleSelectFile`，且改为 `await onSaved?.()` 等 system prompt 刷新完成才返回，状态文案改为 "✓ 已导入并刷新上下文"
+  - **`KnowledgeViewer.tsx`** 新增 frontmatter 解析 + 检测 `source: excel` / `rag_only: true` → 显示 Excel 数据源摘要卡片（sheets 标签 + 使用 `query_excel` 的提示），不再 react-markdown 渲染原表；同时为任何 > 50k 字符的普通文件显示截断警告 + 纯文本预览（不走 markdown 解析）
+  - **`KnowledgeEditor.tsx`** Excel 文件 / > 100k 字符文件 → 显示只读提示卡片，不加载 Monaco（避免"无法编辑"问题），文案明确告知 Excel 文件应"编辑源 .xlsx 后重新导入"
+  - **`document-parser.ts`** 智能表头检测：扫描前 5 行选最像表头的一行（评分 = `字符串单元格 ×2 − 数字单元格 − 空格 ×0.3`，要求填充率 ≥50% 且字符串多于数字），跳过表头行之前的所有合并标题/空行；多行 merged 表头里的 `\n` 替换为空格；同名列加 `_2`/`_3` 后缀去重。修复 v0.5.0 导入的 5 sheets 中有 4 个变成 `col1..colN` 的问题（合并单元格让 row 0 留空导致原检测失败）
+
+### 关于"不要直接编辑 Excel 自动文件"
+
+Excel 导入产生两份资产：`knowledge/<name>.md`（可视化）+ `knowledge/_excel/<name>.json`（结构化）。**手动编辑 .md 不会同步到 .json**，且会被下次重新导入覆盖。Viewer 和 Editor 都已加提示。如需修改数据，请编辑源 .xlsx 后重新导入。
+
+---
+
 ## v0.5.0 (2026-04-13)
 
 ### 新功能

@@ -294,11 +294,19 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           console.warn('README.md 回填失败（不影响导入）:', readmeErr)
         }
 
-        setImportProgress({ current: 5, total: 5, phase: '完成' })
-        showStatus(`✓ 已导入: ${targetPath}`)
+        setImportProgress({ current: 5, total: 5, phase: '刷新上下文' })
         await loadTree()
-        handleSelectFile(targetPath)
-        onSaved?.()
+        // ⚠️ 关键：不再 handleSelectFile(targetPath)。
+        // Excel 的 .md 文件可能很大（250 KB+ × 1000+ 行 markdown 表格），
+        // 自动加载到 KnowledgeViewer 会让 react-markdown 渲染巨型表格卡死渲染器，
+        // 导致"无法关闭知识库"/"无法编辑"。用户需要手动点击文件查看，
+        // 而 Viewer/Editor 会检测 source:excel frontmatter 显示摘要而非全表。
+        //
+        // ⚠️ 关键：必须 await onSaved，等 App 的 handleKnowledgeSaved
+        // 跑完 loadAvatarConfig 重建 system prompt 后才返回，
+        // 否则用户立刻发问会用旧的 stale system prompt（原 Excel 248k 字符塞满 context）。
+        await onSaved?.()
+        showStatus(`✓ 已导入并刷新上下文: ${targetPath}`)
         return
       }
 

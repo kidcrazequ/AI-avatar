@@ -308,7 +308,13 @@ export class DocumentParser {
 
   /**
    * 把 sheet 的二维数组行转成 ExcelSheetData（对象数组 + 列 schema）。
-   * 表头检测与 rowsToMarkdownTable 一致：首行全字符串 → header；否则合成 col1..N。
+   *
+   * 智能表头检测（处理 Excel 合并单元格 / 多行表头）：
+   *   1. 扫描前 5 行，对每一行打分：非空字符串单元格越多分越高，纯数字/None 行扣分
+   *   2. 选最高分的行作为表头；若并列，取靠上的
+   *   3. 表头行之前的所有行都跳过（合并标题、空行等）
+   *   4. 单元格中的 \n（多行 merged 表头）替换为空格
+   *   5. 完全没有合适行就 fallback 到 col1..colN
    */
   private buildSheetData(name: string, rows: unknown[][]): ExcelSheetData {
     if (rows.length === 0) {
@@ -319,21 +325,60 @@ export class DocumentParser {
       return { name, rowCount: 0, columns: [], rows: [] }
     }
 
-    const firstRow = rows[0]
-    const firstRowIsHeader =
-      firstRow.length === maxCols &&
-      firstRow.every(cell => typeof cell === 'string' && cell.toString().trim().length > 0)
+    // 扫前 5 行找最适合作为表头的行
+    const SCAN_DEPTH = Math.min(5, rows.length)
+    let bestHeaderIdx = -1
+    let bestScore = -1
+    for (let i = 0; i < SCAN_DEPTH; i++) {
+      const row = rows[i]
+      let stringCells = 0
+      let numericCells = 0
+      let emptyCells = 0
+      for (let j = 0; j < maxCols; j++) {
+        const cell = row[j]
+        if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
+          emptyCells++
+        } else if (typeof cell === 'number') {
+          numericCells++
+        } else if (typeof cell === 'string') {
+          stringCells++
+        }
+      }
+      // 评分：字符串单元格 +2，数字 -1，空格 -0.3
+      // 表头要求至少 50% 的列非空且大部分是字符串
+      const score = stringCells * 2 - numericCells - emptyCells * 0.3
+      const fillRate = (stringCells + numericCells) / maxCols
+      if (fillRate >= 0.5 && stringCells > numericCells && score > bestScore) {
+        bestScore = score
+        bestHeaderIdx = i
+      }
+    }
 
     let headers: string[]
     let bodyRows: unknown[][]
-    if (firstRowIsHeader) {
-      headers = firstRow.map(c => String(c).trim())
-      bodyRows = rows.slice(1)
+    if (bestHeaderIdx >= 0) {
+      const headerRow = rows[bestHeaderIdx]
+      headers = Array.from({ length: maxCols }, (_, j) => {
+        const cell = headerRow[j]
+        if (cell === null || cell === undefined) return `col${j + 1}`
+        const s = String(cell).trim().replace(/\r?\n/g, ' ').replace(/\s+/g, ' ')
+        return s || `col${j + 1}`
+      })
+      // 跳过表头行及之前的所有行（合并标题等）
+      bodyRows = rows.slice(bestHeaderIdx + 1)
     } else {
+      // 完全没找到合适的表头行 → fallback
       headers = Array.from({ length: maxCols }, (_, i) => `col${i + 1}`)
       bodyRows = rows
     }
     while (headers.length < maxCols) headers.push(`col${headers.length + 1}`)
+    // 去重：同名列加 _2, _3 后缀
+    const seen = new Map<string, number>()
+    headers = headers.map(h => {
+      const count = seen.get(h) || 0
+      seen.set(h, count + 1)
+      return count === 0 ? h : `${h}_${count + 1}`
+    })
 
     // 转对象数组
     const objRows: Array<Record<string, string | number | null>> = bodyRows.map(row => {

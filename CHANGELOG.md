@@ -10,6 +10,12 @@
   - 口头禅从"根据我的经验"改为"根据知识库数据"
   - 现在与 CLAUDE.md 的回答规范完全一致（`avatars/小堵-工商储专家/soul.md`）
 
+- **修复图表 JSON 解析失败 + 图表类型不遵从用户指定** — LLM 在 chart JSON 中输出 JavaScript 函数（如 `"color": function()`），导致前端 JSON.parse 失败显示红框。根因是 draw-chart 技能示例中含 `"valueFormatter": "(v) => v + ' 万'"`，LLM 模仿后输出真正的 JS 函数。同时用户明确要"折线图"但 LLM 自行选了柱状图。修复：
+  - 删除示例中的 `valueFormatter` 函数字符串
+  - 禁止列表新增"严禁 `function` 关键字"，明确 formatter/color 等字段只能用 ECharts 字符串模板
+  - 图表类型约束改为"用户指定时必须严格遵从"
+  - 同步修复 `templates/skills/draw-chart.md` 模板
+
 - **修复多轮对话 context 爆掉** — 用户多次查询 Excel 数据 + 生成图表后，工具返回值和长回答累积撑爆 LLM context 上限。新增两层压缩机制（`chatStore.ts`）：
   - **同轮工具结果压缩**：每次进入下一轮 LLM 调用前，把更早轮次中超过 2000 字符的 tool 结果截断为 500 字符摘要（`compressOldToolResults`）
   - **跨轮次 assistant 消息压缩**：构建 apiMessages 时，只保留最近 4 条 assistant 消息的完整内容，更早的超过 3000 字符的回答截断为 800 字符摘要

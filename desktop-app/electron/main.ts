@@ -707,7 +707,9 @@ wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string,
  */
 wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey: string, baseUrl: string) => {
   assertSafeSegment(avatarId, '分身ID')
+  const _ragT0 = Date.now()
   const retriever = toolRouter.getRetriever(avatarId)
+  console.log(`[rag-retrieve] getRetriever: ${Date.now() - _ragT0}ms`)
 
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
@@ -728,7 +730,10 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
     void wikiErr
   }
 
-  return retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, undefined, wikiChunks)
+  console.log(`[rag-retrieve] before retrieveAndBuildPrompt: ${Date.now() - _ragT0}ms`)
+  const result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, undefined, wikiChunks)
+  console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
+  return result
 })
 
 // ─── 知识百科（Wiki 融合层）───────────────────────────────────────────────────
@@ -912,9 +917,9 @@ interface BatchImportResult {
 }
 
 /**
- * 批量导入核心：给定候选文件列表，逐个 parse → 写入 knowledge/。
- * 跳过 LLM 格式化以避免每文件调一次 LLM（批量场景用户要的是快而不是精）。
- * 单文件导入仍走 KnowledgePanel.handleImportDocument 路径享受 LLM 格式化。
+ * 批量导入核心：逐文件完整处理（解析 → 清洗 → LLM 格式化 → 写入）。
+ * 每完成一个文件立即可搜索，中断后下次跳过已完成文件（断点续导）。
+ * 无 API Key 时降级为原始文本写入（仍然可用，只是未经 LLM 格式化）。
  */
 async function batchImportFiles(
   avatarId: string,
@@ -929,75 +934,140 @@ async function batchImportFiles(
     throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
   }
 
+  // 从设置读取 LLM / OCR API Key（批量导入在主进程执行，无法从渲染进程传参）
+  const apiKey = getDb().getSetting('chat_api_key') || ''
+  const baseUrl = getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const ocrApiKey = getDb().getSetting('ocr_api_key') || ''
+  const ocrBaseUrl = getDb().getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const callLLM: LLMCallFn | null = apiKey ? createLLMFn(apiKey, baseUrl, 'qwen-plus') : null
+
   const imported: Array<{ fileName: string; targetPath: string }> = []
   const failed: Array<{ path: string; error: string }> = []
   const total = files.length
+  const kmgr = knowledgeManagers.get(avatarId) ?? new KnowledgeManager(knowledgePath)
+  knowledgeManagers.set(avatarId, kmgr)
 
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i]
     const fileName = path.basename(filePath)
+    const baseName = fileName
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    const relativePath = `${baseName}.md`
+
+    // 断点续导：跳过已存在且已完成的文件
+    const targetFullPath = path.join(knowledgePath, relativePath)
+    if (fs.existsSync(targetFullPath)) {
+      try {
+        const head = fs.readFileSync(targetFullPath, 'utf-8').slice(0, 300)
+        if (head.includes('source: enhanced') || (head.includes('source: ') && !head.includes('批量导入'))) {
+          imported.push({ fileName, targetPath: relativePath })
+          mainWindow?.webContents.send('knowledge-import-progress', {
+            current: i + 1, total, fileName, phase: 'skipped (已完成)',
+          })
+          continue
+        }
+      } catch { /* 读取失败则重新导入 */ }
+    }
 
     // 进度事件：解析中
     mainWindow?.webContents.send('knowledge-import-progress', {
-      current: i,
-      total,
-      fileName,
-      phase: 'parsing',
+      current: i, total, fileName, phase: `解析中 (${i + 1}/${total})`,
     })
 
-    let rawRelPath: string | null = null
     try {
-      // 先解析文件内容。解析失败直接计入 failed，不再 preserve raw
-      // （否则 parseFile 抛错时会留孤儿 _raw/ 文件，见 subtask 5 子任务 — 这里顺带解决原子性）。
       const parsed = await documentParser.parseFile(filePath)
 
-      // parseFile 成功后再保留原始文件到 _raw/，供 ENHANCE 补跑 OCR / 数值校验时使用。
-      // preserveRawFile 返回的相对路径写入 frontmatter `raw_file` 字段，
-      // ENHANCE 时直接读 frontmatter 拿到精确路径，无需按文件名反查。
+      // 保留原始文件到 _raw/
+      let rawRelPath: string | null = null
       try {
         rawRelPath = await WikiCompiler.preserveRawFile(knowledgePath, filePath)
       } catch (rawErr) {
-        if (logger) logger.activity('batch-import-preserve-raw', `保留原始文件失败（不影响导入）: ${fileName}, ${rawErr instanceof Error ? rawErr.message : String(rawErr)}`)
+        if (logger) logger.activity('batch-import-preserve-raw', `${fileName}: ${rawErr instanceof Error ? rawErr.message : String(rawErr)}`)
       }
 
-      // 批量导入跳过 LLM formatDocument：直接用 parsed.text 作为内容
-      // 图片在批量模式下跳过 OCR（ENHANCE 补跑时从 _raw/ 重新解析获取）
-      // 批量导入的文件默认标记 rag_only，不塞进 system prompt（防止 2.9M 字符撑爆上下文）
-      // 只通过 search_knowledge / query_excel 按需检索
-      const frontmatterLines = ['---', 'rag_only: true', `source: ${parsed.fileType}`]
+      // 清洗文本
+      let cleanedText = cleanPdfFullText(parsed.text || '')
+      if (parsed.fileType === 'word') {
+        cleanedText = stripDocxToc(cleanedText)
+      }
+
+      // OCR 图表页（如果有图片且配置了 OCR API Key）
+      if (parsed.images.length > 0 && ocrApiKey) {
+        mainWindow?.webContents.send('knowledge-import-progress', {
+          current: i, total, fileName, phase: `OCR 图表 (${i + 1}/${total})`,
+        })
+        try {
+          const ocrOutcome = await callVisionOcr(parsed.images, {
+            apiKey: ocrApiKey, baseUrl: ocrBaseUrl,
+          })
+          if (ocrOutcome.results.length > 0 && parsed.perPageChars) {
+            const visionForMerge: Array<{ pageNum: number; content: string }> = []
+            for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
+              const content = ocrOutcome.results[vi]
+              if (content === null) continue
+              visionForMerge.push({
+                pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1),
+                content,
+              })
+            }
+            if (visionForMerge.length > 0) {
+              cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+            }
+          }
+        } catch (ocrErr) {
+          if (logger) logger.activity('batch-import-ocr', `${fileName} OCR 失败: ${ocrErr instanceof Error ? ocrErr.message : String(ocrErr)}`)
+        }
+      }
+
+      // LLM 逐章格式化（有 API Key 且文本足够长时）
+      let finalBody = cleanedText
+      let sourceTag = parsed.fileType
+      if (callLLM && cleanedText.length > 500) {
+        mainWindow?.webContents.send('knowledge-import-progress', {
+          current: i, total, fileName, phase: `LLM 格式化 (${i + 1}/${total})`,
+        })
+        try {
+          finalBody = await formatDocument(
+            cleanedText,
+            baseName,
+            parsed.fileName,
+            callLLM,
+            (progress) => {
+              mainWindow?.webContents.send('knowledge-import-progress', {
+                current: i, total, fileName,
+                phase: `格式化 ${progress.current}/${progress.total} (${i + 1}/${total})`,
+              })
+            },
+          )
+          sourceTag = 'enhanced'
+
+          // 数值校验
+          const fabricated = detectFabricatedNumbers(finalBody, parsed.text || '')
+          if (fabricated.length > 0 && logger) {
+            logger.activity('batch-import-fabrication', `${fileName}: ${fabricated.length} 个疑似编造数值`)
+          }
+        } catch (fmtErr) {
+          if (logger) logger.activity('batch-import-format', `${fileName} LLM 格式化失败，使用原始文本: ${fmtErr instanceof Error ? fmtErr.message : String(fmtErr)}`)
+          // 格式化失败回退到清洗后的原始文本
+        }
+      }
+
+      // 写入文件
+      const frontmatterLines = ['---', 'rag_only: true', `source: ${sourceTag}`]
       if (rawRelPath) frontmatterLines.push(`raw_file: ${rawRelPath}`)
       frontmatterLines.push('---', '')
-      const frontmatter = frontmatterLines.join('\n') + '\n'
-      const header = `# ${parsed.fileName}\n\n> 导入自: ${parsed.fileName}\n> 类型: ${parsed.fileType}\n> 批量导入（未经 LLM 格式化）\n\n---\n\n`
-      const finalContent = frontmatter + header + (parsed.text || '_（无文本内容）_')
-
-      // 目标文件名：清理非法字符后 + .md
-      const baseName = fileName
-        .replace(/\.[^.]+$/, '')
-        .replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
-      const relativePath = `${baseName}.md`
-
-      // 直接调 KnowledgeManager 写入
-      const kmgr = knowledgeManagers.get(avatarId) ?? new KnowledgeManager(knowledgePath)
-      knowledgeManagers.set(avatarId, kmgr)
+      const finalContent = frontmatterLines.join('\n') + '\n' + finalBody
       kmgr.writeFile(relativePath, finalContent)
 
       imported.push({ fileName, targetPath: relativePath })
-
-      // 进度事件：已写入
       mainWindow?.webContents.send('knowledge-import-progress', {
-        current: i + 1,
-        total,
-        fileName,
-        phase: 'written',
+        current: i + 1, total, fileName, phase: 'done',
       })
     } catch (err) {
       failed.push({ path: filePath, error: err instanceof Error ? err.message : String(err) })
       mainWindow?.webContents.send('knowledge-import-progress', {
-        current: i + 1,
-        total,
-        fileName,
-        phase: 'failed',
+        current: i + 1, total, fileName, phase: 'failed',
       })
     }
   }
@@ -1005,8 +1075,33 @@ async function batchImportFiles(
   return { imported, failed }
 }
 
+/** 批量导入完成后构建检索索引（BM25 tokens + contexts + embeddings） */
+async function buildIndexAfterBatchImport(avatarId: string): Promise<void> {
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const idxApiKey = getDb().getSetting('ocr_api_key') || getDb().getSetting('chat_api_key') || ''
+  const idxBaseUrl = getDb().getSetting('ocr_base_url') || getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  if (!idxApiKey) return
+  try {
+    mainWindow?.webContents.send('knowledge-import-progress', {
+      current: 0, total: 0, fileName: '', phase: '构建检索索引...',
+    })
+    const retriever = new KnowledgeRetriever(knowledgePath)
+    const existingIndex = loadIndex(knowledgePath)
+    const idxResult = await buildKnowledgeIndex(
+      retriever,
+      { callLLM: createLLMFn(idxApiKey, idxBaseUrl, 'qwen-turbo'), callEmbedding: createEmbeddingFn(idxApiKey, idxBaseUrl) },
+      undefined,
+      existingIndex,
+    )
+    saveIndex(knowledgePath, idxResult.contexts, idxResult.embeddings, idxResult.hashes)
+    toolRouter.invalidateRetriever(avatarId)
+  } catch (err) {
+    if (logger) logger.error('batch-import-build-index', err instanceof Error ? err : new Error(String(err)))
+  }
+}
+
 /**
- * import-folder: 导入整个文件夹。walk → batch parse → write。
+ * import-folder: 导入整个文件夹。walk → 逐文件完整处理 → 构建索引。
  * 所有步骤在主进程完成，避免 N 次 IPC 往返。
  */
 wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Promise<BatchImportResult> => {
@@ -1024,9 +1119,12 @@ wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Pr
   const { files, skipped, tempDirs } = await walkFolder(resolved)
   try {
     const { imported, failed } = await batchImportFiles(avatarId, files)
+    // 批量导入完成后自动构建索引（每个文件已完整处理，索引一次性构建更高效）
+    if (imported.length > 0) {
+      await buildIndexAfterBatchImport(avatarId)
+    }
     return { imported, skipped, failed }
   } finally {
-    // 清理 walkFolder 解压归档时创建的临时目录
     for (const td of tempDirs) await cleanupTempDir(td)
   }
 })
@@ -1060,6 +1158,9 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
     const { files, skipped, tempDirs } = await walkFolder(tempDir)
     nestedTempDirs = tempDirs
     const { imported, failed } = await batchImportFiles(avatarId, files)
+    if (imported.length > 0) {
+      await buildIndexAfterBatchImport(avatarId)
+    }
     return { imported, skipped, failed }
   } finally {
     await cleanupTempDir(tempDir)

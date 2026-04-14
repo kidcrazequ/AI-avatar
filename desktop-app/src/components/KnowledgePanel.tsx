@@ -555,10 +555,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
       await loadTree()
       onSaved?.()
-      // 导入成功后自动询问是否优化质量
-      if (batch.imported.length > 0) {
-        promptEnhanceAfterBatch(batch.imported.map(f => f.targetPath))
-      }
     } catch (err) {
       console.error('批量导入文件夹失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -605,10 +601,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
       await loadTree()
       onSaved?.()
-      // 导入成功后自动询问是否优化质量
-      if (batch.imported.length > 0) {
-        promptEnhanceAfterBatch(batch.imported.map(f => f.targetPath))
-      }
     } catch (err) {
       console.error('批量导入归档失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))

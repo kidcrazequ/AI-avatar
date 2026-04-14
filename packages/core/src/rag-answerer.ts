@@ -108,7 +108,7 @@ export async function retrieveAndBuildPrompt(
     // 第一跳检索
     const hop1Chunks = retriever.searchChunks(query, 8)
     if (hop1Chunks.length === 0) {
-      return question
+      return `${question}\n\n[系统提示] 知识库检索无结果。知识库可能为空或不包含相关内容。请直接告知用户"当前知识库中没有相关数据，请先导入知识文件"，不要反复调用 search_knowledge / query_excel 等工具尝试搜索。`
     }
 
     // 按第一跳 top-1 分数决定是否需要多跳：

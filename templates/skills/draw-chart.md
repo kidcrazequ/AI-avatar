@@ -11,6 +11,63 @@ description: 当用户需要数据可视化（柱状图/折线图/饼图/趋势/
 
 ---
 
+## ⚠️ 技术栈说明（**关键 — 必读，输出前自检**）
+
+本项目使用 **Apache ECharts 5+**，**不是** Chart.js / Plotly / Vega-Lite / D3 / Recharts / 任何其他图表库。
+
+LLM 训练数据里 Chart.js 比 ECharts 流行很多，你可能下意识写出 Chart.js 格式，**这会直接导致渲染失败**（`Cannot create property 'series' on boolean 'true'` 之类的晦涩错误）。
+
+### ❌ Chart.js 格式（错误示例 — 绝对不要输出这种）
+
+```json
+{
+  "type": "line",
+  "data": {
+    "labels": ["2025年7月", "2025年8月", "2025年9月"],
+    "datasets": [
+      { "label": "效率", "data": [88.25, 88.28, 88.27] }
+    ]
+  }
+}
+```
+
+### ✅ ECharts 格式（正确）
+
+```json
+{
+  "title": { "text": "..." },
+  "tooltip": { "trigger": "axis" },
+  "xAxis": { "type": "category", "data": ["2025年7月", "2025年8月", "2025年9月"] },
+  "yAxis": { "type": "value" },
+  "series": [
+    { "type": "line", "name": "效率", "data": [88.25, 88.28, 88.27] }
+  ]
+}
+```
+
+### 关键差异对照表
+
+| Chart.js（错） | ECharts（对） |
+|---|---|
+| 顶层 `"type": "line"` | 顶层**没有** type；type 在 `series[].type` |
+| `data.labels` | `xAxis.data` |
+| `data.datasets[]` | `series[]` |
+| `datasets[].label` | `series[].name` |
+| `datasets[].data` | `series[].data` |
+| `options.plugins.title.text` | `title.text` |
+| `options.scales.y.beginAtZero` | `yAxis.type: "value"`（默认从 0）|
+
+### 输出前自检清单（必查）
+
+✅ 顶层有 `xAxis`、`yAxis`、`series` 这三个字段（饼图除外，饼图只有 `series`）
+❌ 顶层**没有** `type`、`data.labels`、`data.datasets`、`options.plugins`
+❌ `series` 不是 `datasets`
+❌ `xAxis.data` 不是 `data.labels`
+
+如果你不确定格式，对照下面"输出格式硬约束"段的示例 1 / 2 / 3 逐字段检查。
+
+---
+
 ## 技能说明
 
 当用户的问题涉及数据可视化时，用 ECharts 输出一份高级感图表，直接内联在回答中渲染。

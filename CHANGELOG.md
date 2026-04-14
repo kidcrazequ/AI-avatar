@@ -1,5 +1,82 @@
 # 更新日志
 
+## v0.6.2 (2026-04-14)
+
+### 修复 — Chart.js 格式 LLM drift 导致渲染失败
+
+**问题**：用户问 "215 机型最近 6 个月设备侧效率折线图"，LLM 输出了 **Chart.js 格式**而非 ECharts 格式：
+
+```json
+{
+  "type": "line",
+  "data": {
+    "labels": ["2025年7月", "2025年8月", ...],
+    "datasets": [{ "label": "星火项目设备侧效率", "data": [88.25, 88.28, ..., null] }]
+  }
+}
+```
+
+`ChartRenderer.setOption()` 直接喂给 ECharts，ECharts 内部某处做 `xxx.series = ...` 但 xxx 被 type coercion 成 boolean true，抛出 `Cannot create property 'series' on boolean 'true'`。
+
+**根因**：LLM 训练数据里 Chart.js 远比 ECharts 流行，draw-chart skill 虽然有 ECharts 示例但**没明确说"不是 Chart.js"**，LLM 偶尔会下意识 drift 到更熟悉的 Chart.js 格式。
+
+### 双管齐下修复
+
+#### 修复 A — `ChartRenderer.tsx` 防御性 schema 转换
+
+新增 3 个模块级 helper（**提到组件外避免 useEffect closure 问题**）：
+
+- **`detectChartJsFormat(opt)`**: 检测 `{type, data: {labels, datasets}}` 模式 + 验证缺失 `series/xAxis/yAxis`（防 ECharts 误判）
+- **`convertChartJsToECharts(opt)`**: 自动转换为 ECharts 等价格式
+  - 笛卡尔系（line / bar / scatter / radar）→ `{title, tooltip, xAxis, yAxis, series}`
+  - 饼图（pie / doughnut）→ `{title, series: [{type: 'pie', data: [{name, value}]}]}`
+  - `null` → `'-'`（ECharts gap marker，折线图缺口正确显示）
+  - `options.plugins.title.text` → `title.text`
+  - 多 dataset 时自动加 `legend: {}`
+- **`normalizeOption(opt)`**: 入口函数，先 detect → 命中则转换 + 控制台 warn 一次（方便排查 LLM drift），最后注入 `withSafeGrid`
+
+`useEffect` 里的 `setOption(withSafeGrid(option))` 改为 `setOption(normalizeOption(option))`。LLM 即使输出 Chart.js 格式，图表仍能正确渲染。
+
+#### 修复 B — `draw-chart.md` skill 顶部加技术栈警告
+
+`templates/skills/draw-chart.md` + `avatars/小堵-工商储专家/skills/draw-chart.md` 同步更新（292 → 343 行），在 `## 技能说明` 段之前插入新段：
+
+```
+## ⚠️ 技术栈说明（关键 — 必读，输出前自检）
+
+本项目使用 Apache ECharts 5+，不是 Chart.js / Plotly / Vega-Lite / D3 / Recharts。
+LLM 训练数据里 Chart.js 比 ECharts 流行很多，你可能下意识写出 Chart.js 格式，
+这会直接导致渲染失败。
+
+❌ Chart.js 格式（绝对不要输出这种）：
+{ "type": "line", "data": { "labels": [...], "datasets": [{...}] } }
+
+✅ ECharts 格式（正确）：
+{ "title": {...}, "xAxis": {...}, "yAxis": {...}, "series": [...] }
+
+[关键差异对照表 7 行]
+
+[输出前自检清单 4 条]
+```
+
+### 三层防御汇总
+
+| 层 | 修复 | 作用 |
+|---|---|---|
+| **prompt 层** | skill 顶部技术栈警告 + 对照表 + 自检清单 | 让 LLM 知道项目用 ECharts 不是 Chart.js |
+| **代码层** | ChartRenderer detectChartJsFormat + convertChartJsToECharts | LLM 即使 drift 也能自动转换不崩 |
+| **错误层** | 之前已有的 ChartErrorBoundary（红框 + 原 JSON）| 转换失败时仍能展示原始 JSON 便于调试 |
+
+### 顺带改进
+
+- ChartRenderer 的 `withSafeGrid` 也提到模块级（之前在组件 body 内），消除 ESLint `react-hooks/exhaustive-deps` 警告
+- 转换后的图自动加 `tooltip: { trigger: 'axis' }`（Chart.js 默认有 tooltip，转换时保留这个体验）
+
+### 验证
+
+- desktop-app typecheck ✅ / lint ✅（修复了之前 closure 引发的 hooks warning）/ build ✅
+- 实际效果：用户重启后下次画图，即使 LLM 仍然写 Chart.js 格式也能正常渲染（控制台会有 warn 提示），同时 LLM 看到新 skill 警告后大概率不会再 drift
+
 ## v0.6.1 (2026-04-14)
 
 ### 修复 — draw-chart 技能数据守护规则（防丑图）

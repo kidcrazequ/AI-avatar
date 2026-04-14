@@ -117,6 +117,105 @@ async function ensureEchartsLoaded(): Promise<void> {
   return _echartsLoadingPromise
 }
 
+// ─── ECharts option 预处理 helpers（模块级，零 closure，effect 依赖友好）───
+
+/** 注入默认 grid 间距，防止 Y 轴 name 和 title/subtext 重叠 */
+function withSafeGrid(opt: Record<string, unknown>): Record<string, unknown> {
+  const safe = { ...opt }
+  if (!safe.grid) {
+    safe.grid = { top: 80, left: 80 }
+  } else if (typeof safe.grid === 'object' && !Array.isArray(safe.grid)) {
+    const g = safe.grid as Record<string, unknown>
+    if (g.top === undefined) g.top = 80
+    if (g.left === undefined) g.left = 80
+  }
+  return safe
+}
+
+/**
+ * 防御性 schema 转换：检测 LLM 输出的 Chart.js 格式并自动转成 ECharts 格式。
+ *
+ * **背景**：本项目用 ECharts，但 LLM 训练数据里 Chart.js 更流行，会偶尔
+ * drift 到 Chart.js 的 `{type, data: {labels, datasets}}` 格式。直接把这种
+ * option 喂给 ECharts.setOption 会抛 "Cannot create property 'series' on
+ * boolean 'true'" 这类晦涩错误（ECharts 内部 type coercion 失败）。这里检测
+ * 后自动转换，给 LLM 兜底。
+ *
+ * 支持转换：line / bar / pie / doughnut / scatter / radar
+ */
+function detectChartJsFormat(opt: Record<string, unknown>): boolean {
+  const dataField = opt.data
+  return (
+    typeof opt.type === 'string' &&
+    typeof dataField === 'object' &&
+    dataField !== null &&
+    Array.isArray((dataField as Record<string, unknown>).labels) &&
+    Array.isArray((dataField as Record<string, unknown>).datasets) &&
+    // 防误判：ECharts 完整 option 同时不会缺这三个字段
+    opt.series === undefined &&
+    opt.xAxis === undefined &&
+    opt.yAxis === undefined
+  )
+}
+
+function convertChartJsToECharts(opt: Record<string, unknown>): Record<string, unknown> {
+  const type = String(opt.type)
+  const data = opt.data as Record<string, unknown>
+  const labels = (data.labels as Array<string | number>) || []
+  const datasets = (data.datasets as Array<Record<string, unknown>>) || []
+  const options = (opt.options as Record<string, unknown>) || {}
+  const plugins = (options.plugins as Record<string, unknown>) || {}
+  const titlePlugin = (plugins.title as Record<string, unknown>) || {}
+  const titleText = (titlePlugin.text as string) || (opt.title as string) || '数据图表'
+
+  // null → '-'（ECharts 用 '-' 表示数据缺口，会在折线图里留 gap）
+  const normalizeData = (arr: unknown[]): unknown[] =>
+    arr.map((v) => (v === null || v === undefined ? '-' : v))
+
+  if (type === 'pie' || type === 'doughnut') {
+    const ds = datasets[0] || {}
+    const dsData = (ds.data as Array<number | null>) || []
+    const pieData = dsData.map((v, i) => ({
+      name: String(labels[i] ?? `项 ${i + 1}`),
+      value: v === null ? 0 : v,
+    }))
+    return {
+      title: { text: titleText },
+      series: [
+        {
+          type: 'pie',
+          name: (ds.label as string) || '',
+          data: pieData,
+          radius: type === 'doughnut' ? ['45%', '70%'] : '70%',
+        },
+      ],
+    }
+  }
+
+  // line / bar / scatter / radar / 其他笛卡尔系图
+  return {
+    title: { text: titleText },
+    tooltip: { trigger: 'axis' },
+    ...(datasets.length > 1 ? { legend: {} } : {}),
+    xAxis: { type: 'category', data: labels },
+    yAxis: { type: 'value' },
+    series: datasets.map((ds) => ({
+      type,
+      name: (ds.label as string) || '',
+      data: normalizeData((ds.data as unknown[]) || []),
+    })),
+  }
+}
+
+/** 进入 ECharts setOption 前的预处理：先做 schema 转换，再注入安全 grid */
+function normalizeOption(opt: Record<string, unknown>): Record<string, unknown> {
+  if (detectChartJsFormat(opt)) {
+    console.warn('[ChartRenderer] 检测到 Chart.js 格式输入，自动转换为 ECharts。请检查 draw-chart skill 是否被 LLM 正确遵循。')
+    return withSafeGrid(convertChartJsToECharts(opt))
+  }
+  return withSafeGrid(opt)
+}
+
 /**
  * 主组件。必须给容器固定 width/height，否则 ECharts Canvas 会渲染为空。
  */
@@ -139,18 +238,9 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
     }
   }, [loaded])
 
-  /** 注入默认 grid 间距，防止 Y 轴 name 和 title/subtext 重叠 */
-  function withSafeGrid(opt: Record<string, unknown>): Record<string, unknown> {
-    const safe = { ...opt }
-    if (!safe.grid) {
-      safe.grid = { top: 80, left: 80 }
-    } else if (typeof safe.grid === 'object' && !Array.isArray(safe.grid)) {
-      const g = safe.grid as Record<string, unknown>
-      if (g.top === undefined) g.top = 80
-      if (g.left === undefined) g.left = 80
-    }
-    return safe
-  }
+  // 所有 schema normalize / chart-js 转换 helpers 都提到组件外（withSafeGrid /
+  // detectChartJsFormat / convertChartJsToECharts / normalizeOption），避免
+  // 在组件 body 内造成 useEffect 的 stale closure 问题（react-hooks/exhaustive-deps）。
 
   // loaded 后初始化 chart 实例
   useEffect(() => {
@@ -159,7 +249,7 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
     instanceRef.current = _echartsCore.init(containerRef.current, 'pixel', {
       renderer: 'canvas',
     })
-    instanceRef.current.setOption(withSafeGrid(option), true)
+    instanceRef.current.setOption(normalizeOption(option), true)
 
     const handleResize = () => instanceRef.current?.resize()
     window.addEventListener('resize', handleResize)
@@ -173,7 +263,7 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
   // option 变化时更新（只有 instance 已存在才 setOption）
   useEffect(() => {
     if (instanceRef.current) {
-      instanceRef.current.setOption(withSafeGrid(option), true)
+      instanceRef.current.setOption(normalizeOption(option), true)
     }
   }, [option])
 

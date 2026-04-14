@@ -1,5 +1,12 @@
 # 更新日志
 
+## v0.5.7 (2026-04-14)
+
+### 增强
+
+- **批量导入保留原始文件** — `batchImportFiles` 新增 `preserveRawFile` 调用，将原始文件（PDF/Word/图片等）复制到 `knowledge/_raw/`，供 ENHANCE 补跑 OCR / 数值校验时使用。
+- **ENHANCE 走完整管线** — `enhance-knowledge-files` 从原来的"仅 LLM 格式化"升级为完整管线：从 `_raw/` 重新解析原始文件 → Vision OCR（图表页识别）→ 文本清洗（cleanPdfFullText / stripDocxToc）→ Vision 结果语义融合（mergeVisionIntoText）→ LLM 逐章格式化 → 数值校验（detectFabricatedNumbers）→ 写回。ENHANCE 完成后自动触发检索索引重建（上下文摘要 + 向量嵌入），确保 RAG 检索使用最新内容。无 `_raw/` 原始文件时自动回退到旧的纯文本格式化模式。新增 `ocrApiKey` / `ocrBaseUrl` 参数用于 Vision OCR，新增 `fabricatedWarnings` 返回值报告疑似编造数值数量。
+
 ## v0.5.6 (2026-04-14)
 
 ### 修复

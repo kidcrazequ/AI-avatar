@@ -649,20 +649,36 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
     setIsEnhancing(true)
     setEnhanceProgress(null)
-    showStatus('知识库质量优化中（LLM 格式化）...', false)
+    showStatus('知识库质量优化中（完整管线：OCR → 清洗 → 格式化 → 校验）...', false)
     try {
       const result = await window.electronAPI.enhanceKnowledgeFiles(
         avatarId,
         model.apiKey,
         model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         model.model || 'qwen-plus',
+        ocrModel?.apiKey,
+        ocrModel?.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
         targetFiles,
       )
       if (!mountedRef.current) return
       if (result.total === 0) {
         showStatus('没有需要优化的文件（仅处理批量导入的未格式化文件）')
       } else {
-        showStatus(`✓ 优化完成：${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total} 个`, 10000)
+        const fabMsg = result.fabricatedWarnings > 0 ? ` | ${result.fabricatedWarnings} 个疑似编造数值` : ''
+        showStatus(`✓ 优化完成：${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total} 个${fabMsg}`, 10000)
+
+        // 优化完成后重建检索索引（上下文摘要 + 向量嵌入）
+        const indexApiKey = ocrModel?.apiKey || model.apiKey
+        const indexBaseUrl = ocrModel?.baseUrl || model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        if (indexApiKey && result.enhanced > 0) {
+          try {
+            showStatus('重建检索索引（上下文摘要 + 向量嵌入）...', false)
+            const indexResult = await window.electronAPI.buildKnowledgeIndex(avatarId, indexApiKey, indexBaseUrl)
+            showStatus(`✓ 优化 + 索引完成：${result.enhanced} 文件${fabMsg} | ${indexResult.contextCount} 摘要 + ${indexResult.embeddingCount} 向量`, 10000)
+          } catch (indexErr) {
+            console.warn('索引构建失败（不影响优化结果）:', indexErr)
+          }
+        }
       }
       await loadTree()
       onSaved?.()

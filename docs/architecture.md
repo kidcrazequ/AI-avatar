@@ -527,6 +527,31 @@ IPC: write-knowledge-file ──▶ 保存到 knowledge/
 IPC: build-knowledge-index ──▶ 重建检索索引
 ```
 
+### 6.2b 批量导入 + ENHANCE 补跑流
+
+```
+批量导入（快速，跳过 LLM 管线）
+  │
+  ├─ 用户选择文件夹 / 压缩包
+  ├─ 递归扫描文件
+  ├─ 逐个 parseFile → 粗文本写入 knowledge/*.md（rag_only: true）
+  ├─ 原始文件保留到 knowledge/_raw/（供补跑使用）
+  └─ 可选：自动触发 ENHANCE
+
+ENHANCE 补跑（完整管线，等同单文件导入质量）
+  │
+  ├─ 从 _raw/ 找到原始文件 → DocumentParser.parseFile() 重新解析
+  ├─ Vision OCR（图表页识别，需 OCR API Key）
+  ├─ 文本清洗（cleanPdfFullText / stripDocxToc）
+  ├─ Vision 结果语义融合（mergeVisionIntoText）
+  ├─ LLM 逐章格式化（formatDocument）
+  ├─ 数值校验（detectFabricatedNumbers 比对原文）
+  ├─ 写回 knowledge/*.md（保留 rag_only: true，source: enhanced）
+  └─ 统一重建检索索引（buildKnowledgeIndex）
+
+无 _raw/ 原始文件时自动回退到旧模式（仅 LLM 格式化）
+```
+
 ### 6.3 分身创建流
 
 ```
@@ -1071,6 +1096,9 @@ SoulLoader.loadAvatar() 拼接的 system prompt:
 | 导入·格式化 | DocumentFormatter | `packages/core/src/document-formatter.ts` | `formatDocument()`, `splitIntoChapters()`, `formatChapter()` |
 | 导入·校验 | ocr-html-cleaner | `packages/core/src/utils/ocr-html-cleaner.ts` | `detectFabricatedNumbers()` |
 | 导入·UI 编排 | KnowledgePanel | `desktop-app/src/components/KnowledgePanel.tsx` | `handleImportDocument()` |
+| 批量导入 | main.ts | `desktop-app/electron/main.ts` | `batchImportFiles()`, `import-folder`, `import-archive` |
+| ENHANCE·完整管线 | main.ts | `desktop-app/electron/main.ts` | `enhance-knowledge-files` handler |
+| ENHANCE·UI 编排 | KnowledgePanel | `desktop-app/src/components/KnowledgePanel.tsx` | `handleEnhanceKnowledge()` |
 | 索引·切块 | KnowledgeRetriever | `packages/core/src/knowledge-retriever.ts` | `buildChunks()`, `pushChunks()` |
 | 索引·摘要 | KnowledgeIndexer | `packages/core/src/knowledge-indexer.ts` | `buildKnowledgeIndex()` Phase 1 |
 | 索引·向量 | KnowledgeIndexer | `packages/core/src/knowledge-indexer.ts` | `buildKnowledgeIndex()` Phase 2 |

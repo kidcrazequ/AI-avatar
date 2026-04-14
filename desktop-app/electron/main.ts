@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, type WikiAnswer, type LLMCallFn } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, cleanOcrHtml, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, type WikiAnswer, type LLMCallFn } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
@@ -92,7 +92,7 @@ function getDb(): DatabaseManager {
 /** 含敏感参数（apiKey）的 channel，日志需脱敏 */
 const SENSITIVE_CHANNELS = new Set([
   'consolidate-memory', 'build-knowledge-index', 'rag-retrieve',
-  'compile-wiki', 'lint-knowledge', 'detect-evolution',
+  'compile-wiki', 'lint-knowledge', 'detect-evolution', 'enhance-knowledge-files',
 ])
 
 function wrapHandler(
@@ -937,9 +937,16 @@ async function batchImportFiles(
     })
 
     try {
+      // 保留原始文件到 _raw/，供 ENHANCE 补跑 OCR / 数值校验时使用
+      try {
+        await WikiCompiler.preserveRawFile(knowledgePath, filePath)
+      } catch (rawErr) {
+        if (logger) logger.activity('batch-import-preserve-raw', `保留原始文件失败（不影响导入）: ${fileName}, ${rawErr instanceof Error ? rawErr.message : String(rawErr)}`)
+      }
+
       const parsed = await documentParser.parseFile(filePath)
       // 批量导入跳过 LLM formatDocument：直接用 parsed.text 作为内容
-      // 图片在批量模式下跳过 OCR（渲染进程才有 ocrModel）
+      // 图片在批量模式下跳过 OCR（ENHANCE 补跑时从 _raw/ 重新解析获取）
       // 批量导入的文件默认标记 rag_only，不塞进 system prompt（防止 2.9M 字符撑爆上下文）
       // 只通过 search_knowledge / query_excel 按需检索
       const frontmatter = `---\nrag_only: true\nsource: ${parsed.fileType}\n---\n\n`
@@ -1035,17 +1042,24 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
 })
 
 /**
- * enhance-knowledge-files: 对批量导入的知识文件逐个补跑 LLM 格式化。
+ * enhance-knowledge-files: 对批量导入的知识文件补跑完整管线。
+ * 完整管线：从 _raw/ 重新解析原始文件 → OCR → 清洗 → LLM 格式化 → 数值校验 → 写回。
  * 识别条件：文件含 `rag_only: true` frontmatter + `批量导入` 标记。
  * 格式化完成后保留 rag_only frontmatter（大文件不适合塞 system prompt）。
+ * 索引构建和演化检测由调用方（渲染进程）在所有文件增强完成后统一执行。
  * 通过 knowledge-enhance-progress 事件上报进度。
+ *
+ * @author zhi.qu
+ * @date 2026-04-14
  */
-wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: string, baseUrl: string, model: string, targetFiles?: string[]): Promise<{ enhanced: number; failed: number; total: number }> => {
+wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: string, baseUrl: string, model: string, ocrApiKey?: string, ocrBaseUrl?: string, targetFiles?: string[]): Promise<{ enhanced: number; failed: number; total: number; fabricatedWarnings: number }> => {
   assertSafeSegment(avatarId, '分身ID')
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   if (!fs.existsSync(knowledgePath)) {
     throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
   }
+
+  const rawDir = path.join(knowledgePath, '_raw')
 
   let allFiles: string[]
 
@@ -1057,13 +1071,78 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
     } catch { return false }
   }
 
+  /**
+   * 在 _raw/ 中查找与 .md 文件名最匹配的原始文件。
+   * 匹配策略：.md 文件名去掉 .md 后缀和非法字符替换后的 baseName，
+   * 在 _raw/ 中找 baseName 前缀匹配的文件（可能带时间戳后缀）。
+   */
+  function findRawFile(mdFileName: string): string | null {
+    if (!fs.existsSync(rawDir)) return null
+    const mdBase = mdFileName.replace(/\.md$/, '')
+    const rawEntries = fs.readdirSync(rawDir)
+    // 精确匹配（清理后的 baseName 完全一致）
+    for (const entry of rawEntries) {
+      const entryBase = entry.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      if (entryBase === mdBase) return path.join(rawDir, entry)
+    }
+    // 前缀匹配（带时间戳后缀的副本，如 xxx-1776069859495.pdf）
+    for (const entry of rawEntries) {
+      const entryBase = entry.replace(/-\d{10,}(\.[^.]+)$/, '$1').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+      if (entryBase === mdBase) return path.join(rawDir, entry)
+    }
+    return null
+  }
+
+  /** 调用 Vision 模型识别图表页，返回 OCR 文本数组 */
+  async function callVisionOcr(images: string[], visionApiKey: string, visionBaseUrl: string): Promise<string[]> {
+    const visionPrompt = '请仔细分析这张技术文档页面图片，提取所有有价值的结构化信息：' +
+      '1. 尺寸图/工程图：提取所有尺寸标注数值（单位mm），整理为参数表格；' +
+      '2. 设备布局图：描述各组件的空间位置关系，整理为布局表格；' +
+      '3. 原理图/流程图：描述流向、各部件名称和功能；' +
+      '4. 数据表格：以 Markdown 表格格式输出；' +
+      '5. 接线图：描述端子排列、线缆规格。' +
+      '输出要求：使用 Markdown 格式，直接输出内容不要用代码围栏包裹，保留原始精度数值，' +
+      '只输出图片中实际可见的数据，不要编造或推断图片中不存在的数值，' +
+      '禁止使用任何 emoji 图标，不要在末尾附加总结或自评。'
+
+    const results: string[] = []
+    for (const imageBase64 of images) {
+      try {
+        const response = await fetchWithTimeout(`${visionBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${visionApiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'qwen-vl-max',
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image_url', image_url: { url: imageBase64 } },
+                { type: 'text', text: visionPrompt },
+              ],
+            }],
+            stream: false,
+            max_tokens: 4096,
+          }),
+          timeoutMs: 180_000,
+        })
+        const data = await response.json() as { choices: Array<{ message: { content: string } }> }
+        const text = data.choices?.[0]?.message?.content ?? ''
+        if (text) results.push(cleanOcrHtml(text))
+      } catch (err) {
+        if (logger) logger.error('enhance-vision-ocr', err instanceof Error ? err : new Error(String(err)))
+      }
+    }
+    return results
+  }
+
   if (targetFiles && targetFiles.length > 0) {
-    // 指定了文件列表（批量导入后自动调用），跳过已增强的（断点续跑）
     allFiles = targetFiles
       .map(f => path.join(knowledgePath, f))
       .filter(f => fs.existsSync(f) && !isAlreadyEnhanced(f))
   } else {
-    // 手动点 ENHANCE 按钮，扫描所有需要增强的文件（含 rag_only + 批量导入标记，排除已增强的）
     allFiles = []
     function scanDir(dir: string): void {
       const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -1083,12 +1162,13 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
   }
 
   if (allFiles.length === 0) {
-    return { enhanced: 0, failed: 0, total: 0 }
+    return { enhanced: 0, failed: 0, total: 0, fabricatedWarnings: 0 }
   }
 
   const callLLM: LLMCallFn = createLLMFn(apiKey, baseUrl, model)
   let enhanced = 0
   let failed = 0
+  let fabricatedWarnings = 0
   const total = allFiles.length
 
   for (let i = 0; i < allFiles.length; i++) {
@@ -1097,49 +1177,103 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
     const relPath = path.relative(knowledgePath, filePath)
 
     mainWindow?.webContents.send('knowledge-enhance-progress', {
-      current: i,
-      total,
-      fileName,
-      phase: 'formatting',
+      current: i, total, fileName, phase: 'preparing',
     })
 
     try {
-      const raw = fs.readFileSync(filePath, 'utf-8')
-      // 去掉 frontmatter：匹配开头的 ---\n...\n---，允许各种空白
-      let body = raw
-      const fmEnd = raw.match(/^---\r?\n[\s\S]*?\r?\n---\s*\r?\n/)
-      if (fmEnd) {
-        body = raw.slice(fmEnd[0].length)
-      }
-      // 去掉批量导入 header（# 标题 + > 导入自... + ---），取 --- 之后的纯内容
-      const headerEnd = body.indexOf('\n---\n')
-      const plainText = headerEnd >= 0 ? body.slice(headerEnd + 5).trim() : body.trim()
+      // 尝试从 _raw/ 找到原始文件并重新解析
+      const rawFilePath = findRawFile(fileName)
+      let rawText = ''
+      let parsedImages: string[] = []
+      let parsedPerPageChars: Array<{ num: number; chars: number }> | undefined
+      let parsedImagePageNumbers: number[] | undefined
+      let parsedFileType: string = 'text'
 
-      if (!plainText || plainText.trim().length < 50) {
-        // 内容太少，跳过
+      if (rawFilePath) {
+        mainWindow?.webContents.send('knowledge-enhance-progress', {
+          current: i, total, fileName, phase: 'parsing raw file',
+        })
+        try {
+          const parsed = await documentParser.parseFile(rawFilePath)
+          rawText = parsed.text || ''
+          parsedImages = parsed.images
+          parsedPerPageChars = parsed.perPageChars
+          parsedImagePageNumbers = parsed.imagePageNumbers
+          parsedFileType = parsed.fileType
+        } catch (parseErr) {
+          if (logger) logger.error('enhance-reparse', parseErr instanceof Error ? parseErr : new Error(String(parseErr)))
+          // 解析失败回退到 .md 中的纯文本
+        }
+      }
+
+      // 如果没有从 _raw/ 解析出内容，回退到 .md 文件中的纯文本
+      if (!rawText) {
+        const raw = fs.readFileSync(filePath, 'utf-8')
+        let body = raw
+        const fmEnd = raw.match(/^---\r?\n[\s\S]*?\r?\n---\s*\r?\n/)
+        if (fmEnd) body = raw.slice(fmEnd[0].length)
+        const headerEnd = body.indexOf('\n---\n')
+        rawText = headerEnd >= 0 ? body.slice(headerEnd + 5).trim() : body.trim()
+      }
+
+      if (!rawText || rawText.trim().length < 50) {
         mainWindow?.webContents.send('knowledge-enhance-progress', {
           current: i + 1, total, fileName, phase: 'skipped',
         })
         continue
       }
 
+      // OCR：如果有图表页截图且配置了 Vision API Key
+      const visionResults: string[] = []
+      if (parsedImages.length > 0 && ocrApiKey) {
+        mainWindow?.webContents.send('knowledge-enhance-progress', {
+          current: i, total, fileName, phase: `OCR (${parsedImages.length} images)`,
+        })
+        const visionBase = ocrBaseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        const ocrResults = await callVisionOcr(parsedImages, ocrApiKey, visionBase)
+        visionResults.push(...ocrResults)
+      }
+
+      // 清洗
+      let cleanedText = cleanPdfFullText(rawText)
+      if (parsedFileType === 'word') {
+        cleanedText = stripDocxToc(cleanedText)
+      }
+
+      // 合并 Vision OCR 结果到清洗后的文本
+      if (visionResults.length > 0 && parsedPerPageChars) {
+        const visionForMerge = visionResults.map((content, vi) => ({
+          pageNum: parsedImagePageNumbers?.[vi] ?? (vi + 1),
+          content,
+        }))
+        cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsedPerPageChars)
+      }
+
+      // LLM 逐章格式化
+      mainWindow?.webContents.send('knowledge-enhance-progress', {
+        current: i, total, fileName, phase: 'formatting',
+      })
       const docTitle = fileName.replace(/\.md$/, '')
       const formatted = await formatDocument(
-        plainText,
-        docTitle,
-        fileName,
-        callLLM,
+        cleanedText, docTitle, fileName, callLLM,
         (progress) => {
           mainWindow?.webContents.send('knowledge-enhance-progress', {
-            current: i,
-            total,
-            fileName,
+            current: i, total, fileName,
             phase: `formatting (${progress.current}/${progress.total})`,
           })
         },
       )
 
-      // 写回：保留 rag_only frontmatter，替换内容
+      // 数值校验（需要原始文本做比对基准）
+      if (rawFilePath) {
+        const visionAllText = visionResults.join('\n')
+        const fabricated = detectFabricatedNumbers(formatted, rawText + '\n' + visionAllText)
+        if (fabricated.length > 0) {
+          fabricatedWarnings += fabricated.length
+          if (logger) logger.activity('enhance-fabrication-check', `${relPath}: ${fabricated.length} 个疑似编造数值: ${fabricated.slice(0, 5).join(', ')}`)
+        }
+      }
+
       const newContent = `---\nrag_only: true\nsource: enhanced\n---\n\n${formatted}`
       fs.writeFileSync(filePath, newContent, 'utf-8')
       enhanced++
@@ -1149,14 +1283,14 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, apiKey: strin
       })
     } catch (err) {
       failed++
-      console.error(`[enhance] ${relPath} 格式化失败:`, err instanceof Error ? err.message : String(err))
+      if (logger) logger.error('enhance-knowledge-file', err instanceof Error ? err : new Error(`${relPath}: ${String(err)}`))
       mainWindow?.webContents.send('knowledge-enhance-progress', {
         current: i + 1, total, fileName, phase: 'failed',
       })
     }
   }
 
-  return { enhanced, failed, total }
+  return { enhanced, failed, total, fabricatedWarnings }
 })
 
 /**

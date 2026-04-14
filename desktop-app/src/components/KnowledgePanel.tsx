@@ -3,7 +3,7 @@ import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
 import { LLMService, ModelConfig } from '../services/llm-service'
-import { cleanOcrHtml, cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, type LLMCallFn } from '@soul/core'
+import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, type LLMCallFn } from '@soul/core'
 import { generateTestCasesFromContent } from '../services/test-generator'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
@@ -338,48 +338,31 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       }
 
       let rawText = parsed.text || ''
-      const visionResults: string[] = []
+      // Vision OCR 走 @soul/core 的共享 callVisionOcr：默认并发 3，单图失败不中断，
+      // 自动 cleanOcrHtml。结果数组和 parsed.images 下标对齐（失败位为 null），
+      // 后续 mergeVisionIntoText 前过滤 null。
+      let visionResultsRaw: Array<string | null> = []
+      let visionFailureCount = 0
       if (parsed.images.length > 0 && ocrModel?.apiKey) {
-        const visionConfig: ModelConfig = {
-          ...ocrModel,
-          model: 'qwen-vl-max',
-        }
-        const vision = new LLMService(visionConfig)
-        const visionPrompt = '请仔细分析这张技术文档页面图片，提取所有有价值的结构化信息：' +
-          '1. 尺寸图/工程图：提取所有尺寸标注数值（单位mm），整理为参数表格；' +
-          '2. 设备布局图：描述各组件的空间位置关系，整理为布局表格；' +
-          '3. 原理图/流程图：描述流向、各部件名称和功能；' +
-          '4. 数据表格：以 Markdown 表格格式输出；' +
-          '5. 接线图：描述端子排列、线缆规格。' +
-          '输出要求：使用 Markdown 格式，直接输出内容不要用代码围栏包裹，保留原始精度数值，' +
-          '只输出图片中实际可见的数据，不要编造或推断图片中不存在的数值，' +
-          '禁止使用任何 emoji 图标，不要在末尾附加总结或自评。'
-
-        for (let i = 0; i < parsed.images.length; i++) {
-          showStatus(`图纸解读 ${i + 1} / ${parsed.images.length}...`, false)
-          setImportProgress({ current: 2, total: 5, phase: `图纸解读 ${i + 1}/${parsed.images.length}` })
-          try {
-            const visionText = await vision.complete([
-              {
-                role: 'user',
-                content: [
-                  { type: 'image_url', image_url: { url: parsed.images[i] } },
-                  { type: 'text', text: visionPrompt },
-                ],
-              },
-            ])
-            if (visionText) {
-              const cleaned = cleanOcrHtml(visionText)
-              visionResults.push(cleaned)
-            }
-          } catch (err) {
-            console.error('Vision 分析失败:', err)
-          }
+        const visionBaseUrl = ocrModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        const ocrOutcome = await callVisionOcr(parsed.images, {
+          apiKey: ocrModel.apiKey,
+          baseUrl: visionBaseUrl,
+          onProgress: (done, totalImgs) => {
+            showStatus(`图纸解读 ${done} / ${totalImgs}...`, false)
+            setImportProgress({ current: 2, total: 5, phase: `图纸解读 ${done}/${totalImgs}` })
+          },
+        })
+        visionResultsRaw = ocrOutcome.results
+        visionFailureCount = ocrOutcome.failures.length
+        if (visionFailureCount > 0) {
+          console.warn(`[KnowledgePanel] Vision OCR 失败 ${visionFailureCount}/${parsed.images.length} 张:`, ocrOutcome.failures)
         }
       } else if (parsed.images.length > 0 && !ocrModel?.apiKey) {
         rawText += `\n\n> 注意：文档包含 ${parsed.images.length} 张图表页，但未配置 Qwen API Key，图片内容未识别。请在设置中配置。`
       }
 
+      const visionResults = visionResultsRaw.filter((r): r is string => r !== null)
       if (!rawText && visionResults.length === 0) {
         showStatus('✗ 未能提取任何内容')
         return
@@ -390,12 +373,19 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         cleanedText = stripDocxToc(cleanedText)
       }
 
-      if (visionResults.length > 0 && parsed.perPageChars) {
-        const visionForMerge = visionResults.map((content, i) => ({
-          pageNum: parsed.imagePageNumbers?.[i] ?? (i + 1),
-          content,
-        }))
-        cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+      if (visionResultsRaw.length > 0 && parsed.perPageChars) {
+        const visionForMerge: Array<{ pageNum: number; content: string }> = []
+        for (let i = 0; i < visionResultsRaw.length; i++) {
+          const content = visionResultsRaw[i]
+          if (content === null) continue
+          visionForMerge.push({
+            pageNum: parsed.imagePageNumbers?.[i] ?? (i + 1),
+            content,
+          })
+        }
+        if (visionForMerge.length > 0) {
+          cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+        }
       }
 
       const baseModel = creationModel?.apiKey ? creationModel : chatModel
@@ -651,33 +641,32 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     setEnhanceProgress(null)
     showStatus('知识库质量优化中（完整管线：OCR → 清洗 → 格式化 → 校验）...', false)
     try {
-      const result = await window.electronAPI.enhanceKnowledgeFiles(
-        avatarId,
-        model.apiKey,
-        model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        model.model || 'qwen-plus',
-        ocrModel?.apiKey,
-        ocrModel?.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      const result = await window.electronAPI.enhanceKnowledgeFiles(avatarId, {
+        llm: {
+          apiKey: model.apiKey,
+          baseUrl: model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+          model: model.model || 'qwen-plus',
+        },
+        ocr: ocrModel?.apiKey ? {
+          apiKey: ocrModel.apiKey,
+          baseUrl: ocrModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        } : undefined,
         targetFiles,
-      )
+      })
       if (!mountedRef.current) return
       if (result.total === 0) {
         showStatus('没有需要优化的文件（仅处理批量导入的未格式化文件）')
       } else {
-        const fabMsg = result.fabricatedWarnings > 0 ? ` | ${result.fabricatedWarnings} 个疑似编造数值` : ''
-        showStatus(`✓ 优化完成：${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total} 个${fabMsg}`, 10000)
-
-        // 优化完成后重建检索索引（上下文摘要 + 向量嵌入）
-        const indexApiKey = ocrModel?.apiKey || model.apiKey
-        const indexBaseUrl = ocrModel?.baseUrl || model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-        if (indexApiKey && result.enhanced > 0) {
-          try {
-            showStatus('重建检索索引（上下文摘要 + 向量嵌入）...', false)
-            const indexResult = await window.electronAPI.buildKnowledgeIndex(avatarId, indexApiKey, indexBaseUrl)
-            showStatus(`✓ 优化 + 索引完成：${result.enhanced} 文件${fabMsg} | ${indexResult.contextCount} 摘要 + ${indexResult.embeddingCount} 向量`, 10000)
-          } catch (indexErr) {
-            console.warn('索引构建失败（不影响优化结果）:', indexErr)
-          }
+        // 索引重建已挪进主进程 enhance handler（原子化 + 减少 IPC round trip）
+        const parts: string[] = [
+          `${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total}`,
+        ]
+        if (result.fabricatedWarnings > 0) parts.push(`${result.fabricatedWarnings} 个疑似编造数值`)
+        if (result.ocrFailures > 0) parts.push(`${result.ocrFailures} 张 OCR 失败`)
+        if (result.indexBuilt) parts.push(`索引 ${result.contextCount} 摘要 + ${result.embeddingCount} 向量`)
+        showStatus(`✓ 优化完成：${parts.join(' | ')}`, 10000)
+        if (result.fabricatedDetails.length > 0) {
+          console.warn('[enhance] 疑似编造数值详情：', result.fabricatedDetails)
         }
       }
       await loadTree()

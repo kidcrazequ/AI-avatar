@@ -238,7 +238,21 @@ interface ElectronAPI {
   importArchive: (avatarId: string, archivePath: string) => Promise<BatchImportResult>
   installDefaultSkills: (avatarId: string) => Promise<string[]>
   onImportProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
-  enhanceKnowledgeFiles: (avatarId: string, apiKey: string, baseUrl: string, model: string, ocrApiKey?: string, ocrBaseUrl?: string, targetFiles?: string[]) => Promise<{ enhanced: number; failed: number; total: number; fabricatedWarnings: number }>
+  enhanceKnowledgeFiles: (avatarId: string, options: {
+    llm: { apiKey: string; baseUrl: string; model: string }
+    ocr?: { apiKey: string; baseUrl?: string }
+    targetFiles?: string[]
+  }) => Promise<{
+    enhanced: number
+    failed: number
+    total: number
+    fabricatedWarnings: number
+    fabricatedDetails: Array<{ file: string; values: string[] }>
+    ocrFailures: number
+    indexBuilt: boolean
+    contextCount?: number
+    embeddingCount?: number
+  }>
   onEnhanceProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
 
   // 定时自检（GAP14）

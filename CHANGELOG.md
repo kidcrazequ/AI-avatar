@@ -5,7 +5,18 @@
 ### 增强
 
 - **批量导入保留原始文件** — `batchImportFiles` 新增 `preserveRawFile` 调用，将原始文件（PDF/Word/图片等）复制到 `knowledge/_raw/`，供 ENHANCE 补跑 OCR / 数值校验时使用。
-- **ENHANCE 走完整管线** — `enhance-knowledge-files` 从原来的"仅 LLM 格式化"升级为完整管线：从 `_raw/` 重新解析原始文件 → Vision OCR（图表页识别）→ 文本清洗（cleanPdfFullText / stripDocxToc）→ Vision 结果语义融合（mergeVisionIntoText）→ LLM 逐章格式化 → 数值校验（detectFabricatedNumbers）→ 写回。ENHANCE 完成后自动触发检索索引重建（上下文摘要 + 向量嵌入），确保 RAG 检索使用最新内容。无 `_raw/` 原始文件时自动回退到旧的纯文本格式化模式。新增 `ocrApiKey` / `ocrBaseUrl` 参数用于 Vision OCR，新增 `fabricatedWarnings` 返回值报告疑似编造数值数量。
+- **ENHANCE 走完整管线** — `enhance-knowledge-files` 从原来的"仅 LLM 格式化"升级为完整管线：从 `_raw/` 重新解析原始文件 → Vision OCR（图表页识别）→ 文本清洗（cleanPdfFullText / stripDocxToc）→ Vision 结果语义融合（mergeVisionIntoText）→ LLM 逐章格式化 → 数值校验（detectFabricatedNumbers）→ 写回。ENHANCE 完成后自动触发检索索引重建（上下文摘要 + 向量嵌入），确保 RAG 检索使用最新内容。无 `_raw/` 原始文件时自动回退到旧的纯文本格式化模式。
+
+### 代码审查修复（review pass on 6f8837f）
+
+- **抽取共享 Vision OCR 管线到 core** — 新建 `packages/core/src/utils/vision-ocr.ts`，导出 `callVisionOcr(images, options)`。主进程 ENHANCE 路径和渲染进程单文件导入路径原先各自维护一份 Vision 调用（prompt/模型名/参数硬编码、容易漂移），现合并为同一实现，消除重复代码约 80 行。
+- **Vision OCR 并发化** — 从串行循环改为 worker-based 并发（默认 3 路），一份 50 图表页 PDF 的 OCR 时间由 5-12 分钟降至约 1/3。单图失败不中断其他图，失败详情通过 `failures` 数组上报。
+- **Vision 模型名参数化** — 原先两处硬编码 `qwen-vl-max`，现通过 options 注入，保留默认值。
+- **`findRawFile` 脆弱匹配改为 frontmatter 索引** — 批量导入时把 `preserveRawFile` 返回的精确路径写入 `.md` 文件的 `raw_file: _raw/xxx.pdf` 字段，ENHANCE 时直接读取定位原始文件，避免按文件名反查可能命中错误扩展名（`foo.pdf` vs `foo.xlsx`）、基名碰撞、时间戳正则误伤等问题。老文件（无 `raw_file` 字段）自动回退到 `findRawFile` 按名匹配，保证向后兼容。
+- **`preserveRawFile` 原子性** — 解析顺序调整为"先 `parseFile` 后 `preserveRawFile`"，解析失败时不再产生 `_raw/` 孤儿文件。
+- **`enhance-knowledge-files` 签名 options 化** — 由 7 个位置参数 `(avatarId, apiKey, baseUrl, model, ocrApiKey?, ocrBaseUrl?, targetFiles?)` 改为 `(avatarId, { llm, ocr?, targetFiles? })`，消除 `undefined` 占位，类型更强。返回值从 4 字段扩展到 8 字段：新增 `fabricatedDetails`（每文件的疑似编造值清单）、`ocrFailures`（跨文件 OCR 失败计数）、`indexBuilt` / `contextCount` / `embeddingCount`（索引重建结果）。
+- **索引重建挪进主进程 handler** — 原先 ENHANCE 完成后由渲染进程再发起一次 `buildKnowledgeIndex` IPC 调用，有"用户在 ENHANCE 完成前关窗口导致索引漏建"的风险。现改由主进程 handler 在 for-loop 后直接调用 `buildKnowledgeIndex + saveIndex + invalidateRetriever`，原子化 + 减少一次 IPC round trip。
+- **OCR 单图失败静默吞掉** — 原先单图调用异常只 `logger.error` 然后继续下一张，前端完全看不见。现通过 `ocrFailures` 返回字段汇总上报，ENHANCE 结束时在 toast 显示 `N 张 OCR 失败`。
 
 ## v0.5.6 (2026-04-14)
 

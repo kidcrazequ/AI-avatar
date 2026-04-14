@@ -145,8 +145,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('knowledge-import-progress', handler)
     return () => { ipcRenderer.removeListener('knowledge-import-progress', handler) }
   },
-  enhanceKnowledgeFiles: (avatarId: string, apiKey: string, baseUrl: string, model: string, ocrApiKey?: string, ocrBaseUrl?: string, targetFiles?: string[]) =>
-    ipcRenderer.invoke('enhance-knowledge-files', avatarId, apiKey, baseUrl, model, ocrApiKey, ocrBaseUrl, targetFiles),
+  enhanceKnowledgeFiles: (avatarId: string, options: {
+    llm: { apiKey: string; baseUrl: string; model: string }
+    ocr?: { apiKey: string; baseUrl?: string }
+    targetFiles?: string[]
+  }) => ipcRenderer.invoke('enhance-knowledge-files', avatarId, options),
   onEnhanceProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => {
     const handler = (_: unknown, data: { current: number; total: number; fileName: string; phase: string }) => callback(data)
     ipcRenderer.on('knowledge-enhance-progress', handler)

@@ -1,5 +1,85 @@
 # 更新日志
 
+## v0.6.3 (2026-04-14)
+
+### 修复 — 图表 4 个剩余视觉问题（接 v0.6.2 Chart.js 自动转换）
+
+v0.6.2 让 Chart.js drift 也能渲染了，但**图表本身的视觉质量仍有 4 个问题**（实测 215 机型截图）：
+
+1. **长标题和右上角 legend 撞车** — 标题 `215机型设备侧效率趋势图（2025年7月-12月）` 28 字符，挤进了主题原本预留给 legend 的 right 区域
+2. **Y 轴 0-100% 太宽** — 数据集中在 88-92%，0-100 让 4pp 差异看起来像直线
+3. **decal pattern 太重** — `aria.decal: { show: true }` 给每个 series 加密集紫红色 dots，整张图 80% 被 pattern 覆盖
+4. **多 series 折线图渐变 areaStyle 重叠成浑浊色块** — 主题默认开启 `line.areaStyle` 渐变，2 series 渐变叠加成一片紫红
+
+### 修复 A — 主题（`echarts-pixel-theme.ts`）
+
+| 改动 | 之前 | 之后 |
+|---|---|---|
+| `legend` 位置 | `top: 12, right: 16`（top-right）| `bottom: 12, left: 'center'`（底部居中）|
+| `grid.top` | 72 | 64 |
+| `grid.bottom` | 40 | 56（给底部 legend 留空间）|
+| `aria.decal.show` | `true` | `false`（保留 aria 给屏幕阅读器，但不渲染视觉 pattern）|
+| `line.areaStyle` | 默认渐变 | **删除默认**（多 series 时浑浊；单 series 想要让 LLM 显式 `series[0].areaStyle: {}` 主题会自动注入颜色）|
+
+底部 legend 是更稳的默认，长标题 + 多 series 都不会冲突。
+
+### 修复 B — `draw-chart.md` skill 加 4 条规则
+
+`templates/skills/draw-chart.md` + `avatars/小堵-工商储专家/skills/draw-chart.md` 同步（343 → 357 行）：
+
+#### 规则 3（新）：百分比/效率类数据自适应 Y 轴
+
+```
+如果数据是 % 类（设备效率、转化率、SOH、合格率），强制 0-100 会让 4-5pp
+差异看起来像直线。规则：
+- 计算数据 [min, max]
+- yAxis.min: floor((min - 2) / 5) * 5  （向下取整到 5 的倍数，留 2pp buffer）
+- yAxis.max: ceil((max + 2) / 5) * 5   （向上取整到 5 的倍数，留 2pp buffer）
+- yAxis.axisLabel.formatter: "{value}%"
+- 例：数据 88.25-90.6% → yAxis.min: 85, max: 95
+```
+
+这是 UED "禁止截断 Y 轴" 的合理例外：百分比本身就是相对量，不会误导。
+
+#### 规则 4（强化）：标题 + 副标题必填，标题 ≤ 20 字符
+
+```
+- title.text 简洁（≤ 20 字符），不要把数据范围塞进 text
+- title.subtext 必须有，写"数据来源 / 时间范围 / 项目数 / 单位"
+- 错误反例：text: "215机型设备侧效率趋势图（2025年7月-12月）"（28 字符）
+- 正确：text: "215 机型设备侧效率趋势"
+        subtext: "数据源：xxx · 2025-07 至 2025-12 · 单位 %"
+```
+
+#### 配合规则 2 更新：areaStyle 默认关闭
+
+```
+v0.6.3 起主题不再默认给折线图加渐变 areaStyle。
+- 单 series 折线图想要渐变：series[0].areaStyle: {} 显式开启
+- 多 series 折线图：严禁 areaStyle
+```
+
+#### 高级视觉段同步描述
+
+新增说明 "legend 自动放底部居中（v0.6.3 起）" + "aria 启用但不渲染 decal pattern（v0.6.3 起）"，让 LLM 知道主题已经接管这两件事。
+
+### 验证
+
+- desktop-app typecheck ✅ / lint ✅ / build ✅
+- **实际效果需要用户重启 Soul** 让 LLM 看到新 skill 规则 + 重新走主题渲染。预期：
+  - 长标题不再撞 legend（legend 在底部）
+  - 百分比图表 Y 轴自适应（不再 0-100）
+  - 没有紫红色 dots pattern
+  - 多 series 折线图不再有重叠面积渐变
+
+### 三轮图表修复进度
+
+| 版本 | 修复 | 解决的问题 |
+|---|---|---|
+| v0.6.1 | draw-chart 数据守护规则 | < 3 数据点禁折线、markLine 门槛、稀疏告知、emoji legend icon |
+| v0.6.2 | Chart.js drift 自动转换 + skill ECharts 警告 | "Cannot create property 'series' on boolean 'true'" 渲染失败 |
+| v0.6.3 | 主题视觉打磨 + 百分比 Y 轴 + 标题长度 + decal 关闭 + areaStyle 关闭 | 长标题撞 legend / Y 轴范围浪费 / decal 太重 / 渐变叠加浑浊 |
+
 ## v0.6.2 (2026-04-14)
 
 ### 修复 — Chart.js 格式 LLM drift 导致渲染失败

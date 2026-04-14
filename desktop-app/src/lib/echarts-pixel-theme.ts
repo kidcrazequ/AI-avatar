@@ -84,15 +84,19 @@ const PIXEL_THEME = {
     itemHeight: 10,
     itemGap: 16,
     icon: 'roundRect',
-    top: 12,
-    right: 16,
+    // v0.6.3: legend 移到底部居中。之前 top-right 会和长标题/副标题撞车
+    // （215 机型截图实测：标题 "215机型设备侧效率趋势图（2025年7月-12月）"
+    // 长达 28 字符，挤进 legend 区域）。底部 legend 是更稳的默认，长标题/
+    // 多 series 都不会冲突。
+    bottom: 12,
+    left: 'center',
   },
 
   grid: {
     left: 56,
     right: 24,
-    top: 72,
-    bottom: 40,
+    top: 64,
+    bottom: 56,  // v0.6.3: 40 → 56，给底部 legend 留出空间
     containLabel: true,
   },
 
@@ -137,8 +141,12 @@ const PIXEL_THEME = {
   },
 
   aria: {
+    // v0.6.3: 保留 aria 给屏幕阅读器，但关闭视觉 decal pattern。
+    // 之前 decal: { show: true } 会在每个 series 上叠加密集的紫红色 dot pattern，
+    // 视觉非常 noisy（实测 215 机型截图：整张图 80% 被紫红色 dots 盖住）。
+    // 色盲友好可以靠 5 色 palette 本身的对比度，不必强制 decal。
     enabled: true,
-    decal: { show: true },
+    decal: { show: false },
   },
 
   // ─── 图表类型默认样式 ───
@@ -153,17 +161,10 @@ const PIXEL_THEME = {
       lineStyle: { width: 3.5 },
       itemStyle: { borderWidth: 2 },
     },
-    areaStyle: {
-      opacity: 1,
-      color: {
-        type: 'linear',
-        x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [
-          { offset: 0, color: 'rgba(255, 176, 200, 0.25)' },
-          { offset: 1, color: 'rgba(255, 176, 200, 0.02)' },
-        ],
-      },
-    },
+    // v0.6.3: 移除默认 areaStyle。之前 line.areaStyle 默认 ON 时多 series
+    // 折线图会叠加多层粉色渐变，视觉变浑浊（实测 215 机型截图：2 条 series
+    // 的渐变重叠成一片紫红色块）。单 series 折线图想要渐变的话，让 LLM
+    // 在 series[].areaStyle 显式开启即可。
   },
 
   bar: {

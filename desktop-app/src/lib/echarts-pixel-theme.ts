@@ -94,7 +94,7 @@ const PIXEL_THEME = {
 
   grid: {
     left: 56,
-    right: 24,
+    right: 64,   // v0.6.5: 24 → 64，给 markLine 末端标签留出空间（实测"参考"二字被截断）
     top: 64,
     bottom: 56,  // v0.6.3: 40 → 56，给底部 legend 留出空间
     containLabel: true,
@@ -114,8 +114,9 @@ const PIXEL_THEME = {
     splitLine: {
       lineStyle: {
         color: PIXEL_COLORS.border,
-        type: [4, 4] as unknown as string,
-        opacity: 0.4,
+        type: 'dashed' as const,
+        width: 0.6,
+        opacity: 0.35,
       },
     },
     nameTextStyle: {
@@ -165,6 +166,36 @@ const PIXEL_THEME = {
     // 折线图会叠加多层粉色渐变，视觉变浑浊（实测 215 机型截图：2 条 series
     // 的渐变重叠成一片紫红色块）。单 series 折线图想要渐变的话，让 LLM
     // 在 series[].areaStyle 显式开启即可。
+
+    // v0.6.5: markLine / markPoint 默认样式 —— 防止 LLM 用裸配置时出现
+    // 不协调的默认蓝色/红色/绿色标注。
+    markLine: {
+      lineStyle: {
+        color: PIXEL_COLORS.warning,
+        type: [6, 4] as unknown as string,
+        width: 1.5,
+        opacity: 0.7,
+      },
+      label: {
+        color: PIXEL_COLORS.warning,
+        fontSize: 11,
+        backgroundColor: 'rgba(10, 10, 15, 0.75)',
+        padding: [3, 6],
+        borderRadius: 3,
+      },
+      symbol: ['none', 'none'],
+    },
+    markPoint: {
+      itemStyle: {
+        color: PIXEL_COLORS.primary,
+        borderColor: PIXEL_COLORS.primaryDim,
+        borderWidth: 1,
+      },
+      label: {
+        color: PIXEL_COLORS.text,
+        fontSize: 10,
+      },
+    },
   },
 
   bar: {

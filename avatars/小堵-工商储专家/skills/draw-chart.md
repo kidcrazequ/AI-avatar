@@ -232,7 +232,7 @@ LLM 训练数据里 Chart.js 比 ECharts 流行很多，你可能下意识写出
 2. **areaStyle 默认关闭**（v0.6.3 起）—— 主题不再默认给折线图加渐变 areaStyle（之前多 series 折线图会重叠变浑浊）。**单 series** 折线图想要渐变效果，可在 `series[0].areaStyle: {}` 里显式写空对象（主题会自动注入渐变色）；**多 series 严禁** `areaStyle`
 3. **饼图用环形** — `radius: ["45%", "70%"]`，比实心饼更现代
 4. **markPoint 标注极值** — 趋势图（数据点 ≥ 3 时）加 `markPoint: { data: [{ type: "max" }, { type: "min" }] }` 突出关键数据
-5. **grid 留白** — 不要写 grid 字段，主题默认 `{top: 64, bottom: 56, left: 56, right: 24}` 已为标题和底部 legend 留够空间
+5. **grid 留白** — 不要写 grid 字段，主题默认 `{top: 64, bottom: 56, left: 56, right: 64}` 已为标题、底部 legend、markLine 标签留够空间
 
 ### ❌ 严禁
 

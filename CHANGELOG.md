@@ -1,5 +1,73 @@
 # 更新日志
 
+## v0.6.1 (2026-04-14)
+
+### 修复 — draw-chart 技能数据守护规则（防丑图）
+
+**问题**：用户问 "215 机型 2026 年 1-3 月设备侧效率折线图"，得到的图：
+- 只有 1 个数据点 89.81 在 2026 年 1 月位置（Excel 数据源**实际只到 1 月**）
+- LLM 不知道数据稀疏，硬画 3 月的 X 轴占位刻度
+- markLine 拉了一条蓝色虚线箭头横穿到右边超出图表区域，标签溢出截断
+- legend.icon 是个 emoji "⛑️" 字符（不是主题默认的 roundRect）
+- 副标题 "数据来源：xxx" 和右上角 legend 在垂直位置上撞车
+
+**根因不是主题美感**（`echarts-pixel-theme.ts` 已经有完整的 UED 风格 — 5 色板、Inter 字体、细 splitLine、毛玻璃 tooltip、smooth lines + 渐变 area、圆角 bar、aria decal），**是 LLM 不遵守 chart skill 规则**：
+1. 不检查数据点数量就画折线图
+2. 单点数据 + `markLine.type:'average'` → average 退化为水平线 → 箭头拉到画布外
+3. 用 emoji 字符作 legend.icon
+4. 手写 `legend.right` / `grid` 等位置参数覆盖主题
+5. 数据稀疏不告知用户，硬画一个"看起来像 3 个月"的图
+
+数据本身核实：Excel `00_工商储-产品质量指标dashboard_260303.xlsx` 的 "总原始表" sheet 共 912 行，215 机型 + 设备侧效率非空有 121 行，但**统计周期最大值是 `2601`（YYMM 格式）**—— 即 2026 年 1 月就是数据上限，2602/2603 真的不存在。
+
+### 修复内容
+
+**`templates/skills/draw-chart.md`** + **`avatars/小堵-工商储专家/skills/draw-chart.md`** 同步更新（247 → 292 行），新增 **"数据完整性守护"** 段（4 条强制规则）+ 强化 **"❌ 严禁"** 段（4 条新禁止）：
+
+#### 数据完整性守护（画图前必检）
+
+1. **数据点数量门槛**：
+
+   | N | 允许图表 | 禁止 |
+   |---|---|---|
+   | N=0 | 不画图，输出文字提示 | 全部 |
+   | N=1 | KPI 卡片（标题大字 + 单值 + 副标）| line / scatter / pie |
+   | N=2 | bar 对比图（2 柱 + 涨跌幅）| line（折线至少需 3 点形成趋势）|
+   | N≥3 | 全部允许 | — |
+
+2. **数据稀疏诚实告知**：query_excel 返回行数远少于用户预期时，文字部分必须明确说"数据源中仅有 N 个月可用"，并改用近 6 个月历史数据补够 ≥3 点，**禁止硬画"看起来像 X 个月"但实际只有 N 个点的图**。
+
+3. **markLine / markPoint 数据点门槛**：
+   - `markPoint type: 'max' / 'min'` 仅在 N≥3 时启用
+   - `markLine type: 'average'` 仅在 N≥3 时启用
+   - **反例**：单点 + average markLine → 水平线 + 箭头拉到画布外（v0.6.0 之前的 215 截图就是这样）
+
+4. **X 轴不补空刻度**：数据只到 1 月，X 轴只显示 1 月，不要写 `xAxis.data: ['2026年1月', '2月', '3月']` 占位。
+
+#### 强化 ❌ 严禁
+
+- **手动写 `legend.right` / `legend.top` / `grid.left` / `grid.top` / `grid.right` / `grid.bottom`** —— 主题已经精确计算了位置，手动覆盖会让 legend 撞副标题、grid 把数据挤出图表。
+- **`legend.icon` 用 emoji / 符号字符**（⛑️ 🔵 ▲ 之类）—— 只能用 ECharts 内置形状字符串（`'roundRect' / 'circle' / 'rect' / 'triangle' / 'line' / 'pin' / 'arrow' / 'none'`），最好不写让主题接管为 `roundRect`。
+- **`series[].name` 含 emoji** —— 部分渲染器把 series.name 当 legend label 渲染，emoji 污染图例。
+- **`markLine` / `markPoint` 不检查数据点数量** —— 见数据完整性守护 §3。
+
+### 验证
+
+无代码改动，纯技能 markdown。typecheck / lint / build 跳过。
+**实际效果需要用户重启 Soul（让新 skill 生效）后**重问"215 机型最近 12 个月设备侧效率折线图"（避开"1-3 月"那段稀疏数据）观察。
+
+### 附带：图表问题的真凶不是主题 — 长尾观察
+
+```
+当用户感觉"图表不高级"时，先排查：
+  1. LLM 是否硬写了 legend.icon / grid / legend.right 等位置参数（覆盖主题）
+  2. 数据点数量是否充足（< 3 点就不应该用折线图）
+  3. markLine / markPoint 是否合理（单点数据用 average 会拉横线）
+  4. 数据真实情况是否和用户预期匹配（数据源缺月份就应该告知，而不是占位）
+
+主题层面 (echarts-pixel-theme.ts) 通常已经够用，问题大多在 LLM 不遵守 skill。
+```
+
 ## v0.6.0 (2026-04-14)
 
 ### 性能 — 知识库检索 BM25 token 持久化缓存

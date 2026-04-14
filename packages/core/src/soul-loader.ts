@@ -267,7 +267,14 @@ export class SoulLoader {
   /** 知识目录最大递归深度（使用共享常量，与其他模块保持一致） */
   private static readonly MAX_DIR_DEPTH = DEFAULT_MAX_DIR_DEPTH
 
-  /** 递归读取目录下所有 .md 文件 */
+  /**
+   * 递归读取目录下所有 .md 文件。
+   *
+   * 优化：rag_only 文件（批量导入产物）只读取 frontmatter 头部（~512 字节），
+   * 跳过可能数 MB 的 body。loadAvatar 不需要 rag_only 文件的 body——只用
+   * frontmatter 里的 source 字段生成索引条目。500+ 文件场景下从读取全量内容
+   * （10+ 秒阻塞）降到只读头部（< 1 秒）。
+   */
   private readDirectory(dirPath: string, depth = 0): Array<{ path: string; content: string }> {
     if (depth > SoulLoader.MAX_DIR_DEPTH) {
       console.warn(`[SoulLoader] 目录递归深度超过上限(${SoulLoader.MAX_DIR_DEPTH})，停止: ${dirPath}`)
@@ -281,7 +288,15 @@ export class SoulLoader {
         if (entry.isDirectory()) {
           files.push(...this.readDirectory(fullPath, depth + 1))
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          files.push({ path: fullPath, content: this.readFileSafe(fullPath) })
+          // 先只读头部 512 字节探测 rag_only frontmatter
+          const header = this.readFileHeader(fullPath, 512)
+          if (header !== null && this.isRagOnly(header)) {
+            // rag_only 文件：只保留 frontmatter，loadAvatar 不需要 body
+            files.push({ path: fullPath, content: header })
+          } else {
+            // 非 rag_only 或无 frontmatter：读取完整内容拼入 system prompt
+            files.push({ path: fullPath, content: this.readFileSafe(fullPath) })
+          }
         }
       }
     } catch (error) {
@@ -290,6 +305,32 @@ export class SoulLoader {
       }
     }
     return files
+  }
+
+  /** 读取文件前 N 字节（用于 frontmatter 探测），文件不存在返回 null */
+  private readFileHeader(filePath: string, bytes: number): string | null {
+    let fd: number | null = null
+    try {
+      fd = fs.openSync(filePath, 'r')
+      const buf = Buffer.alloc(bytes)
+      const bytesRead = fs.readSync(fd, buf, 0, bytes, 0)
+      return buf.toString('utf-8', 0, bytesRead)
+    } catch {
+      return null
+    } finally {
+      if (fd !== null) fs.closeSync(fd)
+    }
+  }
+
+  /** 快速判断文件头部是否含 rag_only: true frontmatter */
+  private isRagOnly(header: string): boolean {
+    if (!header.startsWith('---\n') && !header.startsWith('---\r\n')) return false
+    const endIdx = header.indexOf('\n---\n')
+    const endIdx2 = header.indexOf('\n---\r\n')
+    const end = endIdx >= 0 ? endIdx : endIdx2
+    if (end < 0) return false
+    const fm = header.slice(0, end)
+    return /\brag_only\s*:\s*true\b/.test(fm)
   }
 
   private extractAvatarName(claudeMd: string): string {

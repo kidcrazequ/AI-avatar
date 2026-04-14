@@ -41,14 +41,33 @@ interface MockResponse {
 /**
  * 创建一个按 call count 返回预设响应的 mock fetch。
  * 调用次数超过 responses 数组长度时，反复返回最后一项（方便无限失败场景）。
+ *
+ * **重要**：delayMs 期间会监听 `init.signal`，被 abort 时立刻抛 AbortError，
+ * 模拟真实 fetch 的 abort 行为。这样才能真正覆盖 overall timeout 中断 in-flight fetch 的路径。
  */
 function makeMockFetch(responses: MockResponse[]): (url: string, init?: RequestInit) => Promise<Response> {
   let call = 0
-  return async (_url: string, _init?: RequestInit) => {
+  return async (_url: string, init?: RequestInit) => {
     const r = responses[Math.min(call, responses.length - 1)]
     call++
     if (r.delayMs) {
-      await new Promise<void>((resolve) => setTimeout(resolve, r.delayMs))
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, r.delayMs)
+        const signal = init?.signal
+        if (signal) {
+          const onAbort = (): void => {
+            clearTimeout(timer)
+            const err = new Error('This operation was aborted')
+            ;(err as Error & { name: string }).name = 'AbortError'
+            reject(err)
+          }
+          if (signal.aborted) {
+            onAbort()
+            return
+          }
+          signal.addEventListener('abort', onAbort, { once: true })
+        }
+      })
     }
     if (r.networkError) {
       throw new TypeError('fetch failed')
@@ -239,7 +258,9 @@ describe('callVisionOcr', () => {
         await callVisionOcr([FAKE_IMAGE], {
           ...baseOpts,
           maxRetries: 2,
-          onRetry: (info) => retryEvents.push({ attempt: info.attempt, category: info.category }),
+          onRetry: (info) => {
+            retryEvents.push({ attempt: info.attempt, category: info.category })
+          },
         })
         assert.equal(retryEvents.length, 2)
         assert.equal(retryEvents[0].attempt, 1)
@@ -258,7 +279,9 @@ describe('callVisionOcr', () => {
         await callVisionOcr([FAKE_IMAGE, FAKE_IMAGE, FAKE_IMAGE], {
           ...baseOpts,
           concurrency: 1,
-          onProgress: (done, total) => progressCalls.push({ done, total }),
+          onProgress: (done, total) => {
+            progressCalls.push({ done, total })
+          },
         })
         assert.equal(progressCalls.length, 3)
         assert.deepEqual(
@@ -313,6 +336,119 @@ describe('callVisionOcr', () => {
         )
         assert.ok(overallTimeouts.length >= 1)
       },
+    )
+  })
+
+  it('畸形 JSON 响应（SyntaxError）→ 可重试', async () => {
+    const originalFetch = globalThis.fetch
+    let callCount = 0
+    // @ts-expect-error mock
+    globalThis.fetch = async (_url: string) => {
+      callCount++
+      if (callCount === 1) {
+        // 第一次返回畸形 JSON → response.json() 抛 SyntaxError
+        return new Response('<html>not json</html>', { status: 200 })
+      }
+      // 第二次正常返回
+      return new Response(JSON.stringify(okBody('parsed on retry')), { status: 200 })
+    }
+    try {
+      const result = await callVisionOcr([FAKE_IMAGE], baseOpts)
+      assert.equal(result.failures.length, 0)
+      assert.match(result.results[0] as string, /parsed on retry/)
+      assert.equal(callCount, 2)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('Retry-After: 2 秒 → 实际等待时间接近 2 秒（而非本地 full-jitter 退避）', async () => {
+    await withMockFetch(
+      [
+        { status: 429, headers: { 'Retry-After': '2' }, body: {} },
+        { status: 200, body: okBody('respected') },
+      ],
+      async () => {
+        const start = Date.now()
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          retryBaseMs: 1, // 本地退避 attempt=0: 0.5-1ms，远远小于 Retry-After 指定的 2000ms
+        })
+        const elapsed = Date.now() - start
+        assert.equal(result.failures.length, 0)
+        // 如果代码不尊重 Retry-After，elapsed 会 < 100ms
+        // 如果尊重了，elapsed 应 ≥ 1900ms（留 100ms 容差）
+        assert.ok(
+          elapsed >= 1900,
+          `expected elapsed >= 1900ms (Retry-After honored), got ${elapsed}ms`,
+        )
+      },
+    )
+  })
+
+  it('Retry-After: HTTP date 格式 → 被正确解析', async () => {
+    // 构造一个未来 1.5 秒的 HTTP date
+    const futureDate = new Date(Date.now() + 1500).toUTCString()
+    await withMockFetch(
+      [
+        { status: 429, headers: { 'Retry-After': futureDate }, body: {} },
+        { status: 200, body: okBody('http-date ok') },
+      ],
+      async () => {
+        const start = Date.now()
+        const result = await callVisionOcr([FAKE_IMAGE], { ...baseOpts, retryBaseMs: 1 })
+        const elapsed = Date.now() - start
+        assert.equal(result.failures.length, 0)
+        // 容差较大：HTTP date 精度到秒，加上解析延迟，至少 1 秒左右
+        assert.ok(
+          elapsed >= 1000,
+          `expected elapsed >= 1000ms (HTTP date honored), got ${elapsed}ms`,
+        )
+      },
+    )
+  })
+
+  it('Overall timeout 在 retry sleep 期间触发 → 正确标记 overall-timeout', async () => {
+    // 第 1 次 429（立即返回）→ 进入 retry sleep（退避 ≥ 500ms，equal jitter baseMs=2000）
+    // overall timeout=100ms，会在 retry sleep 期间触发
+    await withMockFetch(
+      [
+        { status: 429, body: {} },
+        { status: 200, body: okBody('should not reach') },
+      ],
+      async () => {
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          retryBaseMs: 2000, // equal jitter → 1000-2000ms，远大于 overall timeout 100ms
+          overallTimeoutMs: 100,
+        })
+        assert.equal(result.failures.length, 1)
+        assert.equal(result.failures[0].category, 'overall-timeout')
+      },
+    )
+  })
+
+  it('Overall timeout 中断 in-flight fetch（mock 检查 signal）', async () => {
+    // 单个 fetch 延迟 500ms，overall timeout 100ms，fetch 应被 AbortSignal 中断
+    const start = Date.now()
+    await withMockFetch(
+      [{ status: 200, body: okBody('slow'), delayMs: 500 }],
+      async () => {
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          overallTimeoutMs: 100,
+        })
+        // fetch 被中断 → HttpError('aborted') → classifyError → overall-timeout
+        assert.equal(result.failures.length, 1)
+        assert.equal(result.failures[0].category, 'overall-timeout')
+      },
+    )
+    const elapsed = Date.now() - start
+    // 如果 mock 没 honor signal，测试会等 500ms 才完成
+    // 如果 honored，应在 100-200ms 之间完成
+    assert.ok(
+      elapsed < 400,
+      `expected fetch aborted promptly (elapsed < 400ms), got ${elapsed}ms`,
     )
   })
 

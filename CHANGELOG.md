@@ -1,5 +1,26 @@
 # 更新日志
 
+## v0.5.11 (2026-04-14)
+
+### 修复 — vision-ocr 第三轮代码审查（12 项）
+
+- **Full jitter → Equal jitter** — 原 `random(0, base * 2^n)` 可能返回 0ms 等于没退避。改为 AWS Architecture Blog 推荐的 Equal Jitter `delay/2 + random(0, delay/2)`，保证最小退避 delay/2（attempt=0 时 500-1000ms），同时保留随机分散 retry 风暴的能力。
+- **SyntaxError（畸形 JSON 响应）可重试** — DashScope 偶发返回 HTML 错误页、gzip 解压失败或截断的响应体，`response.json()` 抛 `SyntaxError`。原先归入 `parse-error` 类别后直接终态失败，现在识别为瞬时错误允许 retry。`isRetryable` 对 `SyntaxError` 返回 true。
+- **`aborted` 归到 `overall-timeout` 而非 `unknown`** — `classifyError` 对 `HttpError.type === 'aborted'` 原返回 `'unknown'`（callVisionOcr 不接受外部 signal，所有 aborted 都来自 overall timeout，归 unknown 不精确）。改为返回 `'overall-timeout'`。
+- **`onRetry` / `onProgress` 回调支持 async** — 返回类型从 `void` 改为 `void | Promise<void>`，回调内部会被 `await`。允许用户做 I/O（如写日志文件）而不产生 fire-and-forget unhandled rejection。文档明确 `completed` 含失败的图、`onRetry.category` 是**上一次失败**的分类。
+- **`finalAttempt` 重命名为 `lastAttemptIdx`** — "final" 暗示"决定性的"，实际语义是"循环最后一次执行到的 attempt 编号"。`lastAttemptIdx` 更准确。
+- **body 构造在 retry loop 外 once-ify** — 一张图 base64 ~6-7 MB，原代码在 `callOnce` 内 `JSON.stringify(body)`，3 次 retry 重复 stringify 3 次 ~20 MB 字符串。现在 processOne 外 build+stringify once，callOnce 接收 `bodyStr: string`。
+- **`VisionOcrKnownError` 内部类注释补全** — 说明这是文件内部类（不导出）、外部消费方通过 `VisionOcrFailure.category` 字符串判断分类。
+
+### 测试（vision-ocr.test.ts +5 个 case，共 21 个）
+
+- **Mock fetch 正确响应 AbortSignal** — 原 `delayMs` 实现傻等 setTimeout，不检查 `init.signal.aborted`，导致 overall timeout 测试**没真正覆盖 abort 中断 in-flight fetch 的路径**（如果代码忘了传 signal 给 fetchWithTimeout，测试依然通过）。现在 mock fetch 监听 `signal.abort` 事件并抛 AbortError，真实反映 fetch 被中断的行为。
+- **新测试 1：畸形 JSON 响应 → SyntaxError retry** — 断言第一次返回 `<html>not json</html>` 后第二次返回成功，验证 SyntaxError 被识别为 retryable。
+- **新测试 2：`Retry-After: 2` → 实际等待 ≥1900ms** — 原测试只用 `Retry-After: 0` 验证解析代码不抛错，**没验证值真的被用了**。新测试断言 elapsed 实测时间接近 2000ms，证明 Retry-After 值确实驱动了等待。
+- **新测试 3：`Retry-After: HTTP date 格式`** — 构造未来 1.5 秒的 HTTP date 字符串，断言实际等待 ≥1000ms，覆盖 `parseRetryAfter` 的 date 解析分支（原先是死代码）。
+- **新测试 4：Overall timeout 在 retry sleep 期间触发** — 设置 `retryBaseMs: 2000` 让 retry 退避 1-2 秒、`overallTimeoutMs: 100` 强制 sleep 中触发 abort，验证 for-loop 顶部的 `overallAborted` 检查能正确短路退出。
+- **新测试 5：Overall timeout 中断 in-flight fetch** — 单个 fetch 延迟 500ms、overall timeout 100ms，断言 elapsed < 400ms，证明 AbortSignal 确实触达到正在 fly 的 fetch 上（而不是等 fetch 完成后才发现 overallAborted）。
+
 ## v0.5.10 (2026-04-14)
 
 ### 修复 — vision-ocr 第二轮代码审查（12 项）

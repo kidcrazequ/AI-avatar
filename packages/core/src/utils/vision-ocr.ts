@@ -97,15 +97,25 @@ export interface VisionOcrOptions {
   retryBaseMs?: number
   /** 整批总体超时 ms，默认 1200000 (20 分钟)。<= 0 禁用 */
   overallTimeoutMs?: number
-  /** 进度回调：每完成一张图（无论成功或失败）触发一次 */
-  onProgress?: (completed: number, total: number) => void
-  /** 重试事件回调：每次决定 retry 前触发（在 sleep 之前）*/
+  /**
+   * 进度回调：每完成一张图（**无论成功或失败**）触发一次。
+   * `completed` 含失败的图 —— 所以 `completed === total` 不代表全部成功，
+   * 应当同时检查 `failures.length`。
+   * 回调返回的 Promise 会被 await，可安全地做 I/O。
+   */
+  onProgress?: (completed: number, total: number) => void | Promise<void>
+  /**
+   * 重试事件回调：每次决定 retry 前触发（在退避 sleep 之前）。
+   * info.category 是**上一次失败**的分类（如 'rate-limit'），不是"最终会失败"；
+   * 如果 retry 成功，这个回调触发但 failures 里不会有对应条目。
+   * 回调返回的 Promise 会被 await。
+   */
   onRetry?: (info: {
     index: number
     attempt: number
     category: VisionOcrFailureCategory
     nextDelayMs: number
-  }) => void
+  }) => void | Promise<void>
 }
 
 /** OCR 失败的错误类别，便于上层 UI 和日志聚合 */
@@ -153,8 +163,11 @@ export interface VisionOcrResult {
 // ─── 自定义错误类（替代之前的 monkey-patch）─────────────────────────────────
 
 /**
- * Vision OCR 可识别的结构化错误。
+ * Vision OCR 可识别的结构化错误（文件内部类，不对外导出）。
  * 用 instanceof 检测，替代在 Error 对象上动态加属性的反模式。
+ *
+ * 外部消费方通过 `VisionOcrFailure.category` 字符串判断错误类别 —— 这个 class
+ * 只是 callVisionOcr 内部把"已识别的语义错误"和"HTTP/网络错误"分开处理的载体。
  *
  * - `retryable=true` 表示值得重试（如 empty-response 可能是瞬时抽风）
  * - `partialContent` 仅 `truncated` 类别有值，是 finish_reason=length 时已输出的部分
@@ -176,12 +189,18 @@ class VisionOcrKnownError extends Error {
 /**
  * 判断错误是否可重试。
  *
- * 可重试：timeout / network / 429 限流 / 5xx 服务端错误 / VisionOcrKnownError.retryable
- * 不可重试：4xx（非 429）客户端错误（认证失败、图片格式错误、参数错误等）、
- *           aborted（用户主动取消或 overall timeout）、非 HttpError 异常（JSON 解析等）
+ * 可重试：
+ *   - VisionOcrKnownError.retryable=true（empty-response）
+ *   - HttpError: timeout / network / 429 / 5xx
+ *   - SyntaxError：JSON 解析失败（CDN/代理返回畸形响应体、gzip 解压失败等，通常瞬时）
+ * 不可重试：
+ *   - HttpError 4xx（非 429）、aborted（overall timeout 会走专门分支）
+ *   - VisionOcrKnownError.retryable=false（truncated）
+ *   - 其他未知异常
  */
 function isRetryable(err: unknown): boolean {
   if (err instanceof VisionOcrKnownError) return err.retryable
+  if (err instanceof SyntaxError) return true
   if (!(err instanceof HttpError)) return false
   if (err.type === 'timeout' || err.type === 'network') return true
   if (err.type === 'http') {
@@ -204,21 +223,29 @@ function classifyError(err: unknown): VisionOcrFailureCategory {
       if (err.status !== undefined && err.status >= 500) return 'server-error'
       return 'client-error'
     }
-    // aborted 走到这里
-    return 'unknown'
+    // aborted 只会由 overall timeout 触发（callVisionOcr 不接受外部 signal），
+    // 归到 overall-timeout 更精确
+    return 'overall-timeout'
   }
   if (err instanceof SyntaxError) return 'parse-error'
   return 'unknown'
 }
 
 /**
- * Full jitter 指数退避：random(0, base * 2^attempt)
- * 参考 AWS "Exponential Backoff And Jitter"，在高并发场景比 fixed jitter 更能
- * 打散 retry 风暴（避免所有 worker 同时醒来再次打 API）。
+ * Equal jitter 指数退避：delay/2 + random(0, delay/2)，其中 delay = base * 2^attempt。
+ *
+ * 保证最小退避 delay/2 —— 不像 full jitter 可能返回 0ms 等于没退避。同时
+ * 上半段随机打散 retry 风暴，平衡"给服务器喘息空间"和"分散并发 worker 同时醒来"两个目标。
+ * 参考 AWS Architecture Blog "Exponential Backoff And Jitter"（equal jitter 小节）。
+ *
+ * 示例（baseMs=1000）：
+ *   - attempt=0: 500-1000ms
+ *   - attempt=1: 1000-2000ms
+ *   - attempt=2: 2000-4000ms
  */
 function backoffDelay(attempt: number, baseMs: number): number {
-  const cap = baseMs * Math.pow(2, attempt)
-  return Math.floor(Math.random() * cap)
+  const delay = baseMs * Math.pow(2, attempt)
+  return Math.floor(delay / 2 + Math.random() * (delay / 2))
 }
 
 /**
@@ -372,9 +399,12 @@ export async function callVisionOcr(
         }, overallTimeoutMs)
       : null
 
-  /** 发一次 request + 解析响应。成功返回 OCR 文本，失败抛结构化异常。 */
-  async function callOnce(imageBase64: string): Promise<string> {
-    const body = buildOpenAICompletionBody(imageBase64, prompt, model, maxTokens)
+  /**
+   * 发一次 request + 解析响应。成功返回 OCR 文本，失败抛结构化异常。
+   * 接收已序列化的 `bodyStr`（由 processOne 在 retry loop 外 build once），
+   * 避免 retry 时反复 JSON.stringify 同一张 6+ MB 的 base64 图片。
+   */
+  async function callOnce(bodyStr: string): Promise<string> {
     const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
@@ -382,7 +412,7 @@ export async function callVisionOcr(
         'Accept': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: bodyStr,
       timeoutMs,
       signal: overallController.signal,
     })
@@ -413,8 +443,12 @@ export async function callVisionOcr(
 
   /** 处理单张图：for-loop retry + 错误分类 + Retry-After 尊重 */
   async function processOne(idx: number): Promise<void> {
+    // 在 retry loop 外 build + stringify once（base64 图可达 6-7 MB，重复 stringify 浪费）
+    const bodyStr = JSON.stringify(
+      buildOpenAICompletionBody(images[idx], prompt, model, maxTokens),
+    )
     let lastErr: unknown = null
-    let finalAttempt = 0
+    let lastAttemptIdx = 0
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       // Overall timeout 优先短路：触发后立即标记为 overall-timeout 并返回
@@ -427,9 +461,9 @@ export async function callVisionOcr(
         })
         return
       }
-      finalAttempt = attempt
+      lastAttemptIdx = attempt
       try {
-        const text = await callOnce(images[idx])
+        const text = await callOnce(bodyStr)
         results[idx] = cleanOcrHtml(text)
         return
       } catch (err) {
@@ -466,7 +500,7 @@ export async function callVisionOcr(
             delayMs = backoffDelay(attempt, retryBaseMs)
           }
           if (onRetry) {
-            onRetry({
+            await onRetry({
               index: idx,
               attempt: attempt + 1,
               category: classifyError(err),
@@ -489,7 +523,7 @@ export async function callVisionOcr(
       index: idx,
       error: lastErr instanceof Error ? lastErr.message : String(lastErr),
       category,
-      attempts: finalAttempt + 1,
+      attempts: lastAttemptIdx + 1,
       ...(httpStatus !== undefined ? { httpStatus } : {}),
     })
   }
@@ -499,7 +533,7 @@ export async function callVisionOcr(
       const idx = cursor++
       await processOne(idx)
       completed++
-      if (onProgress) onProgress(completed, total)
+      if (onProgress) await onProgress(completed, total)
     }
   }
 

@@ -1,5 +1,22 @@
 # 更新日志
 
+## v0.5.10 (2026-04-14)
+
+### 修复 — vision-ocr 第二轮代码审查（12 项）
+
+- **自定义 Error 类替代 monkey-patch** — 原先在 Error 对象上动态加 `__visionCategory` / `__visionPartial` 属性再强制 cast 读出，是 TypeScript 反模式。现改用 `VisionOcrKnownError` 内部 class，字段类型安全、`instanceof` 检测不需要 cast，日志序列化时也不会泄漏私有字段。
+- **empty-response 现在可重试** — 原先 empty content 被当作终态直接失败，但实际可能是 DashScope 瞬时抽风（内部限流返回空、代理吃响应体等）。现设置 `VisionOcrKnownError.retryable=true`，受 `maxRetries` 控制，连续失败才视为真终态。
+- **整批 overall timeout cap** — 防御 worst case：单图 3 次 retry × 300s timeout = 15 分钟/图，50 张图理论最坏 4+ 小时。新增 `DEFAULT_VISION_OVERALL_TIMEOUT_MS = 20 * 60 * 1000`（20 分钟）和 `overallTimeoutMs` option。触发后：已完成的保留、进行中的 fetch 被 `AbortSignal` 中断、未启动的 slot 标记为 `overall-timeout` 类别失败提前返回。
+- **尊重 `Retry-After` 头** — 429 限流响应通常带 `Retry-After: N` 头告知客户端等多久。原先完全忽略。改造 `fetchWithTimeout`：非 2xx 响应时把 response headers 规范化为小写 key 后附到 `HttpError.headers`；vision-ocr 在 429 retry 时读取 `retry-after`（支持秒数和 HTTP date 两种格式），取服务器建议和本地 full-jitter 退避中的**较大**值作为实际等待时间。
+- **Full jitter 指数退避** — 原先公式 `base * 2^attempt + random(0, 500)` 是 "fixed jitter"，当 base delay 较大时打散效果差（attempt=2 时 4000ms delay 只有 12.5% 方差）。改为 AWS 推荐的 full jitter: `random(0, base * 2^attempt)`，更能分散 retry 风暴，避免所有 worker 同时醒来再次打 API。
+- **`onRetry` 回调 + retry sleep 期间 UI 反馈** — 新增 `onRetry?: (info) => void` option，每次决定 retry 前触发（在 sleep 之前），info 包含 `index / attempt / category / nextDelayMs`，上层 UI 可以显示 "图 23 正在重试 (第 2 次 / 限流退避 1500ms)"，不再出现进度条无故冻结。
+- **`finish_reason === 'length'` 截断检测顺序调整** — 原先先检查 `!text`（空）再检查 truncated，导致"0 tokens 就截断"被归类为 empty 而非 truncated。现调整为先检查 truncated，保证 finish_reason=length 总被正确分类。
+- **OpenAI 协议细节抽象** — 把请求体构造（`buildOpenAICompletionBody`）和响应解析（`parseOpenAICompletionResponse`）抽成内部 helper，"协议细节"和"retry 逻辑"解耦。不引入 provider interface（避免过度设计），但未来替换 vision provider 只需换这两个函数。
+- **孤儿 JSDoc 搬家** — 上一轮重构把 `callVisionOcr` 主函数的 JSDoc 块留在了中段、与函数本体断联。现整块挪到函数正上方。
+- **`while` 循环改 `for`** — retry loop 改用 `for (let attempt = 0; attempt <= maxRetries; attempt++)`，意图更显式、更符合约定。
+- **新增单元测试 16 个（覆盖所有 retry 分支）** — `packages/core/src/tests/vision-ocr.test.ts`，用 Node 原生 `node:test` runner + mock `globalThis.fetch`。覆盖：成功路径、429/5xx/network retry、4xx 不重试、连续失败分类、truncated 保留 partial、empty retry、Retry-After 头、onRetry/onProgress 回调、并发 cursor 原子性、overall timeout 触发、参数校验、baseUrl 归一化。
+- **`HttpError.headers` 字段（向后兼容）** — `HttpError` 构造函数第 4 参数新增可选 `headers?: Record<string, string>`（小写 key）。所有现有 `new HttpError(...)` 调用无需修改。`fetchWithTimeout` 非 2xx 分支自动填充规范化后的 headers，供上层做智能退避。
+
 ## v0.5.9 (2026-04-14)
 
 ### 修复

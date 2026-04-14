@@ -22,6 +22,12 @@ export class HttpError extends Error {
     message: string,
     public readonly type: 'timeout' | 'network' | 'http' | 'aborted',
     public readonly status?: number,
+    /**
+     * 响应头（仅 `type === 'http'` 非 2xx 时有）。
+     * key 已规范化为小写（避免 `Retry-After` vs `retry-after` 大小写歧义）。
+     * 供上层读取 `retry-after` / `x-ratelimit-*` 等字段做智能退避。
+     */
+    public readonly headers?: Record<string, string>,
   ) {
     super(message)
     this.name = 'HttpError'
@@ -73,10 +79,16 @@ export async function fetchWithTimeout(
     const response = await fetch(url, { ...fetchOptions, signal: controller.signal })
 
     if (!response.ok) {
+      // 规范化响应头（key 全部小写），便于上层 `headers['retry-after']` 稳定读取。
+      const normalizedHeaders: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        normalizedHeaders[key.toLowerCase()] = value
+      })
       throw new HttpError(
         `HTTP ${response.status} ${response.statusText}: ${url}`,
         'http',
         response.status,
+        normalizedHeaders,
       )
     }
 

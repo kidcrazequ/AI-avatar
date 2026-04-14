@@ -954,6 +954,7 @@ async function batchImportFiles(
   const kmgr = knowledgeManagers.get(avatarId) ?? new KnowledgeManager(knowledgePath)
   knowledgeManagers.set(avatarId, kmgr)
 
+  const batchStartTime = Date.now()
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i]
     const fileName = path.basename(filePath)
@@ -982,8 +983,11 @@ async function batchImportFiles(
       current: i, total, fileName, phase: `解析中 (${i + 1}/${total})`,
     })
 
+    const fileStartTime = Date.now()
     try {
+      const t0 = Date.now()
       const parsed = await documentParser.parseFile(filePath)
+      const parseMs = Date.now() - t0
 
       // 保留原始文件到 _raw/
       let rawRelPath: string | null = null
@@ -1000,10 +1004,12 @@ async function batchImportFiles(
       }
 
       // OCR 图表页（如果有图片且配置了 OCR API Key）
+      let ocrMs = 0
       if (parsed.images.length > 0 && ocrApiKey) {
         mainWindow?.webContents.send('knowledge-import-progress', {
-          current: i, total, fileName, phase: `OCR 图表 (${i + 1}/${total})`,
+          current: i, total, fileName, phase: `OCR ${parsed.images.length} 张图 (${i + 1}/${total})`,
         })
+        const ocrT0 = Date.now()
         try {
           const ocrOutcome = await callVisionOcr(parsed.images, {
             apiKey: ocrApiKey, baseUrl: ocrBaseUrl,
@@ -1025,15 +1031,18 @@ async function batchImportFiles(
         } catch (ocrErr) {
           if (logger) logger.activity('batch-import-ocr', `${fileName} OCR 失败: ${ocrErr instanceof Error ? ocrErr.message : String(ocrErr)}`)
         }
+        ocrMs = Date.now() - ocrT0
       }
 
       // LLM 逐章格式化（有 API Key 且文本足够长时）
       let finalBody = cleanedText
       let sourceTag = parsed.fileType
+      let fmtMs = 0
       if (callLLM && cleanedText.length > 500) {
         mainWindow?.webContents.send('knowledge-import-progress', {
           current: i, total, fileName, phase: `LLM 格式化 (${i + 1}/${total})`,
         })
+        const fmtT0 = Date.now()
         try {
           finalBody = await formatDocument(
             cleanedText,
@@ -1056,8 +1065,8 @@ async function batchImportFiles(
           }
         } catch (fmtErr) {
           if (logger) logger.activity('batch-import-format', `${fileName} LLM 格式化失败，使用原始文本: ${fmtErr instanceof Error ? fmtErr.message : String(fmtErr)}`)
-          // 格式化失败回退到清洗后的原始文本
         }
+        fmtMs = Date.now() - fmtT0
       }
 
       // 写入文件
@@ -1067,9 +1076,13 @@ async function batchImportFiles(
       const finalContent = frontmatterLines.join('\n') + '\n' + finalBody
       kmgr.writeFile(relativePath, finalContent)
 
+      const totalMs = Date.now() - fileStartTime
+      const textLen = Math.round(cleanedText.length / 1024)
+      console.log(`[batch-import] ✓ ${i + 1}/${total} ${fileName} — ${totalMs}ms (解析 ${parseMs}ms, OCR ${ocrMs}ms, 格式化 ${fmtMs}ms) ${textLen}KB`)
+
       imported.push({ fileName, targetPath: relativePath })
       mainWindow?.webContents.send('knowledge-import-progress', {
-        current: i + 1, total, fileName, phase: 'done',
+        current: i + 1, total, fileName, phase: `✓ ${Math.round(totalMs / 1000)}s (${i + 1}/${total})`,
       })
     } catch (err) {
       failed.push({ path: filePath, error: err instanceof Error ? err.message : String(err) })
@@ -1079,6 +1092,8 @@ async function batchImportFiles(
     }
   }
 
+  const batchTotalSec = Math.round((Date.now() - batchStartTime) / 1000)
+  console.log(`[batch-import] 完成: ${imported.length} 成功 / ${failed.length} 失败 / 共 ${total} 文件 — 总耗时 ${batchTotalSec}s (${Math.round(batchTotalSec / 60)}分${batchTotalSec % 60}秒)`)
   return { imported, failed }
 }
 

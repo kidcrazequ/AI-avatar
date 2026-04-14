@@ -236,7 +236,12 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       {(isLoading || isRunningTests) && (
         <div className="px-6 py-2 bg-px-surface border-t-2 border-px-border">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-px-primary animate-pulse-glow" />
+            {/* 三点跳动动画 */}
+            <div className="flex items-center gap-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-px-primary animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />
+              <div className="w-1.5 h-1.5 rounded-full bg-px-primary animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }} />
+              <div className="w-1.5 h-1.5 rounded-full bg-px-primary animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }} />
+            </div>
             <span className="font-game text-[13px] text-px-text-sec tracking-wider">
               {toolCallStatus
                 ? `${TOOL_NAME_MAP[toolCallStatus] ?? toolCallStatus}...`

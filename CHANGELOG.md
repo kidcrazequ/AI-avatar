@@ -1,5 +1,16 @@
 # 更新日志
 
+## v0.5.9 (2026-04-14)
+
+### 修复
+
+- **Vision OCR 加入 retry + 错误分类** — 批量 ENHANCE 场景下偶发的 OCR 单图失败，根因主要是瞬时错误（DashScope 限流 429、5xx 服务端、网络层抖动、超时），原 `callVisionOcr` 对单图失败只 `logger.error` 后继续下一张、完全不重试。现加入指数退避 retry（默认 2 次 = 最多 3 次 attempt，基数 1000ms + jitter），按 `HttpError.type/status` 分类：`timeout` / `network` / `429` / `5xx` → 可重试；`4xx`（非 429）/ `aborted` → 不重试。预期失败率显著下降。
+- **Vision OCR 失败类别化** — `VisionOcrFailure` 新增 `category` 字段（`timeout` / `rate-limit` / `server-error` / `network` / `client-error` / `empty-response` / `truncated` / `parse-error` / `unknown` 共 9 类）、`attempts` 字段（实际尝试次数）、`httpStatus` 字段。上层 UI 和日志可按类别聚合展示，便于排查。
+- **Vision OCR 默认参数上调** — `DEFAULT_VISION_TIMEOUT_MS`: 180s → 300s（极端复杂图偶有 180-240s 耗时）；`DEFAULT_VISION_MAX_TOKENS`: 4096 → 8192（密集技术图原常被截断）；新增 `DEFAULT_VISION_MAX_RETRIES` / `DEFAULT_VISION_RETRY_BASE_MS` 常量及 `maxRetries` / `retryBaseMs` options 供上层覆盖。
+- **`finish_reason === 'length'` 截断检测** — 原本输出被 `max_tokens` 截断时只返回部分内容不报错，上层拿到残缺数据不知情。现识别此情况记为 `truncated` 类别失败，但 `results` 仍保留已截断的部分内容（供调用方判断是否使用），`failures` 里同时登记。
+- **`baseUrl` 归一化** — 去掉尾部斜杠避免拼接出 `//chat/completions` 双斜杠。
+- **HTTP `Accept` 头补齐** — 显式 `Accept: application/json`。
+
 ## v0.5.8 (2026-04-14)
 
 ### 修复与重构

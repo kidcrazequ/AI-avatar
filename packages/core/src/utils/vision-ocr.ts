@@ -99,16 +99,23 @@ export interface VisionOcrOptions {
   overallTimeoutMs?: number
   /**
    * 进度回调：每完成一张图（**无论成功或失败**）触发一次。
-   * `completed` 含失败的图 —— 所以 `completed === total` 不代表全部成功，
-   * 应当同时检查 `failures.length`。
-   * 回调返回的 Promise 会被 await，可安全地做 I/O。
+   *
+   * - `completed` 含失败的图 —— `completed === total` 不代表全部成功，
+   *   应当同时检查 `failures.length`
+   * - 回调返回的 Promise 会被 await，可安全地做 I/O（如 IPC 事件上报）
+   * - **并发顺序非确定**：多 worker 并发时，`completed` 值递增顺序由完成时机决定，
+   *   不保证严格单调递增（worker A 的 completed=1 回调可能晚于 worker B 的 completed=2）。
+   *   UI 实现应按"显示最新值"的策略，不要假设回调严格按 1,2,3... 顺序触发。
    */
   onProgress?: (completed: number, total: number) => void | Promise<void>
   /**
    * 重试事件回调：每次决定 retry 前触发（在退避 sleep 之前）。
-   * info.category 是**上一次失败**的分类（如 'rate-limit'），不是"最终会失败"；
-   * 如果 retry 成功，这个回调触发但 failures 里不会有对应条目。
-   * 回调返回的 Promise 会被 await。
+   *
+   * - `info.category` 是**上一次失败**的分类（如 'rate-limit'），不是"最终会失败"
+   *   如果 retry 成功，这个回调触发但 failures 里不会有对应条目
+   * - `info.nextDelayMs` 是纯退避时间，不含 onRetry 回调自身耗时；
+   *   **实际 retry 间隔 = onRetry 耗时 + nextDelayMs**，回调内部请保持轻量（建议 <10ms）
+   * - 回调返回的 Promise 会被 await
    */
   onRetry?: (info: {
     index: number
@@ -268,11 +275,51 @@ function parseRetryAfter(headers: Record<string, string> | undefined): number | 
   return null
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * 可中断 sleep：等待 `ms` 毫秒或 `signal` 被 abort，哪个先发生。
+ *
+ * 与普通 `sleep` 的差别：如果 signal 在 sleep 期间被 abort，立即 resolve（不 reject）。
+ * resolve 后调用方可以检查 `signal.aborted` 决定后续逻辑。
+ *
+ * **为什么 resolve 不 reject**：让 retry loop 在 sleep 后统一走 `overallAborted` 检查分支，
+ * 避免 catch 里再次判断 abort 类型。统一的退出路径更易推理。
+ *
+ * 用于 retry 退避 sleep：overall timeout 触发时 retry sleep 立即醒来，
+ * 让 overall timeout 成为真正的硬上限（原先 sleep 不可中断时可能被拖延几秒）。
+ */
+function interruptibleSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve()
+      return
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 // ─── OpenAI 兼容协议 helper（#11 轻量抽象）─────────────────────────────────
+
+/** OpenAI Chat Completions 请求体（含 vision content 的子集） */
+interface OpenAIVisionRequestBody {
+  model: string
+  messages: Array<{
+    role: 'user'
+    content: Array<
+      | { type: 'image_url'; image_url: { url: string } }
+      | { type: 'text'; text: string }
+    >
+  }>
+  stream: false
+  max_tokens: number
+}
 
 /**
  * 构造 OpenAI Chat Completions 兼容的请求体（含视觉消息）。
@@ -283,7 +330,7 @@ function buildOpenAICompletionBody(
   prompt: string,
   model: string,
   maxTokens: number,
-): object {
+): OpenAIVisionRequestBody {
   return {
     model,
     messages: [
@@ -377,6 +424,12 @@ export async function callVisionOcr(
 
   if (!apiKey) throw new Error('callVisionOcr: apiKey 必填')
   if (!baseUrl) throw new Error('callVisionOcr: baseUrl 必填')
+  if (concurrency < 1) {
+    throw new Error(`callVisionOcr: concurrency 必须 >= 1，收到 ${concurrency}`)
+  }
+  if (maxRetries < 0) {
+    throw new Error(`callVisionOcr: maxRetries 必须 >= 0，收到 ${maxRetries}`)
+  }
 
   // 归一化 baseUrl 尾部斜杠，避免拼接出 //chat/completions
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '')
@@ -388,14 +441,16 @@ export async function callVisionOcr(
   let cursor = 0
   let completed = 0
 
-  // Overall timeout：共享 AbortController，超时后 abort 所有 in-flight fetch
+  // Overall timeout：共享 AbortController，超时后 abort 所有 in-flight fetch 和 retry sleep。
+  // abort() 不传参数，让调用方通过 `overallAborted` 标志和 `classifyError` 逻辑
+  // 统一映射到 `overall-timeout` 类别，不依赖 signal.reason 的 stringify 格式。
   const overallController = new AbortController()
   let overallAborted = false
   const overallTimer: ReturnType<typeof setTimeout> | null =
     overallTimeoutMs > 0
       ? setTimeout(() => {
           overallAborted = true
-          overallController.abort(new Error('vision-ocr overall timeout'))
+          overallController.abort()
         }, overallTimeoutMs)
       : null
 
@@ -404,7 +459,7 @@ export async function callVisionOcr(
    * 接收已序列化的 `bodyStr`（由 processOne 在 retry loop 外 build once），
    * 避免 retry 时反复 JSON.stringify 同一张 6+ MB 的 base64 图片。
    */
-  async function callOnce(bodyStr: string): Promise<string> {
+  async function sendRequestOnce(bodyStr: string): Promise<string> {
     const response = await fetchWithTimeout(endpoint, {
       method: 'POST',
       headers: {
@@ -463,7 +518,7 @@ export async function callVisionOcr(
       }
       lastAttemptIdx = attempt
       try {
-        const text = await callOnce(bodyStr)
+        const text = await sendRequestOnce(bodyStr)
         results[idx] = cleanOcrHtml(text)
         return
       } catch (err) {
@@ -507,7 +562,8 @@ export async function callVisionOcr(
               nextDelayMs: delayMs,
             })
           }
-          await sleep(delayMs)
+          // 可中断 sleep：overall timeout 触发时立即醒来（不等 delayMs 自然结束）
+          await interruptibleSleep(delayMs, overallController.signal)
           continue
         }
 

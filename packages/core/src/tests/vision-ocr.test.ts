@@ -387,8 +387,10 @@ describe('callVisionOcr', () => {
   })
 
   it('Retry-After: HTTP date 格式 → 被正确解析', async () => {
-    // 构造一个未来 1.5 秒的 HTTP date
-    const futureDate = new Date(Date.now() + 1500).toUTCString()
+    // 构造未来 3 秒的 HTTP date。注意 HTTP date 精度到秒（toUTCString 丢 ms），
+    // 所以 Date.parse 回来最多少 999ms。用 +3000ms 保证实际等待至少 2001ms，
+    // 容差后断言 >= 1900ms，避免秒边界 timing 导致的 flaky。
+    const futureDate = new Date(Date.now() + 3000).toUTCString()
     await withMockFetch(
       [
         { status: 429, headers: { 'Retry-After': futureDate }, body: {} },
@@ -399,10 +401,9 @@ describe('callVisionOcr', () => {
         const result = await callVisionOcr([FAKE_IMAGE], { ...baseOpts, retryBaseMs: 1 })
         const elapsed = Date.now() - start
         assert.equal(result.failures.length, 0)
-        // 容差较大：HTTP date 精度到秒，加上解析延迟，至少 1 秒左右
         assert.ok(
-          elapsed >= 1000,
-          `expected elapsed >= 1000ms (HTTP date honored), got ${elapsed}ms`,
+          elapsed >= 1900,
+          `expected elapsed >= 1900ms (HTTP date honored), got ${elapsed}ms`,
         )
       },
     )
@@ -449,6 +450,78 @@ describe('callVisionOcr', () => {
     assert.ok(
       elapsed < 400,
       `expected fetch aborted promptly (elapsed < 400ms), got ${elapsed}ms`,
+    )
+  })
+
+  it('interruptibleSleep: Overall timeout 在 retry sleep 期间触发立即唤醒（硬上限）', async () => {
+    // retryBaseMs=5000 → equal jitter attempt=0 区间 2500-5000ms
+    // overallTimeoutMs=200 → 200ms 后触发
+    // 预期：retry sleep 被中断，总耗时接近 200ms（而非 2500ms+）
+    const start = Date.now()
+    await withMockFetch(
+      [
+        { status: 429, body: {} },
+        { status: 200, body: okBody('should not reach') },
+      ],
+      async () => {
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          retryBaseMs: 5000,
+          overallTimeoutMs: 200,
+        })
+        assert.equal(result.failures.length, 1)
+        assert.equal(result.failures[0].category, 'overall-timeout')
+      },
+    )
+    const elapsed = Date.now() - start
+    // 如果 sleep 不可中断，elapsed 至少 2500ms
+    // 如果可中断，应在 300ms 左右（200 overall + 少量 overhead）
+    assert.ok(
+      elapsed < 1000,
+      `expected interruptible sleep (elapsed < 1000ms), got ${elapsed}ms`,
+    )
+  })
+
+  it('maxRetries=0 边界 → 首次失败立即终态（无 retry）', async () => {
+    await withMockFetch(
+      [{ status: 429, body: {} }],
+      async () => {
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          maxRetries: 0,
+        })
+        assert.equal(result.failures.length, 1)
+        assert.equal(result.failures[0].attempts, 1)
+        assert.equal(result.failures[0].category, 'rate-limit')
+      },
+    )
+  })
+
+  it('maxRetries=0 首次成功', async () => {
+    await withMockFetch(
+      [{ status: 200, body: okBody('no retry needed') }],
+      async () => {
+        const result = await callVisionOcr([FAKE_IMAGE], {
+          ...baseOpts,
+          maxRetries: 0,
+        })
+        assert.equal(result.failures.length, 0)
+        assert.match(result.results[0] as string, /no retry needed/)
+      },
+    )
+  })
+
+  it('concurrency=0 抛错（非法参数）', async () => {
+    await assert.rejects(
+      () => callVisionOcr([FAKE_IMAGE], { ...baseOpts, concurrency: 0 }),
+      /concurrency 必须 >= 1/,
+    )
+  })
+
+  it('maxRetries=-1 抛错（非法参数）', async () => {
+    await assert.rejects(
+      () => callVisionOcr([FAKE_IMAGE], { ...baseOpts, maxRetries: -1 }),
+      /maxRetries 必须 >= 0/,
     )
   })
 

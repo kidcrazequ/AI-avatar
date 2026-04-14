@@ -1,5 +1,25 @@
 # 更新日志
 
+## v0.5.12 (2026-04-14)
+
+### 修复 — vision-ocr 第四轮代码审查（8 项）
+
+- **Interruptible sleep：overall timeout 升级为硬上限** — 原 `sleep(delayMs)` 不可中断，overall timeout 触发后 worker 仍会等完 retry 退避才 bail，实际 overall 耗时 = `overallTimeoutMs + max_retry_backoff_duration`（最坏可超 10 秒）。新增 `interruptibleSleep(ms, signal)` helper：监听 `signal.abort` 事件立即 resolve（不 reject，让 retry loop 统一走 `overallAborted` 检查）。retry 退避改用 interruptibleSleep，overall timeout 成为真正硬上限。
+- **参数校验：`concurrency < 1` / `maxRetries < 0` 抛错** — 原先 `concurrency=0` 静默早退返回空 results（最糟糕组合：既不工作又不报错），`maxRetries=-1` 直接进入 for loop 条件 `attempt <= -1` 为假从不执行。现在两个参数都在开头校验并抛明确的 Error。
+- **`callOnce` → `sendRequestOnce` 重命名** — 函数已重构为接收预序列化的 bodyStr，"callOnce" 的旧语义（"调用一次 Vision"）已不精确，新名字更准确反映"发送一次 HTTP 请求"。
+- **`buildOpenAICompletionBody` 返回类型收紧** — 从 `object` 改为内部 interface `OpenAIVisionRequestBody`，字段类型安全，未来改协议字段时 TypeScript 能帮忙。
+- **`overallController.abort()` 无参数** — 原先传 `new Error('vision-ocr overall timeout')` 作为 abort reason，但实际下游（`fetchWithTimeout` / `interruptibleSleep`）都通过 `overallAborted` 标志和 `classifyError` 统一映射到 `overall-timeout` 类别，不依赖 `signal.reason`。无参数 `abort()` 更简洁，避免 Error 对象在 `signal.reason` 中挂一个永不被读取的字段。
+- **`onRetry` / `onProgress` 契约文档完善** — 明确写出两个易踩坑的点：(1) `onProgress.completed` 在多 worker 并发下**顺序非确定**，UI 应按"显示最新值"策略而非假设严格 1,2,3... 递增；(2) `onRetry.nextDelayMs` 是纯退避时间，不含 onRetry 回调自身耗时 —— **实际 retry 间隔 = onRetry 耗时 + nextDelayMs**，回调内部请保持轻量（建议 <10ms）。
+
+### 测试（vision-ocr.test.ts +5 个 case，共 21 → 26）
+
+- **新测试 1：interruptibleSleep 硬上限验证** — `retryBaseMs: 5000`（退避 2500-5000ms）+ `overallTimeoutMs: 200`（200ms overall cap），断言实际耗时 < 1000ms，证明 retry sleep 被 overall timeout 中断唤醒而非等到自然结束。
+- **新测试 2：`maxRetries=0` 首次失败立即终态** — 断言 `attempts=1`（无 retry）+ `category='rate-limit'`。
+- **新测试 3：`maxRetries=0` 首次成功** — 断言无 failures。
+- **新测试 4：`concurrency=0` 抛错** — 验证参数校验。
+- **新测试 5：`maxRetries=-1` 抛错** — 验证参数校验。
+- **修复 flaky 测试** — "Retry-After: HTTP date 格式" 原先用 `Date.now() + 1500` 偶发失败（HTTP date 精度到秒，toUTCString 丢 ms 后 Date.parse 回来最多少 999ms，实际等待可能低至 501ms）。改为 `+3000ms` 保证最小等待 2001ms，断言 `>= 1900ms` 稳定通过。
+
 ## v0.5.11 (2026-04-14)
 
 ### 修复 — vision-ocr 第三轮代码审查（12 项）

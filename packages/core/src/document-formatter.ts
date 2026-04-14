@@ -221,9 +221,9 @@ export async function formatDocument(
   // 如果未来改为 worker_threads 多线程，需改用 Atomics 或任务队列。
   let cursor = 0
 
-  // 短章节（< 2000 字符）直接保留原文，不调 LLM — 签字页、目录页、端子图等
-  // 短内容 LLM 格式化收益极低但每次调用要 5-10 秒，批量导入时是主要瓶颈。
-  const SHORT_CHAPTER_THRESHOLD = 2000
+  // 极短章节（< 200 字符）直接保留原文，不调 LLM — 空白页、页码、纯标题行等
+  // 这些几乎没有可格式化的内容，跳过后节省 API 调用。
+  const SHORT_CHAPTER_THRESHOLD = 200
 
   async function worker(): Promise<void> {
     while (cursor < chapters.length) {

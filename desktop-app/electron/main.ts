@@ -316,6 +316,15 @@ wrapHandler('load-avatar', (_, avatarId: string) => {
   const config = soulLoader.loadAvatar(avatarId)
   // Feature 7: 缓存 system prompt 供子代理委派使用
   toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
+
+  // 异步预热 chunk 缓存（fire-and-forget）：用 fs.promises.readFile 在
+  // Node.js 线程池中读取文件，主线程不阻塞，不影响 UI 和 fetch stream。
+  // 用户提问前 chunks 已就绪，不会出彩色伞。
+  const retriever = toolRouter.getRetriever(avatarId)
+  retriever.warmUpAsync().catch(err => {
+    console.warn('[load-avatar] chunk 异步预热失败（不影响功能）:', err instanceof Error ? err.message : String(err))
+  })
+
   return config
 })
 

@@ -172,12 +172,44 @@ export class KnowledgeRetriever {
   }
 
   /**
-   * 预热 chunk 缓存：提前触发 buildChunks() + BM25 倒排索引构建。
-   * 在 load-avatar 时用 setImmediate 延迟调用，避免首次 searchChunks
-   * 同步读取数百个文件阻塞主线程导致 UI 卡顿（macOS beach ball）。
+   * 异步预热 chunk 缓存：用 fs.promises.readFile 读取文件，不阻塞主线程。
+   * 在 load-avatar 返回后 fire-and-forget 调用，用户提问前 chunks 已就绪。
+   * 如果预热未完成用户就提问了，searchChunks 会回退到同步 buildChunks。
    */
-  warmUp(): void {
-    this.getChunks()
+  async warmUpAsync(): Promise<void> {
+    if (this.chunksCache) return
+    const files = this.collectFiles(this.knowledgePath)
+    const chunks: Chunk[] = []
+    for (const filePath of files) {
+      const relativePath = path.relative(this.knowledgePath, filePath)
+      let content: string
+      try {
+        content = await fs.promises.readFile(filePath, 'utf-8')
+      } catch (err) {
+        console.warn(`[KnowledgeRetriever] 预热跳过 ${relativePath}: ${err instanceof Error ? err.message : String(err)}`)
+        continue
+      }
+      const sections = content.split(/^#{2,3}\s+/m)
+      const headingMatches = [...content.matchAll(/^#{2,3}\s+(.+)$/gm)]
+      if (sections.length <= 1) {
+        this.pushChunks(chunks, relativePath, relativePath, content)
+      } else {
+        sections.forEach((section, i) => {
+          if (!section.trim()) return
+          const heading = headingMatches[i - 1]?.[1] ?? relativePath
+          this.pushChunks(chunks, relativePath, heading, section)
+        })
+      }
+    }
+    // 仅在 chunksCache 仍为空时写入（防止与同步 buildChunks 竞态）
+    if (!this.chunksCache) {
+      for (const chunk of chunks) {
+        const key = `${chunk.file}::${chunk.heading}`
+        const ctx = this.contextMap.get(key)
+        if (ctx) chunk.context = ctx
+      }
+      this.chunksCache = chunks
+    }
   }
 
   /**

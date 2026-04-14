@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, type WikiAnswer, type LLMCallFn } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, type WikiAnswer, type LLMCallFn } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser } from './document-parser'
@@ -1509,20 +1509,13 @@ wrapHandler('check-update', async (): Promise<{
 }> => {
   const currentVersion = app.getVersion()
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10000)
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       'https://api.github.com/repos/kidcrazequ/AI-avatar/releases/latest',
       {
         headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'Soul-Desktop' },
-        signal: controller.signal,
+        timeoutMs: 10000,
       },
     )
-    clearTimeout(timeout)
-    if (!res.ok) {
-      console.warn(`[check-update] GitHub API 返回 ${res.status}`)
-      return { hasUpdate: false, currentVersion }
-    }
     const data = await res.json() as { tag_name?: string; html_url?: string; body?: string }
     const latestVersion = (data.tag_name || '').replace(/^v/, '')
     if (!latestVersion) return { hasUpdate: false, currentVersion }

@@ -302,24 +302,30 @@ const TOOL_RESULT_COMPRESS_THRESHOLD = 2000
  * 这样 LLM 仍能看到最新数据，但不会被历史工具返回值撑爆 context。
  */
 function compressOldToolResults(messages: LLMMessage[]): void {
-  // 找到最后一个 assistant 消息的位置（即最近一轮工具调用的起点）
-  let lastAssistantIdx = -1
+  // 从末尾找倒数第 2 个 assistant 位置：保留最近 2 轮工具结果完整，
+  // 避免 LLM 因"上一轮刚查的数据被压缩"被诱导重新调用工具
+  let assistantsSeen = 0
+  let preserveFromIdx = -1
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === 'assistant') {
-      lastAssistantIdx = i
-      break
+      assistantsSeen++
+      if (assistantsSeen >= 2) {
+        preserveFromIdx = i
+        break
+      }
     }
   }
-  if (lastAssistantIdx <= 0) return
+  // 不足 2 个 assistant 消息（第一轮工具调用前 / 刚结束第一轮）→ 无需压缩
+  if (preserveFromIdx <= 0) return
 
-  // 压缩 lastAssistantIdx 之前的所有 tool 结果
-  for (let i = 0; i < lastAssistantIdx; i++) {
+  // 压缩 preserveFromIdx 之前的所有 tool 结果
+  for (let i = 0; i < preserveFromIdx; i++) {
     const msg = messages[i]
     if (msg.role === 'tool' && typeof msg.content === 'string' && msg.content.length > TOOL_RESULT_COMPRESS_THRESHOLD) {
-      // 保留前 500 字符作为摘要 + 截断提示
+      // 保留前 500 字符作为摘要 + 禁止性截断提示（不再诱导 LLM 重调工具）
       messages[i] = {
         ...msg,
-        content: msg.content.slice(0, 500) + `\n\n[... 已压缩，原文 ${msg.content.length} 字符。如需完整数据请重新调用工具查询]`,
+        content: msg.content.slice(0, 500) + `\n\n[... 已压缩，原文 ${msg.content.length} 字符。⚠️ **不要因为这段被压缩就重新调用相同参数的工具** —— 这是你之前已经查询过的数据，结果的要点应该还在你的推理链路和最近轮次回答里。仅当你需要**不同 filter / sheet / file** 的新数据时才调用工具。]`,
       }
     }
   }

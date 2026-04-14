@@ -1,5 +1,88 @@
 # 更新日志
 
+## v0.5.15 (2026-04-14)
+
+### 修复 — 工具轮数耗尽 regression 根因
+
+**问题**：用户问 "画 215 机型 2026 年 1-3 月设备侧效率折线图" 时，LLM 仍然撞 `MAX_TOOL_ROUNDS = 10` 报错 `[系统提示] 工具调用轮数达到上限，已提前结束本轮。`，v0.5.14 的 Excel 查询纪律没能完全遏制。
+
+**真正根因**（`git blame` 追溯到 `261d629` commit，2026-04-13）：`chatStore.ts` 的 `compressOldToolResults` 函数在压缩旧 tool 结果时，末尾的摘要文字是**诱导性指令**：
+
+```
+[... 已压缩，原文 N 字符。如需完整数据请重新调用工具查询]
+```
+
+"**如需完整数据请重新调用工具查询**" 对 LLM 来说是一条**反向指令** —— 每压缩一次就明确叫 LLM 重新调用工具。这在 "query_excel → load_skill → draw_chart" 这类多工具流程中触发死循环：
+
+| Round | LLM 动作 | LLM 看到的 |
+|---|---|---|
+| 1 | `query_excel(机型=215)` → 3 行数据 | 完整数据 ✓ |
+| 2 | `load_skill('draw-chart')` | Round 1 结果被压缩 + "请重新调用工具查询" ⚠️ |
+| 3 | LLM 看到提示 → 重新 `query_excel` | Round 2 也被压缩 |
+| ... | 重复 | **死循环耗尽 10 轮** |
+
+这是 `261d629` 引入的文案错误，当时只测了"两轮简单流程"，没覆盖多工具流程。
+
+### 修复 A — `compressOldToolResults` 压缩文字从"诱导"改"禁止"
+
+`desktop-app/src/stores/chatStore.ts` 压缩摘要末尾文字：
+
+- ❌ 旧：`"如需完整数据请重新调用工具查询"`
+- ✅ 新：`"⚠️ 不要因为这段被压缩就重新调用相同参数的工具 —— 这是你之前已经查询过的数据，结果的要点应该还在你的推理链路和最近轮次回答里。仅当你需要不同 filter / sheet / file 的新数据时才调用工具。"`
+
+从"请重新调用"反向改成"**不要**因为压缩就重调相同参数"，消除了 LLM 的死循环诱因。
+
+### 修复 B — `compressOldToolResults` 保留最近 2 轮 tool 结果而非 1 轮
+
+原逻辑：找 **最后一个** assistant 消息，压缩它之前的所有 tool 结果（保留 1 轮）。
+新逻辑：找 **倒数第 2 个** assistant 消息，压缩它之前的 tool 结果（保留 2 轮）。
+
+代码改动（`chatStore.ts:compressOldToolResults`）：
+- 扫描时计数 `assistantsSeen`，命中 2 个才设 `preserveFromIdx`
+- 其他逻辑（压缩阈值 2000 字符、截断长度 500 字符、调用点、函数签名）**完全不变**
+
+**边界情况保证**（所有场景都是旧逻辑的弱化版，永远不会压得比原来更多）：
+- 0 个 assistant → 同旧：不压缩
+- 1 个 assistant → 旧会压缩前置 tool（但前置本就无 tool，实际等价无操作），新不压缩
+- 2+ 个 assistant → 新的永远多保留 1 轮 = ~16KB tool 结果（Excel 场景 1 次 query_excel ≤ 8KB），占 131k tokens context 的 ~6%，安全
+
+### 修复 C — system prompt 加"工具顺序"纪律
+
+`packages/core/src/soul-loader.ts` 的 Excel 查询纪律段新增规则 5：
+
+```
+5. 画图/图表需求的工具顺序（关键）：当用户要求生成图表（折线图/柱状图/饼图/趋势对比等），
+   必须先 load_skill('draw-chart') 再 query_excel，不要反过来。
+   draw-chart 技能内部会告诉你图表 JSON 格式、数据过滤策略、"最多 2 次 query_excel"的纪律。
+   - ❌ 错误顺序：query_excel × 多次 → 想起要加载 draw-chart 技能 → 轮数已耗尽
+   - ✅ 正确顺序：load_skill('draw-chart') → query_excel × 1-2 次（带精确 filter）→ 输出 chart 代码块
+```
+
+**为什么需要 C**：原先 `draw-chart` 技能文件里的 "最多 2 次 query_excel" 纪律只在技能**加载后**才进入 LLM 上下文。LLM 在加载技能前可以自由浪费轮数。这条规则强制 LLM **先** load_skill **再** query_excel，让技能纪律第一时间生效。
+
+### 三项修复的关系
+
+| 修复 | 治什么 |
+|---|---|
+| A. 压缩文字从"诱导"改"禁止" | **治根因** —— 直接阻断 LLM 看到压缩摘要后重调工具的循环 |
+| B. 保留最近 2 轮 tool 结果 | **加缓冲** —— 给 LLM 短期记忆，减少被压缩触发的重调机会 |
+| C. 强制 load_skill 先于 query_excel | **防御性前置** —— 让技能纪律第一时间激活，从源头约束 LLM 行为 |
+
+A 是主修，B 和 C 是辅助。即使 A 失效，B 减少触发，C 让技能纪律提前生效。**三层防御**。
+
+### 不影响原有逻辑的保证
+
+- `compressOldToolResults` 函数签名、调用点、阈值、压缩后长度**全部不变**
+- 其他压缩机制（`compressedRecentMessages` 的 4 条 assistant 保留）**完全不碰**
+- apiMessages 结构、mutation 方式**完全一致**
+- 边界情况（0/1 个 assistant）新旧行为**等价**
+- 所有场景下新逻辑都是**旧逻辑的弱化版**，永远不会更激进
+
+### 验证
+
+core build ✅ + desktop-app typecheck ✅ / lint ✅ / build ✅。
+实际效果需要用户重启应用（让新 system prompt + 新 chatStore 生效）后重试画图请求观察。
+
 ## v0.5.14 (2026-04-14)
 
 ### 修复 — Excel 查询工具轮数耗尽

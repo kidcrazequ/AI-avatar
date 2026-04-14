@@ -190,7 +190,10 @@ export class SoulLoader {
         parts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
         parts.push('3. **单次回答最多 3 次 `query_excel` 调用**。超过说明过滤条件太散，应回退到 Schema 确认字段，而不是继续试探。\n')
         parts.push('4. **禁止"探索式试探"**（不带 filter 的 `limit: 5` 这种）—— Schema 里已有列名、样例、范围，试探只浪费工具调用轮数。\n')
-        parts.push('5. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n\n')
+        parts.push('5. **画图/图表需求的工具顺序（关键）**：当用户要求生成图表（折线图/柱状图/饼图/趋势对比等），**必须先** `load_skill(\'draw-chart\')` **再** `query_excel`，**不要反过来**。draw-chart 技能内部会告诉你图表 JSON 格式、数据过滤策略、"最多 2 次 query_excel"的纪律。先加载技能再查数据可以让你在技能约束下高效完成，避免烧完轮数才想起要加载技能。\n')
+        parts.push('   - ❌ 错误顺序：`query_excel` × 多次 → 想起要加载 draw-chart 技能 → 轮数已耗尽\n')
+        parts.push('   - ✅ 正确顺序：`load_skill(\'draw-chart\')` → `query_excel` × 1-2 次（带精确 filter）→ 输出 ` ```chart ` 代码块\n')
+        parts.push('6. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n\n')
         parts.push('## Schema 摘要\n')
         excelSchemas.forEach(schema => {
           parts.push(this.formatExcelSchema(schema))

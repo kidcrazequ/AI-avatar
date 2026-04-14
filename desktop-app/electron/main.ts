@@ -1069,8 +1069,12 @@ async function batchImportFiles(
         fmtMs = Date.now() - fmtT0
       }
 
-      // 写入文件
-      const frontmatterLines = ['---', 'rag_only: true', `source: ${sourceTag}`]
+      // 写入文件（与单文件导入一致：大文件标 rag_only，小文件直接进 system prompt）
+      const RAG_ONLY_THRESHOLD = 50_000  // 50KB 以上标 rag_only
+      const isLargeFile = finalBody.length > RAG_ONLY_THRESHOLD
+      const frontmatterLines = ['---']
+      if (isLargeFile) frontmatterLines.push('rag_only: true')
+      frontmatterLines.push(`source: ${sourceTag}`)
       if (rawRelPath) frontmatterLines.push(`raw_file: ${rawRelPath}`)
       frontmatterLines.push('---', '')
       const finalContent = frontmatterLines.join('\n') + '\n' + finalBody
@@ -1094,6 +1098,28 @@ async function batchImportFiles(
 
   const batchTotalSec = Math.round((Date.now() - batchStartTime) / 1000)
   console.log(`[batch-import] 完成: ${imported.length} 成功 / ${failed.length} 失败 / 共 ${total} 文件 — 总耗时 ${batchTotalSec}s (${Math.round(batchTotalSec / 60)}分${batchTotalSec % 60}秒)`)
+
+  // 更新 README.md 索引（与单文件导入一致）
+  if (imported.length > 0) {
+    try {
+      const readmePath = path.join(knowledgePath, 'README.md')
+      let readme = ''
+      try { readme = fs.readFileSync(readmePath, 'utf-8') } catch { /* 不存在则新建 */ }
+      const newEntries = imported
+        .filter(f => !readme.includes(f.targetPath))
+        .map(f => `| ${f.targetPath.replace(/\.md$/, '')} | [${f.targetPath}](${f.targetPath}) | 批量导入 |`)
+      if (newEntries.length > 0) {
+        if (!readme.includes('| 文件 |') && !readme.includes('| --- |')) {
+          readme += '\n\n## 知识文件索引\n\n| 文件 | 路径 | 来源 |\n| --- | --- | --- |\n'
+        }
+        readme += newEntries.join('\n') + '\n'
+        fs.writeFileSync(readmePath, readme, 'utf-8')
+      }
+    } catch (readmeErr) {
+      console.warn('[batch-import] README.md 更新失败（不影响导入）:', readmeErr instanceof Error ? readmeErr.message : String(readmeErr))
+    }
+  }
+
   return { imported, failed }
 }
 

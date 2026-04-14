@@ -1,6 +1,6 @@
 # 更新日志
 
-## v0.6.3 (2026-04-14)
+## v0.6.4 (2026-04-14)
 
 ### 修复 — `dist:mac` 也加自动 rebuild better-sqlite3
 
@@ -21,6 +21,8 @@ slice is not valid mach-o file （实际是 PE32+ Windows DLL）
 **修复**：`desktop-app/package.json` 的 `dist:mac` 末尾追加 `&& npx @electron/rebuild -f -w better-sqlite3`。现在 4 个 dist 命令格式完全一致：打包结束后都自动 rebuild 回 host arch。
 
 `@electron/rebuild` 默认用 host arch（Intel Mac → x64，Apple Silicon Mac → arm64），不需要硬编码 `--arch`。
+
+## v0.6.3 (2026-04-14)
 
 ### 修复 — 图表 4 个剩余视觉问题（接 v0.6.2 Chart.js 自动转换）
 

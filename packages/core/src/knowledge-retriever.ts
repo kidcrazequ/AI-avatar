@@ -144,6 +144,15 @@ export class KnowledgeRetriever {
   private contextMap = new Map<string, string>()
   /** 向量 embedding 映射：key = "file::heading" */
   private embeddingMap = new Map<string, number[]>()
+  /**
+   * BM25 token 缓存映射：key = "file::heading"，value = 分词后的 token 数组。
+   * 通过 setTokens 从 _index/tokens.json 注入（持久化跨 session），避免每次重启都
+   * 重新跑 segmentit 中文分词（CPU 重活）。新分词的 chunks 也会回填进此 map，
+   * 然后由 ToolRouter / 调用方决定何时 saveTokensCache 落盘。
+   */
+  private tokensMap = new Map<string, string[]>()
+  /** 标记 tokensMap 是否在 searchChunks 期间被新增了条目，供调用方判断是否需要落盘 */
+  private tokensDirty = false
   /** BM25 预计算缓存：df、avgDl，以及倒排索引（token → chunk 索引集合） */
   private bm25Cache: {
     df: Map<string, number>
@@ -217,6 +226,34 @@ export class KnowledgeRetriever {
   }
 
   /**
+   * 注入持久化的 token 缓存（从 _index/tokens.json 加载）。
+   * 后续 searchChunks 的 lazy tokenize 阶段优先查此 map，cache miss 才调 segmentit。
+   * 调用此方法不会影响 chunksCache / bm25Cache（tokens 是独立维度）。
+   */
+  setTokens(tokens: Map<string, string[]>): void {
+    this.tokensMap = new Map(tokens)
+    this.tokensDirty = false
+  }
+
+  /**
+   * 导出当前所有 tokens（含 setTokens 注入的 + searchChunks 期间新分词的）。
+   * 供调用方序列化到 _index/tokens.json。
+   */
+  getTokens(): Map<string, string[]> {
+    return new Map(this.tokensMap)
+  }
+
+  /** 是否有未落盘的新 token（searchChunks 期间填充了新条目）。供调用方决定是否 saveTokensCache。 */
+  isTokensDirty(): boolean {
+    return this.tokensDirty
+  }
+
+  /** 重置 dirty 标志（saveTokensCache 落盘后调用）。 */
+  clearTokensDirty(): void {
+    this.tokensDirty = false
+  }
+
+  /**
    * 检索知识库中与查询最相关的 chunk。
    *
    * 评分策略：
@@ -238,13 +275,24 @@ export class KnowledgeRetriever {
     const queryTokens = tokenize(query.toLowerCase())
     if (queryTokens.length === 0) return []
 
-    // 预计算所有 chunk 的分词（带缓存）
+    // 预计算所有 chunk 的分词（三层缓存）：
+    //   1. chunk.tokens 内存缓存（同一 retriever 实例多次 search 复用）
+    //   2. tokensMap 持久化缓存（从 _index/tokens.json 加载，跨 session 复用）
+    //   3. 都没有 → 调 segmentit tokenize（CPU 重活），结果回填到 tokensMap + 标记 dirty
     for (const chunk of allChunks) {
-      if (!chunk.tokens) {
-        const searchableText = (chunk.context ? chunk.context + ' ' : '') +
-          chunk.heading + ' ' + chunk.content
-        chunk.tokens = tokenize(searchableText.toLowerCase())
+      if (chunk.tokens) continue
+      const cacheKey = `${chunk.file}::${chunk.heading}`
+      const persistedTokens = this.tokensMap.get(cacheKey)
+      if (persistedTokens) {
+        chunk.tokens = persistedTokens
+        continue
       }
+      const searchableText = (chunk.context ? chunk.context + ' ' : '') +
+        chunk.heading + ' ' + chunk.content
+      const fresh = tokenize(searchableText.toLowerCase())
+      chunk.tokens = fresh
+      this.tokensMap.set(cacheKey, fresh)
+      this.tokensDirty = true
     }
 
     // 复用或构建 BM25 统计缓存（通过 chunksCache 引用比对检测内容变化，避免每次构建巨大指纹字符串）

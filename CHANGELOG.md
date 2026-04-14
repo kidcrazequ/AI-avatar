@@ -1,5 +1,71 @@
 # 更新日志
 
+## v0.6.0 (2026-04-14)
+
+### 性能 — 知识库检索 BM25 token 持久化缓存
+
+**问题**：批量导入大量知识文件后（实测：233 个 .md / 4.5 MB CJK 文本），**第一次** `search_knowledge` 调用让 Electron main process **单线程 CPU 100% 跑 30-180 秒**，UI 出现 macOS beach ball 看起来像死机。原因是 `KnowledgeRetriever.searchChunks()` 的 lazy tokenize 阶段对所有 chunks 用 `segmentit` 中文分词器跑一遍，每次重启都要重做。
+
+**修复**：把分词结果持久化到 `_index/tokens.json`，跨 session 复用。
+
+#### 三层缓存策略
+
+| 层 | 存储 | 失效条件 |
+|---|---|---|
+| 1 | `chunk.tokens` 内存缓存 | retriever 实例销毁 |
+| 2 | `tokensMap` per-retriever 内存 Map | retriever 实例销毁 |
+| 3 | `_index/tokens.json` 磁盘 | 文件删除 / 损坏 / chunk key 变化 |
+
+`searchChunks` 的 lazy tokenize 阶段优先查 `tokensMap`，cache miss 才调 segmentit + 回填 + 标记 `tokensDirty`。`ToolRouter.execute()` 在每次工具调用后检测 `isTokensDirty()`，dirty 时同步落盘到 `_index/tokens.json`。
+
+#### 性能预期
+
+| 场景 | v0.5.15 | v0.6.0 |
+|---|---|---|
+| 冷启动首查（无 tokens.json，233 文件 / 4.5 MB CJK）| 30-180 秒 | 30-180 秒**首次**+ 自动落盘 |
+| 热启动首查（tokens.json 存在）| 30-180 秒 | **< 2 秒** |
+| 重启后第二次查询 | 慢 → 快 | 始终快 |
+| 增量导入 1 个新文件后查询 | 全部重新分词 | 只分词新增 chunks |
+
+**主要收益**：每次重启 Soul 不再付 30-180 秒分词税。批量导入后第一次查询仍然慢一次（构建初始 cache），但**只需要付一次**。
+
+#### 改动文件
+
+- **`packages/core/src/utils/chunk-cache.ts`**（新建）—— `loadTokensCache` / `saveTokensCache` / `TOKENS_FILE` / `PersistedTokens` interface。原子写入复用 knowledge-indexer 的 `tmpPath + rename` 模式，防止崩溃损坏 tokens.json。损坏 / 类型不合法时静默 fallback 到全量重新分词，不抛错。
+- **`packages/core/src/knowledge-retriever.ts`** —— 新增 `tokensMap: Map<string, string[]>` 字段、`setTokens` / `getTokens` / `isTokensDirty` / `clearTokensDirty` 方法。`searchChunks` 的 lazy tokenize 循环从"只查 `chunk.tokens`"扩展为"查 `chunk.tokens` → 查 `tokensMap` → 调 segmentit + 回填 map 标记 dirty"。
+- **`packages/core/src/knowledge-indexer.ts`** —— `saveIndex` 新增可选 `tokens?: Map<string, string[]>` 参数，存在时调 `saveTokensCache` 一并写盘。`loadIndex` 返回类型新增 `tokens: Map<string, string[]>` 字段，自动调 `loadTokensCache`，缺失或损坏时返回空 Map（向后兼容旧 `_index/`）。
+- **`packages/core/src/tool-router.ts`** —— `getRetriever` 在加载 `index` 后调 `retriever.setTokens(index.tokens)` 注入持久化缓存。新增 `saveRetrieverTokens(avatarId)` 方法封装"检测 dirty → 落盘 → 清 dirty"逻辑。`execute()` 在每次工具调用后调用此方法，覆盖所有可能触发 lazy tokenize 的工具（`search_knowledge` / 内部 wiki 注入 / `compare_products` 等）。
+- **`packages/core/src/index.ts`** —— 导出 `loadTokensCache` / `saveTokensCache` / `TOKENS_FILE` / `PersistedTokens`。
+
+#### 单元测试（新建 `chunk-cache.test.ts`，8 cases 全通过）
+
+- ✅ saveTokensCache → loadTokensCache 完整 round-trip（含 CJK 字符串、空数组）
+- ✅ 文件不存在返回 null
+- ✅ 损坏 JSON 返回 null 而不抛错（静默 fallback）
+- ✅ 类型不合法的项被跳过，合法项保留（防御外部篡改）
+- ✅ 不残留 `.tmp` 文件（atomic write 验证）
+- ✅ 自动创建不存在的 `_index` 目录
+- ✅ 覆盖已存在的 tokens.json
+- ✅ 空 Map 也能保存和加载
+
+回归：vision-ocr 26/26 测试全部通过，无副作用。
+
+#### 向后兼容
+
+- 旧 `_index/` 目录（无 tokens.json）→ `loadIndex` 返回空 Map → 首次查询走完整 lazy tokenize → 完成后自动落盘
+- 旧版本升级到 v0.6.0 后**第一次查询仍慢**（构建初始 cache），**之后所有查询和重启都快**
+- `_index/tokens.json` 损坏 / 缺失 / chunk key 不匹配 → 静默 fallback 到重新分词，不影响功能
+
+#### 不在 v0.6.0 范围（推迟到 Phase 2）
+
+- **进度事件反馈**（方案 3）—— 让 UI 显示 "正在索引知识库 N/233" 而非 beach ball。需要扩展 `KnowledgeRetriever.searchChunks` 加 `onProgress` 回调，通过 IPC 转发到渲染进程显示 toast。改动跨 5 个文件，单独立项实施。
+- **App 启动后台预热 retriever**（方案 2）—— 方案 1 的 cache 命中后首查已经 < 2 秒，预热边际收益小。视用户反馈再决定。
+
+### 验证
+
+- core build ✅ + chunk-cache tests **8/8 ✅** + vision-ocr tests **26/26 ✅**（无回归）
+- desktop-app typecheck ✅ / lint ✅ / build ✅
+
 ## v0.5.15 (2026-04-14)
 
 ### 修复 — 工具轮数耗尽 regression 根因

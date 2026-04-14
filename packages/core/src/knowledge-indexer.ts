@@ -15,6 +15,7 @@ import path from 'path'
 import crypto from 'crypto'
 import type { KnowledgeRetriever } from './knowledge-retriever'
 import type { LLMCallFn } from './document-formatter'
+import { loadTokensCache, saveTokensCache } from './utils/chunk-cache'
 
 /** 写入临时文件后原子 rename，防止进程中断导致索引损坏 */
 function atomicWriteSync(filePath: string, data: string): void {
@@ -199,13 +200,15 @@ ${ck.contentPreview.slice(0, 300)}`
 
 /**
  * 将索引持久化到磁盘（JSON 格式）。
- * 写入 `knowledgePath/_index/contexts.json`、`_index/embeddings.json` 和 `_index/hashes.json`。
+ * 写入 `knowledgePath/_index/contexts.json`、`_index/embeddings.json`、
+ * `_index/hashes.json` 和（可选）`_index/tokens.json`。
  */
 export function saveIndex(
   knowledgePath: string,
   contexts: Map<string, string>,
   embeddings: Map<string, number[]>,
   hashes?: Map<string, string>,
+  tokens?: Map<string, string[]>,
 ): void {
   const indexDir = path.join(knowledgePath, INDEX_DIR_NAME)
   if (!fs.existsSync(indexDir)) {
@@ -227,15 +230,21 @@ export function saveIndex(
     for (const [k, v] of hashes) hashesObj[k] = v
     atomicWriteSync(path.join(indexDir, HASHES_FILE), JSON.stringify(hashesObj))
   }
+
+  // BM25 token 缓存（跨 session 复用，避免每次重启都重新 segmentit 中文分词）
+  if (tokens && tokens.size > 0) {
+    saveTokensCache(indexDir, tokens)
+  }
 }
 
 /**
- * 从磁盘加载持久化索引（含 hashes 用于增量比对）。
- * 任一文件不存在则返回 null。
+ * 从磁盘加载持久化索引（含 hashes 用于增量比对，含 tokens 用于跳过 BM25 分词）。
+ * 任一**核心**文件（contexts / embeddings）不存在则返回 null。
+ * tokens 和 hashes 是可选增强，缺失时返回的 Map 为空。
  */
 export function loadIndex(
   knowledgePath: string,
-): { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string> } | null {
+): { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens: Map<string, string[]> } | null {
   const indexDir = path.join(knowledgePath, INDEX_DIR_NAME)
   const contextsPath = path.join(indexDir, CONTEXTS_FILE)
   const embeddingsPath = path.join(indexDir, EMBEDDINGS_FILE)
@@ -266,7 +275,10 @@ export function loadIndex(
       }
     }
 
-    return { contexts, embeddings, hashes }
+    // tokens 文件可选（v0.6.0 新增），缺失时返回空 Map（首次查询会重新分词）
+    const tokens = loadTokensCache(indexDir) ?? new Map<string, string[]>()
+
+    return { contexts, embeddings, hashes, tokens }
   } catch (err) {
     console.warn(`[knowledge-indexer] 索引加载失败：${err instanceof Error ? err.message : String(err)}`)
     return null

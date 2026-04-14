@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import { KnowledgeRetriever } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
+import { saveTokensCache } from './utils/chunk-cache'
 import { SubAgentManager } from './sub-agent-manager'
 import { assertSafeSegment } from './utils/path-security'
 
@@ -58,10 +59,32 @@ export class ToolRouter {
       if (index) {
         retriever.setContexts(index.contexts)
         retriever.setEmbeddings(index.embeddings)
+        // v0.6.0: 加载持久化的 BM25 token 缓存，避免每次重启都重跑 segmentit 中文分词
+        if (index.tokens.size > 0) {
+          retriever.setTokens(index.tokens)
+        }
       }
       this.retrievers.set(avatarId, retriever)
     }
     return this.retrievers.get(avatarId)!
+  }
+
+  /**
+   * 把 retriever 当前的 tokens 落盘到 _index/tokens.json。
+   * 由调用方在 searchKnowledge 之后判断 isTokensDirty() 决定是否调用，
+   * 避免每次查询都 I/O。
+   */
+  saveRetrieverTokens(avatarId: string): void {
+    const retriever = this.retrievers.get(avatarId)
+    if (!retriever || !retriever.isTokensDirty()) return
+    const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+    const indexDir = path.join(knowledgePath, '_index')
+    try {
+      saveTokensCache(indexDir, retriever.getTokens())
+      retriever.clearTokensDirty()
+    } catch (err) {
+      console.warn(`[tool-router] saveTokensCache 失败: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   /**
@@ -84,28 +107,35 @@ export class ToolRouter {
     const { name, arguments: args } = request
 
     try {
+      let result: ToolCallResult
       switch (name) {
         case 'read_knowledge_file':
-          return this.readKnowledgeFile(avatarId, args)
+          result = this.readKnowledgeFile(avatarId, args); break
         case 'search_knowledge':
-          return this.searchKnowledge(avatarId, args)
+          result = this.searchKnowledge(avatarId, args); break
         case 'list_knowledge_files':
-          return this.listKnowledgeFiles(avatarId)
+          result = this.listKnowledgeFiles(avatarId); break
         case 'query_excel':
-          return this.queryExcel(avatarId, args)
+          result = this.queryExcel(avatarId, args); break
         case 'calculate_roi':
-          return this.calculateRoi(args)
+          result = this.calculateRoi(args); break
         case 'lookup_policy':
-          return this.lookupPolicy(avatarId, args)
+          result = this.lookupPolicy(avatarId, args); break
         case 'compare_products':
-          return this.compareProducts(avatarId, args)
+          result = this.compareProducts(avatarId, args); break
         case 'load_skill':
-          return this.loadSkill(avatarId, args)
+          result = this.loadSkill(avatarId, args); break
         case 'delegate_task':
-          return await this.delegateTask(avatarId, args, callLLM)
+          result = await this.delegateTask(avatarId, args, callLLM); break
         default:
           return { content: '', error: `未知工具: ${name}` }
       }
+      // v0.6.0: 如果本次工具调用触发了 lazy tokenize，把新的 tokens 落盘到
+      // _index/tokens.json，下次重启不用再花 30-180 秒重新 segmentit 分词。
+      // 覆盖所有可能调 retriever.searchChunks 的工具（search_knowledge、内部 wiki 注入、
+      // compareProducts 等），不只是显式 search_knowledge。
+      this.saveRetrieverTokens(avatarId)
+      return result
     } catch (error) {
       return { content: '', error: error instanceof Error ? error.message : String(error) }
     }
@@ -125,6 +155,7 @@ export class ToolRouter {
     if (!query) return { content: '', error: '缺少 query 参数' }
     const topN = (args.top_n as number) ?? 5
     const results = this.getRetriever(avatarId).searchChunks(query, topN)
+    // tokens 落盘由 execute() 末尾统一处理（覆盖所有内部 searchChunks 调用方）
     if (results.length === 0) {
       return { content: '未找到相关知识内容。' }
     }

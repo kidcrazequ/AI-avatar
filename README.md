@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#)
-[![Release](https://img.shields.io/badge/release-v0.5.15-green.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v0.6.0-green.svg)](CHANGELOG.md)
 
 ![Soul Desktop](docs/images/desktop-app.png)
 

@@ -1,6 +1,6 @@
 {
   "name": "soul-desktop",
-  "version": "0.5.15",
+  "version": "0.6.0",
   "description": "AI分身 - 桌面应用",
   "author": "zhi.qu",
   "main": "dist-electron/main.js",

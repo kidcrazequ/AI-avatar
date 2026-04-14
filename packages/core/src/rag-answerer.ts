@@ -111,21 +111,29 @@ export async function retrieveAndBuildPrompt(
       return question
     }
 
-    // 实体提取：从第一跳结果中提取组件/设备名
-    const hop1Text = hop1Chunks
-      .slice(0, 5)
-      .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
-      .join('\n\n')
-
+    // 按第一跳 top-1 分数决定是否需要多跳：
+    // 高分（≥ 阈值）说明查询关键词精准命中，直接用第一跳结果，省一次 LLM 调用（3-5 秒）。
+    // 低分说明查询模糊（如"这个柜子散热方案有什么问题"），需要 LLM 提取实体做二次检索。
+    const HOP1_SCORE_THRESHOLD = 8
+    const top1Score = hop1Chunks[0]?.score ?? 0
     let entities: string[] = []
-    try {
-      const entityResponse = await config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
-      entities = entityResponse
-        .split('\n')
-        .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
-        .filter(e => e.length >= 2 && e.length <= 20)
-    } catch (err) {
-      console.warn('[RAG] 实体提取失败，跳过多跳检索:', err instanceof Error ? err.message : String(err))
+
+    if (top1Score < HOP1_SCORE_THRESHOLD) {
+      // 实体提取：从第一跳结果中提取组件/设备名
+      const hop1Text = hop1Chunks
+        .slice(0, 5)
+        .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
+        .join('\n\n')
+
+      try {
+        const entityResponse = await config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
+        entities = entityResponse
+          .split('\n')
+          .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
+          .filter(e => e.length >= 2 && e.length <= 20)
+      } catch (err) {
+        console.warn('[RAG] 实体提取失败，跳过多跳检索:', err instanceof Error ? err.message : String(err))
+      }
     }
 
     // 多跳检索

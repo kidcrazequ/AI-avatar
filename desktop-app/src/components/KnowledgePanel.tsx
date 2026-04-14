@@ -82,15 +82,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     return () => unsub()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 订阅文件写入事件 — 每完成一个文件刷新文件树
-  useEffect(() => {
-    const unsub = window.electronAPI.onFileWritten(() => {
-      if (!mountedRef.current) return
-      loadTree()
-    })
-    return () => unsub()
-  }, [loadTree])
-
   // 订阅知识库增强进度事件
   useEffect(() => {
     const unsub = window.electronAPI.onEnhanceProgress((data) => {
@@ -122,6 +113,15 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
   useEffect(() => {
     loadTree()
+  }, [loadTree])
+
+  // 订阅文件写入事件 — 每完成一个文件刷新文件树
+  useEffect(() => {
+    const unsub = window.electronAPI.onFileWritten(() => {
+      if (!mountedRef.current) return
+      loadTree()
+    })
+    return () => unsub()
   }, [loadTree])
 
   useEffect(() => {

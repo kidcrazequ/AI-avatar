@@ -1,5 +1,39 @@
 # 更新日志
 
+## v0.6.6 (2026-04-14)
+
+### 性能 — 启动假死 + 提问卡顿 + 思考动画 + 图表视觉
+
+#### 1. 启动假死修复
+
+批量导入 416 个文件后，`loadAvatar()` 的 `readDirectory()` 同步读取所有 `.md` 文件完整内容（含 rag_only 大文件），阻塞主线程 10+ 秒导致 UI 假死。
+
+**修复**：`readDirectory()` 对每个 .md 文件先读 512 字节探测 frontmatter，`rag_only: true` 的文件只保留头部元数据，跳过可能数 MB 的 body。500+ 文件场景从 10+ 秒降到 < 1 秒。
+
+#### 2. RAG 提问加速
+
+每次提问固定调一次 LLM 做实体提取（多跳检索），即使查询关键词已精准命中也要等 3-5 秒。
+
+**修复**：检查第一跳 BM25 top-1 score，≥ 8 时跳过实体提取直接用第一跳结果。精准查询（如"215 机型设备侧效率"）省 3-5 秒。
+
+#### 3. 思考动画修复
+
+"思考中..."状态只显示一个静态小方块，`animate-pulse-glow` 是未定义的自定义动画类。
+
+**修复**：改为 Tailwind 内置 `animate-bounce` 三点错时跳动，给用户明确的"正在处理"视觉反馈。
+
+#### 4. 图表 markLine 标签截断
+
+参考线末端标签"参考"被 `grid.right: 24` 截断。
+
+**修复**：`grid.right` 24→64；新增 markLine 默认样式（暖黄虚线、无箭头、深底标签）；新增 markPoint 默认样式（LED 粉色）；splitLine 改为更微妙的虚线。
+
+#### 5. warmUp 预热回滚
+
+`setImmediate` 预热 chunk 缓存仍然阻塞主线程。如果用户在预热期间发消息，LLM fetch stream 会断开报 `BodyStreamBuffer was aborted`。
+
+**修复**：回滚 warmUp，chunk 构建由 `searchChunks` 懒加载触发，发生在 async handler 内部不阻塞 UI。
+
 ## v0.6.5 (2026-04-14)
 
 ### 修复 — PDF Windows 打包兼容 + 批量导入增强

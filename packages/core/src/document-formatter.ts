@@ -221,15 +221,23 @@ export async function formatDocument(
   // 如果未来改为 worker_threads 多线程，需改用 Atomics 或任务队列。
   let cursor = 0
 
+  // 短章节（< 2000 字符）直接保留原文，不调 LLM — 签字页、目录页、端子图等
+  // 短内容 LLM 格式化收益极低但每次调用要 5-10 秒，批量导入时是主要瓶颈。
+  const SHORT_CHAPTER_THRESHOLD = 2000
+
   async function worker(): Promise<void> {
     while (cursor < chapters.length) {
       const idx = cursor++
       const ch = chapters[idx]
-      try {
-        formatted[idx] = await formatChapter(ch, callLLM)
-      } catch (err) {
-        console.error(`[formatDocument] 章节 "${ch.title}" 格式化失败，使用原文:`, err instanceof Error ? err.message : String(err))
+      if (ch.content.length < SHORT_CHAPTER_THRESHOLD) {
         formatted[idx] = ch.content
+      } else {
+        try {
+          formatted[idx] = await formatChapter(ch, callLLM)
+        } catch (err) {
+          console.error(`[formatDocument] 章节 "${ch.title}" 格式化失败，使用原文:`, err instanceof Error ? err.message : String(err))
+          formatted[idx] = ch.content
+        }
       }
       completedCount++
       if (onProgress) {

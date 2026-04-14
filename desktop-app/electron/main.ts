@@ -1088,6 +1088,8 @@ async function batchImportFiles(
       mainWindow?.webContents.send('knowledge-import-progress', {
         current: i + 1, total, fileName, phase: `✓ ${Math.round(totalMs / 1000)}s (${i + 1}/${total})`,
       })
+      // 每完成一个文件通知渲染进程刷新文件树
+      mainWindow?.webContents.send('knowledge-file-written', { avatarId, fileName: relativePath })
     } catch (err) {
       failed.push({ path: filePath, error: err instanceof Error ? err.message : String(err) })
       mainWindow?.webContents.send('knowledge-import-progress', {

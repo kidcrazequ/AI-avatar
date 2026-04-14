@@ -1,5 +1,31 @@
 # 更新日志
 
+## v0.6.5 (2026-04-14)
+
+### 修复 — PDF Windows 打包兼容 + 批量导入增强
+
+#### 1. PDF Windows 打包兼容
+
+pdf-parse v2 内部通过 `import("./pdf.worker.mjs")` 动态加载 pdfjs worker。在 Windows 打包后 asar 内 `import()` 加载 `.mjs` 文件有兼容性问题，导致所有 PDF 导入失败。
+
+**修复**：构建时把 pdfjs worker 预构建为 CJS（`pdf-worker.cjs`），主进程启动时通过 `require()` 加载到 `globalThis.pdfjsWorker`。pdfjs-dist 检测到后直接使用，跳过有兼容问题的动态 `import()`。
+
+#### 2. 批量导入支持嵌套归档
+
+之前批量导入文件夹时，遇到嵌套的 `.zip` / `.rar` / `.7z` / `.tar.gz` 会跳过并标记 `unsupported extension`。
+
+**修复**：`walkFolder` BFS 遍历时遇到归档文件自动解压到临时目录并加入队列继续遍历。解压产物受原有深度 / 文件数 / 总字节限制约束，完成后自动清理临时目录。
+
+#### 3. 支持 `.doc` 旧版 Word 格式
+
+之前导入 `.doc` 文件直接报错"不支持旧版 .doc 格式"。mammoth 只支持 `.docx`（Office Open XML），无法处理旧版 OLE2 二进制格式。
+
+**修复**：新增 `word-extractor` 依赖（纯 JS，MIT），提取 `.doc` 文件的正文、脚注、尾注。`.doc` 加入 `SUPPORTED_PARSE_EXTENSIONS`。
+
+#### 4. UI 文案优化
+
+"知识库质量优化中（完整管线：OCR → 清洗 → 格式化 → 校验）..." → "知识库质量优化中..."，去掉用户不需要感知的技术细节。
+
 ## v0.6.4 (2026-04-14)
 
 ### 修复 — `dist:mac` 也加自动 rebuild better-sqlite3

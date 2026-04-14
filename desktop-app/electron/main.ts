@@ -939,7 +939,8 @@ async function batchImportFiles(
   const baseUrl = getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
   const ocrApiKey = getDb().getSetting('ocr_api_key') || ''
   const ocrBaseUrl = getDb().getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  const callLLM: LLMCallFn | null = apiKey ? createLLMFn(apiKey, baseUrl, 'qwen-plus') : null
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  const callLLM: LLMCallFn | null = apiKey ? createLLMFn(apiKey, baseUrl, chatModel) : null
 
   const imported: Array<{ fileName: string; targetPath: string }> = []
   const failed: Array<{ path: string; error: string }> = []

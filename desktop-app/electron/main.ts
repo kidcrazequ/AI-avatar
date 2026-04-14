@@ -934,13 +934,19 @@ async function batchImportFiles(
     throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
   }
 
-  // 从设置读取 LLM / OCR API Key（批量导入在主进程执行，无法从渲染进程传参）
-  const apiKey = getDb().getSetting('chat_api_key') || ''
-  const baseUrl = getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  // 从设置读取 API Key。格式化优先用 creation 模型（qwen-plus），fallback 到 ocr，最后 chat。
+  // 对话模型（deepseek-chat）不适合做文档格式化，qwen-plus 专长于此。
+  const creationApiKey = getDb().getSetting('creation_api_key') || ''
+  const creationBaseUrl = getDb().getSetting('creation_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const creationModel = getDb().getSetting('creation_model') || 'qwen-plus'
   const ocrApiKey = getDb().getSetting('ocr_api_key') || ''
   const ocrBaseUrl = getDb().getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
-  const callLLM: LLMCallFn | null = apiKey ? createLLMFn(apiKey, baseUrl, chatModel) : null
+
+  // 格式化 LLM：creation > ocr > chat（按适合程度降序）
+  const fmtApiKey = creationApiKey || ocrApiKey || getDb().getSetting('chat_api_key') || ''
+  const fmtBaseUrl = creationApiKey ? creationBaseUrl : ocrApiKey ? ocrBaseUrl : (getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+  const fmtModel = creationApiKey ? creationModel : ocrApiKey ? 'qwen-plus' : (getDb().getSetting('chat_model') ?? 'deepseek-chat')
+  const callLLM: LLMCallFn | null = fmtApiKey ? createLLMFn(fmtApiKey, fmtBaseUrl, fmtModel) : null
 
   const imported: Array<{ fileName: string; targetPath: string }> = []
   const failed: Array<{ path: string; error: string }> = []

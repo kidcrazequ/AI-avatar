@@ -172,6 +172,15 @@ export class KnowledgeRetriever {
   }
 
   /**
+   * 预热 chunk 缓存：提前触发 buildChunks() + BM25 倒排索引构建。
+   * 在 load-avatar 时用 setImmediate 延迟调用，避免首次 searchChunks
+   * 同步读取数百个文件阻塞主线程导致 UI 卡顿（macOS beach ball）。
+   */
+  warmUp(): void {
+    this.getChunks()
+  }
+
+  /**
    * 注入 LLM 生成的上下文索引描述。
    * 每个 chunk 对应一句话摘要，在检索时拼接到 chunk 文本前面参与 BM25 评分。
    */

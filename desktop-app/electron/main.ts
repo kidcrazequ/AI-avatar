@@ -316,6 +316,20 @@ wrapHandler('load-avatar', (_, avatarId: string) => {
   const config = soulLoader.loadAvatar(avatarId)
   // Feature 7: 缓存 system prompt 供子代理委派使用
   toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
+
+  // 预热 KnowledgeRetriever chunk 缓存：getRetriever 会触发 loadIndex + 懒创建 retriever，
+  // 再调用 warmUp() 提前构建 chunks + BM25 索引。这样用户首次提问时 searchChunks 不会
+  // 同步读取 416 个文件阻塞主线程导致彩色伞（beach ball）。
+  // 用 setImmediate 推迟到当前 IPC 返回后执行，避免阻塞 load-avatar 响应。
+  setImmediate(() => {
+    try {
+      const retriever = toolRouter.getRetriever(avatarId)
+      retriever.warmUp()
+    } catch (err) {
+      console.warn('[load-avatar] chunk 预热失败（不影响功能）:', err instanceof Error ? err.message : String(err))
+    }
+  })
+
   return config
 })
 

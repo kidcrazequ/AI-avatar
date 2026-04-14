@@ -248,9 +248,16 @@ export class ToolRouter {
       serialized = JSON.stringify(resultRows)
     }
 
+    // 精简 schema 附在每次查询结果里：name + dtype，让 LLM 每次查询后都能看到列定义，
+    // 避免早先的 tool 结果被 compressOldToolResults 压缩后"记忆模糊"又从头试探列名。
+    // 不带 samples / uniqueCount / range（这些在 system prompt 的 Schema 摘要里有）。
+    const schemaBrief = sheet.columns.map(c => ({ name: c.name, dtype: c.dtype }))
+
     const payload = {
       file,
       sheet: sheetName,
+      sheet_row_count: sheet.rowCount,
+      schema: schemaBrief,
       count: resultRows.length,
       total_matched: matched.length,
       truncated: truncatedByLimit || truncatedBySize,

@@ -1,5 +1,34 @@
 # 更新日志
 
+## v0.5.14 (2026-04-14)
+
+### 修复 — Excel 查询工具轮数耗尽
+
+**问题**：用户问 "Summary 总表是否有月份数据" 等 schema 类 meta 问题时，LLM 反复调 `query_excel` 试探列名，撞到 `MAX_TOOL_ROUNDS = 10` 上限报错 `[系统提示] 工具调用轮数达到上限，已提前结束本轮。`。
+
+**根因**（排查多轮确认，非代码 bug）：
+- `soul-loader.ts:formatExcelSchema` 输出的 Schema 摘要实际非常详尽（列名 / dtype / 唯一值数 / 范围 / 样例），system prompt 里一直完整存在（`compressOldToolResults` 只压缩 `tool` 消息，不动 system prompt）
+- 但 LLM **没意识到 Schema 摘要已经能回答 meta 问题**，选择了"用 `query_excel` 去验证"的试探路径
+- 用户本次没加载 `draw-chart` 技能，所以"最多 2 次 `query_excel` + 4 轮内必须出图"的纪律没生效，LLM 没有刹车
+- 早先的 tool 结果经 `compressOldToolResults` 压缩后，LLM "记忆模糊"又从头探索列名
+
+**修复 A — system prompt 加全局 Excel 查询纪律**（`packages/core/src/soul-loader.ts`）：
+在 `# 可查询 Excel 数据源` 段里加入不依赖技能加载的 5 条纪律：
+1. schema 相关问题（列名 / 类型 / 是否含月份 / 字段列表 / 数据范围）→ **直接从 Schema 摘要回答，不要调 `query_excel`**
+2. 具体数据问题 → 必须带 filter 调 `query_excel`
+3. 单次回答**最多 3 次** `query_excel` 调用
+4. 禁止"探索式试探"（不带 filter 的 `limit: 5`）
+5. 违反纪律会导致工具轮数耗尽
+
+**修复 B — `query_excel` 返回值带精简 Schema**（`packages/core/src/tool-router.ts`）：
+`queryExcel` 返回的 payload 新增两个字段：
+- `sheet_row_count`: sheet 总行数（原先没返回）
+- `schema`: 精简列定义 `Array<{name, dtype}>`，让 LLM 每次查询后都能看到完整列表
+
+这样即使早先的 tool 结果被压缩，LLM 在新一次 query_excel 响应里依然能看到当前 sheet 的所有列名和类型，不会因"记忆模糊"重新试探。不包含 samples / uniqueCount / range（这些在 system prompt Schema 摘要里），避免膨胀 response payload 超过 `QUERY_EXCEL_MAX_CONTENT_CHARS = 8000` 字符上限。
+
+**验证**：core build ✅ + vision-ocr tests 26/26 ✅ + desktop-app typecheck / lint / build 全绿。实际效果需要用户下次问 schema 类 meta 问题时观察 LLM 是否不再调 `query_excel`。
+
 ## v0.5.13 (2026-04-14)
 
 ### 构建脚本

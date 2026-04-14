@@ -185,6 +185,13 @@ export class SoulLoader {
       if (excelSchemas.length > 0) {
         parts.push('\n\n---\n\n# 可查询 Excel 数据源\n\n')
         parts.push('以下 Excel 已导入并建立索引，请使用 `query_excel({file, sheet, filter, columns, limit})` 按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
+        parts.push('## Excel 查询纪律（严格执行，不依赖技能加载）\n\n')
+        parts.push('1. **schema 相关问题**（"有没有 X 列"、"X 列是什么类型"、"是否包含月份/日期"、"这张表有哪些字段"、"数据范围"）→ **直接从下方 Schema 摘要回答，不要调 query_excel**。Schema 摘要已包含列名、类型、唯一值数量、数值范围、样例值，足以回答绝大多数 meta 问题。\n')
+        parts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
+        parts.push('3. **单次回答最多 3 次 `query_excel` 调用**。超过说明过滤条件太散，应回退到 Schema 确认字段，而不是继续试探。\n')
+        parts.push('4. **禁止"探索式试探"**（不带 filter 的 `limit: 5` 这种）—— Schema 里已有列名、样例、范围，试探只浪费工具调用轮数。\n')
+        parts.push('5. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n\n')
+        parts.push('## Schema 摘要\n')
         excelSchemas.forEach(schema => {
           parts.push(this.formatExcelSchema(schema))
           parts.push('\n')

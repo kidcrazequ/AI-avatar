@@ -58,6 +58,12 @@ npm run dev
 
 打包：`npm run dist:mac` / `npm run dist:win`
 
+### 安装包与分身数据
+
+- **安装包不内含任何分身目录**：`electron-builder` 只打包应用本体，并附带只读资源 `templates/`、`shared/`；**不会**把仓库里的 `avatars/`（例如「小堵-工商储专家」等示例）打进 DMG / NSIS。
+- **首次安装默认没有分身**：运行时数据在用户目录下的 `userData/avatars/`，初始为空列表，需在应用内「新建分身」。
+- **从源码 `npm run dev` 开发时**，才会指向仓库内的 `avatars/`，便于本地调试；与正式安装包行为不同。
+
 ### 给已有分身安装默认技能（v0.5.0 新增）
 
 新分身创建时会自动安装 `templates/skills/` 下的默认技能。已有分身可以用以下命令一次性回填：

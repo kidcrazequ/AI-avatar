@@ -934,19 +934,11 @@ async function batchImportFiles(
     throw new Error(`分身 knowledge 目录不存在: ${avatarId}`)
   }
 
-  // 从设置读取 API Key。格式化优先用 creation 模型（qwen-plus），fallback 到 ocr，最后 chat。
-  // 对话模型（deepseek-chat）不适合做文档格式化，qwen-plus 专长于此。
-  const creationApiKey = getDb().getSetting('creation_api_key') || ''
-  const creationBaseUrl = getDb().getSetting('creation_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  const creationModel = getDb().getSetting('creation_model') || 'qwen-plus'
+  // OCR API Key（批量导入只做解析 + 清洗 + OCR，不做 LLM 格式化）
+  // LLM 格式化不影响检索质量（BM25 + 向量都作用在原始文本上），仅影响人工浏览时的可读性。
+  // 格式化由用户在知识库文件查看器中按需对单个文件操作（ENHANCE 按钮）。
   const ocrApiKey = getDb().getSetting('ocr_api_key') || ''
   const ocrBaseUrl = getDb().getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-
-  // 格式化 LLM：creation > ocr > chat（按适合程度降序）
-  const fmtApiKey = creationApiKey || ocrApiKey || getDb().getSetting('chat_api_key') || ''
-  const fmtBaseUrl = creationApiKey ? creationBaseUrl : ocrApiKey ? ocrBaseUrl : (getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1')
-  const fmtModel = creationApiKey ? creationModel : ocrApiKey ? 'qwen-plus' : (getDb().getSetting('chat_model') ?? 'deepseek-chat')
-  const callLLM: LLMCallFn | null = fmtApiKey ? createLLMFn(fmtApiKey, fmtBaseUrl, fmtModel) : null
 
   const imported: Array<{ fileName: string; targetPath: string }> = []
   const failed: Array<{ path: string; error: string }> = []
@@ -1034,40 +1026,10 @@ async function batchImportFiles(
         ocrMs = Date.now() - ocrT0
       }
 
-      // LLM 逐章格式化（有 API Key 且文本足够长时）
-      let finalBody = cleanedText
-      let sourceTag = parsed.fileType
-      let fmtMs = 0
-      if (callLLM && cleanedText.length > 500) {
-        mainWindow?.webContents.send('knowledge-import-progress', {
-          current: i, total, fileName, phase: `LLM 格式化 (${i + 1}/${total})`,
-        })
-        const fmtT0 = Date.now()
-        try {
-          finalBody = await formatDocument(
-            cleanedText,
-            baseName,
-            parsed.fileName,
-            callLLM,
-            (progress) => {
-              mainWindow?.webContents.send('knowledge-import-progress', {
-                current: i, total, fileName,
-                phase: `格式化 ${progress.current}/${progress.total} (${i + 1}/${total})`,
-              })
-            },
-          )
-          sourceTag = 'enhanced'
-
-          // 数值校验
-          const fabricated = detectFabricatedNumbers(finalBody, parsed.text || '')
-          if (fabricated.length > 0 && logger) {
-            logger.activity('batch-import-fabrication', `${fileName}: ${fabricated.length} 个疑似编造数值`)
-          }
-        } catch (fmtErr) {
-          if (logger) logger.activity('batch-import-format', `${fileName} LLM 格式化失败，使用原始文本: ${fmtErr instanceof Error ? fmtErr.message : String(fmtErr)}`)
-        }
-        fmtMs = Date.now() - fmtT0
-      }
+      // 批量导入跳过 LLM 格式化（不影响检索，格式化由用户按需操作）
+      const finalBody = cleanedText
+      const sourceTag = parsed.fileType
+      const fmtMs = 0
 
       // 写入文件（与单文件导入一致：大文件标 rag_only，小文件直接进 system prompt）
       const RAG_ONLY_THRESHOLD = 50_000  // 50KB 以上标 rag_only
@@ -1217,6 +1179,109 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
     // walkFolder 解压嵌套归档时在 os.tmpdir() 下创建独立临时目录，需单独清理
     for (const td of nestedTempDirs) await cleanupTempDir(td)
   }
+})
+
+/**
+ * format-knowledge-file: 对单个知识文件执行 LLM 格式化（从 _raw/ 重新解析 → 清洗 → 格式化 → 写回）。
+ * 由用户在知识库文件查看器中按需点击"格式化"按钮触发。
+ */
+wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: string): Promise<{ success: boolean; error?: string }> => {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const filePath = path.join(knowledgePath, relativePath)
+  if (!fs.existsSync(filePath)) throw new Error(`文件不存在: ${relativePath}`)
+
+  // 读取 API Key（creation > ocr > chat）
+  const creationApiKey = getDb().getSetting('creation_api_key') || ''
+  const creationBaseUrl = getDb().getSetting('creation_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const creationModel = getDb().getSetting('creation_model') || 'qwen-plus'
+  const ocrApiKey = getDb().getSetting('ocr_api_key') || ''
+  const ocrBaseUrl = getDb().getSetting('ocr_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+  const fmtApiKey = creationApiKey || ocrApiKey || getDb().getSetting('chat_api_key') || ''
+  const fmtBaseUrl = creationApiKey ? creationBaseUrl : ocrApiKey ? ocrBaseUrl : (getDb().getSetting('chat_base_url') || 'https://dashscope.aliyuncs.com/compatible-mode/v1')
+  const fmtModel = creationApiKey ? creationModel : ocrApiKey ? 'qwen-plus' : (getDb().getSetting('chat_model') ?? 'deepseek-chat')
+  if (!fmtApiKey) throw new Error('未配置 API Key，无法格式化')
+  const callLLM: LLMCallFn = createLLMFn(fmtApiKey, fmtBaseUrl, fmtModel)
+
+  // 从 _raw/ 重新解析原始文件（如果有）或用当前 .md 的纯文本
+  const rawDir = path.join(knowledgePath, '_raw')
+  let rawText = ''
+  let parsedFileType = 'text'
+
+  // 尝试从 frontmatter 找到 raw_file
+  const currentContent = fs.readFileSync(filePath, 'utf-8')
+  const fmMatch = currentContent.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  let rawFilePath: string | null = null
+  if (fmMatch) {
+    const rawFileMatch = fmMatch[1].match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
+    if (rawFileMatch) {
+      const candidate = path.join(knowledgePath, rawFileMatch[1].trim())
+      if (fs.existsSync(candidate)) rawFilePath = candidate
+    }
+  }
+
+  if (rawFilePath) {
+    const parsed = await documentParser.parseFile(rawFilePath)
+    rawText = parsed.text || ''
+    parsedFileType = parsed.fileType
+
+    // OCR 图表页
+    if (parsed.images.length > 0 && ocrApiKey) {
+      try {
+        const ocrOutcome = await callVisionOcr(parsed.images, { apiKey: ocrApiKey, baseUrl: ocrBaseUrl })
+        if (ocrOutcome.results.length > 0 && parsed.perPageChars) {
+          const visionForMerge: Array<{ pageNum: number; content: string }> = []
+          for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
+            const content = ocrOutcome.results[vi]
+            if (content === null) continue
+            visionForMerge.push({ pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1), content })
+          }
+          if (visionForMerge.length > 0) {
+            rawText = mergeVisionIntoText(
+              parsedFileType === 'word' ? stripDocxToc(cleanPdfFullText(rawText)) : cleanPdfFullText(rawText),
+              visionForMerge, parsed.perPageChars,
+            )
+          }
+        }
+      } catch {}
+    }
+
+    if (!rawText) rawText = cleanPdfFullText(parsed.text || '')
+    else rawText = parsedFileType === 'word' ? stripDocxToc(cleanPdfFullText(rawText)) : cleanPdfFullText(rawText)
+  } else {
+    // 没有 _raw/ 原始文件，用 .md 中的纯文本
+    let body = currentContent
+    const fmEnd = currentContent.match(/^---\r?\n[\s\S]*?\r?\n---\s*\r?\n/)
+    if (fmEnd) body = currentContent.slice(fmEnd[0].length)
+    rawText = body.trim()
+  }
+
+  if (!rawText || rawText.length < 100) {
+    return { success: false, error: '文件内容过少，无需格式化' }
+  }
+
+  const baseName = relativePath.replace(/\.md$/, '')
+  const formatted = await formatDocument(rawText, baseName, relativePath, callLLM)
+
+  // 数值校验：检测 LLM 是否编造了原文中不存在的数值
+  const fabricated = detectFabricatedNumbers(formatted, rawText)
+  if (fabricated.length > 0 && logger) {
+    logger.activity('format-file-fabrication', `${relativePath}: ${fabricated.length} 个疑似编造数值: ${fabricated.slice(0, 5).join(', ')}`)
+  }
+
+  // 写回（保留原 frontmatter 的关键字段）
+  const fmLines = ['---']
+  const isLarge = formatted.length > 50_000
+  if (isLarge) fmLines.push('rag_only: true')
+  fmLines.push('source: enhanced')
+  if (fmMatch) {
+    const rawFileMatch = fmMatch[1].match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
+    if (rawFileMatch) fmLines.push(`raw_file: ${rawFileMatch[1].trim()}`)
+  }
+  fmLines.push('---', '')
+  fs.writeFileSync(filePath, fmLines.join('\n') + '\n' + formatted, 'utf-8')
+
+  return { success: true }
 })
 
 /**

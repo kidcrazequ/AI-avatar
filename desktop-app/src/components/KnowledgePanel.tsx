@@ -36,6 +36,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   const [isImporting, setIsImporting] = useState(false)
   const [isBatchImporting, setIsBatchImporting] = useState(false)
   const [isEnhancing, setIsEnhancing] = useState(false)
+  const [isFormatting, setIsFormatting] = useState(false)
   const [enhanceProgress, setEnhanceProgress] = useState<{ current: number; total: number; fileName: string; phase: string } | null>(null)
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
@@ -1024,6 +1025,34 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                           {isGeneratingTests ? '...' : 'GEN TEST'}
                         </button>
                       )}
+                      <button
+                        onClick={async () => {
+                          if (!avatarId || !selectedPath || isFormatting) return
+                          setIsFormatting(true)
+                          showStatus(`格式化中: ${selectedPath}...`, false)
+                          try {
+                            const result = await window.electronAPI.formatKnowledgeFile(avatarId, selectedPath)
+                            if (result.success) {
+                              showStatus(`✓ ${selectedPath} 格式化完成`)
+                              await loadTree()
+                              // 重新加载文件内容
+                              handleSelectFile(selectedPath)
+                              onSaved?.()
+                            } else {
+                              showStatus(`✗ ${result.error || '格式化失败'}`)
+                            }
+                          } catch (err) {
+                            showStatus(`✗ 格式化失败: ${err instanceof Error ? err.message : String(err)}`)
+                          } finally {
+                            setIsFormatting(false)
+                          }
+                        }}
+                        disabled={isFormatting || isBusy}
+                        className="pixel-btn-outline-muted py-1"
+                        title="对此文件执行 LLM 结构化格式化"
+                      >
+                        {isFormatting ? '...' : 'FORMAT'}
+                      </button>
                       <button onClick={() => setIsEditMode(true)} className="pixel-btn-outline-light py-1">EDIT</button>
                     </>
                   )}

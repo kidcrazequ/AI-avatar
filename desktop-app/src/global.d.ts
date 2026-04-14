@@ -238,6 +238,7 @@ interface ElectronAPI {
   importArchive: (avatarId: string, archivePath: string) => Promise<BatchImportResult>
   installDefaultSkills: (avatarId: string) => Promise<string[]>
   onImportProgress: (callback: (data: { current: number; total: number; fileName: string; phase: string }) => void) => (() => void)
+  formatKnowledgeFile: (avatarId: string, relativePath: string) => Promise<{ success: boolean; error?: string }>
   onFileWritten: (callback: (data: { avatarId: string; fileName: string }) => void) => (() => void)
   enhanceKnowledgeFiles: (avatarId: string, options: {
     llm: { apiKey: string; baseUrl: string; model: string }

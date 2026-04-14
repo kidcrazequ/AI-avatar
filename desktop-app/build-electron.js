@@ -43,6 +43,15 @@ esbuild.build({
   })
 }).then(() => {
   console.log('✅ pdf-worker.cjs 已构建（CJS 格式，绕过 asar import() 兼容问题）')
+
+  // node-unrar-js 的 WASM 文件需要拷贝到输出目录（esbuild 无法打包 .wasm 二进制）
+  const unrarWasm = path.join(__dirname, 'node_modules/node-unrar-js/dist/js/unrar.wasm')
+  const unrarDest = path.join(__dirname, 'dist-electron/unrar.wasm')
+  if (fs.existsSync(unrarWasm)) {
+    fs.copyFileSync(unrarWasm, unrarDest)
+    console.log('✅ unrar.wasm 已拷贝')
+  }
+
   console.log('✅ Electron 主进程编译完成')
 }).catch((error) => {
   console.error('❌ 编译失败:', error)

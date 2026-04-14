@@ -1047,6 +1047,7 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
   }
 
   const tempDir = await makeTempExtractDir()
+  let nestedTempDirs: string[] = []
   try {
     mainWindow?.webContents.send('knowledge-import-progress', {
       current: 0,
@@ -1057,12 +1058,13 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
     await extractArchive(resolved, tempDir)
 
     const { files, skipped, tempDirs } = await walkFolder(tempDir)
+    nestedTempDirs = tempDirs
     const { imported, failed } = await batchImportFiles(avatarId, files)
     return { imported, skipped, failed }
   } finally {
     await cleanupTempDir(tempDir)
     // walkFolder 解压嵌套归档时在 os.tmpdir() 下创建独立临时目录，需单独清理
-    for (const td of tempDirs) await cleanupTempDir(td)
+    for (const td of nestedTempDirs) await cleanupTempDir(td)
   }
 })
 

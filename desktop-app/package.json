@@ -12,7 +12,7 @@
     "icons": "node scripts/generate-icons.js",
     "pack": "npm run build && npm run icons && electron-builder --dir",
     "dist": "npm run build && npm run icons && electron-builder",
-    "dist:mac": "npm run build && npm run icons && electron-builder --mac",
+    "dist:mac": "npm run build && npm run icons && electron-builder --mac && npx @electron/rebuild -f -w better-sqlite3",
     "dist:win": "npm run build && npm run icons && electron-builder --win && npx @electron/rebuild -f -w better-sqlite3",
     "dist:linux": "npm run build && npm run icons && electron-builder --linux && npx @electron/rebuild -f -w better-sqlite3",
     "dist:all": "npm run build && npm run icons && electron-builder --mac --win --linux && npx @electron/rebuild -f -w better-sqlite3",

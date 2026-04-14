@@ -2,6 +2,26 @@
 
 ## v0.6.3 (2026-04-14)
 
+### 修复 — `dist:mac` 也加自动 rebuild better-sqlite3
+
+v0.5.13 给 `dist:win` / `dist:linux` / `dist:all` 加了自动 rebuild 兜底（避免跨平台打包污染 dev 环境），但**漏了 `dist:mac`**。当时假设"Mac 打 Mac 不会换 binding"。
+
+实测发现 dist:mac 也会动 binding：当 codesign 失败 / 中途出错 / 目标 arch 和 host 不一致时，`electron-builder install-app-deps` 在打包流程中已经把 binding 换成了目标 arch，但因后续步骤失败没有恢复。重启后 `npm run dev` 报：
+
+```
+dlopen failed: incompatible architecture (have 'arm64', need 'x86_64h' or 'x86_64')
+```
+
+或者（之前 dist:win 失败遗留的情况）：
+
+```
+slice is not valid mach-o file （实际是 PE32+ Windows DLL）
+```
+
+**修复**：`desktop-app/package.json` 的 `dist:mac` 末尾追加 `&& npx @electron/rebuild -f -w better-sqlite3`。现在 4 个 dist 命令格式完全一致：打包结束后都自动 rebuild 回 host arch。
+
+`@electron/rebuild` 默认用 host arch（Intel Mac → x64，Apple Silicon Mac → arm64），不需要硬编码 `--arch`。
+
 ### 修复 — 图表 4 个剩余视觉问题（接 v0.6.2 Chart.js 自动转换）
 
 v0.6.2 让 Chart.js drift 也能渲染了，但**图表本身的视觉质量仍有 4 个问题**（实测 215 机型截图）：

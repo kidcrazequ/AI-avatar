@@ -59,7 +59,7 @@ interface ParsedDocument {
   text: string
   images: string[]
   fileName: string
-  fileType: 'pdf' | 'word' | 'image' | 'text' | 'excel'
+  fileType: 'pdf' | 'word' | 'pptx' | 'image' | 'text' | 'excel'
   /** 每页字符数，用于 Vision 数据按页码融入原文（PDF 专属） */
   perPageChars?: Array<{ num: number; chars: number }>
   /** 图表页截图对应的页码列表（与 images 一一对应） */

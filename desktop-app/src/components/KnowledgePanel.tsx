@@ -799,7 +799,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               {isBatchImporting ? '...' : '[📦] ARCHIVE'}
             </button>
             <button
-              onClick={handleEnhanceKnowledge}
+              onClick={() => handleEnhanceKnowledge()}
               disabled={isBusy}
               className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="优化知识库质量"

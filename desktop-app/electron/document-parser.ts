@@ -264,12 +264,27 @@ export class DocumentParser {
     const sections: string[] = []
     for (let i = 0; i < slideEntries.length; i++) {
       const xml = slideEntries[i].getData().toString('utf-8')
-      // 提取所有 <a:t> 文本节点（PowerPoint XML 中文本存储在 <a:t> 标签内）
+      // 提取所有 <a:t> 文本节点（PowerPoint XML 中文本存储在 <a:t> 标签内）。
+      //
+      // ⚠️ 正则必须区分 <a:t> 与 <a:tblPr>/<a:tbl>/<a:tc>/<a:tr>/<a:txBody> 等。
+      // 原实现 /<a:t[^>]*>/ 会让 [^>]* 吃掉 "blPr" 等字符，错误地匹配到 <a:tblPr>
+      // 等标签，把整段嵌套 XML 当作文本拉出来。
+      //
+      // 正确写法：<a:t 后面要么直接是 >（无属性），要么是空白 + 属性。用
+      // (?:\s[^>]*)? 保证后续字符要么不存在，要么以空白开头。这样 <a:tblPr>
+      // 在 "blPr" 处失败（b 不是空白也不是 >），不会误匹配。
       const texts: string[] = []
-      const regex = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g
+      const regex = /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g
       let match: RegExpExecArray | null
       while ((match = regex.exec(xml)) !== null) {
-        const t = match[1].trim()
+        // XML 实体反转义（&amp; &lt; &gt; &quot; &apos;）
+        const t = match[1]
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&apos;/g, "'")
+          .trim()
         if (t) texts.push(t)
       }
       if (texts.length > 0) {

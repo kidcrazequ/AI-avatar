@@ -1,5 +1,12 @@
 # 更新日志
 
+## v0.5.6 (2026-04-14)
+
+### 修复
+
+- **pptx 导入产生 OOXML 乱码** — `parsePptx` 的 `<a:t>` 正则 `<a:t[^>]*>` 会误匹配 `<a:tblPr>`/`<a:tbl>`/`<a:tableStyleId>` 等以 `a:t` 开头的其他 DrawingML 标签，导致导入结果里混入大段 OOXML 样式 XML。改为 `<a:t(?:\s[^>]*)?>`（`a:t` 后必须是空白字符或直接 `>`），并补上 XML 实体反转义（`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`）。
+- **Viewer/Editor 把 pptx 误标为 Excel 数据源** — pptx 快速路径写入 `source: pptx` + `rag_only: true`，但 `KnowledgeViewer` 旧逻辑只按 `rag_only` 分支，统一显示 "📊 EXCEL 数据源"，还建议用 `query_excel` 工具（pptx 根本不支持）。现按 `source` 字段分类渲染：excel → 📊 EXCEL 数据源（`query_excel`），pptx → 📽️ POWERPOINT 数据源（`search_knowledge`），其他 `rag_only` → 📄 大文件数据源。`KnowledgeEditor` 的 `detectExcelSource` 同步推广为 `detectAutoSource`，pptx/其他自动生成文件一并进入只读态。
+
 ## v0.5.5 (2026-04-13)
 
 ### 新功能

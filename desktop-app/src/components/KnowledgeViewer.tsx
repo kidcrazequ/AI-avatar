@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo, type CSSProperties, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -45,20 +45,48 @@ const LARGE_FILE_THRESHOLD = 50_000
 export default function KnowledgeViewer({ content }: Props) {
   const { meta, body } = useMemo(() => parseFrontmatter(content), [content])
 
-  // Excel/CSV 数据源 → 显示摘要而非全量表格
-  if (meta.source === 'excel' || meta.rag_only === true) {
+  // 自动生成的 rag_only 数据源 → 显示摘要而非全量内容
+  const source = typeof meta.source === 'string' ? meta.source : null
+  if (source === 'excel' || source === 'pptx' || meta.rag_only === true) {
     const sheets = Array.isArray(meta.sheets) ? (meta.sheets as string[]) : []
     const excelJson = typeof meta.excel_json === 'string' ? meta.excel_json : null
     const lineCount = body.split('\n').length
+
+    const sourceConfig: Record<string, { label: string; desc: ReactNode; reimport: string }> = {
+      excel: {
+        label: '📊 EXCEL 数据源',
+        desc: (
+          <>这是从 Excel / CSV 自动生成的知识文件。<strong className="text-px-text">整张表格不在 system prompt 中</strong>，
+          通过 <code className="text-px-accent">query_excel</code> 工具按条件精确查询。</>
+        ),
+        reimport: '编辑源 .xlsx 后重新导入',
+      },
+      pptx: {
+        label: '📽️ POWERPOINT 数据源',
+        desc: (
+          <>这是从 PowerPoint 自动生成的知识文件。<strong className="text-px-text">全文不在 system prompt 中</strong>，
+          通过 <code className="text-px-accent">search_knowledge</code> 工具按语义检索相关幻灯片。</>
+        ),
+        reimport: '编辑源 .pptx 后重新导入',
+      },
+    }
+    const cfg = sourceConfig[source ?? ''] ?? {
+      label: '📄 大文件数据源',
+      desc: (
+        <>这是自动生成的大文件知识。<strong className="text-px-text">全文不在 system prompt 中</strong>，
+        通过 <code className="text-px-accent">search_knowledge</code> 工具按语义检索。</>
+      ),
+      reimport: '编辑源文件后重新导入',
+    }
+
     return (
       <div className="h-full overflow-y-auto p-6 bg-px-surface">
         <div className="border-2 border-px-primary bg-px-bg p-4 mb-4">
           <div className="font-game text-[12px] text-px-primary tracking-wider mb-2">
-            📊 EXCEL 数据源
+            {cfg.label}
           </div>
           <p className="text-[13px] text-px-text font-body leading-[1.7] mb-3">
-            这是从 Excel / CSV 自动生成的知识文件。<strong className="text-px-text">整张表格不在 system prompt 中</strong>，
-            通过 <code className="text-px-accent">query_excel</code> 工具按条件精确查询。
+            {cfg.desc}
           </p>
           {sheets.length > 0 && (
             <div className="text-[12px] text-px-text-sec font-body mb-2">
@@ -76,8 +104,8 @@ export default function KnowledgeViewer({ content }: Props) {
             </div>
           )}
           <div className="mt-3 text-[11px] text-px-text-dim font-body leading-[1.6]">
-            如需修改内容，请<strong className="text-px-text">编辑源 .xlsx 后重新导入</strong>。
-            直接编辑此 .md 文件不会反映到结构化数据。
+            如需修改内容，请<strong className="text-px-text">{cfg.reimport}</strong>。
+            直接编辑此 .md 文件不会反映到源文件。
           </div>
         </div>
         <details className="border border-px-border bg-px-bg p-3">

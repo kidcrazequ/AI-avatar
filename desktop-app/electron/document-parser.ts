@@ -82,6 +82,7 @@ const EXCEL_MAX_ROWS_PER_SHEET = 5000
  */
 export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
   '.pdf',
+  '.doc',
   '.docx',
   '.pptx',
   '.xlsx',
@@ -139,7 +140,7 @@ export class DocumentParser {
       case '.docx':
         return this.parseWord(filePath, fileName)
       case '.doc':
-        throw new Error('不支持旧版 .doc 格式，请使用 Word 将文件另存为 .docx 后重试')
+        return this.parseDocLegacy(filePath, fileName)
       case '.pptx':
         return this.parsePptx(filePath, fileName)
       case '.xlsx':
@@ -163,6 +164,19 @@ export class DocumentParser {
   }
 
   private async parsePdf(filePath: string, fileName: string): Promise<ParsedDocument> {
+    // pdfjs-dist 的 fake worker 模式通过 import("./pdf.worker.mjs") 加载 worker。
+    // 在 Windows 打包后 asar 内 import() 加载 .mjs 有兼容性问题。
+    // 预加载 CJS 版本的 worker 并挂到 globalThis，pdfjs-dist 检测到后直接使用。
+    if (!(globalThis as Record<string, unknown>).pdfjsWorker) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        ;(globalThis as Record<string, unknown>).pdfjsWorker = require(
+          require('path').join(__dirname, 'pdf-worker.cjs')
+        )
+      } catch (e) {
+        console.warn('[DocumentParser] 预加载 pdf worker 失败（将回退到动态 import）:', e)
+      }
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PDFParse } = require('pdf-parse')
     const buffer = await fs.promises.readFile(filePath)
@@ -231,6 +245,24 @@ export class DocumentParser {
     const result = await mammoth.extractRawText({ path: filePath })
     return {
       text: result.value || '',
+      images: [],
+      fileName,
+      fileType: 'word',
+    }
+  }
+
+  /** 解析旧版 .doc（OLE2 二进制格式），使用 word-extractor 纯 JS 库 */
+  private async parseDocLegacy(filePath: string, fileName: string): Promise<ParsedDocument> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const WordExtractor = require('word-extractor')
+    const extractor = new WordExtractor()
+    const doc = await extractor.extract(filePath)
+    const body = doc.getBody() || ''
+    const footnotes = doc.getFootnotes() || ''
+    const endnotes = doc.getEndnotes() || ''
+    const parts = [body, footnotes, endnotes].filter(Boolean)
+    return {
+      text: parts.join('\n\n'),
       images: [],
       fileName,
       fileType: 'word',

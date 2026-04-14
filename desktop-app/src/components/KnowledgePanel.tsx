@@ -639,7 +639,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
     setIsEnhancing(true)
     setEnhanceProgress(null)
-    showStatus('知识库质量优化中（完整管线：OCR → 清洗 → 格式化 → 校验）...', false)
+    showStatus('知识库质量优化中...', false)
     try {
       const result = await window.electronAPI.enhanceKnowledgeFiles(avatarId, {
         llm: {

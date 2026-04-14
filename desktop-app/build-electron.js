@@ -29,13 +29,20 @@ esbuild.build({
   sourcemap: true,
   plugins: [soulCoreSrcPlugin],
 }).then(() => {
-  // pdf-parse 依赖 pdfjs-dist 的 worker 文件，需拷贝到输出目录
-  const workerSrc = path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.worker.mjs')
-  const workerDest = path.join(__dirname, 'dist-electron/pdf.worker.mjs')
-  if (fs.existsSync(workerSrc)) {
-    fs.copyFileSync(workerSrc, workerDest)
-    console.log('✅ pdf.worker.mjs 已拷贝')
-  }
+  // pdf-parse v2 内部通过 import("./pdf.worker.mjs") 动态加载 pdfjs worker。
+  // 在 Windows 打包后 asar 内 import() 加载 .mjs 有兼容性问题。
+  // 解决方案：把 worker 预构建为 CJS，主进程启动时通过 require() 加载并
+  // 挂到 globalThis.pdfjsWorker，pdfjs-dist 检测到后直接使用，跳过 import()。
+  return esbuild.build({
+    entryPoints: [path.join(__dirname, 'node_modules/pdfjs-dist/build/pdf.worker.mjs')],
+    bundle: true,
+    platform: 'node',
+    target: 'node20',
+    outfile: path.join(__dirname, 'dist-electron/pdf-worker.cjs'),
+    format: 'cjs',
+  })
+}).then(() => {
+  console.log('✅ pdf-worker.cjs 已构建（CJS 格式，绕过 asar import() 兼容问题）')
   console.log('✅ Electron 主进程编译完成')
 }).catch((error) => {
   console.error('❌ 编译失败:', error)

@@ -39,6 +39,18 @@ export const ARCHIVE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 /** 归档解压后总大小上限（4 GB），防止 zip 炸弹 */
 export const ARCHIVE_MAX_INFLATED_BYTES = 4 * 1024 * 1024 * 1024
 
+/** 遍历时可自动解压的归档扩展名 */
+const ARCHIVE_EXTENSIONS = new Set(['.zip', '.rar', '.7z', '.tar.gz', '.tgz'])
+
+/** 判断文件名是否为支持的归档格式 */
+function isArchiveFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase()
+  if (ARCHIVE_EXTENSIONS.has(path.extname(lower))) return true
+  // .tar.gz 是双后缀，extname 只能取 .gz
+  if (lower.endsWith('.tar.gz')) return true
+  return false
+}
+
 /** 跳过模式：这些路径段出现在任意层级都会被整段 skip */
 const SKIP_PATTERNS = new Set([
   'node_modules',
@@ -74,6 +86,8 @@ export interface WalkResult {
   files: string[]
   /** 被跳过的文件，附原因 */
   skipped: Array<{ path: string; reason: string }>
+  /** 遍历过程中因解压归档而创建的临时目录，调用方需在完成后清理 */
+  tempDirs: string[]
 }
 
 // ─── 文件夹遍历 ─────────────────────────────────────────────────────────────
@@ -96,6 +110,7 @@ export async function walkFolder(root: string, opts: WalkOptions = {}): Promise<
 
   const files: string[] = []
   const skipped: Array<{ path: string; reason: string }> = []
+  const tempDirs: string[] = []
   let totalBytes = 0
 
   const queue: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }]
@@ -134,6 +149,19 @@ export async function walkFolder(root: string, opts: WalkOptions = {}): Promise<
         continue
       }
 
+      // 归档文件：解压到临时目录后加入 BFS 队列继续遍历
+      if (isArchiveFile(entry.name)) {
+        try {
+          const tempDir = await makeTempExtractDir()
+          tempDirs.push(tempDir)
+          await extractArchive(full, tempDir)
+          queue.push({ dir: tempDir, depth: depth + 1 })
+        } catch (err) {
+          skipped.push({ path: full, reason: `archive extract failed: ${(err as Error).message}` })
+        }
+        continue
+      }
+
       const ext = path.extname(entry.name).toLowerCase()
       if (!allowed.has(ext)) {
         skipped.push({ path: full, reason: `unsupported extension: ${ext || '(none)'}` })
@@ -160,12 +188,12 @@ export async function walkFolder(root: string, opts: WalkOptions = {}): Promise<
       totalBytes += fileSize
       if (files.length >= maxFiles) {
         skipped.push({ path: '(后续略)', reason: `file count cap reached (${maxFiles})` })
-        return { files, skipped }
+        return { files, skipped, tempDirs }
       }
     }
   }
 
-  return { files, skipped }
+  return { files, skipped, tempDirs }
 }
 
 // ─── 归档解压 ───────────────────────────────────────────────────────────────

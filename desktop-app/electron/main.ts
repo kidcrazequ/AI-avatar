@@ -1012,9 +1012,14 @@ wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Pr
     throw new Error(`安全限制：仅允许导入用户主目录下的文件夹`)
   }
 
-  const { files, skipped } = await walkFolder(resolved)
-  const { imported, failed } = await batchImportFiles(avatarId, files)
-  return { imported, skipped, failed }
+  const { files, skipped, tempDirs } = await walkFolder(resolved)
+  try {
+    const { imported, failed } = await batchImportFiles(avatarId, files)
+    return { imported, skipped, failed }
+  } finally {
+    // 清理 walkFolder 解压归档时创建的临时目录
+    for (const td of tempDirs) await cleanupTempDir(td)
+  }
 })
 
 /**
@@ -1042,11 +1047,13 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
     })
     await extractArchive(resolved, tempDir)
 
-    const { files, skipped } = await walkFolder(tempDir)
+    const { files, skipped, tempDirs } = await walkFolder(tempDir)
     const { imported, failed } = await batchImportFiles(avatarId, files)
     return { imported, skipped, failed }
   } finally {
     await cleanupTempDir(tempDir)
+    // walkFolder 解压嵌套归档时在 os.tmpdir() 下创建独立临时目录，需单独清理
+    for (const td of tempDirs) await cleanupTempDir(td)
   }
 })
 

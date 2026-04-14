@@ -2,6 +2,10 @@
 
 ## v0.5.12 (2026-04-14)
 
+### 构建脚本
+
+- **跨平台打包后自动 rebuild better-sqlite3 恢复本机 native binding** — `dist:win` / `dist:linux` / `dist:all` 三个 script 末尾追加 `&& npx @electron/rebuild -f -w better-sqlite3`。**根因**：`electron-builder --win` / `--linux` 会原地 rebuild `node_modules/better-sqlite3/build/Release/better_sqlite3.node` 为目标平台的二进制（为了打进安装包），但打包结束后**不会**恢复本机版本。下次 `npm run dev` 时 Electron 加载的是上一次打包目标平台的 `.node` 文件，macOS 会报 `dlopen failed: slice is not valid mach-o file`（因为实际是 Windows PE32+ DLL 或 Linux ELF）。自动 rebuild 后副作用消除，开发/打包可以自由切换。`dist:mac` 不需要这个步骤（本机打包本机，native binding 不变）。
+
 ### 修复 — vision-ocr 第四轮代码审查（8 项）
 
 - **Interruptible sleep：overall timeout 升级为硬上限** — 原 `sleep(delayMs)` 不可中断，overall timeout 触发后 worker 仍会等完 retry 退避才 bail，实际 overall 耗时 = `overallTimeoutMs + max_retry_backoff_duration`（最坏可超 10 秒）。新增 `interruptibleSleep(ms, signal)` helper：监听 `signal.abort` 事件立即 resolve（不 reject，让 retry loop 统一走 `overallAborted` 检查）。retry 退避改用 interruptibleSleep，overall timeout 成为真正硬上限。

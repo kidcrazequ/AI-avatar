@@ -71,18 +71,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     return () => clearInterval(timer)
   }, [taskStartTime])
 
-  // 订阅主进程批量导入进度事件
+  // 订阅主进程批量导入进度事件 — 同步更新状态栏文字和进度条
   useEffect(() => {
     const unsub = window.electronAPI.onImportProgress((data) => {
       if (!mountedRef.current) return
-      setImportProgress({
-        current: data.current,
-        total: data.total,
-        phase: `${data.phase} · ${data.fileName}`,
-      })
+      const phase = data.fileName ? `${data.phase} · ${data.fileName}` : data.phase
+      setImportProgress({ current: data.current, total: data.total, phase })
+      showStatus(phase, false)
     })
     return () => unsub()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 订阅知识库增强进度事件
   useEffect(() => {

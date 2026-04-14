@@ -1,5 +1,35 @@
 # 更新日志
 
+## v0.6.7 (2026-04-14)
+
+### 重构 — 批量导入逐文件完整处理 + 多项修复
+
+#### 1. 批量导入架构重构（中断安全）
+
+之前批量导入只做快速写入（无 LLM 格式化），需要用户手动点 ENHANCE 补跑。ENHANCE 中断后文件处于半成品状态。
+
+**重构**：逐文件完整处理（解析 → 清洗 → OCR → LLM 格式化 → 写入）。每完成一个文件立即可搜索，支持断点续导（跳过已完成文件）。导入完成后自动构建检索索引。无 API Key 时降级为原始文本写入。格式化优先用 creation 模型（qwen-plus），fallback 到 chat 模型。
+
+#### 2. 知识库为空时直接告知用户
+
+RAG 检索无结果时，在 user 消息中附加系统提示引导 LLM 直接回复"知识库中没有相关数据"，不再浪费 10 轮工具调用搜索不存在的数据。
+
+#### 3. 导入进度实时显示
+
+状态栏文字跟随每个文件的处理阶段实时更新（解析中 → OCR → LLM 格式化 → done），不再停在"解压 + 批量导入中..."。
+
+#### 4. unrar.wasm 路径修复
+
+node-unrar-js 的 WASM 文件无法被 esbuild 打包，运行时报 ENOENT。构建时拷贝到 dist-electron/。
+
+#### 5. tempDirs 作用域修复
+
+import-archive 的 finally 块引用了 try 块内的 tempDirs 变量，extractArchive 抛出时报 ReferenceError。
+
+#### 6. 异步预热 chunk 缓存
+
+用 fs.promises.readFile 替代同步 readFileSync 预热 chunks，主线程不阻塞。
+
 ## v0.6.6 (2026-04-14)
 
 ### 性能 — 启动假死 + 提问卡顿 + 思考动画 + 图表视觉

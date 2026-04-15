@@ -6,6 +6,10 @@
 
 - **🔥 纯图片 / 图片型 docx 的 OCR 结果被静默丢弃修复** — `main.ts` 批量导入、单文件导入、enhance 补跑 OCR 三处 merge 分支都有同一个 bug：`if (ocrOutcome.results.length > 0 && parsed.perPageChars)` — `parsed.perPageChars` 只对 PDF 有，`parseImage()` 和 `parseWord()` 都不设置此字段。导致**所有 .jpg / .png / .gif / .webp / .bmp 输入，以及图片型 docx** 的 Vision OCR 结果都被整段跳过，最终写入 md 永远是空的 `_（无文本内容）_`。修复：`perPageChars` 不存在时回退到"OCR 结果直接作正文"路径（`ocrTexts.join('\n\n')` 追加到 cleanedText）。此前小堵-工商储专家 knowledge 目录中 19 张 .png / .jpg 图片（OCV-SOC 曲线、电源规格书等）的 md 全部为空，实际 RAG 里完全没有这些图的内容
 
+- **🔥 LLM 请求超时不生效修复** — `llm-factory.ts` 的 `createLLMFn` / `createEmbeddingFn` 此前用 `@soul/core` 的 `fetchWithTimeout`，但后者在 fetch() resolve（response headers 到达）后的 finally 里立即 clearTimeout，**调用方后续 `response.json()` 读 body 不受任何超时保护**。实测见过 LLM 服务端慢吐 8192 tokens 持续 32 分钟不 terminate 的情况。修复：在 `llm-factory.ts` 内部用专用 `fetchJsonWithTimeout` wrapper，单一 AbortController 同时覆盖 fetch 连接阶段 + response.json() body 读取阶段，保证 5 分钟超时对整个请求-响应周期生效
+
+- **🔥 formatDocument 表格型章节跳过 LLM** — 添加 `isTableLikeContent` 预检测：章节内容 Tab 字符 > 3% 或短行（<=20 chars）占比 > 45% 时跳过 LLM 调用，直接用 markdown 代码块包裹原文返回。根因：成品检验报告 .doc / K=V 数据表 PDF / 密集表单等 Tab 分隔 checkbox 内容送给 LLM 时，LLM 要么卡在表格格式化上反复重试要么服务端慢吐到 terminate。实测 `量道-液冷柜检验报告.doc`（2591 字 Tab 分隔表单）格式化耗时 **32 分钟 → 2ms**（加速 ~96 万倍），表单内容完整保留到代码块中，BM25 检索和向量召回都不受影响
+
 ## v0.6.12 (2026-04-15)
 
 ### Process 目录验证 + 追加修复

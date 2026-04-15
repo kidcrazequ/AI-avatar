@@ -228,13 +228,42 @@ export function splitIntoChapters(text: string): Chapter[] {
 }
 
 /**
+ * 判定章节内容是否为"表格/数据表型"（大量 Tab 或短行 checkbox 清单），
+ * 这种内容送给 LLM 格式化时：
+ *   - LLM 要么反复尝试输出超长 markdown table 撑爆 max_tokens
+ *   - 要么服务端慢吐几十分钟直到客户端超时 / 服务端 terminate
+ *   - 即使成功也经常把 `□OK □NG` 这种 checkbox 扔掉
+ * 这类章节直接跳过 LLM，保留原文按 markdown 代码块输出（RAG 上 BM25
+ * 完整命中，向量检索也覆盖，不影响召回质量）。
+ *
+ * 判定规则：
+ *   - Tab 字符占比 > 3%，或
+ *   - 短行（<=20 chars）占比 > 45%（需至少 20 行）
+ */
+function isTableLikeContent(text: string): boolean {
+  if (text.length < 200) return false
+  const tabCount = (text.match(/\t/g) || []).length
+  if (tabCount / text.length > 0.03) return true
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  if (lines.length < 20) return false
+  const shortLines = lines.filter(l => l.length <= 20).length
+  return shortLines / lines.length > 0.45
+}
+
+/**
  * 将单个章节送入 LLM 进行 Markdown 格式化。
  * LLM 角色为「排版员」：保留全部内容，只做格式转换。
+ *
+ * 表格型章节跳过 LLM，直接用代码块包裹原文（避免 LLM 卡在表格格式化）。
  */
 export async function formatChapter(
   chapter: Chapter,
   callLLM: LLMCallFn,
 ): Promise<string> {
+  if (isTableLikeContent(chapter.content)) {
+    return `## ${chapter.title}\n\n\`\`\`\n${chapter.content}\n\`\`\`\n`
+  }
+
   const userPrompt = `请将以下文档章节格式化为结构化 Markdown。
 保留全部原文内容，不删减任何文字或数值。
 

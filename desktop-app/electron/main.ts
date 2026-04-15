@@ -1006,18 +1006,30 @@ async function batchImportFiles(
           const ocrOutcome = await callVisionOcr(parsed.images, {
             apiKey: ocrApiKey, baseUrl: ocrBaseUrl,
           })
-          if (ocrOutcome.results.length > 0 && parsed.perPageChars) {
-            const visionForMerge: Array<{ pageNum: number; content: string }> = []
-            for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
-              const content = ocrOutcome.results[vi]
-              if (content === null) continue
-              visionForMerge.push({
-                pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1),
-                content,
-              })
-            }
-            if (visionForMerge.length > 0) {
-              cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+          if (ocrOutcome.results.length > 0) {
+            if (parsed.perPageChars) {
+              // PDF 路径：按页号 merge 回原文本（保留 perPage 结构）
+              const visionForMerge: Array<{ pageNum: number; content: string }> = []
+              for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
+                const content = ocrOutcome.results[vi]
+                if (content === null) continue
+                visionForMerge.push({
+                  pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1),
+                  content,
+                })
+              }
+              if (visionForMerge.length > 0) {
+                cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+              }
+            } else {
+              // 纯图片 / 图片型 docx 路径：无 perPage 结构，把 OCR 结果直接作为正文
+              // 修复：此前 perPageChars 为空时整段 merge 被跳过，导致所有 .jpg/.png/.docx 图片
+              // 解析出的 OCR 结果被静默丢弃，md 永远为空
+              const ocrTexts = ocrOutcome.results.filter((r): r is string => r !== null && r.trim().length > 0)
+              if (ocrTexts.length > 0) {
+                const joined = ocrTexts.join('\n\n')
+                cleanedText = cleanedText.trim() ? `${cleanedText}\n\n${joined}` : joined
+              }
             }
           }
         } catch (ocrErr) {
@@ -1268,18 +1280,27 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
     if (parsed.images.length > 0 && ocrApiKey) {
       try {
         const ocrOutcome = await callVisionOcr(parsed.images, { apiKey: ocrApiKey, baseUrl: ocrBaseUrl })
-        if (ocrOutcome.results.length > 0 && parsed.perPageChars) {
-          const visionForMerge: Array<{ pageNum: number; content: string }> = []
-          for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
-            const content = ocrOutcome.results[vi]
-            if (content === null) continue
-            visionForMerge.push({ pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1), content })
-          }
-          if (visionForMerge.length > 0) {
-            rawText = mergeVisionIntoText(
-              parsedFileType === 'word' ? stripDocxToc(cleanPdfFullText(rawText)) : cleanPdfFullText(rawText),
-              visionForMerge, parsed.perPageChars,
-            )
+        if (ocrOutcome.results.length > 0) {
+          if (parsed.perPageChars) {
+            const visionForMerge: Array<{ pageNum: number; content: string }> = []
+            for (let vi = 0; vi < ocrOutcome.results.length; vi++) {
+              const content = ocrOutcome.results[vi]
+              if (content === null) continue
+              visionForMerge.push({ pageNum: parsed.imagePageNumbers?.[vi] ?? (vi + 1), content })
+            }
+            if (visionForMerge.length > 0) {
+              rawText = mergeVisionIntoText(
+                parsedFileType === 'word' ? stripDocxToc(cleanPdfFullText(rawText)) : cleanPdfFullText(rawText),
+                visionForMerge, parsed.perPageChars,
+              )
+            }
+          } else {
+            // 纯图片 / 图片型 docx：无 perPage 结构，OCR 结果直接作正文
+            const ocrTexts = ocrOutcome.results.filter((r): r is string => r !== null && r.trim().length > 0)
+            if (ocrTexts.length > 0) {
+              const joined = ocrTexts.join('\n\n')
+              rawText = rawText.trim() ? `${rawText}\n\n${joined}` : joined
+            }
           }
         }
       } catch {}
@@ -1555,18 +1576,27 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
 
       // 合并 Vision OCR 结果到清洗后的文本。
       // visionResultsRaw 中失败的位是 null，过滤后按原下标对应 imagePageNumbers。
-      if (visionResultsRaw.length > 0 && parsedPerPageChars) {
-        const visionForMerge: Array<{ pageNum: number; content: string }> = []
-        for (let vi = 0; vi < visionResultsRaw.length; vi++) {
-          const content = visionResultsRaw[vi]
-          if (content === null) continue
-          visionForMerge.push({
-            pageNum: parsedImagePageNumbers?.[vi] ?? (vi + 1),
-            content,
-          })
-        }
-        if (visionForMerge.length > 0) {
-          cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsedPerPageChars)
+      if (visionResultsRaw.length > 0) {
+        if (parsedPerPageChars) {
+          const visionForMerge: Array<{ pageNum: number; content: string }> = []
+          for (let vi = 0; vi < visionResultsRaw.length; vi++) {
+            const content = visionResultsRaw[vi]
+            if (content === null) continue
+            visionForMerge.push({
+              pageNum: parsedImagePageNumbers?.[vi] ?? (vi + 1),
+              content,
+            })
+          }
+          if (visionForMerge.length > 0) {
+            cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsedPerPageChars)
+          }
+        } else {
+          // 纯图片 / 图片型 docx：无 perPage 结构，OCR 结果直接作正文
+          const ocrTexts = visionResultsRaw.filter((r): r is string => r !== null && r.trim().length > 0)
+          if (ocrTexts.length > 0) {
+            const joined = ocrTexts.join('\n\n')
+            cleanedText = cleanedText.trim() ? `${cleanedText}\n\n${joined}` : joined
+          }
         }
       }
 

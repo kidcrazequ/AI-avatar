@@ -15,6 +15,8 @@
 
 12. **dry-run 清理临时目录** — 归档解压目录在 main 结束时自动 `rm -rf`，避免 /tmp 堆积
 
+13. **🔥 纯图片 / 图片型 docx 的 OCR 结果被静默丢弃修复** — `main.ts` 批量导入、单文件导入、enhance 补跑 OCR 三处 merge 分支都有同一个 bug：`if (ocrOutcome.results.length > 0 && parsed.perPageChars)` — `parsed.perPageChars` 只对 PDF 有，`parseImage()` 和 `parseWord()` 都不设置此字段。导致**所有 .jpg / .png / .gif / .webp / .bmp 输入，以及图片型 docx** 的 Vision OCR 结果都被整段跳过，最终写入 md 永远是空的 `_（无文本内容）_`。修复：`perPageChars` 不存在时回退到"OCR 结果直接作正文"路径（`ocrTexts.join('\n\n')` 追加到 cleanedText）。此前小堵-工商储专家 knowledge 目录中 19 张 .png / .jpg 图片（OCV-SOC 曲线、电源规格书等）的 md 全部为空，实际 RAG 里完全没有这些图的内容
+
 **Process 目录 107 文件（含归档内部 11 份）最终结果**：
 - 解析失败 **2**（GBK 编码 zip，adm-zip 限制 — 生产 folder-importer 也受影响）
 - 真空 **2**（空壳合同模板 `附件六 技术协议.docx`，文档本身只有"甲方/乙方/日期"签名栏，结构性无救）

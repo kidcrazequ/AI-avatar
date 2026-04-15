@@ -204,6 +204,8 @@ interface ElectronAPI {
   getSkill: (avatarId: string, skillId: string) => Promise<Skill | undefined>
   updateSkill: (avatarId: string, skillId: string, content: string) => Promise<void>
   toggleSkill: (avatarId: string, skillId: string, enabled: boolean) => Promise<void>
+  createSkill: (avatarId: string, skillId: string, content: string) => Promise<Skill>
+  deleteSkill: (avatarId: string, skillId: string) => Promise<void>
 
   // 工具调用（GAP4）
   executeToolCall: (avatarId: string, name: string, args: Record<string, unknown>) => Promise<{ content: string; error?: string }>

@@ -10,6 +10,36 @@ interface Props {
   onSkillsChanged?: () => void
 }
 
+/** 新建技能时的默认模板 */
+const NEW_SKILL_TEMPLATE = `---
+name: {{skillId}}
+description: 描述这个技能做什么，什么时候该用它。LLM 会读这段描述判断是否触发技能。
+---
+
+# {{skillId}}
+
+> **级别**：[■] 基础
+> **版本**：v1.0
+
+## 技能说明
+
+在这里写清楚这个技能的用途、触发场景、输入输出、工作流程。
+
+## 触发条件
+
+当用户问题包含以下关键词时使用：
+
+- ...
+
+## 输出格式
+
+...
+
+## 示例
+
+...
+`
+
 export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Props) {
   const [skills, setSkills] = useState<Skill[]>([])
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
@@ -18,6 +48,13 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const [isSaving, setIsSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
   const saveMsgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // 新建技能 state
+  const [isCreating, setIsCreating] = useState(false)
+  const [newSkillId, setNewSkillId] = useState('')
+  const [newSkillContent, setNewSkillContent] = useState('')
+  // 删除确认 state
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; clearTimeout(saveMsgTimerRef.current) } }, [])
@@ -96,6 +133,92 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
     setEditContent('')
   }
 
+  const handleNewSkill = () => {
+    setIsCreating(true)
+    setNewSkillId('')
+    setNewSkillContent(NEW_SKILL_TEMPLATE)
+    setIsEditing(false)
+    setPendingDeleteId(null)
+  }
+
+  const handleCreateCancel = () => {
+    setIsCreating(false)
+    setNewSkillId('')
+    setNewSkillContent('')
+  }
+
+  const handleCreateSubmit = async () => {
+    const id = newSkillId.trim()
+    if (!id) {
+      setSaveMsg('NEED ID')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+      return
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      setSaveMsg('ID INVALID')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+      return
+    }
+    setIsSaving(true)
+    try {
+      // 展开模板里的 {{skillId}} 占位符
+      const content = newSkillContent.replace(/\{\{skillId\}\}/g, id)
+      const created = await window.electronAPI.createSkill(avatarId, id, content)
+      if (!mountedRef.current) return
+      await loadSkills()
+      if (!mountedRef.current) return
+      setIsCreating(false)
+      setNewSkillId('')
+      setNewSkillContent('')
+      setSelectedSkill(created)
+      setSaveMsg('CREATED')
+      onSkillsChanged?.()
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+    } catch (error) {
+      if (!mountedRef.current) return
+      console.error('创建技能失败:', error)
+      setSaveMsg('CREATE FAILED')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 3000)
+    } finally {
+      if (mountedRef.current) setIsSaving(false)
+    }
+  }
+
+  const handleRequestDelete = () => {
+    if (selectedSkill) setPendingDeleteId(selectedSkill.id)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteId) return
+    setIsSaving(true)
+    try {
+      await window.electronAPI.deleteSkill(avatarId, pendingDeleteId)
+      if (!mountedRef.current) return
+      setPendingDeleteId(null)
+      setIsEditing(false)
+      setSelectedSkill(null)
+      await loadSkills(false)
+      onSkillsChanged?.()
+      setSaveMsg('DELETED')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+    } catch (error) {
+      if (!mountedRef.current) return
+      console.error('删除技能失败:', error)
+      setSaveMsg('DELETE FAILED')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 3000)
+    } finally {
+      if (mountedRef.current) setIsSaving(false)
+    }
+  }
+
+  const handleCancelDelete = () => setPendingDeleteId(null)
+
   const { enabledCount, disabledCount } = useMemo(() => {
     let enabled = 0
     for (const s of skills) { if (s.enabled) enabled++ }
@@ -113,8 +236,17 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
       <div className="flex-1 overflow-hidden flex">
         {/* 左侧列表 */}
         <div className="w-1/3 border-r-2 border-px-border flex flex-col">
-          <div className="px-4 py-3 border-b-2 border-px-border bg-px-elevated">
+          <div className="px-4 py-3 border-b-2 border-px-border bg-px-elevated flex items-center justify-between gap-2">
             <h3 className="font-game text-[13px] text-px-text tracking-wider">技能列表</h3>
+            <button
+              type="button"
+              onClick={handleNewSkill}
+              className="pixel-btn-outline-light text-[11px] px-2 py-0.5"
+              aria-label="新建技能"
+              title="新建技能"
+            >
+              [+ NEW]
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto bg-px-bg">
             {skills.length === 0 ? (
@@ -162,7 +294,55 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
         {/* 右侧详情 */}
         <div className="flex-1 overflow-hidden flex flex-col">
-          {selectedSkill ? (
+          {isCreating ? (
+            <>
+              <div className="px-6 py-4 border-b-2 border-px-border bg-px-elevated flex items-center justify-between">
+                <div>
+                  <h3 className="font-game text-[16px] font-bold text-px-text">新建技能</h3>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="font-game text-[12px] text-px-text-dim tracking-wider">
+                      技能 ID 仅支持英文字母、数字、连字符或下划线
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {saveMsg && (
+                    <span className={`font-game text-[12px] tracking-wider ${saveMsg === 'CREATED' ? 'text-px-success' : 'text-px-danger'}`}>
+                      {saveMsg}
+                    </span>
+                  )}
+                  <button onClick={handleCreateCancel} className="pixel-btn-outline-muted">CANCEL</button>
+                  <button onClick={handleCreateSubmit} disabled={isSaving} className="pixel-btn-primary">
+                    {isSaving ? '...' : 'CREATE'}
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 border-b-2 border-px-border bg-px-surface">
+                <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
+                  技能 ID (文件名)
+                </label>
+                <input
+                  type="text"
+                  value={newSkillId}
+                  onChange={(e) => setNewSkillId(e.target.value)}
+                  placeholder="例如: draw-mermaid / export-pptx / filter-open-tasks"
+                  className="pixel-input w-full text-[14px] font-mono"
+                  autoFocus
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+                <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
+                  技能内容 (Markdown，{`{{skillId}}`} 会被替换为 ID)
+                </label>
+                <textarea
+                  value={newSkillContent}
+                  onChange={(e) => setNewSkillContent(e.target.value)}
+                  className="pixel-input w-full h-[calc(100%-2rem)] resize-none font-mono text-[13px]"
+                  placeholder="技能 markdown 内容..."
+                />
+              </div>
+            </>
+          ) : selectedSkill ? (
             <>
               <div className="px-6 py-4 border-b-2 border-px-border bg-px-elevated flex items-center justify-between">
                 <div>
@@ -176,12 +356,23 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
                 </div>
                 <div className="flex items-center gap-2">
                   {saveMsg && (
-                    <span className={`font-game text-[12px] tracking-wider ${saveMsg === 'SAVED' ? 'text-px-success' : 'text-px-danger'}`}>
+                    <span className={`font-game text-[12px] tracking-wider ${saveMsg === 'SAVED' || saveMsg === 'DELETED' ? 'text-px-success' : 'text-px-danger'}`}>
                       {saveMsg}
                     </span>
                   )}
-                  {!isEditing ? (
-                    <button onClick={handleEdit} className="pixel-btn-outline-light">EDIT</button>
+                  {pendingDeleteId === selectedSkill.id ? (
+                    <div className="flex gap-2 items-center">
+                      <span className="font-game text-[11px] text-px-danger tracking-wider">确认删除？</span>
+                      <button onClick={handleCancelDelete} className="pixel-btn-outline-muted">CANCEL</button>
+                      <button onClick={handleConfirmDelete} disabled={isSaving} className="pixel-btn-outline-light text-px-danger border-px-danger">
+                        {isSaving ? '...' : 'DELETE'}
+                      </button>
+                    </div>
+                  ) : !isEditing ? (
+                    <>
+                      <button onClick={handleRequestDelete} className="pixel-btn-outline-muted text-px-danger">DELETE</button>
+                      <button onClick={handleEdit} className="pixel-btn-outline-light">EDIT</button>
+                    </>
                   ) : (
                     <div className="flex gap-2">
                       <button onClick={handleCancel} className="pixel-btn-outline-muted">CANCEL</button>

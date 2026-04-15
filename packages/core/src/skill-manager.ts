@@ -90,6 +90,70 @@ export class SkillManager {
     fs.writeFileSync(skill.filePath, content, 'utf-8')
   }
 
+  /**
+   * 新建技能：在 `avatars/{avatarId}/skills/` 下创建 `{skillId}.md`。
+   *
+   * @param avatarId 分身 ID
+   * @param skillId  技能 ID（== 文件名主体，必须全英文 / 数字 / 连字符，避免路径穿越和文件系统问题）
+   * @param content  完整的 markdown 内容（应包含 frontmatter + 正文）
+   * @returns 创建后的 Skill 对象
+   * @throws 如果 skillId 非法、文件已存在、或写入失败
+   */
+  createSkill(avatarId: string, skillId: string, content: string): Skill {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
+    // 额外限制 skillId 只能是英文 / 数字 / 连字符 / 下划线，避免和 path-security 重复但更严格
+    if (!/^[A-Za-z0-9_-]+$/.test(skillId)) {
+      throw new Error(`技能 ID 必须只包含英文字母、数字、连字符或下划线: ${skillId}`)
+    }
+    const skillsDir = path.join(this.avatarsPath, avatarId, 'skills')
+    if (!fs.existsSync(skillsDir)) {
+      fs.mkdirSync(skillsDir, { recursive: true })
+    }
+    const filePath = path.join(skillsDir, `${skillId}.md`)
+    if (fs.existsSync(filePath)) {
+      throw new Error(`技能已存在，请换一个 ID 或改用"编辑"功能: ${skillId}`)
+    }
+
+    fs.writeFileSync(filePath, content, 'utf-8')
+
+    const created = this.getSkill(avatarId, skillId)
+    if (!created) {
+      // 写入后读取失败 — 极少见，但要报错
+      throw new Error(`创建成功但读取失败: ${skillId}`)
+    }
+    return created
+  }
+
+  /**
+   * 删除技能：物理删除 `{skillId}.md` 并从 `.config.json` 的 disabledSkills 列表中移除（清理）。
+   *
+   * @param avatarId 分身 ID
+   * @param skillId  技能 ID
+   * @throws 如果技能不存在或删除失败
+   */
+  deleteSkill(avatarId: string, skillId: string): void {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
+    const skill = this.getSkill(avatarId, skillId)
+    if (!skill) {
+      throw new Error(`技能不存在: ${skillId}`)
+    }
+
+    fs.unlinkSync(skill.filePath)
+
+    // 清理 disabledSkills 里的残留条目（不影响主流程，失败不抛）
+    try {
+      const config = this.getSkillConfig(avatarId)
+      if (config.disabledSkills.includes(skillId)) {
+        config.disabledSkills = config.disabledSkills.filter(id => id !== skillId)
+        this.saveSkillConfig(avatarId, config)
+      }
+    } catch (err) {
+      console.warn('[SkillManager] 清理 disabledSkills 失败（不影响主流程）:', err instanceof Error ? err.message : String(err))
+    }
+  }
+
   toggleSkill(avatarId: string, skillId: string, enabled: boolean): void {
     assertSafeSegment(avatarId, '分身ID')
     assertSafeSegment(skillId, '技能ID')

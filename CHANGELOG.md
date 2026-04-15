@@ -14,6 +14,16 @@
 
 - **✨ Mermaid 图表渲染** — 聊天消息里 ```mermaid 代码块会被自动渲染为交互式图表，覆盖**甘特图 / 流程图 / 时序图 / 思维导图 / 看板 / 饼图 / 状态机 / ER 图 / 类图 / Git 图 / 时间线 / 四象限图 / Sankey** 等 10+ 种可视化类型。此前用户需要"生成甘特图"这类需求时没有对应 skill，现在 LLM 只要吐 mermaid 语法就能直接出图。新增 `desktop-app/src/components/MermaidRenderer.tsx`（懒加载 + 错误边界 + 像素暗色主题）+ `MessageBubble.tsx` 的 ChartCodeBlock 增加 `language-mermaid` 分支 + 流式输出检测（未完成的 mermaid 代码块显示 ⏳ 生成中）+ `npm install mermaid`（~800KB gz，动态 import 不打进初始 bundle）
 
+- **✨ Mermaid 主题对齐像素 LED 风格** — `MermaidRenderer.tsx` 的 `themeVariables` 从通用 dark theme 换成对齐 `tailwind.config.js` 的 `px.*` 配色：LED 粉 `#FFB0C8`（节点边框/连线）× void-black `#0A0A0F`（背景）× 薄荷绿 `#50D8A0`（accent/done 任务）× 文字 `#E8E8EC`（LED 白）。甘特图的 active/done/crit 任务、时序图的 actor/signal/note、状态图的 labels 全部细化主题变量。字体切到 `JetBrains Mono`（和项目现有代码块字体一致）
+
+- **✨ 技能 CRUD UI** — SkillsPanel 支持**新建**和**删除**技能（此前只能编辑现有的）。新增：
+  - `SkillManager.createSkill(avatarId, skillId, content)` — 严格校验 ID（仅 `[A-Za-z0-9_-]+`）+ 检查重复 + 写入文件 + 返回解析后的 Skill
+  - `SkillManager.deleteSkill(avatarId, skillId)` — 物理删除文件 + 清理 `.config.json` 里的 disabledSkills 残留
+  - `main.ts` 的 `create-skill` / `delete-skill` IPC handler
+  - `preload.ts` 的 `createSkill` / `deleteSkill` 方法暴露到 `window.electronAPI`
+  - `global.d.ts` 类型声明
+  - `SkillsPanel.tsx` 新增 `[+ NEW]` 按钮（左侧列表头）+ `[DELETE]` 按钮（右侧详情，带内联确认）+ 新建表单视图（ID 输入框 + Markdown 模板编辑器，`{{skillId}}` 占位符会自动替换）
+
 ## v0.6.12 (2026-04-15)
 
 ### Process 目录验证 + 追加修复

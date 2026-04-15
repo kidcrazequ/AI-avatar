@@ -646,6 +646,20 @@ wrapHandler('toggle-skill', (_, avatarId: string, skillId: string, enabled: bool
   skillManager.toggleSkill(avatarId, skillId, enabled)
 })
 
+wrapHandler('create-skill', (_, avatarId: string, skillId: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const created = skillManager.createSkill(avatarId, skillId, content)
+  if (logger) logger.recordGenerated('skill', avatarId, created.filePath, { skillId, action: 'create' })
+  return created
+})
+
+wrapHandler('delete-skill', (_, avatarId: string, skillId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(skillId, '技能ID')
+  skillManager.deleteSkill(avatarId, skillId)
+  if (logger) logger.activity('delete-skill', `avatarId=${avatarId}, skillId=${skillId}`)
+})
+
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────
 
 /**

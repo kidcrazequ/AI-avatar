@@ -92,21 +92,67 @@ async function ensureMermaidLoaded(): Promise<void> {
     const mermaid = mod.default || mod
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme: 'base',
       securityLevel: 'strict',
-      fontFamily: 'monospace',
+      fontFamily: '"JetBrains Mono", monospace',
       themeVariables: {
-        // 像素主题配色（对齐 CSS 变量 --px-primary / --px-bg 等的常用值）
-        primaryColor: '#3b82f6',
-        primaryTextColor: '#e5e7eb',
-        primaryBorderColor: '#60a5fa',
-        lineColor: '#9ca3af',
-        secondaryColor: '#1f2937',
-        tertiaryColor: '#111827',
-        background: '#0a0e1a',
-        mainBkg: '#1f2937',
-        secondBkg: '#111827',
-        textColor: '#e5e7eb',
+        // 对齐 tailwind.config.js 的 px 主题：LED 粉 × void-black × 薄荷绿
+        // 参见 desktop-app/tailwind.config.js colors.px
+        darkMode: true,
+        background: '#0A0A0F',        // px.bg
+        primaryColor: '#12121A',      // px.surface（节点填充）
+        primaryTextColor: '#E8E8EC',  // px.text（节点文字）
+        primaryBorderColor: '#FFB0C8', // px.primary（LED 粉边框）
+        secondaryColor: '#1A1A25',    // px.elevated
+        secondaryTextColor: '#E8E8EC',
+        secondaryBorderColor: '#50D8A0', // px.accent 薄荷绿
+        tertiaryColor: '#222230',     // px.hover
+        tertiaryTextColor: '#E8E8EC',
+        tertiaryBorderColor: '#9898A8',
+        lineColor: '#FFB0C8',         // px.primary 连线
+        textColor: '#E8E8EC',
+        mainBkg: '#12121A',
+        secondBkg: '#1A1A25',
+        tertiaryBkg: '#222230',
+        nodeBorder: '#FFB0C8',
+        clusterBkg: '#1A1A25',
+        clusterBorder: '#2A2A3A',
+        titleColor: '#FFB0C8',
+        edgeLabelBackground: '#0A0A0F',
+        // 甘特图
+        gridColor: '#2A2A3A',
+        taskBkgColor: '#1A1A25',
+        taskTextColor: '#E8E8EC',
+        taskTextLightColor: '#E8E8EC',
+        taskTextOutsideColor: '#E8E8EC',
+        taskTextClickableColor: '#FFB0C8',
+        activeTaskBkgColor: '#FFB0C8',
+        activeTaskBorderColor: '#FFB0C8',
+        doneTaskBkgColor: '#50D8A0',
+        doneTaskBorderColor: '#50D8A0',
+        critBkgColor: '#E85858',
+        critBorderColor: '#E85858',
+        sectionBkgColor: '#12121A',
+        sectionBkgColor2: '#1A1A25',
+        todayLineColor: '#F0C060',
+        // 时序图
+        actorBkg: '#12121A',
+        actorBorder: '#FFB0C8',
+        actorTextColor: '#E8E8EC',
+        actorLineColor: '#9898A8',
+        signalColor: '#FFB0C8',
+        signalTextColor: '#E8E8EC',
+        labelBoxBkgColor: '#1A1A25',
+        labelBoxBorderColor: '#FFB0C8',
+        labelTextColor: '#E8E8EC',
+        loopTextColor: '#E8E8EC',
+        noteBkgColor: '#1A1A25',
+        noteBorderColor: '#50D8A0',
+        noteTextColor: '#E8E8EC',
+        // 状态图
+        labelColor: '#E8E8EC',
+        errorBkgColor: '#E85858',
+        errorTextColor: '#E8E8EC',
       },
     })
     _mermaid = mermaid

@@ -36,7 +36,9 @@ export type LLMCallFn = (
  * 图表页文字阈值（同 document-parser.ts）：
  * 少于此字符数的页面以图表为主，需要 OCR。
  */
-const MAX_CHAPTER_CHARS = 6000
+// 降至 3000 配合 embedding 输入上限（indexer 的 slice），每章节一个向量就能覆盖全内容。
+// 早期版本是 6000，会导致 3000+ 字的后半段语义无法向量召回。
+const MAX_CHAPTER_CHARS = 3000
 
 /**
  * 文档格式化专用 System Prompt。
@@ -96,37 +98,69 @@ export function splitIntoChapters(text: string): Chapter[] {
   //   - 每级 1-2 位数字（排除 `220 94,5` 这类表格数据）
   //   - 数字后跟 tab/空格 + CJK 字符开头的标题（排除纯数字/ASCII 行）
   //   - 标题不以句号/感叹号/问号结尾（排除 `2 听变流器无异常响声。` 这类列表项）
-  const headingPattern = /^(?:第[一二三四五六七八九十百\d]+章\s+.+|[一二三四五六七八九十]+、.+|\d{1,2}(?:\.\d{1,2})*[\s\t]+[\u4E00-\u9FFF].{1,25})\s*$/m
+  const headingPattern = /^(?:第[一二三四五六七八九十百\d]+[章节条]\s+.+|[一二三四五六七八九十]+、.+|\d{1,2}(?:\.\d{1,2})*\.?[\s\t]+[A-Z\u4E00-\u9FFF].{1,40})\s*$/m
   // 句号/感叹号/问号结尾 = 句子/列表项，不是章节标题
   const sentenceEndPattern = /[。！？.!?]\s*$/
+  // 英文独立标题：3-40 字符，首字母大写，含空格或混合大小写（排除纯编号 ID 如 UL-US-12345）。
+  // 触发条件是严格的：必须是独占一行且前后为空行，避免把 UL 证书里的人名 / 职位误判成标题。
+  const englishHeadingPattern = /^[A-Z][A-Za-z0-9&()\/\-]*(?:[\s][A-Za-z0-9&()\/\-]+){0,6}$/
+  // 孤立中文标题：首字符 CJK，2-30 字符，可混少量 ASCII/符号，不带末尾标点或冒号。
+  // 典型：「系统运行模式」「离网模式」「电池充放电模式（并网电流源模式）」这类无编号短标题。
+  const cjkHeadingPattern = /^[\u4E00-\u9FFF][\u4E00-\u9FFFA-Za-z0-9（）()·\-/]{1,29}$/
 
   const lines = text.split('\n')
   const chapterBreaks: Array<{ lineIndex: number; title: string }> = []
 
+  const isIsolated = (idx: number): boolean => {
+    const prevEmpty = idx === 0 || lines[idx - 1].trim() === ''
+    const nextEmpty = idx === lines.length - 1 || lines[idx + 1].trim() === ''
+    return prevEmpty && nextEmpty
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
-    if (line && headingPattern.test(line) && !sentenceEndPattern.test(line)) {
+    if (!line || sentenceEndPattern.test(line)) continue
+    if (headingPattern.test(line)) {
+      chapterBreaks.push({ lineIndex: i, title: line })
+      continue
+    }
+    // 冒号结尾 = key:value 标签而非章节标题
+    if (/[:：]\s*$/.test(line)) continue
+    // 英文标题分支：必须满足长度、格式、且前后孤立
+    if (line.length >= 3 && line.length <= 40 && englishHeadingPattern.test(line) && isIsolated(i)) {
+      // 排除纯代码/ID 行（无空格 + 含数字或短横）和日期行
+      const looksLikeCodeOrId = !/\s/.test(line) && /[0-9\-]/.test(line)
+      if (!looksLikeCodeOrId) {
+        chapterBreaks.push({ lineIndex: i, title: line })
+        continue
+      }
+    }
+    // 孤立 CJK 短标题分支：前后孤立 + 首字符 CJK + 2-30 字符
+    if (cjkHeadingPattern.test(line) && isIsolated(i)) {
       chapterBreaks.push({ lineIndex: i, title: line })
     }
   }
 
-  if (chapterBreaks.length === 0) {
-    return [{ title: '全文', content: text, index: 0 }]
-  }
-
   const rawChapters: Chapter[] = []
-  for (let i = 0; i < chapterBreaks.length; i++) {
-    const start = chapterBreaks[i].lineIndex
-    const end = i + 1 < chapterBreaks.length ? chapterBreaks[i + 1].lineIndex : lines.length
-    const content = lines.slice(start, end).join('\n').trim()
-    rawChapters.push({ title: chapterBreaks[i].title, content, index: i })
-  }
 
-  const firstBreakLine = chapterBreaks[0].lineIndex
-  if (firstBreakLine > 0) {
-    const preamble = lines.slice(0, firstBreakLine).join('\n').trim()
-    if (preamble.length > 50) {
-      rawChapters.unshift({ title: '前言/目录', content: preamble, index: -1 })
+  if (chapterBreaks.length === 0) {
+    // 无章节标题 — 作为单个「全文」章节进入后续合并/切分管线，
+    // 让超长文档（>MAX_CHAPTER_CHARS）仍能被二次切分，避免单 chunk 超纲
+    rawChapters.push({ title: '全文', content: text, index: 0 })
+  } else {
+    for (let i = 0; i < chapterBreaks.length; i++) {
+      const start = chapterBreaks[i].lineIndex
+      const end = i + 1 < chapterBreaks.length ? chapterBreaks[i + 1].lineIndex : lines.length
+      const content = lines.slice(start, end).join('\n').trim()
+      rawChapters.push({ title: chapterBreaks[i].title, content, index: i })
+    }
+
+    const firstBreakLine = chapterBreaks[0].lineIndex
+    if (firstBreakLine > 0) {
+      const preamble = lines.slice(0, firstBreakLine).join('\n').trim()
+      if (preamble.length > 50) {
+        rawChapters.unshift({ title: '前言/目录', content: preamble, index: -1 })
+      }
     }
   }
 

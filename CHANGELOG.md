@@ -1,5 +1,46 @@
 # 更新日志
 
+## v0.6.11 (2026-04-15)
+
+### 批量导入质量修复 — 章节切分 / 长文档 embedding / docx 图片 / pdfjs flake
+
+经 `testdocs/dry-run-format-product.ts` 对 300 份工商储产品文档跑 4 轮 dry-run 暴露并修复：
+
+1. **章节切分 6 处 regex 修复**
+   - 新增 `第X条` / `第X节` 分支（合同/协议类文档）
+   - 数字编号后允许可选句号（`1. 化学品...` 类中英混排文档）
+   - 标题首字符允许英文大写（编号英文标题）
+   - 新增 **英文独立标题分支**：首字母大写 + 前后空行孤立 + 非 key:value，覆盖 `Instructions`、`Round-Trip Efficiency (RTE)` 类裸标题
+   - 新增 **孤立 CJK 短标题分支**：首字符 CJK + 前后空行孤立 + 2-30 字符，覆盖 `系统运行模式`、`离网模式` 这类无编号裸中文标题
+   - 冒号 `:` / `：` 结尾排除（过滤 `Certificate Number:` 等 key:value 标签）
+
+2. **章节切分早 return bug 修复** — `chapterBreaks.length === 0` 时直接 return 单个"全文"章节，跳过了整个 merge + 超长切分管线。导致 14k BOM / 17k 控制计划等超长单章节文档无法二次切分。改为 fall-through，让无章节文档也走切分逻辑
+
+3. **长文档 embedding 覆盖修复**
+   - `knowledge-indexer.ts` embedding 输入从 `slice(0, 500)` 改为 `slice(0, 3000)`
+   - `document-formatter.ts` `MAX_CHAPTER_CHARS` 从 6000 改为 3000
+   - 两者配合实现"隐式滑窗"：formatter 保证每章节 ≤ 3000 字，indexer 单向量完整覆盖章节语义
+   - 修复 1000–6000 字章节的后半段无法向量召回的问题
+
+4. **docx 图片提取** — `parseWord()` 补充 `word/media/*` 图片提取为 base64 dataURL，交给下游 Vision OCR。修复图片型 docx（如 `Test report key pages GB44240.docx`）解析为空的问题
+
+5. **PDF 分页 fallback** — `parsePdf()` 当 `textResult.pages` 缺失或为空，且全文稀疏/乱码时，fallback 截图前 N 页交给 Vision。修复 `2025010041-3 IP 等级防水测试 CNAS.pdf` 这类 pdfjs 拿不到分页信息导致零截图的边界情况
+
+6. **pdfjs 批量 flake 缓解** — `parsePdf()` 末尾调 `parser.destroy()` 释放底层 document 引用，消除批量导入 300+ 文件时 worker 状态累积导致的"0 截图"随机 flake（161 页 PCS 报告从批量 0 截图恢复到正常）
+
+7. **dry-run 脚本升级**（`testdocs/dry-run-format-product.ts`）
+   - 递归遍历目录 + 按相对路径显示
+   - 新增分类：**Vision 兜底** / **短文档直送** / **表格型 PDF** / **真空** / **真乱码** — 把 dry-run 工件与真问题分离
+   - 表格型检测：短行占比 > 45% 时跳过章节切分报警
+   - `.dwg` 归入跳过（CAD 图纸 parser 不支持，不算失败）
+
+**Product 目录 300 文件 dry-run 结果（v1 → v4）**：
+- 解析失败 3 → **0**
+- 真乱码 3 → **0**（全归 Vision 兜底）
+- 真空文档 40 → **3**（剩余都是 pdfjs 小概率 flake，生产单文件处理路径不受影响）
+- 未切分 38 → **2**（剩余 2 份是 < 3000 字 key:value 证书表单，embedding 完整覆盖 RAG 零影响）
+
+
 ## v0.6.10 (2026-04-15)
 
 ### UI 修复 + 乱码检测 + 章节切分优化 + README 增强

@@ -169,7 +169,10 @@ ${ck.contentPreview.slice(0, 300)}`
     const batch = needEmbedding.slice(i, i + batchSize)
     const texts = batch.map(ck => {
       const ctx = contextMap.get(ck.key) || ''
-      return (ctx + ' ' + ck.heading + ' ' + ck.contentPreview).slice(0, 500)
+      // 3000 字覆盖整个 MAX_CHAPTER_CHARS 章节，配合 formatter 的切分阈值形成"隐式滑窗"：
+      // 每章节 ≤ 3000 字 → 单向量完整覆盖章节语义。现代 embedding 模型（bge/text-3）上下文 8k+，
+      // 500 字是历史遗留的过度保守值，会让 1000-6000 字章节的后半段无法语义召回。
+      return (ctx + ' ' + ck.heading + ' ' + ck.contentPreview).slice(0, 3000)
     })
 
     if (onProgress) {

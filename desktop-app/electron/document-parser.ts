@@ -223,7 +223,8 @@ export class DocumentParser {
     // 2. 统计每页字符数（用于 Vision 数据定位），并找出图表页
     const perPageChars: Array<{ num: number; chars: number }> = []
     const imageDensePages: number[] = []
-    if (Array.isArray(textResult.pages)) {
+    const hasPageInfo = Array.isArray(textResult.pages) && textResult.pages.length > 0
+    if (hasPageInfo) {
       textResult.pages.forEach((page: { num: number; text: string }) => {
         const chars = (page.text || '').replace(/\s+/g, '').length
         perPageChars.push({ num: page.num, chars })
@@ -231,6 +232,14 @@ export class DocumentParser {
           imageDensePages.push(page.num)
         }
       })
+    }
+
+    // 分页信息缺失的 fallback：若全文本身稀疏/乱码，就把所有页当图表页走 OCR，
+    // 避免 pdfjs 拿不到 perPage 时整份文档零截图（曾出现于某些 CNAS 测试报告）。
+    // 页号列表从 getScreenshot 拿，这样即使分页 API 失败也能兜底。
+    let needsFullDocFallback = false
+    if (imageDensePages.length === 0 && shouldOcrPage(fullText)) {
+      needsFullDocFallback = true
     }
 
     // 3. 渲染截图并按文字密度筛选（getScreenshot 的 pages 参数在 v2 中无效），限制最大页数
@@ -247,12 +256,20 @@ export class DocumentParser {
       imageDensePages.length = 0
       imageDensePages.push(...sampled)
     }
-    if (imageDensePages.length > 0 && !this._aborted) {
+    if ((imageDensePages.length > 0 || needsFullDocFallback) && !this._aborted) {
       try {
         const imageDenseSet = new Set(imageDensePages)
         const screenshotResult = await parser.getScreenshot({ scale: 2 })
-        for (const screenshot of screenshotResult.pages) {
-          if (imageDenseSet.has(screenshot.pageNumber) && screenshot.dataUrl) {
+        const allPages = screenshotResult.pages as Array<{ pageNumber: number; dataUrl?: string }>
+        // fallback 模式：前 MAX_SCREENSHOT_PAGES 页全截图
+        const pagesToShot = needsFullDocFallback
+          ? allPages.slice(0, MAX_SCREENSHOT_PAGES)
+          : allPages.filter(p => imageDenseSet.has(p.pageNumber))
+        if (needsFullDocFallback) {
+          console.warn(`[DocumentParser] 分页信息缺失且全文稀疏/乱码，fallback 截图 ${pagesToShot.length}/${allPages.length} 页`)
+        }
+        for (const screenshot of pagesToShot) {
+          if (screenshot.dataUrl) {
             images.push(screenshot.dataUrl)
             imagePageNumbers.push(screenshot.pageNumber)
           }
@@ -261,6 +278,10 @@ export class DocumentParser {
         console.error('[DocumentParser] PDF 截图失败:', err)
       }
     }
+
+    // 释放 pdfjs 底层 document，避免批量导入 300+ 文件时 worker 累积状态导致
+    // 后续文件随机出现"0 截图"的 flake。单文件场景 destroy 无副作用。
+    try { await parser.destroy() } catch { /* ignore */ }
 
     return {
       text: fullText,
@@ -276,9 +297,30 @@ export class DocumentParser {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mammoth = require('mammoth')
     const result = await mammoth.extractRawText({ path: filePath })
+
+    // 图片型 docx（正文几乎全是插入的图片）mammoth 提不出文字。抽 word/media/*
+    // 作为 images[] 交给下游 Vision OCR，避免整份文档变成空文本。
+    const images: string[] = []
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AdmZip = require('adm-zip')
+      const zip = new AdmZip(filePath)
+      const entries = zip.getEntries() as Array<{ entryName: string; getData: () => Buffer }>
+      for (const e of entries) {
+        const m = e.entryName.match(/^word\/media\/.+\.(png|jpe?g|gif|bmp|webp)$/i)
+        if (!m) continue
+        const ext = m[1].toLowerCase()
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+        images.push(`data:${mime};base64,${e.getData().toString('base64')}`)
+        if (images.length >= MAX_SCREENSHOT_PAGES) break
+      }
+    } catch (err) {
+      console.warn('[DocumentParser] docx 图片提取失败:', err)
+    }
+
     return {
       text: result.value || '',
-      images: [],
+      images,
       fileName,
       fileType: 'word',
     }

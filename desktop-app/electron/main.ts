@@ -1295,8 +1295,8 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
     rawText = body.trim()
   }
 
-  if (!rawText || rawText.length < 100) {
-    return { success: false, error: '文件内容过少，无需格式化' }
+  if (!rawText || rawText.length < 500) {
+    return { success: false, error: rawText ? '文件内容过短（< 500 字符），无需格式化' : '文件无文字内容（纯图片/扫描件），格式化无效' }
   }
 
   if (isGarbledText(rawText)) {

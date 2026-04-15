@@ -2,16 +2,22 @@
 
 ## v0.6.10 (2026-04-15)
 
-### UI 修复 + 乱码检测 + README 增强
+### UI 修复 + 乱码检测 + 章节切分优化 + README 增强
 
 1. **移除 ENHANCE 按钮** — 批量导入已不需要补跑 LLM 格式化，清理相关死代码
 2. **GEN TEST / FORMAT 按钮样式修复** — 从 `pixel-btn-outline-muted` 改为 `pixel-btn-outline-light`，深色背景下可见
-3. **状态文字可见性** — PanelHeader subtitle 颜色从 `text-px-text-dim` 改为 `text-px-primary`；`isBusy` 时隐藏 subtitle 避免与进度条重复
-4. **格式化进度动画** — `isFormatting` 加入 `isBusy`，FORMAT 操作时显示 spinner + 进度条
-5. **PDF 乱码检测** — 新增 `isGarbledText()` 检测 CID 字体编码异常，乱码页强制 OCR；FORMAT 乱码内容时给出明确错误提示
-6. **README 增强** — 批量导入首次创建 README 时生成完整模板（使用说明、目录结构、命名规范、质量标准）
-7. **LLM 超时调大** — `BACKEND_API_TIMEOUT_MS` 3 分钟 → 5 分钟，减少格式化超时失败
-8. **TS 零错误** — 修复 `@soul/core` 缺少 `exports` 字段导致 `callVisionOcr` 在 bundler 模式下找不到的问题
+3. **FORMAT 按钮智能显隐** — Excel / PPT / 图片文件自动隐藏 FORMAT 按钮（通过 frontmatter raw_file 扩展名判断）
+4. **状态文字可见性** — PanelHeader subtitle 颜色从 `text-px-text-dim` 改为 `text-px-primary`；`isBusy` 时隐藏 subtitle 避免与进度条重复
+5. **格式化进度动画** — `isFormatting` 加入 `isBusy`，FORMAT 操作时显示 spinner + 进度条
+6. **PDF 乱码检测** — 新增 `isGarbledText()` 检测 CID 字体编码异常，乱码页强制 OCR；FORMAT 乱码内容时给出明确错误提示
+7. **章节切分优化（v12）** — 经 35 文件 dry-run 测试验证：
+   - 收紧 heading regex：每级最多 2 位数字 + 标题必须以 CJK 字符开头，排除表格数据（`220 94,5`）和列表项（句号结尾的行）
+   - 微小章节自动合并：< 500 chars 的章节合并到前一章节
+   - 效果：用户手册 130 章节 → 8-12 章节，电气原理图 46 → 1，技术协议 20 → 3
+8. **FORMAT 跳过短内容** — 纯图 PDF（cleaned=0）和小文件（<500 chars）给出明确提示而非无效调 LLM
+9. **README 增强** — 批量导入首次创建 README 时生成完整模板（使用说明、目录结构、命名规范、质量标准）
+10. **LLM 超时调大** — `BACKEND_API_TIMEOUT_MS` 3 分钟 → 5 分钟，减少格式化超时失败
+11. **TS 零错误** — 修复 `@soul/core` 缺少 `exports` 字段导致 `callVisionOcr` 在 bundler 模式下找不到的问题
 
 ## v0.6.9 (2026-04-15)
 

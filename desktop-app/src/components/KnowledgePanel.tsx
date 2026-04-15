@@ -945,34 +945,42 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                           {isGeneratingTests ? '...' : 'GEN TEST'}
                         </button>
                       )}
-                      <button
-                        onClick={async () => {
-                          if (!avatarId || !selectedPath || isFormatting) return
-                          setIsFormatting(true)
-                          showStatus(`格式化中: ${selectedPath}...`, false)
-                          try {
-                            const result = await window.electronAPI.formatKnowledgeFile(avatarId, selectedPath)
-                            if (result.success) {
-                              showStatus(`✓ ${selectedPath} 格式化完成`)
-                              await loadTree()
-                              // 重新加载文件内容
-                              handleSelectFile(selectedPath)
-                              onSaved?.()
-                            } else {
-                              showStatus(`✗ ${result.error || '格式化失败'}`)
-                            }
-                          } catch (err) {
-                            showStatus(`✗ 格式化失败: ${err instanceof Error ? err.message : String(err)}`)
-                          } finally {
-                            setIsFormatting(false)
-                          }
-                        }}
-                        disabled={isFormatting || isBusy}
-                        className="pixel-btn-outline-light py-1"
-                        title="对此文件执行 LLM 结构化格式化"
-                      >
-                        {isFormatting ? '...' : 'FORMAT'}
-                      </button>
+                      {/* Excel / PPT / 图片等结构化文件不需要 LLM 格式化 */}
+                      {(() => {
+                        const rawMatch = fileContent.match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
+                        const rawExt = rawMatch ? rawMatch[1].split('.').pop()?.toLowerCase() : ''
+                        const noFormat = ['xlsx', 'xls', 'csv', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(rawExt || '')
+                        if (noFormat) return null
+                        return (
+                          <button
+                            onClick={async () => {
+                              if (!avatarId || !selectedPath || isFormatting) return
+                              setIsFormatting(true)
+                              showStatus(`格式化中: ${selectedPath}...`, false)
+                              try {
+                                const result = await window.electronAPI.formatKnowledgeFile(avatarId, selectedPath)
+                                if (result.success) {
+                                  showStatus(`✓ ${selectedPath} 格式化完成`)
+                                  await loadTree()
+                                  handleSelectFile(selectedPath)
+                                  onSaved?.()
+                                } else {
+                                  showStatus(`✗ ${result.error || '格式化失败'}`)
+                                }
+                              } catch (err) {
+                                showStatus(`✗ 格式化失败: ${err instanceof Error ? err.message : String(err)}`)
+                              } finally {
+                                setIsFormatting(false)
+                              }
+                            }}
+                            disabled={isFormatting || isBusy}
+                            className="pixel-btn-outline-light py-1"
+                            title="对此文件执行 LLM 结构化格式化"
+                          >
+                            {isFormatting ? '...' : 'FORMAT'}
+                          </button>
+                        )
+                      })()}
                       <button onClick={() => setIsEditMode(true)} className="pixel-btn-outline-light py-1">EDIT</button>
                     </>
                   )}

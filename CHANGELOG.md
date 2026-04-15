@@ -1,10 +1,8 @@
 # 更新日志
 
-## v0.6.13 (2026-04-15)
+## v0.6.14 (2026-04-15)
 
 ### 修复
-
-- **🔥 纯图片 / 图片型 docx 的 OCR 结果被静默丢弃修复** — `main.ts` 批量导入、单文件导入、enhance 补跑 OCR 三处 merge 分支都有同一个 bug：`if (ocrOutcome.results.length > 0 && parsed.perPageChars)` — `parsed.perPageChars` 只对 PDF 有，`parseImage()` 和 `parseWord()` 都不设置此字段。导致**所有 .jpg / .png / .gif / .webp / .bmp 输入，以及图片型 docx** 的 Vision OCR 结果都被整段跳过，最终写入 md 永远是空的 `_（无文本内容）_`。修复：`perPageChars` 不存在时回退到"OCR 结果直接作正文"路径（`ocrTexts.join('\n\n')` 追加到 cleanedText）。此前小堵-工商储专家 knowledge 目录中 19 张 .png / .jpg 图片（OCV-SOC 曲线、电源规格书等）的 md 全部为空，实际 RAG 里完全没有这些图的内容
 
 - **🔥 LLM 请求超时不生效修复** — `llm-factory.ts` 的 `createLLMFn` / `createEmbeddingFn` 此前用 `@soul/core` 的 `fetchWithTimeout`，但后者在 fetch() resolve（response headers 到达）后的 finally 里立即 clearTimeout，**调用方后续 `response.json()` 读 body 不受任何超时保护**。实测见过 LLM 服务端慢吐 8192 tokens 持续 32 分钟不 terminate 的情况。修复：在 `llm-factory.ts` 内部用专用 `fetchJsonWithTimeout` wrapper，单一 AbortController 同时覆盖 fetch 连接阶段 + response.json() body 读取阶段，保证 5 分钟超时对整个请求-响应周期生效
 
@@ -23,6 +21,12 @@
   - `preload.ts` 的 `createSkill` / `deleteSkill` 方法暴露到 `window.electronAPI`
   - `global.d.ts` 类型声明
   - `SkillsPanel.tsx` 新增 `[+ NEW]` 按钮（左侧列表头）+ `[DELETE]` 按钮（右侧详情，带内联确认）+ 新建表单视图（ID 输入框 + Markdown 模板编辑器，`{{skillId}}` 占位符会自动替换）
+
+## v0.6.13 (2026-04-15)
+
+### 修复
+
+- **🔥 纯图片 / 图片型 docx 的 OCR 结果被静默丢弃修复** — `main.ts` 批量导入、单文件导入、enhance 补跑 OCR 三处 merge 分支都有同一个 bug：`if (ocrOutcome.results.length > 0 && parsed.perPageChars)` — `parsed.perPageChars` 只对 PDF 有，`parseImage()` 和 `parseWord()` 都不设置此字段。导致**所有 .jpg / .png / .gif / .webp / .bmp 输入，以及图片型 docx** 的 Vision OCR 结果都被整段跳过，最终写入 md 永远是空的 `_（无文本内容）_`。修复：`perPageChars` 不存在时回退到"OCR 结果直接作正文"路径（`ocrTexts.join('\n\n')` 追加到 cleanedText）。此前小堵-工商储专家 knowledge 目录中 19 张 .png / .jpg 图片（OCV-SOC 曲线、电源规格书等）的 md 全部为空，实际 RAG 里完全没有这些图的内容
 
 ## v0.6.12 (2026-04-15)
 

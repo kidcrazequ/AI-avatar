@@ -12,6 +12,8 @@ export interface Skill {
   enabled: boolean
   filePath: string
   content: string
+  /** 系统自带技能（来自 templates/skills/），不允许通过 UI 删除 */
+  isBuiltin: boolean
 }
 
 export interface SkillConfig {
@@ -20,9 +22,39 @@ export interface SkillConfig {
 
 export class SkillManager {
   private avatarsPath: string
+  /** templates 目录的绝对路径（用于判定内置技能） */
+  private templatesPath: string
+  /** 内置技能 ID 集合的缓存（首次读取时初始化，避免每个 skill 都去 stat） */
+  private builtinSkillIdsCache: Set<string> | null = null
 
   constructor(avatarsPath: string) {
     this.avatarsPath = avatarsPath
+    // soul 仓库根 = avatarsPath 的父目录，templates/ 在根下
+    this.templatesPath = path.join(avatarsPath, '..', 'templates')
+  }
+
+  /**
+   * 获取内置技能 ID 集合（首次调用时扫描 `templates/skills/*.md`，结果缓存）。
+   * 用于 isBuiltin 判定 + deleteSkill 拦截。
+   */
+  private getBuiltinSkillIds(): Set<string> {
+    if (this.builtinSkillIdsCache) return this.builtinSkillIdsCache
+    const skillsTemplateDir = path.join(this.templatesPath, 'skills')
+    const set = new Set<string>()
+    if (fs.existsSync(skillsTemplateDir) && fs.statSync(skillsTemplateDir).isDirectory()) {
+      for (const entry of fs.readdirSync(skillsTemplateDir, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          set.add(entry.name.replace(/\.md$/, ''))
+        }
+      }
+    }
+    this.builtinSkillIdsCache = set
+    return set
+  }
+
+  /** 判定某个 skillId 是否为系统内置（来自 templates/skills/） */
+  isBuiltinSkill(skillId: string): boolean {
+    return this.getBuiltinSkillIds().has(skillId)
   }
 
   getSkills(avatarId: string): Skill[] {
@@ -139,6 +171,10 @@ export class SkillManager {
     if (!skill) {
       throw new Error(`技能不存在: ${skillId}`)
     }
+    // 内置技能不允许删除（来自 templates/skills/，删了下次创建分身又会回来，且会破坏其它分身共享假设）
+    if (this.isBuiltinSkill(skillId)) {
+      throw new Error(`系统内置技能不可删除: ${skillId}（如需停用请用"禁用"开关）`)
+    }
 
     fs.unlinkSync(skill.filePath)
 
@@ -228,6 +264,7 @@ export class SkillManager {
       enabled: true,
       filePath,
       content,
+      isBuiltin: this.isBuiltinSkill(id),
     }
   }
 

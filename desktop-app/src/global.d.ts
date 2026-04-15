@@ -206,6 +206,7 @@ interface ElectronAPI {
   toggleSkill: (avatarId: string, skillId: string, enabled: boolean) => Promise<void>
   createSkill: (avatarId: string, skillId: string, content: string) => Promise<Skill>
   deleteSkill: (avatarId: string, skillId: string) => Promise<void>
+  generateSkillDraft: (description: string) => Promise<{ draft: string; suggestedId: string }>
 
   // 工具调用（GAP4）
   executeToolCall: (avatarId: string, name: string, args: Record<string, unknown>) => Promise<{ content: string; error?: string }>
@@ -346,6 +347,8 @@ interface Skill {
   enabled: boolean
   filePath: string
   content: string
+  /** 系统内置技能（来自 templates/skills/），不允许 UI 删除 */
+  isBuiltin: boolean
 }
 
 /** Wiki 编译元数据 */

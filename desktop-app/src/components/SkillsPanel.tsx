@@ -51,8 +51,12 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
   // 新建技能 state
   const [isCreating, setIsCreating] = useState(false)
+  const [createMode, setCreateMode] = useState<'manual' | 'ai'>('ai')
   const [newSkillId, setNewSkillId] = useState('')
   const [newSkillContent, setNewSkillContent] = useState('')
+  // AI 自然语言描述 state
+  const [aiDescription, setAiDescription] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
   // 删除确认 state
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
@@ -135,8 +139,10 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
   const handleNewSkill = () => {
     setIsCreating(true)
+    setCreateMode('ai')
     setNewSkillId('')
-    setNewSkillContent(NEW_SKILL_TEMPLATE)
+    setNewSkillContent('')
+    setAiDescription('')
     setIsEditing(false)
     setPendingDeleteId(null)
   }
@@ -145,6 +151,49 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
     setIsCreating(false)
     setNewSkillId('')
     setNewSkillContent('')
+    setAiDescription('')
+  }
+
+  /** 切到手动模式时，如果当前编辑器为空，预填一份模板骨架 */
+  const handleSwitchMode = (mode: 'manual' | 'ai') => {
+    setCreateMode(mode)
+    if (mode === 'manual' && !newSkillContent.trim()) {
+      setNewSkillContent(NEW_SKILL_TEMPLATE)
+    }
+  }
+
+  /**
+   * 用 AI 把自然语言描述转成 skill markdown 草稿。
+   * LLM 返回后自动 prefill 编辑器（ID + 内容），切到手动模式让用户继续修改。
+   */
+  const handleGenerateWithAI = async () => {
+    const desc = aiDescription.trim()
+    if (!desc) {
+      setSaveMsg('NEED DESC')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2000)
+      return
+    }
+    setIsGenerating(true)
+    try {
+      const { draft, suggestedId } = await window.electronAPI.generateSkillDraft(desc)
+      if (!mountedRef.current) return
+      setNewSkillContent(draft)
+      if (suggestedId) setNewSkillId(suggestedId)
+      setCreateMode('manual')   // 自动切到手动模式让用户审阅 / 修改
+      setSaveMsg('GENERATED')
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 2500)
+    } catch (error) {
+      if (!mountedRef.current) return
+      console.error('AI 生成技能草稿失败:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      setSaveMsg(`GEN FAILED: ${msg.slice(0, 50)}`)
+      clearTimeout(saveMsgTimerRef.current)
+      saveMsgTimerRef.current = setTimeout(() => { if (mountedRef.current) setSaveMsg('') }, 5000)
+    } finally {
+      if (mountedRef.current) setIsGenerating(false)
+    }
   }
 
   const handleCreateSubmit = async () => {
@@ -297,50 +346,108 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
           {isCreating ? (
             <>
               <div className="px-6 py-4 border-b-2 border-px-border bg-px-elevated flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-4">
                   <h3 className="font-game text-[16px] font-bold text-px-text">新建技能</h3>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="font-game text-[12px] text-px-text-dim tracking-wider">
-                      技能 ID 仅支持英文字母、数字、连字符或下划线
-                    </span>
+                  {/* 模式切换 */}
+                  <div className="flex border-2 border-px-border">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchMode('ai')}
+                      className={`font-game text-[11px] tracking-wider px-3 py-1 transition-none
+                        ${createMode === 'ai' ? 'bg-px-primary text-px-bg' : 'bg-transparent text-px-text-dim hover:text-px-text'}`}
+                    >
+                      AI 辅助
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchMode('manual')}
+                      className={`font-game text-[11px] tracking-wider px-3 py-1 transition-none border-l-2 border-px-border
+                        ${createMode === 'manual' ? 'bg-px-primary text-px-bg' : 'bg-transparent text-px-text-dim hover:text-px-text'}`}
+                    >
+                      手动编写
+                    </button>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {saveMsg && (
-                    <span className={`font-game text-[12px] tracking-wider ${saveMsg === 'CREATED' ? 'text-px-success' : 'text-px-danger'}`}>
+                    <span className={`font-game text-[12px] tracking-wider ${saveMsg === 'CREATED' || saveMsg === 'GENERATED' ? 'text-px-success' : 'text-px-danger'}`}>
                       {saveMsg}
                     </span>
                   )}
                   <button onClick={handleCreateCancel} className="pixel-btn-outline-muted">CANCEL</button>
-                  <button onClick={handleCreateSubmit} disabled={isSaving} className="pixel-btn-primary">
-                    {isSaving ? '...' : 'CREATE'}
-                  </button>
+                  {createMode === 'manual' && (
+                    <button onClick={handleCreateSubmit} disabled={isSaving} className="pixel-btn-primary">
+                      {isSaving ? '...' : 'CREATE'}
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className="p-6 border-b-2 border-px-border bg-px-surface">
-                <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
-                  技能 ID (文件名)
-                </label>
-                <input
-                  type="text"
-                  value={newSkillId}
-                  onChange={(e) => setNewSkillId(e.target.value)}
-                  placeholder="例如: draw-mermaid / export-pptx / filter-open-tasks"
-                  className="pixel-input w-full text-[14px] font-mono"
-                  autoFocus
-                />
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
-                <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
-                  技能内容 (Markdown，{`{{skillId}}`} 会被替换为 ID)
-                </label>
-                <textarea
-                  value={newSkillContent}
-                  onChange={(e) => setNewSkillContent(e.target.value)}
-                  className="pixel-input w-full h-[calc(100%-2rem)] resize-none font-mono text-[13px]"
-                  placeholder="技能 markdown 内容..."
-                />
-              </div>
+
+              {createMode === 'ai' ? (
+                /* AI 自然语言生成模式 */
+                <div className="flex-1 overflow-y-auto p-6 bg-px-surface flex flex-col gap-4">
+                  <div>
+                    <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
+                      用一段话描述你想要的技能
+                    </label>
+                    <textarea
+                      value={aiDescription}
+                      onChange={(e) => setAiDescription(e.target.value)}
+                      placeholder={'例如：\n我希望有一个技能，当用户问"接下来要做什么"时，从知识库的会议纪要里挑出状态为 open 的任务，按截止日期排序，输出为 mermaid 甘特图。'}
+                      className="pixel-input w-full h-48 resize-none font-body text-[14px]"
+                      autoFocus
+                    />
+                    <p className="font-game text-[10px] text-px-text-dim tracking-wider mt-2">
+                      LLM 会基于 templates/skill-template.md 和现有技能示例（draw-chart / draw-mermaid / chart-from-knowledge）生成草稿
+                    </p>
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      onClick={handleGenerateWithAI}
+                      disabled={isGenerating || !aiDescription.trim()}
+                      className="pixel-btn-primary px-8 py-2"
+                    >
+                      {isGenerating ? '生成中... (~30-60s)' : '⚡ 生成草稿'}
+                    </button>
+                  </div>
+                  <div className="border-t-2 border-px-border-dim pt-4">
+                    <h4 className="font-game text-[11px] text-px-text-dim tracking-wider mb-2">使用建议</h4>
+                    <ul className="text-[12px] text-px-text-sec font-body space-y-1">
+                      <li>• 越具体越好：写清楚<strong>什么时候触发</strong>、<strong>需要什么输入</strong>、<strong>输出什么格式</strong></li>
+                      <li>• 提到具体场景（"基于知识库" / "用户消息里的数据"）能让 LLM 加上数据来源约束</li>
+                      <li>• 生成后可以切到"手动编写"继续修改</li>
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                /* 手动编辑模式 */
+                <>
+                  <div className="p-6 border-b-2 border-px-border bg-px-surface">
+                    <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
+                      技能 ID (文件名，仅支持 a-z 0-9 _ -)
+                    </label>
+                    <input
+                      type="text"
+                      value={newSkillId}
+                      onChange={(e) => setNewSkillId(e.target.value)}
+                      placeholder="例如: draw-mermaid / export-pptx / filter-open-tasks"
+                      className="pixel-input w-full text-[14px] font-mono"
+                    />
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+                    <label className="font-game text-[12px] text-px-text-dim tracking-wider block mb-2">
+                      技能内容 (Markdown，{`{{skillId}}`} 会被替换为 ID)
+                    </label>
+                    <textarea
+                      value={newSkillContent}
+                      onChange={(e) => setNewSkillContent(e.target.value)}
+                      className="pixel-input w-full h-[calc(100%-2rem)] resize-none font-mono text-[13px]"
+                      placeholder="技能 markdown 内容..."
+                    />
+                  </div>
+                </>
+              )}
             </>
           ) : selectedSkill ? (
             <>
@@ -370,7 +477,17 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
                     </div>
                   ) : !isEditing ? (
                     <>
-                      <button onClick={handleRequestDelete} className="pixel-btn-outline-muted text-px-danger">DELETE</button>
+                      {/* 内置技能不显示 DELETE 按钮（系统自带，禁止删除；只能用"禁用"开关停用） */}
+                      {selectedSkill.isBuiltin ? (
+                        <span
+                          className="font-game text-[10px] text-px-text-dim tracking-wider px-2"
+                          title="系统内置技能不可删除，可用左侧勾选框禁用"
+                        >
+                          [BUILTIN]
+                        </span>
+                      ) : (
+                        <button onClick={handleRequestDelete} className="pixel-btn-outline-muted text-px-danger">DELETE</button>
+                      )}
                       <button onClick={handleEdit} className="pixel-btn-outline-light">EDIT</button>
                     </>
                   ) : (

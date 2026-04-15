@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleSkill: (avatarId: string, skillId: string, enabled: boolean) => ipcRenderer.invoke('toggle-skill', avatarId, skillId, enabled),
   createSkill: (avatarId: string, skillId: string, content: string) => ipcRenderer.invoke('create-skill', avatarId, skillId, content),
   deleteSkill: (avatarId: string, skillId: string) => ipcRenderer.invoke('delete-skill', avatarId, skillId),
+  generateSkillDraft: (description: string) => ipcRenderer.invoke('generate-skill-draft', description),
 
   // 工具调用（GAP4）
   executeToolCall: (avatarId: string, name: string, args: Record<string, unknown>) =>

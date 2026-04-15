@@ -23,6 +23,7 @@ import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger } from './logger'
 import { createEmbeddingFn, createLLMFn } from './llm-factory'
+import { SKILL_GEN_SYSTEM_PROMPT, buildSkillGenUserPrompt } from './skill-generator-prompt'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -59,6 +60,7 @@ const knowledgeManagers = new Map<string, KnowledgeManager>()
 const wikiCompilers = new Map<string, WikiCompiler>()
 
 let avatarsPath: string
+let templatesPath: string
 let soulLoader: SoulLoader
 let db: DatabaseManager
 let avatarManager: AvatarManager
@@ -167,7 +169,7 @@ function createWindow() {
 
 function initManagers() {
   avatarsPath = resolveAvatarsPath()
-  const templatesPath = resolveTemplatesPath()
+  templatesPath = resolveTemplatesPath()
   logger = new Logger(app.getPath('userData'))
   soulLoader = new SoulLoader(avatarsPath)
   db = new DatabaseManager()
@@ -658,6 +660,36 @@ wrapHandler('delete-skill', (_, avatarId: string, skillId: string) => {
   assertSafeSegment(skillId, '技能ID')
   skillManager.deleteSkill(avatarId, skillId)
   if (logger) logger.activity('delete-skill', `avatarId=${avatarId}, skillId=${skillId}`)
+})
+
+/**
+ * generate-skill-draft: 用 LLM 把用户的自然语言描述转成 skill markdown 草稿。
+ * 参考 templates/skill-template.md 的格式 + templates/skills/*.md 的 few-shot 示例。
+ * 返回 { draft, suggestedId }，前端把 draft 预填到编辑器，suggestedId 预填到 ID 输入框。
+ */
+wrapHandler('generate-skill-draft', async (_, description: string) => {
+  if (!description || description.trim().length === 0) {
+    throw new Error('请提供技能描述')
+  }
+  const apiKey = getDb().getSetting('chat_api_key') ?? ''
+  const baseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  if (!apiKey) {
+    throw new Error('未配置 chat_api_key，请先在设置里填入 LLM API Key')
+  }
+  // 复用 createLLMFn（已修复 fetchJsonWithTimeout 的 body 读取超时问题）
+  const callLLM = createLLMFn(apiKey, baseUrl, chatModel)
+  const userPrompt = buildSkillGenUserPrompt(templatesPath, description)
+  // 8192 tokens 足够生成一份完整 skill，单次调用通常 < 60s
+  const draft = await callLLM(SKILL_GEN_SYSTEM_PROMPT, userPrompt, 8192)
+
+  // 从 frontmatter 里提取 name 字段作为 suggestedId（若失败则给空字符串让用户手填）
+  let suggestedId = ''
+  const nameMatch = draft.match(/^---\s*\n[\s\S]*?\nname:\s*([A-Za-z0-9_-]+)\s*\n[\s\S]*?\n---/m)
+  if (nameMatch) suggestedId = nameMatch[1]
+
+  if (logger) logger.activity('generate-skill-draft', `description.len=${description.length}, draft.len=${draft.length}, suggestedId=${suggestedId}`)
+  return { draft, suggestedId }
 })
 
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────
@@ -1716,7 +1748,7 @@ wrapHandler('install-default-skills', (_, avatarId: string) => {
  * 返回拷贝的文件名列表。
  */
 function installDefaultSkillsSync(avatarId: string): string[] {
-  const templatesPath = resolveTemplatesPath()
+  // templatesPath 是模块级变量，由 initManagers 初始化
   const srcDir = path.join(templatesPath, 'skills')
   if (!fs.existsSync(srcDir) || !fs.statSync(srcDir).isDirectory()) {
     return [] // 模板目录不存在，视为无默认技能

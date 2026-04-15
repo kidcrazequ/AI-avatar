@@ -145,15 +145,22 @@ export class DocumentParser {
   /** 解析文件，返回文本内容和图片列表。带超时保护。 */
   async parseFile(filePath: string): Promise<ParsedDocument> {
     this._aborted = false
-    return Promise.race([
-      this._parseFileImpl(filePath),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => {
-          this._aborted = true
-          reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`))
-        }, PARSE_TIMEOUT_MS)
-      ),
-    ])
+    let timer: NodeJS.Timeout | null = null
+    try {
+      return await Promise.race([
+        this._parseFileImpl(filePath),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            this._aborted = true
+            reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`))
+          }, PARSE_TIMEOUT_MS)
+        }),
+      ])
+    } finally {
+      // 关键：成功路径必须 clearTimeout，否则 timer 挂到 event loop 上
+      // 导致批量处理 300 文件后 CLI 进程迟迟不退出（生产 Electron 长驻进程不受影响）
+      if (timer) clearTimeout(timer)
+    }
   }
 
   private async _parseFileImpl(filePath: string): Promise<ParsedDocument> {
@@ -297,9 +304,11 @@ export class DocumentParser {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mammoth = require('mammoth')
     const result = await mammoth.extractRawText({ path: filePath })
+    let text: string = result.value || ''
 
-    // 图片型 docx（正文几乎全是插入的图片）mammoth 提不出文字。抽 word/media/*
-    // 作为 images[] 交给下游 Vision OCR，避免整份文档变成空文本。
+    // docx 是 zip 包。同一次打开拿两样东西：① word/media/* 图片（兜底 Vision OCR）
+    // ② 如果 mammoth 输出过短，从 word/document.xml 直抽 <w:t> 节点 fallback
+    //   —— 覆盖 mammoth.extractRawText 遗漏的表格单元格、文本框、SDT 内容控件等
     const images: string[] = []
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -314,12 +323,46 @@ export class DocumentParser {
         images.push(`data:${mime};base64,${e.getData().toString('base64')}`)
         if (images.length >= MAX_SCREENSHOT_PAGES) break
       }
+
+      // 表格型 docx fallback：mammoth 提取字符过少且文件 > 20KB → 直抽 <w:t>
+      const stat = await fs.promises.stat(filePath)
+      if (text.replace(/\s+/g, '').length < 500 && stat.size > 20 * 1024) {
+        const docEntry = entries.find(e => e.entryName === 'word/document.xml')
+        if (docEntry) {
+          const xml = docEntry.getData().toString('utf-8')
+          // 按 </w:p>、</w:tr>、<w:br/> 作为块分隔符，在 <w:t> 节点间插换行，
+          // 保留段落/表格行的视觉结构（而不是扁平拼接）。
+          const segments: string[] = []
+          const segRegex = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<\/w:p>|<\/w:tr>|<w:br\/>/g
+          let m2: RegExpExecArray | null
+          let buf = ''
+          while ((m2 = segRegex.exec(xml)) !== null) {
+            if (m2[1] !== undefined) {
+              buf += m2[1]
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&apos;/g, "'")
+            } else {
+              if (buf.trim()) segments.push(buf.trim())
+              buf = ''
+            }
+          }
+          if (buf.trim()) segments.push(buf.trim())
+          const xmlText = segments.join('\n')
+          if (xmlText.length > text.length) {
+            console.warn(`[DocumentParser] docx mammoth 提取过短（${text.length} 字），使用 XML fallback（${xmlText.length} 字）`)
+            text = xmlText
+          }
+        }
+      }
     } catch (err) {
-      console.warn('[DocumentParser] docx 图片提取失败:', err)
+      console.warn('[DocumentParser] docx 图片/XML fallback 失败:', err)
     }
 
     return {
-      text: result.value || '',
+      text,
       images,
       fileName,
       fileType: 'word',

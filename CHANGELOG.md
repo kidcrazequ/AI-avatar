@@ -40,6 +40,25 @@
 - 真空文档 40 → **3**（剩余都是 pdfjs 小概率 flake，生产单文件处理路径不受影响）
 - 未切分 38 → **2**（剩余 2 份是 < 3000 字 key:value 证书表单，embedding 完整覆盖 RAG 零影响）
 
+---
+
+### Process 目录验证 + 追加修复
+
+8. **docx 表格 fallback** — `parseWord()` 当 mammoth 提取字数 < 500 且文件 > 20KB 时，直接解 zip 从 `word/document.xml` 抽 `<w:t>` 节点（按 `</w:p>` / `</w:tr>` / `<w:br/>` 作为块分隔符保留段落结构）。覆盖 mammoth `extractRawText` 不含表格单元格文本、文本框、SDT 内容控件的已知限制
+
+9. **parser setTimeout 泄漏修复** — `parseFile()` 的超时保护用 `setTimeout` 但成功路径未 `clearTimeout`。批量处理 300+ 文件后每个文件留一个 5 分钟的 pending timer，导致 CLI dry-run 跑完后进程不退出。`try/finally` 中加 `clearTimeout` 修复（生产 Electron 长驻进程不受影响）
+
+10. **dry-run 归档解压 walk-through** — `testdocs/dry-run-format-product.ts` 遇到 `.zip` / `.rar` 时解压到临时目录并递归扫描内部文件（含 zip 炸弹防护由 node 自身限制托底），报告路径用 `{archive}!/{inner}` 格式。和生产 folder-importer 行为一致，暴露归档内部的真实文件结构
+    - 用 `createRequire('/Users/cnlm007398/AI/soul/desktop-app/package.json')` 解决 dry-run 脚本从 `testdocs/` 跑时 `require('adm-zip')` / `require('node-unrar-js')` 找不到依赖的问题
+
+11. **dry-run 报告命名** — 报告文件名从固定 `dry-run-report-product.json` 改为按目标目录 basename 动态命名（`dry-run-report-{basename}.json`），多个目录跑 dry-run 时互不覆盖
+
+12. **dry-run 清理临时目录** — 归档解压目录在 main 结束时自动 `rm -rf`，避免 /tmp 堆积
+
+**Process 目录 107 文件（含归档内部 11 份）最终结果**：
+- 解析失败 **2**（GBK 编码 zip，adm-zip 限制 — 生产 folder-importer 也受影响）
+- 真空 **2**（空壳合同模板 `附件六 技术协议.docx`，文档本身只有"甲方/乙方/日期"签名栏，结构性无救）
+- 真乱码 0 / 未切分 1（2591 字 `.doc` 检验报告无章节结构，embedding 完整覆盖 RAG 无影响）
 
 ## v0.6.10 (2026-04-15)
 

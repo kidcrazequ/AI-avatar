@@ -69,7 +69,25 @@
 4. 缺少必要输入时主动询问
 
 可用技能：
-（暂无技能）
+
+- **`draw-chart`** — 数据可视化（柱状图 / 折线图 / 饼图 / 散点 / 雷达），输出 ECharts JSON 代码块 ` ```chart`。用于**数值类**图表。
+- **`chart-from-knowledge`** — 知识库数据 → ECharts 图表的组合技能（先检索再画）。
+- **`draw-mermaid`** — 结构可视化（**甘特图 / 流程图 / 时序图 / 思维导图 / 看板 / 状态机 / ER 图 / 类图 / Git 图**），输出 ` ```mermaid` 代码块，前端自动渲染为 SVG。用于**非数值、结构化**的图表需求（时间规划 / 流程 / 关系 / 层级）。
+
+技能选择速查：
+
+| 用户说什么 | 用哪个技能 |
+|---|---|
+| "画个柱状图 / 趋势图 / 饼图 / 对比" | `draw-chart` |
+| "画甘特图 / 项目计划 / 时间表" | `draw-mermaid`（`gantt`）|
+| "画流程图 / 工作流 / 全景图 / 架构图" | `draw-mermaid`（`flowchart`）|
+| "画时序图 / 交互 / 调用链" | `draw-mermaid`（`sequenceDiagram`）|
+| "画思维导图 / 脑图" | `draw-mermaid`（`mindmap`）|
+| "画看板 / Kanban" | `draw-mermaid`（`kanban`）|
+| "画状态机 / 流程状态" | `draw-mermaid`（`stateDiagram-v2`）|
+| "画 ER 图 / 数据模型" | `draw-mermaid`（`erDiagram`）|
+
+**重要**：这些技能输出的图表在聊天消息里会被**自动渲染为可视图形**，不是代码文本。LLM 只需要按技能文档的格式输出代码块。
 
 ## 回答示范
 

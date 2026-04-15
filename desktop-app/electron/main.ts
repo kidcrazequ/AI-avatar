@@ -757,7 +757,7 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   const retriever = toolRouter.getRetriever(avatarId)
   console.log(`[rag-retrieve] getRetriever: ${Date.now() - _ragT0}ms`)
 
-  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
+  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')  // 实体提取用 turbo 即可，plus 单次 ~177s 太慢
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
 
   // Phase 2: 可选注入 wiki/concepts/ 百科内容（设置开关控制，默认关闭）
@@ -795,6 +795,7 @@ wrapHandler('compile-wiki', async (_, avatarId: string, apiKey: string, baseUrl:
   assertSafeSegment(avatarId, '分身ID')
   const avatarPath = path.join(avatarsPath, avatarId)
   const retriever = toolRouter.getRetriever(avatarId)
+  // wiki 编译是离线批量任务，需要更强的实体抽取 / 概念聚合能力，保留 plus
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
   const wiki = new WikiCompiler(avatarPath)
   const chunks = retriever.getFullChunks()

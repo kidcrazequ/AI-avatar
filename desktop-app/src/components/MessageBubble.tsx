@@ -4,19 +4,54 @@ import remarkGfm from 'remark-gfm'
 import { ChatMessage, useChatStore } from '../stores/chatStore'
 import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
+import MermaidRenderer from './MermaidRenderer'
 
 const REMARK_PLUGINS = [remarkGfm]
 
 /**
- * 自定义 code 组件：拦截 `language-chart` 代码块，解析 JSON 后用 ECharts 渲染。
- * 其它 language 走默认 <code>/<pre> 样式（由 prose-pixel 主题处理）。
+ * mermaid 流式检测：生成中代码块的结尾特征。
+ * mermaid 没有统一的结束标记，用启发式：以已知关键字开头 + 最后一行是否完整。
+ */
+const MERMAID_KEYWORDS = /^(gantt|flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|erDiagram|journey|gitGraph|pie|mindmap|timeline|quadrantChart|kanban|sankey|requirementDiagram|C4Context|xychart|block|architecture)\b/i
+function isMermaidComplete(code: string): boolean {
+  const trimmed = code.trim()
+  if (trimmed.length < 10) return false
+  if (!MERMAID_KEYWORDS.test(trimmed)) return false
+  // 至少有 2 行内容（声明 + 至少一行定义）
+  const lines = trimmed.split('\n').filter(l => l.trim().length > 0)
+  return lines.length >= 2
+}
+
+/**
+ * 自定义 code 组件：拦截 `language-chart` / `language-mermaid` 代码块，
+ * 前者用 ECharts，后者用 Mermaid 渲染。其它 language 走默认 <code>/<pre> 样式。
  */
 function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boolean }): ReactElement {
   const { inline, className, children, ...rest } = props
   const raw = String(children ?? '').replace(/\n$/, '')
 
-  // inline code / 非 chart language 走默认渲染
-  if (inline || !className || !className.includes('language-chart')) {
+  // inline code 直接走默认渲染
+  if (inline || !className) {
+    return <code className={className} {...rest}>{children}</code>
+  }
+
+  // mermaid 分支（甘特/流程/时序/思维导图/看板/饼图/状态机/ER/类/git 等）
+  if (className.includes('language-mermaid')) {
+    if (!isMermaidComplete(raw)) {
+      return (
+        <pre className="my-3 border-2 border-px-primary/30 bg-px-bg p-3 overflow-x-auto animate-pulse">
+          <div className="font-game text-[11px] tracking-wider text-px-text-dim mb-2">
+            ⏳ MERMAID 图表生成中...
+          </div>
+          <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
+        </pre>
+      )
+    }
+    return <MermaidRenderer code={raw} />
+  }
+
+  // 非 chart / 非 mermaid 代码块走默认渲染
+  if (!className.includes('language-chart')) {
     return <code className={className} {...rest}>{children}</code>
   }
 

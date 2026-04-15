@@ -10,6 +10,10 @@
 
 - **🔥 formatDocument 表格型章节跳过 LLM** — 添加 `isTableLikeContent` 预检测：章节内容 Tab 字符 > 3% 或短行（<=20 chars）占比 > 45% 时跳过 LLM 调用，直接用 markdown 代码块包裹原文返回。根因：成品检验报告 .doc / K=V 数据表 PDF / 密集表单等 Tab 分隔 checkbox 内容送给 LLM 时，LLM 要么卡在表格格式化上反复重试要么服务端慢吐到 terminate。实测 `量道-液冷柜检验报告.doc`（2591 字 Tab 分隔表单）格式化耗时 **32 分钟 → 2ms**（加速 ~96 万倍），表单内容完整保留到代码块中，BM25 检索和向量召回都不受影响
 
+### 新功能
+
+- **✨ Mermaid 图表渲染** — 聊天消息里 ```mermaid 代码块会被自动渲染为交互式图表，覆盖**甘特图 / 流程图 / 时序图 / 思维导图 / 看板 / 饼图 / 状态机 / ER 图 / 类图 / Git 图 / 时间线 / 四象限图 / Sankey** 等 10+ 种可视化类型。此前用户需要"生成甘特图"这类需求时没有对应 skill，现在 LLM 只要吐 mermaid 语法就能直接出图。新增 `desktop-app/src/components/MermaidRenderer.tsx`（懒加载 + 错误边界 + 像素暗色主题）+ `MessageBubble.tsx` 的 ChartCodeBlock 增加 `language-mermaid` 分支 + 流式输出检测（未完成的 mermaid 代码块显示 ⏳ 生成中）+ `npm install mermaid`（~800KB gz，动态 import 不打进初始 bundle）
+
 ## v0.6.12 (2026-04-15)
 
 ### Process 目录验证 + 追加修复

@@ -50,6 +50,7 @@
     "echarts-for-react": "^3.0.2",
     "eventsource-parser": "^3.0.6",
     "mammoth": "^1.12.0",
+    "mermaid": "^11.14.0",
     "node-7z": "^3.0.0",
     "node-unrar-js": "^2.0.2",
     "pdf-parse": "^2.4.5",

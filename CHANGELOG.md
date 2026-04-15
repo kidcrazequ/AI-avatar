@@ -1,5 +1,23 @@
 # 更新日志
 
+## v0.6.15 (2026-04-15)
+
+### 新功能
+
+- **✨ 内置技能保护 + AI 自然语言生成技能草稿** — 用户体验大幅升级：
+  - **draw-mermaid 加入 `templates/skills/`** —— 此前 mermaid skill 只在小堵分身的 `skills/` 里，现在所有新分身创建时都会自动获得 mermaid 能力（和 draw-chart / chart-from-knowledge 并列）
+  - **`Skill.isBuiltin` 字段** —— `SkillManager` 在 parse 时检查 `templates/skills/` 是否存在同名 .md，结果缓存到 `builtinSkillIdsCache` 集合，每个 Skill 对象返回时附 `isBuiltin: boolean`
+  - **`SkillManager.deleteSkill` 拒绝内置技能** —— 服务端兜底，错误信息提示用"禁用"开关停用而非删除
+  - **前端 `SkillsPanel.tsx` 隐藏内置技能的 `DELETE` 按钮** —— 改为显示灰色 `[BUILTIN]` 标签 + tooltip
+  - **AI 自然语言生成技能草稿** —— 新建对话框默认进入"AI 辅助"模式：
+    * 用户用一段话描述他想要的技能（例如"我要一个把会议纪要里 open 任务输出甘特图的技能"）
+    * 后端 `generate-skill-draft` IPC 调用 LLM，**meta-prompt 自动注入 `templates/skill-template.md` 格式规范 + `templates/skills/*.md` 作为 few-shot 示例**
+    * LLM 返回完整的 skill markdown 草稿
+    * 前端自动 prefill 到编辑器 + 提取 frontmatter 的 `name` 字段作为 ID
+    * 自动切到"手动编写"模式让用户审阅 / 修改 / 创建
+  - 新增 `desktop-app/electron/skill-generator-prompt.ts` —— `SKILL_GEN_SYSTEM_PROMPT` + `buildSkillGenUserPrompt(templatesPath, description)`，将模板规范和示例拼成完整 prompt
+  - 模式切换 UI：[AI 辅助] [手动编写] 像素风按钮组，AI 模式失败可一键切到手动模式继续编辑
+
 ## v0.6.14 (2026-04-15)
 
 ### 修复
@@ -21,20 +39,6 @@
   - `preload.ts` 的 `createSkill` / `deleteSkill` 方法暴露到 `window.electronAPI`
   - `global.d.ts` 类型声明
   - `SkillsPanel.tsx` 新增 `[+ NEW]` 按钮（左侧列表头）+ `[DELETE]` 按钮（右侧详情，带内联确认）+ 新建表单视图（ID 输入框 + Markdown 模板编辑器，`{{skillId}}` 占位符会自动替换）
-
-- **✨ 内置技能保护 + AI 自然语言生成技能草稿** — 用户体验大幅升级：
-  - **draw-mermaid 加入 `templates/skills/`** —— 此前 mermaid skill 只在小堵分身的 `skills/` 里，现在所有新分身创建时都会自动获得 mermaid 能力（和 draw-chart / chart-from-knowledge 并列）
-  - **`Skill.isBuiltin` 字段** —— `SkillManager` 在 parse 时检查 `templates/skills/` 是否存在同名 .md，结果缓存到 `builtinSkillIdsCache` 集合，每个 Skill 对象返回时附 `isBuiltin: boolean`
-  - **`SkillManager.deleteSkill` 拒绝内置技能** —— 服务端兜底，错误信息提示用"禁用"开关停用而非删除
-  - **前端 `SkillsPanel.tsx` 隐藏内置技能的 `DELETE` 按钮** —— 改为显示灰色 `[BUILTIN]` 标签 + tooltip
-  - **AI 自然语言生成技能草稿** —— 新建对话框默认进入"AI 辅助"模式：
-    * 用户用一段话描述他想要的技能（例如"我要一个把会议纪要里 open 任务输出甘特图的技能"）
-    * 后端 `generate-skill-draft` IPC 调用 LLM，**meta-prompt 自动注入 `templates/skill-template.md` 格式规范 + `templates/skills/*.md` 作为 few-shot 示例**
-    * LLM 返回完整的 skill markdown 草稿
-    * 前端自动 prefill 到编辑器 + 提取 frontmatter 的 `name` 字段作为 ID
-    * 自动切到"手动编写"模式让用户审阅 / 修改 / 创建
-  - 新增 `desktop-app/electron/skill-generator-prompt.ts` —— `SKILL_GEN_SYSTEM_PROMPT` + `buildSkillGenUserPrompt(templatesPath, description)`，将模板规范和示例拼成完整 prompt
-  - 模式切换 UI：[AI 辅助] [手动编写] 像素风按钮组，AI 模式失败可一键切到手动模式继续编辑
 
 ## v0.6.13 (2026-04-15)
 

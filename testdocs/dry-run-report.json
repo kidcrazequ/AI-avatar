@@ -1,0 +1,826 @@
+[
+  {
+    "fileName": "00 工商储-产品质量指标dashboard 260303.xlsx",
+    "ext": ".xlsx",
+    "skipped": true,
+    "skipReason": ".xlsx 文件不需要 LLM 格式化"
+  },
+  {
+    "fileName": "02.07.02.0.011 262KWh柜体组件-Model.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 372,
+    "ocrPages": 1,
+    "cleanedChars": 356,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 356
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "125kW新国标报告最终版 -对外简版带水印(1)---洛希-恩玖 pcs.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 24317,
+    "ocrPages": 20,
+    "cleanedChars": 24004,
+    "isGarbled": true,
+    "garbledRatio": 93
+  },
+  {
+    "fileName": "262KWh工商柜 Model (1).pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 16,
+    "ocrPages": 1,
+    "cleanedChars": 0,
+    "isGarbled": false
+  },
+  {
+    "fileName": "262kWh工商柜电气原理图 (1).pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 5350,
+    "ocrPages": 10,
+    "cleanedChars": 5181,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 5181
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "262户外柜原理图-从柜.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 10413,
+    "ocrPages": 16,
+    "cleanedChars": 10159,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "前言/目录",
+        "chars": 579
+      },
+      {
+        "title": "16 \t部件列表 \tV01（第1部分）",
+        "chars": 5343
+      },
+      {
+        "title": "16 \t部件列表 \tV01（第2部分）",
+        "chars": 4248
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "3.1 【标准版】ENS-L262-01技术协议-对外完整版.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 10077,
+    "ocrPages": 0,
+    "cleanedChars": 9928,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "1\t项目概述\t3",
+        "chars": 219
+      },
+      {
+        "title": "8\t签字页\t17（第1部分）",
+        "chars": 5995
+      },
+      {
+        "title": "8\t签字页\t17（第2部分）",
+        "chars": 3662
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "3.1 【标准版】ENS-L262-03技术协议-对外完整版.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 10082,
+    "ocrPages": 0,
+    "cleanedChars": 9933,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "1\t项目概述\t4",
+        "chars": 219
+      },
+      {
+        "title": "8\t签字页\t19（第1部分）",
+        "chars": 5998
+      },
+      {
+        "title": "8\t签字页\t19（第2部分）",
+        "chars": 3664
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "3.1 【高阶版】ENS-L262-01技术协议-对外完整版.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 10091,
+    "ocrPages": 0,
+    "cleanedChars": 9942,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "1\t项目概述\t4",
+        "chars": 219
+      },
+      {
+        "title": "8\t签字页\t19（第1部分）",
+        "chars": 5993
+      },
+      {
+        "title": "8\t签字页\t19（第2部分）",
+        "chars": 3678
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "3.1 【高阶版】ENS-L262-03技术协议-对外完整版.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 10093,
+    "ocrPages": 0,
+    "cleanedChars": 9944,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "1\t项目概述\t3",
+        "chars": 219
+      },
+      {
+        "title": "8\t签字页\t18（第1部分）",
+        "chars": 5993
+      },
+      {
+        "title": "8\t签字页\t18（第2部分）",
+        "chars": 3680
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "ENS-L262储能一体机一次电气图.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 16,
+    "ocrPages": 1,
+    "cleanedChars": 0,
+    "isGarbled": false
+  },
+  {
+    "fileName": "ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.xlsx",
+    "ext": ".xlsx",
+    "skipped": true,
+    "skipReason": ".xlsx 文件不需要 LLM 格式化"
+  },
+  {
+    "fileName": "ENS-L262储能一体机施工地基图20250217.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 568,
+    "ocrPages": 0,
+    "cleanedChars": 552,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 552
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "ENS-L262用户手册 ODM2.0 V1.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 21383,
+    "ocrPages": 0,
+    "cleanedChars": 20645,
+    "isGarbled": false,
+    "chapterCount": 8,
+    "chapters": [
+      {
+        "title": "第一章 关于本手册\t4",
+        "chars": 5064
+      },
+      {
+        "title": "2.16 日常操作与维护",
+        "chars": 1997
+      },
+      {
+        "title": "3.3.2 储能变流器",
+        "chars": 1036
+      },
+      {
+        "title": "3.3.4 电池簇",
+        "chars": 3739
+      },
+      {
+        "title": "5.3.2 连接件的紧固",
+        "chars": 714
+      },
+      {
+        "title": "5.4.2 地基要求",
+        "chars": 3272
+      },
+      {
+        "title": "9.2.2 维护周期",
+        "chars": 2044
+      },
+      {
+        "title": "9.3 故障排除",
+        "chars": 2721
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "ENS-L262用户手册 ODM2.0 V2-2026.2.26 修正B版.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 21537,
+    "ocrPages": 0,
+    "cleanedChars": 20819,
+    "isGarbled": false,
+    "chapterCount": 10,
+    "chapters": [
+      {
+        "title": "第一章 关于本手册\t4",
+        "chars": 5064
+      },
+      {
+        "title": "2.16 日常操作与维护",
+        "chars": 1989
+      },
+      {
+        "title": "3.3.2 储能变流器",
+        "chars": 1036
+      },
+      {
+        "title": "3.3.4 电池簇",
+        "chars": 3739
+      },
+      {
+        "title": "5.3.2 连接件的紧固",
+        "chars": 720
+      },
+      {
+        "title": "5.4.2 地基要求",
+        "chars": 1733
+      },
+      {
+        "title": "6.3 接线总览",
+        "chars": 1723
+      },
+      {
+        "title": "9.2.2 维护周期",
+        "chars": 2044
+      },
+      {
+        "title": "9.3 故障排除",
+        "chars": 2073
+      },
+      {
+        "title": "9.4 补漆措施",
+        "chars": 636
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "ENS-L262用户手册 ODM2.0 V2.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 21474,
+    "ocrPages": 0,
+    "cleanedChars": 20758,
+    "isGarbled": false,
+    "chapterCount": 10,
+    "chapters": [
+      {
+        "title": "第一章 关于本手册\t4",
+        "chars": 5064
+      },
+      {
+        "title": "2.16 日常操作与维护",
+        "chars": 1989
+      },
+      {
+        "title": "3.3.2 储能变流器",
+        "chars": 1036
+      },
+      {
+        "title": "3.3.4 电池簇",
+        "chars": 3739
+      },
+      {
+        "title": "5.3.2 连接件的紧固",
+        "chars": 720
+      },
+      {
+        "title": "5.4.2 地基要求",
+        "chars": 1672
+      },
+      {
+        "title": "6.3 接线总览",
+        "chars": 1723
+      },
+      {
+        "title": "9.2.2 维护周期",
+        "chars": 2044
+      },
+      {
+        "title": "9.3 故障排除",
+        "chars": 2073
+      },
+      {
+        "title": "9.4 补漆措施",
+        "chars": 636
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "ENS-L262用户手册.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 20780,
+    "ocrPages": 0,
+    "cleanedChars": 20054,
+    "isGarbled": false,
+    "chapterCount": 9,
+    "chapters": [
+      {
+        "title": "第一章 关于本手册\t4",
+        "chars": 5064
+      },
+      {
+        "title": "2.16 日常操作与维护",
+        "chars": 2005
+      },
+      {
+        "title": "3.3.2 储能变流器",
+        "chars": 1036
+      },
+      {
+        "title": "3.3.4 电池簇",
+        "chars": 3739
+      },
+      {
+        "title": "5.3.2 连接件的紧固",
+        "chars": 714
+      },
+      {
+        "title": "5.4.2 地基要求",
+        "chars": 3145
+      },
+      {
+        "title": "9.2.2 维护周期",
+        "chars": 1582
+      },
+      {
+        "title": "9.3 故障排除",
+        "chars": 2073
+      },
+      {
+        "title": "9.4 补漆措施",
+        "chars": 636
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "ENS-L262用户手册（添加定期巡检内容）-0827.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 21160,
+    "ocrPages": 0,
+    "cleanedChars": 20434,
+    "isGarbled": false,
+    "chapterCount": 9,
+    "chapters": [
+      {
+        "title": "第一章 关于本手册\t4",
+        "chars": 5064
+      },
+      {
+        "title": "2.16 日常操作与维护",
+        "chars": 2005
+      },
+      {
+        "title": "3.3.2 储能变流器",
+        "chars": 1036
+      },
+      {
+        "title": "3.3.4 电池簇",
+        "chars": 3739
+      },
+      {
+        "title": "5.3.2 连接件的紧固",
+        "chars": 714
+      },
+      {
+        "title": "5.4.2 地基要求",
+        "chars": 3145
+      },
+      {
+        "title": "9.2.2 维护周期",
+        "chars": 1962
+      },
+      {
+        "title": "9.3 故障排除",
+        "chars": 2073
+      },
+      {
+        "title": "9.4 补漆措施",
+        "chars": 636
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "LXKJ2EAO02W (洛希--314模块-新版委托）2025.01.06(1).pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 26759,
+    "ocrPages": 5,
+    "cleanedChars": 26270,
+    "isGarbled": false,
+    "chapterCount": 6,
+    "chapters": [
+      {
+        "title": "前言/目录（第1部分）",
+        "chars": 5999
+      },
+      {
+        "title": "前言/目录（第2部分）",
+        "chars": 2702
+      },
+      {
+        "title": "5.6.4.3 \t热失控扩散性能（第1部分）",
+        "chars": 5604
+      },
+      {
+        "title": "5.6.4.3 \t热失控扩散性能（第2部分）",
+        "chars": 5738
+      },
+      {
+        "title": "1.5 \t倍单体",
+        "chars": 3519
+      },
+      {
+        "title": "4 负极对外部裸露",
+        "chars": 2760
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "LXKJ2EAO02W (洛希--楚能314模块-新版委托）2025.01.06(1)-CORNEX 楚能314电芯-严禁外发客户.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 26759,
+    "ocrPages": 5,
+    "cleanedChars": 26270,
+    "isGarbled": false,
+    "chapterCount": 6,
+    "chapters": [
+      {
+        "title": "前言/目录（第1部分）",
+        "chars": 5999
+      },
+      {
+        "title": "前言/目录（第2部分）",
+        "chars": 2702
+      },
+      {
+        "title": "5.6.4.3 \t热失控扩散性能（第1部分）",
+        "chars": 5604
+      },
+      {
+        "title": "5.6.4.3 \t热失控扩散性能（第2部分）",
+        "chars": 5738
+      },
+      {
+        "title": "1.5 \t倍单体",
+        "chars": 3519
+      },
+      {
+        "title": "4 负极对外部裸露",
+        "chars": 2760
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "PCS 应用能力说明V1.1(1).pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 7788,
+    "ocrPages": 1,
+    "cleanedChars": 7635,
+    "isGarbled": false,
+    "chapterCount": 4,
+    "chapters": [
+      {
+        "title": "前言/目录",
+        "chars": 3950
+      },
+      {
+        "title": "4.1 \t纯离网工况",
+        "chars": 1372
+      },
+      {
+        "title": "4.4 \t柴发协同配合要求",
+        "chars": 883
+      },
+      {
+        "title": "2 \t用测温仪器检测变流器内部温度无异常。 \t",
+        "chars": 1435
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.28.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 20450,
+    "ocrPages": 0,
+    "cleanedChars": 20099,
+    "isGarbled": false,
+    "chapterCount": 6,
+    "chapters": [
+      {
+        "title": "前言/目录",
+        "chars": 599
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第1部分）",
+        "chars": 5994
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第2部分）",
+        "chars": 5995
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第3部分）",
+        "chars": 3194
+      },
+      {
+        "title": "7.1.3 铭牌设计要求如下：",
+        "chars": 2143
+      },
+      {
+        "title": "8.1.3 乙方现场服务人员的职责",
+        "chars": 2162
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 567,
+    "ocrPages": 32,
+    "cleanedChars": 0,
+    "isGarbled": false
+  },
+  {
+    "fileName": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_C -洛希.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 20540,
+    "ocrPages": 0,
+    "cleanedChars": 20187,
+    "isGarbled": false,
+    "chapterCount": 6,
+    "chapters": [
+      {
+        "title": "前言/目录",
+        "chars": 599
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第1部分）",
+        "chars": 6000
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第2部分）",
+        "chars": 5997
+      },
+      {
+        "title": "9\t文件资料及交付\t26（第3部分）",
+        "chars": 3274
+      },
+      {
+        "title": "7.1.3 铭牌设计要求如下：",
+        "chars": 2143
+      },
+      {
+        "title": "8.1.3 乙方现场服务人员的职责",
+        "chars": 2162
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "储能系统方案 标准柜 (ESCU).pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 1368,
+    "ocrPages": 5,
+    "cleanedChars": 1282,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 1282
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "手动并离网操作 V1.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 1987,
+    "ocrPages": 0,
+    "cleanedChars": 1705,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "二、配置检查",
+        "chars": 87
+      },
+      {
+        "title": "三、并网转离网操作流程 / Grid-Connected to Off-Grid Operation",
+        "chars": 752
+      },
+      {
+        "title": "四、离网转并网操作流程 / Off-Grid to Grid-Connected Operation",
+        "chars": 816
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "手动并离网操作-0314.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 1987,
+    "ocrPages": 0,
+    "cleanedChars": 1705,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "一、配置检查",
+        "chars": 87
+      },
+      {
+        "title": "二、并网转离网操作流程 / Grid-Connected to Off-Grid Operation",
+        "chars": 752
+      },
+      {
+        "title": "三、离网转并网操作流程 / Off-Grid to Grid-Connected Operation",
+        "chars": 816
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "手动并离网操作-0317.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 2024,
+    "ocrPages": 0,
+    "cleanedChars": 1748,
+    "isGarbled": false,
+    "chapterCount": 3,
+    "chapters": [
+      {
+        "title": "一、并离网支持数量",
+        "chars": 205
+      },
+      {
+        "title": "三、并网转离网操作流程 / Grid-Connected to Off-Grid Operation",
+        "chars": 755
+      },
+      {
+        "title": "四、离网转并网操作流程 / Off-Grid to Grid-Connected Operation",
+        "chars": 737
+      }
+    ],
+    "wholeFileChapter": false
+  },
+  {
+    "fileName": "手动并离网操作-更改版2025.12.30.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 496,
+    "ocrPages": 0,
+    "cleanedChars": 490,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 490
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "检验报告.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 279,
+    "ocrPages": 16,
+    "cleanedChars": 0,
+    "isGarbled": false
+  },
+  {
+    "fileName": "远景262柜安装单页-2026.2.27.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 222,
+    "ocrPages": 1,
+    "cleanedChars": 206,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 206
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "远景并离网项目.docx",
+    "ext": ".docx",
+    "skipped": false,
+    "rawChars": 2438,
+    "ocrPages": 0,
+    "cleanedChars": 2400,
+    "isGarbled": false,
+    "chapterCount": 1,
+    "chapters": [
+      {
+        "title": "全文",
+        "chars": 2400
+      }
+    ],
+    "wholeFileChapter": true
+  },
+  {
+    "fileName": "通用场景(2).pptx",
+    "ext": ".pptx",
+    "skipped": true,
+    "skipReason": ".pptx 文件不需要 LLM 格式化"
+  },
+  {
+    "fileName": "鉴定证书.jpg",
+    "ext": ".jpg",
+    "skipped": true,
+    "skipReason": ".jpg 文件不需要 LLM 格式化"
+  },
+  {
+    "fileName": "防爆合格证.pdf",
+    "ext": ".pdf",
+    "skipped": false,
+    "rawChars": 16,
+    "ocrPages": 1,
+    "cleanedChars": 0,
+    "isGarbled": false
+  }
+]

@@ -1,5 +1,18 @@
 # 更新日志
 
+## v0.6.10 (2026-04-15)
+
+### UI 修复 + 乱码检测 + README 增强
+
+1. **移除 ENHANCE 按钮** — 批量导入已不需要补跑 LLM 格式化，清理相关死代码
+2. **GEN TEST / FORMAT 按钮样式修复** — 从 `pixel-btn-outline-muted` 改为 `pixel-btn-outline-light`，深色背景下可见
+3. **状态文字可见性** — PanelHeader subtitle 颜色从 `text-px-text-dim` 改为 `text-px-primary`；`isBusy` 时隐藏 subtitle 避免与进度条重复
+4. **格式化进度动画** — `isFormatting` 加入 `isBusy`，FORMAT 操作时显示 spinner + 进度条
+5. **PDF 乱码检测** — 新增 `isGarbledText()` 检测 CID 字体编码异常，乱码页强制 OCR；FORMAT 乱码内容时给出明确错误提示
+6. **README 增强** — 批量导入首次创建 README 时生成完整模板（使用说明、目录结构、命名规范、质量标准）
+7. **LLM 超时调大** — `BACKEND_API_TIMEOUT_MS` 3 分钟 → 5 分钟，减少格式化超时失败
+8. **TS 零错误** — 修复 `@soul/core` 缺少 `exports` 字段导致 `callVisionOcr` 在 bundler 模式下找不到的问题
+
 ## v0.6.9 (2026-04-15)
 
 ### 重构 — 批量导入去掉 LLM 格式化 + 单文件 FORMAT 按钮

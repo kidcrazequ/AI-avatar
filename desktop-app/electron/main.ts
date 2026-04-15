@@ -12,7 +12,7 @@ import os from 'os'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, type WikiAnswer, type LLMCallFn } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
-import { DocumentParser } from './document-parser'
+import { DocumentParser, isGarbledText } from './document-parser'
 import {
   walkFolder,
   extractArchive,
@@ -1069,12 +1069,51 @@ async function batchImportFiles(
       const readmePath = path.join(knowledgePath, 'README.md')
       let readme = ''
       try { readme = fs.readFileSync(readmePath, 'utf-8') } catch { /* 不存在则新建 */ }
+
+      // README 不存在或为空时，生成完整模板
+      const displayName = avatarId.replace(/-/g, ' ')
+      if (!readme.trim()) {
+        readme = `# ${displayName} 知识库
+
+本目录存放 ${displayName} 分身的领域知识文件。分身在工作时会基于这些文件内容进行回答。
+
+## 使用说明
+
+1. 所有知识文件采用 **Markdown 格式**，分身可以直接读取
+2. 添加新知识时，可通过顶部 IMPORT / FOLDER / ARCHIVE 按钮导入原始文档（PDF / DOCX / Excel 等）
+3. 分身回答时会标注知识来源，格式为 \`[来源: knowledge/文件名]\`
+4. 如果知识库中没有相关内容，分身会明确告知并建议补充
+
+## 目录结构
+
+\`\`\`
+knowledge/
+├── README.md          # 本文件（知识库索引）
+├── _raw/              # 原始文档存档（PDF / DOCX 等）
+├── _index/            # 检索索引（自动生成，勿手动修改）
+└── *.md               # 知识文件（Markdown 格式）
+\`\`\`
+
+## 知识文件命名规范
+
+- 使用 **中文名称 + 简短后缀** 命名，如 \`产品名-用户手册.md\`、\`场景名-最佳实践.md\`
+- 文件名不使用空格，用 \`-\` 或 \`_\` 分隔
+
+## 知识质量标准
+
+- 每个知识文件开头包含来源说明（原始文档名称和版本）
+- 关键数值已标注单位
+- 图片中的数据已被 OCR 识别并写入 Markdown
+- 本 README 的知识文件索引已同步更新
+`
+      }
+
       const newEntries = imported
         .filter(f => !readme.includes(f.targetPath))
         .map(f => `| ${f.targetPath.replace(/\.md$/, '')} | [${f.targetPath}](${f.targetPath}) | 批量导入 |`)
       if (newEntries.length > 0) {
         if (!readme.includes('| 文件 |') && !readme.includes('| --- |')) {
-          readme += '\n\n## 知识文件索引\n\n| 文件 | 路径 | 来源 |\n| --- | --- | --- |\n'
+          readme += '\n## 知识文件索引\n\n| 文件 | 路径 | 来源 |\n| --- | --- | --- |\n'
         }
         readme += newEntries.join('\n') + '\n'
         fs.writeFileSync(readmePath, readme, 'utf-8')
@@ -1258,6 +1297,10 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
 
   if (!rawText || rawText.length < 100) {
     return { success: false, error: '文件内容过少，无需格式化' }
+  }
+
+  if (isGarbledText(rawText)) {
+    return { success: false, error: '文件内容为乱码（PDF 字体编码异常），请配置 OCR API Key 后重新导入原始 PDF' }
   }
 
   const baseName = relativePath.replace(/\.md$/, '')

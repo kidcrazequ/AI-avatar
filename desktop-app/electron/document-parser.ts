@@ -56,8 +56,24 @@ export interface ExcelStructuredData {
 }
 
 /**
- * 判断 PDF 某页是否需要 OCR（图纸/图表/扫描件）。
+ * 检测文本是否为乱码（PDF CID 字体编码错误导致的 Unicode 乱码）。
+ * 原理：正常中文/英文文档中，常见字符（CJK 基本区 + ASCII 字母数字 + 常见标点）占比应 > 50%。
+ * CID 字体乱码会产出大量稀有 Unicode 字符（Sinhala / Gujarati / Tibetan / Canadian Syllabics 等），
+ * 导致常见字符占比骤降。
+ */
+export function isGarbledText(text: string): boolean {
+  const stripped = text.replace(/\s+/g, '')
+  if (stripped.length < 20) return false
+  // 常见字符：CJK 基本区 + ASCII 字母数字 + 中英文标点
+  const commonChars = stripped.replace(/[A-Za-z0-9\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF.,;:!?'"()\[\]{}<>@#$%^&*+=\-_/\\|~`，。；：！？、""''（）【】《》—…·\u00A0\u2000-\u206F]/g, '')
+  const ratio = 1 - commonChars.length / stripped.length
+  return ratio < 0.4
+}
+
+/**
+ * 判断 PDF 某页是否需要 OCR（图纸/图表/扫描件/乱码页）。
  * 智能策略：
+ *   - 乱码页 → 一定 OCR（CID 字体编码错误，文字提取为乱码）
  *   - < 300 chars → 一定 OCR（扫描件 / 纯图片页）
  *   - 300-1000 chars + 噪音比 > 25% → OCR（工程图纸：大量单字符行 A B C 1 2 3）
  *   - 其他 → 正常文字页，不 OCR
@@ -68,6 +84,8 @@ function shouldOcrPage(pageText: string): boolean {
   const stripped = pageText.replace(/\s+/g, '')
   const chars = stripped.length
   if (chars < 300) return true
+  // 乱码检测：CID 字体编码错误导致的 Unicode 乱码，必须走 OCR
+  if (isGarbledText(pageText)) return true
   if (chars >= 1000) return false
   // 300-1000 区间：检查噪音比（单字符行占比 > 25% = 工程图纸图框坐标噪音）
   const lines = pageText.split(/\n/).filter(l => l.trim())

@@ -11,8 +11,8 @@
 
 import { fetchWithTimeout, type LLMCallFn, type EmbeddingCallFn } from '@soul/core'
 
-/** 索引构建/RAG 等后台 API 调用的超时时间（3 分钟） */
-export const BACKEND_API_TIMEOUT_MS = 180_000
+/** 索引构建/RAG 等后台 API 调用的超时时间（5 分钟） */
+export const BACKEND_API_TIMEOUT_MS = 300_000
 
 /**
  * 创建 EmbeddingCallFn 适配器，用于知识索引构建中的向量嵌入调用。

@@ -15,7 +15,7 @@ export default function PanelHeader({ title, subtitle, onClose, actions }: Panel
         <div>
           <h2 className="font-game text-[14px] tracking-wider uppercase">{title}</h2>
           {subtitle && (
-            <p className="font-game text-[12px] text-px-text-dim mt-1 tracking-wider">{subtitle}</p>
+            <p className="font-game text-[12px] text-px-primary mt-1 tracking-wider">{subtitle}</p>
           )}
         </div>
       </div>

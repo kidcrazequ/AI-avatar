@@ -35,9 +35,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
   const [isImporting, setIsImporting] = useState(false)
   const [isBatchImporting, setIsBatchImporting] = useState(false)
-  const [isEnhancing, setIsEnhancing] = useState(false)
   const [isFormatting, setIsFormatting] = useState(false)
-  const [enhanceProgress, setEnhanceProgress] = useState<{ current: number; total: number; fileName: string; phase: string } | null>(null)
   const [isGeneratingTests, setIsGeneratingTests] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
   const [isLinting, setIsLinting] = useState(false)
@@ -83,16 +81,8 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     return () => unsub()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 订阅知识库增强进度事件
-  useEffect(() => {
-    const unsub = window.electronAPI.onEnhanceProgress((data) => {
-      if (!mountedRef.current) return
-      setEnhanceProgress(data)
-    })
-    return () => unsub()
-  }, [])
 
-  const isBusy = isImporting || isBatchImporting || isEnhancing || isDetectingEvolution || isCompiling || isLinting
+  const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting || isFormatting
   useEffect(() => {
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
     if (!isBusy && taskStartTime) setTaskStartTime(null)
@@ -618,67 +608,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
-  /** 批量导入完成后自动开始质量优化（只处理本次导入的文件） */
-  const promptEnhanceAfterBatch = (importedFiles: string[]) => {
-    if (importedFiles.length === 0) return
-    // 不在此处检查 model（会被闭包捕获变成 stale），handleEnhanceKnowledge 内部会实时获取
-    setTimeout(() => {
-      if (mountedRef.current) {
-        handleEnhanceKnowledge(importedFiles).catch(err => {
-          console.error('自动优化失败:', err)
-        })
-      }
-    }, 300)
-  }
-
-  const handleEnhanceKnowledge = async (targetFiles?: string[]) => {
-    const model = creationModel?.apiKey ? creationModel : chatModel
-    if (!model?.apiKey) {
-      showStatus('✗ 需要先配置 API Key')
-      return
-    }
-    setIsEnhancing(true)
-    setEnhanceProgress(null)
-    showStatus('知识库质量优化中...', false)
-    try {
-      const result = await window.electronAPI.enhanceKnowledgeFiles(avatarId, {
-        llm: {
-          apiKey: model.apiKey,
-          baseUrl: model.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-          model: model.model || 'qwen-plus',
-        },
-        ocr: ocrModel?.apiKey ? {
-          apiKey: ocrModel.apiKey,
-          baseUrl: ocrModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        } : undefined,
-        targetFiles,
-      })
-      if (!mountedRef.current) return
-      if (result.total === 0) {
-        showStatus('没有需要优化的文件（仅处理批量导入的未格式化文件）')
-      } else {
-        // 索引重建已挪进主进程 enhance handler（原子化 + 减少 IPC round trip）
-        const parts: string[] = [
-          `${result.enhanced} 成功 / ${result.failed} 失败 / 共 ${result.total}`,
-        ]
-        if (result.fabricatedWarnings > 0) parts.push(`${result.fabricatedWarnings} 个疑似编造数值`)
-        if (result.ocrFailures > 0) parts.push(`${result.ocrFailures} 张 OCR 失败`)
-        if (result.indexBuilt) parts.push(`索引 ${result.contextCount} 摘要 + ${result.embeddingCount} 向量`)
-        showStatus(`✓ 优化完成：${parts.join(' | ')}`, 10000)
-        if (result.fabricatedDetails.length > 0) {
-          console.warn('[enhance] 疑似编造数值详情：', result.fabricatedDetails)
-        }
-      }
-      await loadTree()
-      onSaved?.()
-    } catch (err) {
-      console.error('知识库优化失败:', err)
-      showStatus('✗ 优化失败: ' + (err instanceof Error ? err.message : String(err)))
-    } finally {
-      setIsEnhancing(false)
-      setEnhanceProgress(null)
-    }
-  }
 
   const handleGenerateTests = async () => {
     const testModel = creationModel?.apiKey ? creationModel : chatModel
@@ -772,7 +701,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     <Modal isOpen={true} onClose={onClose} size="lg">
       <PanelHeader
         title="KNOWLEDGE BASE"
-        subtitle={statusMsg || undefined}
+        subtitle={!isBusy ? (statusMsg || undefined) : undefined}
         onClose={onClose}
         actions={
           <div className="flex items-center gap-2">
@@ -802,15 +731,6 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               title="支持 zip / tar.gz / 7z / rar"
             >
               {isBatchImporting ? '...' : '[📦] ARCHIVE'}
-            </button>
-            <button
-              onClick={() => handleEnhanceKnowledge()}
-              disabled={isBusy}
-              className="pixel-btn-outline-light disabled:opacity-40"
-              aria-label="优化知识库质量"
-              title="对批量导入的文件补跑 LLM 格式化，提升检索质量"
-            >
-              {isEnhancing ? (enhanceProgress ? `${enhanceProgress.current}/${enhanceProgress.total}` : '...') : '[✨] ENHANCE'}
             </button>
             <button
               onClick={() => setShowNewFileDialog(true)}
@@ -1019,7 +939,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                         <button
                           onClick={handleGenerateTests}
                           disabled={isGeneratingTests}
-                          className="pixel-btn-outline-muted py-1"
+                          className="pixel-btn-outline-light py-1"
                           title="根据此文件生成测试用例"
                         >
                           {isGeneratingTests ? '...' : 'GEN TEST'}
@@ -1048,7 +968,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                           }
                         }}
                         disabled={isFormatting || isBusy}
-                        className="pixel-btn-outline-muted py-1"
+                        className="pixel-btn-outline-light py-1"
                         title="对此文件执行 LLM 结构化格式化"
                       >
                         {isFormatting ? '...' : 'FORMAT'}

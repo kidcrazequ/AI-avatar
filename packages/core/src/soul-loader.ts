@@ -142,8 +142,16 @@ export class SoulLoader {
     }
 
     // 知识库文件（递归读取所有 knowledge/ 子目录文件）
-    // rag_only 标记的文件（Excel 导入、超大文档等）不拼入 system prompt，
-    // 只通过 search_knowledge / query_excel 等工具按需检索。
+    // 知识文件注入策略：
+    //   - 批量导入产物（有 source: pdf/word/pptx/... frontmatter）→ 运行时 rag_only，
+    //     通过 search_knowledge / query_excel / read_knowledge_file 按需检索（Channel B+C）
+    //   - 用户手写文件（无 source 字段）→ 塞进 system prompt（Channel A 全量注入）
+    //   - 显式标记 rag_only: true 的文件 → 同上，不塞 prompt
+    //
+    // 为什么不全塞？237 文件 × 大多 < 50KB = 184K tokens，超 DeepSeek 131K 窗口。
+    // 即使不超窗口，128K+ 长上下文的 LLM 注意力退化严重（"lost in the middle"），
+    // 全量注入的实际完整性远低于理论值。Channel B（RAG top-12）+ Channel C（10 轮
+    // search_knowledge / read_knowledge_file）完全可以兜底。
     if (knowledgeRootFiles.length > 0) {
       const knowledgeBase = path.join(avatarPath, 'knowledge')
       const stuffEntries: Array<{ relPath: string; body: string }> = []
@@ -152,7 +160,9 @@ export class SoulLoader {
       for (const f of knowledgeRootFiles) {
         const relPath = path.relative(knowledgeBase, f.path)
         const { data: fm, body } = parseFrontmatter(f.content)
-        if (fm.rag_only === true) {
+        // 批量导入产物带 source 字段（source: pdf / word / pptx / excel / image），
+        // 运行时当 rag_only 处理，不塞 system prompt。保留通过工具按需检索的能力。
+        if (fm.rag_only === true || fm.source) {
           ragOnlyEntries.push({ relPath, meta: fm })
         } else {
           stuffEntries.push({ relPath, body })

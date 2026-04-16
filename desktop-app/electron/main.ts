@@ -788,6 +788,12 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   }
   const result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
   console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
+  // v0.6.16: rag-retrieve 期间如果 searchChunks 触发了 lazy segmentit 分词
+  // （例如旧 tokens.json 的 cache key 因 splitIntoChapters 改 MAX_CHAPTER_CHARS 而失效），
+  // 把新 token 落盘到 _index/tokens.json，下次会话/查询不用再花 150-200 秒重新分词。
+  // 此前只有 executeToolCall 路径会保存 tokens，rag-retrieve 路径漏了 → 每次重启都
+  // 在 rag-retrieve 阶段重新 segmentit 5000 chunks。
+  toolRouter.saveRetrieverTokens(avatarId)
   return result
 })
 

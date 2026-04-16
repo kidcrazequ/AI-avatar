@@ -248,13 +248,32 @@ function stripExplicitSeriesColors(opt: Record<string, unknown>): Record<string,
   return stripped
 }
 
-/** 进入 ECharts setOption 前的预处理：先做 schema 转换，再剥显式颜色，再注入安全 grid */
-function normalizeOption(opt: Record<string, unknown>): Record<string, unknown> {
-  if (detectChartJsFormat(opt)) {
-    console.warn('[ChartRenderer] 检测到 Chart.js 格式输入，自动转换为 ECharts。请检查 draw-chart skill 是否被 LLM 正确遵循。')
-    return withSafeGrid(stripExplicitSeriesColors(convertChartJsToECharts(opt)))
+/**
+ * 强制 legend 位置为底部居中（主题默认值）。
+ * LLM 经常写 legend.top / legend.right 把图例放到标题旁边导致文字重叠。
+ * 实测 215 机型截图：legend "设备侧效率" 的粉色圆点叠在标题文字中间。
+ */
+function forceLegendBottom(opt: Record<string, unknown>): Record<string, unknown> {
+  if (opt.legend && typeof opt.legend === 'object' && !Array.isArray(opt.legend)) {
+    const legend = { ...opt.legend as Record<string, unknown> }
+    delete legend.top
+    delete legend.right
+    delete legend.left
+    legend.bottom = 12
+    // 不删 legend.show 等其他合法字段
+    return { ...opt, legend }
   }
-  return withSafeGrid(stripExplicitSeriesColors(opt))
+  return opt
+}
+
+/** 进入 ECharts setOption 前的预处理：schema 转换 → 剥颜色 → 强制 legend 底部 → 安全 grid */
+function normalizeOption(opt: Record<string, unknown>): Record<string, unknown> {
+  let result = opt
+  if (detectChartJsFormat(result)) {
+    console.warn('[ChartRenderer] 检测到 Chart.js 格式输入，自动转换为 ECharts。请检查 draw-chart skill 是否被 LLM 正确遵循。')
+    result = convertChartJsToECharts(result)
+  }
+  return withSafeGrid(forceLegendBottom(stripExplicitSeriesColors(result)))
 }
 
 /**

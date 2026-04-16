@@ -94,7 +94,9 @@ const PIXEL_THEME = {
 
   grid: {
     left: 56,
-    right: 64,   // v0.6.5: 24 → 64，给 markLine 末端标签留出空间（实测"参考"二字被截断）
+    // v0.6.16: 64 → 96，给 markLine 末端标签（"平均: 90.23"）留出完整空间
+    // 实测 215 机型截图：markLine label "平均: 90." 被截断
+    right: 96,
     // v0.6.16: 64 → 100，给 title (15px) + 适当 padding + yAxis name + 图例 留出空间
     // 之前 64 太挤，实测 215 机型截图：yAxis name "设备侧效率（%）" 和图例叠在标题正下方
     top: 100,

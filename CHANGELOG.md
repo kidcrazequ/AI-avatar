@@ -1,5 +1,21 @@
 # 更新日志
 
+## v0.6.17 (2026-04-16)
+
+### 新功能
+
+- **Skill 路由系统 v1.0** — `skill-index.yaml` + `SkillRouter`（分词 / bigram / keyword 反向索引），命中时把完整 `SKILL.md` 注入 RAG，减少一次 `load_skill` 的 LLM 往返。
+
+### 修复
+
+- **tokens 持久化与预热** — `rag-retrieve` 结束后写入 `_index/tokens.json`；`loadIndex` 返回 null 时仍独立加载 tokens 缓存，避免每次全量 segmentit（`searchChunks` 路径实测由约 260s 降至百毫秒级）。
+- **批量导入产物运行时 `rag_only`** — `SoulLoader` 对带 `source:` frontmatter 的导入产物按 rag_only 处理，避免超大 system prompt 撑爆上下文。
+- **ECharts 像素主题** — 图表标题与图例重叠、markLine 右侧标签截断。
+
+### 文档
+
+- **CHANGELOG / README** — 与本轮 Skill 路由与检索性能修复对齐。
+
 ## v0.6.16 (2026-04-16)
 
 ### 新功能

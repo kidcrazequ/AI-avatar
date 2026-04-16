@@ -130,8 +130,15 @@ export async function retrieveAndBuildPrompt(
   retrieverLocks.set(retriever, new Promise<void>(r => { releaseLock = r }))
   await prev
 
+  // 阶段计时（每行 [RAG] 开头打印到主进程 stdout，用于定位慢点）
+  const _t0 = Date.now()
+  const _phase = (label: string): void => {
+    console.log(`[RAG] ${label}: +${Date.now() - _t0}ms`)
+  }
+
   const keywords = tokenize(question)
   const query = keywords.join(' ')
+  _phase('tokenize done')
 
   const emit = (phase: RAGProgressPhase, detail?: string): void => {
     try { config.onProgress?.(phase, detail) } catch { /* 不让进度回调影响主流程 */ }
@@ -146,15 +153,20 @@ export async function retrieveAndBuildPrompt(
       const [queryEmb] = await config.callEmbedding([question])
       retriever.injectQueryVector(queryEmb)
       injectedQueryVector = true
+      _phase('callEmbedding done')
     } catch (err) {
       console.warn('[RAG] 查询 embedding 失败，退回纯 BM25:', err instanceof Error ? err.message : String(err))
+      _phase('callEmbedding FAILED')
     }
+  } else {
+    _phase('skip callEmbedding (retriever has no embeddings)')
   }
 
   try {
     // 第一跳检索
     emit('searching', '正在检索知识库…')
     const hop1Chunks = retriever.searchChunks(query, 8)
+    _phase(`hop1 searchChunks done (${hop1Chunks.length} chunks, top1Score=${(hop1Chunks[0]?.score ?? 0).toFixed(2)})`)
     if (hop1Chunks.length === 0) {
       emit('done')
       return `${question}\n\n[系统提示] 知识库检索无结果。知识库可能为空或不包含相关内容。请直接告知用户"当前知识库中没有相关数据，请先导入知识文件"，不要反复调用 search_knowledge / query_excel 等工具尝试搜索。`
@@ -172,6 +184,7 @@ export async function retrieveAndBuildPrompt(
     // 节省一次 LLM 调用（10-30 秒）。覆盖典型场景如 "215 机型 2026 1月 3月 效率"。
     const numericTokenCount = countNumericTokens(question)
     const isNumericDense = numericTokenCount >= NUMERIC_DENSE_TOKEN_THRESHOLD
+    console.log(`[RAG] numeric tokens in query=${numericTokenCount}, isNumericDense=${isNumericDense}, top1Score=${top1Score.toFixed(2)}, threshold=${HOP1_SCORE_THRESHOLD}`)
 
     if (top1Score < HOP1_SCORE_THRESHOLD && !isNumericDense) {
       // 实体提取：从第一跳结果中提取组件/设备名
@@ -181,23 +194,33 @@ export async function retrieveAndBuildPrompt(
         .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
         .join('\n\n')
 
+      _phase('entity extraction START (LLM call)')
       try {
         // (a) 30s 软超时：超时 fallback 到 hop1-only。fetchJsonWithTimeout 本身有 5min 硬超时，
         // 这里 30s 是为 UX 兜底，避免单次 rag-retrieve 拖到分钟级让用户以为应用挂了。
+        let timeoutId: ReturnType<typeof setTimeout> | null = null
         const entityPromise = config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
-        const timeoutPromise = new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error(`实体提取软超时 ${ENTITY_EXTRACT_TIMEOUT_MS}ms`)), ENTITY_EXTRACT_TIMEOUT_MS),
-        )
-        const entityResponse = await Promise.race([entityPromise, timeoutPromise])
-        entities = entityResponse
-          .split('\n')
-          .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
-          .filter(e => e.length >= 2 && e.length <= 20)
+        const timeoutPromise = new Promise<string>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(`实体提取软超时 ${ENTITY_EXTRACT_TIMEOUT_MS}ms`)), ENTITY_EXTRACT_TIMEOUT_MS)
+        })
+        try {
+          const entityResponse = await Promise.race([entityPromise, timeoutPromise])
+          entities = entityResponse
+            .split('\n')
+            .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
+            .filter(e => e.length >= 2 && e.length <= 20)
+          _phase(`entity extraction DONE (${entities.length} entities)`)
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId)
+        }
       } catch (err) {
         console.warn('[RAG] 实体提取失败/超时，退回 hop1-only:', err instanceof Error ? err.message : String(err))
+        _phase('entity extraction FAILED/TIMEOUT')
       }
     } else if (isNumericDense) {
       console.log(`[RAG] 数字密集查询（${numericTokenCount} 个具体 token），跳过实体提取`)
+    } else {
+      _phase('entity extraction SKIPPED (top1 score >= threshold)')
     }
 
     // 多跳检索
@@ -207,6 +230,7 @@ export async function retrieveAndBuildPrompt(
     const allChunks = entities.length > 0
       ? retriever.multiHopSearch(query, entities, 15)
       : hop1Chunks.map(c => ({ ...c, hop: 1 }))
+    _phase(`multiHopSearch done (${allChunks.length} chunks)`)
 
     emit('building', '正在拼装上下文…')
 
@@ -231,6 +255,7 @@ export async function retrieveAndBuildPrompt(
           .join('\n\n---\n\n')
     }
 
+    _phase('build refText done')
     emit('done')
     return `用户问题：${question}
 

@@ -164,3 +164,47 @@ async function callLLM(...) {
 - [ ] 是否有新的内联 `fetch` 调用 LLM/Embedding API（而非通过 `llm-factory.ts`）？
 - [ ] 是否有新的递归目录遍历缺少深度限制？
 - [ ] React 组件中是否有新的 1 秒以上异步操作，但缺少 `mountedRef`/`loadSeqRef` 保护？
+- [ ] desktop-app 中是否有硬编码十六进制色值（而非 `--px-*` 变量 / Tailwind `px-*` 类）？
+
+---
+
+## 6. 主题色彩变量
+
+**规则**：desktop-app 中所有颜色值必须通过 CSS 变量 `--px-*` 引用，禁止在组件中硬编码十六进制色值（`#xxxxxx`）。
+
+**原因**：主题系统通过 `[data-theme]` 属性切换 CSS 变量实现运行时换肤。硬编码色值不会跟随主题变化，导致切换后出现色彩不一致。
+
+**变量定义位置**：`src/index.css` 中的 `:root` / `[data-theme="..."\]` 块。
+
+**Tailwind 引用**：`tailwind.config.js` 中 `colors.px.*` 已全部指向 CSS 变量，组件中使用 `bg-px-primary`、`text-px-text` 等 Tailwind 类即可。
+
+**新增主题步骤**：
+1. 在 `src/index.css` 中新增 `[data-theme="theme-id"]` 块，定义全部 `--px-*` 变量
+2. 在 `src/stores/themeStore.ts` 的 `ThemeId` 类型和 `THEMES` 数组中注册
+3. 运行 `python3` 相近度检查脚本，确保 primary 距离 > 30
+
+**关键文件**：
+| 文件 | 职责 |
+|------|------|
+| `src/index.css` | CSS 变量定义（81 个主题） |
+| `src/stores/themeStore.ts` | Zustand 状态 + 主题元数据 |
+| `tailwind.config.js` | Tailwind `colors.px.*` → CSS 变量映射 |
+| `src/App.tsx` | 根节点 `data-theme={themeId}` 绑定 |
+| `src/components/SettingsPanel.tsx` | THEME 标签页 UI |
+
+```css
+/* ✅ 正确 — 使用 CSS 变量 */
+.my-component {
+  background: var(--px-surface);
+  color: var(--px-primary);
+  box-shadow: 0 0 8px var(--px-glow);
+}
+```
+
+```tsx
+// ✅ 正确 — 使用 Tailwind 类
+<div className="bg-px-surface text-px-primary" />
+
+// ❌ 错误 — 硬编码色值
+<div style={{ background: '#12121A', color: '#FFB0C8' }} />
+```

@@ -1,0 +1,48 @@
+# 在 Windows runner 上构建 soul-desktop 安装包，确保 better-sqlite3 等 native 依赖为有效 win32-x64 PE。
+# 在 macOS 上仅执行 electron-builder --win 时，若 prebuild 未命中当前 Electron ABI，可能把非 Windows 的 .node 打进包，运行时报「not a valid Win32 application」。
+# @author zhi.qu
+# @date 2026-04-10
+
+name: desktop-build-win
+
+on:
+  workflow_dispatch:
+  # 按需取消注释：在 main 上自动打 Windows 包（消耗 runner 分钟数）
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'desktop-app/**'
+  #     - 'packages/core/**'
+  #     - '.github/workflows/desktop-build-win.yml'
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop-app/package-lock.json
+            packages/core/package-lock.json
+
+      - name: Build @soul/core (desktop 依赖 file: 引用 dist)
+        working-directory: packages/core
+        run: npm ci && npm run build
+
+      - name: Install desktop-app and build Windows installer
+        working-directory: desktop-app
+        run: npm ci && npm run dist:win
+
+      - name: Upload NSIS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-desktop-win-x64-installer
+          path: desktop-app/release/*.exe
+          if-no-files-found: error

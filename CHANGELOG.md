@@ -1,5 +1,19 @@
 # 更新日志
 
+## v0.7.0 (2026-04-16)
+
+### 新功能
+
+- **主题系统** — 支持运行时切换 81 个电影风格主题（9 个浅色 + 72 个暗色）。设置面板新增「THEME / 外观主题」标签页，一键切换，选择持久化到 localStorage。
+  - 色彩体系全面变量化（CSS Custom Properties），Tailwind 配置、组件样式、ECharts 图表、Mermaid 图表、Markdown 渲染均通过 `--px-*` 变量驱动。
+  - 覆盖赛博朋克、太空史诗、犯罪惊悚、文艺浪漫、动画奇幻、韦斯安德森等电影美学流派。
+  - 新增 `themeStore.ts`（Zustand）管理主题状态。
+
+### 构建
+
+- **afterPack 交叉编译修复** — macOS 打 Windows 包时自动下载 win32 版 better-sqlite3 prebuild（延续 v0.6.18 修复）。
+
+
 ## v0.6.18 (2026-04-16)
 
 ### 构建

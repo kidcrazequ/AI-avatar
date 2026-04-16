@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useThemeStore, THEMES } from '../stores/themeStore'
 import { DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL } from '../services/llm-service'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
@@ -67,6 +68,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const WIKI_TAB = -2
   const MEMORY_TAB = -3
   const CRON_TAB = -4
+  const THEME_TAB = -5
+  const { themeId, setTheme } = useThemeStore()
   const [isExporting, setIsExporting] = useState(false)
   const [logMsg, setLogMsg] = useState('')
   // Wiki 设置状态
@@ -384,6 +387,18 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
           >
             <span className="font-game text-[12px] tracking-wider">CRON</span>
             <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">定时任务</span>
+          </button>
+          {/* 主题设置 Tab */}
+          <button
+            onClick={() => setActiveTab(THEME_TAB)}
+            className={`text-left px-4 py-3 border-l-3 border-t-2 border-t-px-border transition-none
+              ${activeTab === THEME_TAB
+                ? 'border-l-px-primary bg-px-surface text-px-text'
+                : 'border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
+              }`}
+          >
+            <span className="font-game text-[12px] tracking-wider">THEME</span>
+            <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">外观主题</span>
           </button>
           {/* 日志与反馈 Tab */}
           <button
@@ -720,6 +735,45 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                     日志文件包含：报错时间、错误信息、系统版本。<br />
                     不含任何对话内容和 API Key。
                   </p>
+                </div>
+              </div>
+            </div>
+          ) : activeTab === THEME_TAB ? (
+            /* ── 主题设置面板 ── */
+            <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+              <div className="max-w-lg space-y-6">
+                <div className="border-l-3 border-px-primary pl-4 py-1">
+                  <h3 className="font-game text-[16px] font-bold text-px-text mb-1">外观主题</h3>
+                  <p className="font-game text-[14px] text-px-text-sec">选择你喜欢的电影风格主题</p>
+                </div>
+                <div className="space-y-3">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTheme(t.id)}
+                      className={`w-full flex items-center gap-4 px-5 py-4 border-2 transition-none text-left
+                        ${themeId === t.id
+                          ? 'border-px-primary bg-px-primary/10'
+                          : 'border-px-border bg-px-elevated hover:border-px-text-sec'
+                        }`}
+                    >
+                      <div className="w-10 h-10 border-2 border-px-border flex items-center justify-center flex-shrink-0">
+                        {themeId === t.id
+                          ? <span className="text-px-primary font-game text-[14px]">&#x2713;</span>
+                          : <span className="text-px-text-dim font-game text-[12px]">&#x25C6;</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-game text-[15px] text-px-text font-bold">{t.name}</span>
+                          <span className="font-game text-[12px] text-px-text-dim">{t.nameEn}</span>
+                          {t.isDark
+                            ? <span className="pixel-badge text-[9px]">DARK</span>
+                            : <span className="pixel-badge pixel-badge-success text-[9px]">LIGHT</span>}
+                        </div>
+                        <p className="font-game text-[13px] text-px-text-sec mt-1">{t.description}</p>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

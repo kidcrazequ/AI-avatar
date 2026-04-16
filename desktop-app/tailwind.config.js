@@ -7,49 +7,50 @@ module.exports = {
   theme: {
     extend: {
       /**
-       * Pixel LED 设计 Token
-       * 粉色点阵 × void-black —— CRT 显示屏 / LED 点阵质感
+       * 主题化设计 Token —— 所有颜色通过 CSS 变量实现运行时切换
+       * 默认主题: Pixel LED（粉色点阵 × void-black CRT）
+       * 主题定义在 src/index.css 的 :root / [data-theme] 中
        */
       colors: {
         px: {
-          // ── 背景层次（4 层 void-black 梯度）──
-          bg:       '#0A0A0F',   // Layer 0: void-black 底板
-          surface:  '#12121A',   // Layer 1: 面板/卡片
-          elevated: '#1A1A25',   // Layer 2: 工具栏/浮层
-          hover:    '#222230',   // Layer 3: 悬停/选中
+          // ── 背景层次（4 层梯度）──
+          bg:       'var(--px-bg)',
+          surface:  'var(--px-surface)',
+          elevated: 'var(--px-elevated)',
+          hover:    'var(--px-hover)',
 
           // ── 边框 ──
-          border:     '#2A2A3A',
-          'border-dim': '#1E1E2C',
+          border:     'var(--px-border)',
+          'border-dim': 'var(--px-border-dim)',
 
           // ── 文字 ──
-          text:       '#E8E8EC',  // 主文字（LED 白）
-          'text-sec':  '#9898A8', // 次要
-          'text-dim':  '#5A5A6E', // 弱化
+          text:       'var(--px-text)',
+          'text-sec':  'var(--px-text-sec)',
+          'text-dim':  'var(--px-text-dim)',
 
-          // ── 主色：LED 粉（点阵显示屏粉色）──
-          primary:       '#FFB0C8',
-          'primary-hover': '#FFC0D4',
-          'primary-dim':   '#D890A8',
+          // ── 主色 ──
+          primary:       'var(--px-primary)',
+          'primary-hover': 'var(--px-primary-hover)',
+          'primary-dim':   'var(--px-primary-dim)',
 
-          // ── 辅色：柔和薄荷绿 ──
-          accent:      '#50D8A0',
-          'accent-dim': '#38B880',
+          // ── 辅色 ──
+          accent:      'var(--px-accent)',
+          'accent-dim': 'var(--px-accent-dim)',
 
           // ── 功能色 ──
-          success:  '#50D888',
-          warning:  '#F0C060',
-          danger:   '#E85858',
+          success:  'var(--px-success)',
+          warning:  'var(--px-warning)',
+          danger:   'var(--px-danger)',
 
           // ── 兼容旧名 ──
-          black:   '#0A0A0F',
-          white:   '#E8E8EC',
-          warm:    '#FFB0C8',
-          muted:   '#5A5A6E',
-          subtle:  '#9898A8',
-          dark:    '#12121A',
-          mid:     '#1A1A25',
-          line:    '#2A2A3A',
+          black:   'var(--px-bg)',
+          white:   'var(--px-text)',
+          warm:    'var(--px-primary)',
+          muted:   'var(--px-text-dim)',
+          subtle:  'var(--px-text-sec)',
+          dark:    'var(--px-surface)',
+          mid:     'var(--px-elevated)',
+          line:    'var(--px-border)',
         }
       },
       fontFamily: {
@@ -67,15 +68,15 @@ module.exports = {
         'px-xl':   ['20px', { lineHeight: '32px' }],
       },
       boxShadow: {
-        'pixel-sm':    '2px 2px 0 0 #0A0A0F',
-        'pixel':       '3px 3px 0 0 #0A0A0F',
-        'pixel-lg':    '4px 4px 0 0 #0A0A0F',
-        'pixel-xl':    '6px 6px 0 0 #0A0A0F',
-        'pixel-brand': '3px 3px 0 0 #D890A8',
+        'pixel-sm':    '2px 2px 0 0 var(--px-bg)',
+        'pixel':       '3px 3px 0 0 var(--px-bg)',
+        'pixel-lg':    '4px 4px 0 0 var(--px-bg)',
+        'pixel-xl':    '6px 6px 0 0 var(--px-bg)',
+        'pixel-brand': '3px 3px 0 0 var(--px-primary-dim)',
         'pixel-white': '3px 3px 0 0 rgba(232,232,236,0.10)',
-        'pixel-glow':  '0 0 20px rgba(255,176,200,0.15)',
-        'glow-sm':     '0 0 8px rgba(255,176,200,0.12)',
-        'glow-pink':   '0 0 12px rgba(255,176,200,0.20)',
+        'pixel-glow':  '0 0 20px var(--px-glow)',
+        'glow-sm':     '0 0 8px var(--px-glow)',
+        'glow-pink':   '0 0 12px var(--px-glow-strong)',
       },
       animation: {
         'blink':        'blink 1s step-end infinite',
@@ -101,8 +102,8 @@ module.exports = {
           '100%': { transform: 'scale(1)',    opacity: '1' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 8px rgba(255,176,200,0.08)' },
-          '50%':      { boxShadow: '0 0 20px rgba(255,176,200,0.25)' },
+          '0%, 100%': { boxShadow: '0 0 8px var(--px-glow)' },
+          '50%':      { boxShadow: '0 0 20px var(--px-glow-strong)' },
         },
         fadeIn: {
           from: { opacity: '0' },

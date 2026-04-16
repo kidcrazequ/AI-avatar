@@ -15,6 +15,7 @@ import PixelNavBar from './components/PixelNavBar'
 import AvatarImage from './components/AvatarImage'
 import Toast from './components/shared/Toast'
 import { useShallow } from 'zustand/react/shallow'
+import { useThemeStore } from './stores/themeStore'
 import { useChatStore } from './stores/chatStore'
 import { MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core'
 import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
@@ -51,6 +52,8 @@ function App() {
   const cronKnowledgeRunningRef = useRef(false)
   const avatarSwitchSeqRef = useRef(0)
   const skipEffectLoadRef = useRef(false)
+
+  const themeId = useThemeStore(s => s.themeId)
 
   const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, chatModel, systemPrompt } = useChatStore(
     useShallow(s => ({
@@ -394,7 +397,7 @@ function App() {
   )
 
   return (
-    <div className="crt-scanlines">
+    <div className="crt-scanlines" data-theme={themeId}>
       {!activeAvatarId ? (
         renderAvatarSelectPage()
       ) : (

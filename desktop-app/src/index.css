@@ -580,17 +580,17 @@
   --px-text:     #E8D0E0;
   --px-text-sec: #A07898;
   --px-text-dim: #685070;
-  --px-primary:       #D01848;
-  --px-primary-hover: #E02858;
-  --px-primary-dim:   #A81038;
+  --px-primary:#C818A0;
+  --px-primary-hover:#D828B0;
+  --px-primary-dim:#A01080;
   --px-accent:     #7030D0;
   --px-accent-dim: #5820A8;
   --px-success: #48B868;
   --px-warning: #D8A040;
   --px-danger:  #D01030;
-  --px-glow:        rgba(208,24,72,0.14);
-  --px-glow-strong: rgba(208,24,72,0.28);
-  --px-scanline: rgba(112,48,208,0.025);
+  --px-glow:rgba(200,24,160,0.14);
+  --px-glow-strong:rgba(200,24,160,0.28);
+  --px-scanline:rgba(200,24,160,0.025);
 }
 
 /* ── 你的名字（黄昏橙 × 彗星蓝 — 跨越时空的思念） ── */
@@ -700,17 +700,17 @@
   --px-text:     #D8D8E0;
   --px-text-sec: #9090A0;
   --px-text-dim: #585868;
-  --px-primary:       #B8A060;
-  --px-primary-hover: #C8B070;
-  --px-primary-dim:   #988848;
-  --px-accent:     #7888A0;
-  --px-accent-dim: #607088;
+  --px-primary:#8898B8;
+  --px-primary-hover:#98A8C8;
+  --px-primary-dim:#7080A0;
+  --px-accent:#C8B078;
+  --px-accent-dim:#A89860;
   --px-success: #50B878;
   --px-warning: #D0A848;
   --px-danger:  #C84848;
-  --px-glow:        rgba(184,160,96,0.12);
-  --px-glow-strong: rgba(184,160,96,0.25);
-  --px-scanline: rgba(184,160,96,0.015);
+  --px-glow:rgba(136,152,184,0.10);
+  --px-glow-strong:rgba(136,152,184,0.22);
+  --px-scanline:rgba(136,152,184,0.015);
 }
 
 /* ── 2001太空漫游（HAL 红 × 无菌白） ── */
@@ -854,10 +854,10 @@
   --px-bg:#0C0808;--px-surface:#161210;--px-elevated:#201A16;--px-hover:#2A221E;
   --px-border:#382E28;--px-border-dim:#28201A;
   --px-text:#F0E8DC;--px-text-sec:#B0A898;--px-text-dim:#787068;
-  --px-primary:#D09048;--px-primary-hover:#D8A058;--px-primary-dim:#B07838;
+  --px-primary:#E8C078;--px-primary-hover:#F0D088;--px-primary-dim:#C8A060;
   --px-accent:#E8D8C0;--px-accent-dim:#C8B8A0;
   --px-success:#68A868;--px-warning:#D09848;--px-danger:#B84838;
-  --px-glow:rgba(208,144,72,0.10);--px-glow-strong:rgba(208,144,72,0.22);--px-scanline:rgba(208,144,72,0.015);
+  --px-glow:rgba(232,192,120,0.10);--px-glow-strong:rgba(232,192,120,0.22);--px-scanline:rgba(232,192,120,0.015);
 }
 
 /* ── 消失的爱人（冰钢蓝 × 有毒绿） ── */
@@ -876,10 +876,10 @@
   --px-bg:#0A0808;--px-surface:#141010;--px-elevated:#1E1818;--px-hover:#282020;
   --px-border:#383028;--px-border-dim:#282018;
   --px-text:#D8D0B8;--px-text-sec:#A09878;--px-text-dim:#687050;
-  --px-primary:#C8A048;--px-primary-hover:#D8B058;--px-primary-dim:#A88838;
+  --px-primary:#9C8830;--px-primary-hover:#AC9840;--px-primary-dim:#7C7020;
   --px-accent:#585850;--px-accent-dim:#404038;
   --px-success:#60A858;--px-warning:#C8A048;--px-danger:#B83828;
-  --px-glow:rgba(200,160,72,0.10);--px-glow-strong:rgba(200,160,72,0.22);--px-scanline:rgba(200,160,72,0.015);
+  --px-glow:rgba(156,136,48,0.10);--px-glow-strong:rgba(156,136,48,0.22);--px-scanline:rgba(156,136,48,0.015);
 }
 
 /* ── 囚徒（冷雨灰 × 地下室琥珀） ── */
@@ -887,10 +887,10 @@
   --px-bg:#08090A;--px-surface:#101214;--px-elevated:#181C1E;--px-hover:#222628;
   --px-border:#303438;--px-border-dim:#202428;
   --px-text:#D0D4D8;--px-text-sec:#8890A0;--px-text-dim:#506068;
-  --px-primary:#A89058;--px-primary-hover:#B8A068;--px-primary-dim:#887840;
-  --px-accent:#708090;--px-accent-dim:#586878;
+  --px-primary:#7888A0;--px-primary-hover:#8898B0;--px-primary-dim:#607088;
+  --px-accent:#C09850;--px-accent-dim:#A08040;
   --px-success:#58B070;--px-warning:#C8A050;--px-danger:#B84040;
-  --px-glow:rgba(168,144,88,0.10);--px-glow-strong:rgba(168,144,88,0.22);--px-scanline:rgba(168,144,88,0.015);
+  --px-glow:rgba(120,136,160,0.10);--px-glow-strong:rgba(120,136,160,0.22);--px-scanline:rgba(120,136,160,0.015);
 }
 
 /* ── 遗传厄运（窒息棕 × 病态黄） ── */
@@ -898,10 +898,10 @@
   --px-bg:#0A0806;--px-surface:#141008;--px-elevated:#1E1810;--px-hover:#282018;
   --px-border:#382C1C;--px-border-dim:#281E10;
   --px-text:#D8D0B8;--px-text-sec:#A09070;--px-text-dim:#686040;
-  --px-primary:#B8A030;--px-primary-hover:#C8B040;--px-primary-dim:#988820;
+  --px-primary:#90A828;--px-primary-hover:#A0B838;--px-primary-dim:#789018;
   --px-accent:#706848;--px-accent-dim:#585038;
   --px-success:#68A058;--px-warning:#B8A030;--px-danger:#A83020;
-  --px-glow:rgba(184,160,48,0.10);--px-glow-strong:rgba(184,160,48,0.22);--px-scanline:rgba(184,160,48,0.015);
+  --px-glow:rgba(144,168,40,0.10);--px-glow-strong:rgba(144,168,40,0.22);--px-scanline:rgba(144,168,40,0.015);
 }
 
 /* ── 穆赫兰道（林奇蓝 × 红丝绒） ── */
@@ -931,10 +931,10 @@
   --px-bg:#0A0408;--px-surface:#180810;--px-elevated:#280C18;--px-hover:#381020;
   --px-border:#481828;--px-border-dim:#380C1C;
   --px-text:#F0C8D0;--px-text-sec:#B07888;--px-text-dim:#704858;
-  --px-primary:#E00828;--px-primary-hover:#F02038;--px-primary-dim:#B80018;
+  --px-primary:#F03010;--px-primary-hover:#F84828;--px-primary-dim:#C82008;
   --px-accent:#2040B8;--px-accent-dim:#1830A0;
   --px-success:#48C068;--px-warning:#D8A040;--px-danger:#E00828;
-  --px-glow:rgba(224,8,40,0.16);--px-glow-strong:rgba(224,8,40,0.32);--px-scanline:rgba(32,64,184,0.025);
+  --px-glow:rgba(240,48,16,0.16);--px-glow-strong:rgba(240,48,16,0.32);--px-scanline:rgba(240,48,16,0.025);
 }
 
 /* ── 曼蒂（迷幻红 × 酸性紫） ── */
@@ -942,10 +942,10 @@
   --px-bg:#0A0208;--px-surface:#180410;--px-elevated:#28081C;--px-hover:#380C28;
   --px-border:#481038;--px-border-dim:#380828;
   --px-text:#F0C0D0;--px-text-sec:#B07090;--px-text-dim:#704060;
-  --px-primary:#D01040;--px-primary-hover:#E02050;--px-primary-dim:#A80830;
+  --px-primary:#A01858;--px-primary-hover:#B02868;--px-primary-dim:#801048;
   --px-accent:#8020C0;--px-accent-dim:#6018A0;
   --px-success:#40D070;--px-warning:#D0A040;--px-danger:#D01040;
-  --px-glow:rgba(208,16,64,0.16);--px-glow-strong:rgba(208,16,64,0.32);--px-scanline:rgba(128,32,192,0.025);
+  --px-glow:rgba(160,24,88,0.16);--px-glow-strong:rgba(160,24,88,0.32);--px-scanline:rgba(160,24,88,0.025);
 }
 
 /* ── 好时光（钠光橙 × 焦虑红） ── */
@@ -964,10 +964,10 @@
   --px-bg:#040408;--px-surface:#080810;--px-elevated:#0C0C1C;--px-hover:#101028;
   --px-border:#181838;--px-border-dim:#0C0C28;
   --px-text:#D0D0E8;--px-text-sec:#8888B0;--px-text-dim:#505078;
-  --px-primary:#00C8A0;--px-primary-hover:#20D8B0;--px-primary-dim:#00A880;
+  --px-primary:#00B0D8;--px-primary-hover:#20C0E8;--px-primary-dim:#0098B8;
   --px-accent:#E83090;--px-accent-dim:#C02078;
   --px-success:#00D890;--px-warning:#E0A848;--px-danger:#E83090;
-  --px-glow:rgba(0,200,160,0.14);--px-glow-strong:rgba(0,200,160,0.28);--px-scanline:rgba(232,48,144,0.02);
+  --px-glow:rgba(0,176,216,0.14);--px-glow-strong:rgba(0,176,216,0.28);--px-scanline:rgba(232,48,144,0.02);
 }
 
 /* ── 春假（热带霓虹 × 日落粉） ── */
@@ -975,10 +975,10 @@
   --px-bg:#08040C;--px-surface:#100818;--px-elevated:#1C0E28;--px-hover:#281438;
   --px-border:#381C48;--px-border-dim:#281038;
   --px-text:#E8D0E0;--px-text-sec:#A880A8;--px-text-dim:#685078;
-  --px-primary:#FF4090;--px-primary-hover:#FF60A8;--px-primary-dim:#D03078;
+  --px-primary:#FF6050;--px-primary-hover:#FF7868;--px-primary-dim:#D84838;
   --px-accent:#30E0D0;--px-accent-dim:#20C0B0;
   --px-success:#40E080;--px-warning:#E0B048;--px-danger:#E03060;
-  --px-glow:rgba(255,64,144,0.14);--px-glow-strong:rgba(255,64,144,0.28);--px-scanline:rgba(48,224,208,0.02);
+  --px-glow:rgba(255,96,80,0.14);--px-glow-strong:rgba(255,96,80,0.28);--px-scanline:rgba(48,224,208,0.02);
 }
 
 /* ── 瞬息全宇宙（多元宇宙紫 × 贝果米） ── */
@@ -997,10 +997,10 @@
   --px-bg:#0A0808;--px-surface:#161210;--px-elevated:#201C18;--px-hover:#2A2420;
   --px-border:#3A3028;--px-border-dim:#2A2018;
   --px-text:#E8DCC8;--px-text-sec:#A89880;--px-text-dim:#706850;
-  --px-primary:#D8A040;--px-primary-hover:#E0B050;--px-primary-dim:#B88830;
+  --px-primary:#D87840;--px-primary-hover:#E08850;--px-primary-dim:#B86030;
   --px-accent:#4870A8;--px-accent-dim:#385888;
   --px-success:#60A868;--px-warning:#D8A040;--px-danger:#B84040;
-  --px-glow:rgba(216,160,64,0.10);--px-glow-strong:rgba(216,160,64,0.22);--px-scanline:rgba(216,160,64,0.015);
+  --px-glow:rgba(216,120,64,0.10);--px-glow-strong:rgba(216,120,64,0.22);--px-scanline:rgba(216,120,64,0.015);
 }
 
 /* ── 燃烧（韩国秋棕 × 黄昏橘） ── */
@@ -1008,10 +1008,10 @@
   --px-bg:#0C0806;--px-surface:#18120C;--px-elevated:#241A14;--px-hover:#30221C;
   --px-border:#403024;--px-border-dim:#302018;
   --px-text:#E0D4C0;--px-text-sec:#A89478;--px-text-dim:#706850;
-  --px-primary:#D07030;--px-primary-hover:#E08040;--px-primary-dim:#B05820;
+  --px-primary:#A86028;--px-primary-hover:#B87038;--px-primary-dim:#884818;
   --px-accent:#886848;--px-accent-dim:#705840;
   --px-success:#68A060;--px-warning:#D07030;--px-danger:#B03828;
-  --px-glow:rgba(208,112,48,0.10);--px-glow-strong:rgba(208,112,48,0.22);--px-scanline:rgba(208,112,48,0.015);
+  --px-glow:rgba(168,96,40,0.10);--px-glow-strong:rgba(168,96,40,0.22);--px-scanline:rgba(168,96,40,0.015);
 }
 
 /* ── 魅影缝匠（薰衣草 × 奶油白） ── */
@@ -1030,10 +1030,10 @@
   --px-bg:#0A0808;--px-surface:#141010;--px-elevated:#1E1818;--px-hover:#282020;
   --px-border:#382C28;--px-border-dim:#28201C;
   --px-text:#E0D8C8;--px-text-sec:#A09880;--px-text-dim:#687058;
-  --px-primary:#B87848;--px-primary-hover:#C88858;--px-primary-dim:#986038;
+  --px-primary:#C88050;--px-primary-hover:#D89060;--px-primary-dim:#A86840;
   --px-accent:#5890C0;--px-accent-dim:#4078A0;
   --px-success:#60A868;--px-warning:#C89040;--px-danger:#B04038;
-  --px-glow:rgba(184,120,72,0.10);--px-glow-strong:rgba(184,120,72,0.22);--px-scanline:rgba(184,120,72,0.015);
+  --px-glow:rgba(200,128,80,0.10);--px-glow-strong:rgba(200,128,80,0.22);--px-scanline:rgba(200,128,80,0.015);
 }
 
 /* ── 晒后假日（褪色青 × 温暖记忆黄） ── */
@@ -1096,10 +1096,10 @@
   --px-bg:#0A0A0C;--px-surface:#141418;--px-elevated:#1E1E24;--px-hover:#282830;
   --px-border:#38384040;--px-border-dim:#282830;
   --px-text:#E0DCE0;--px-text-sec:#989098;--px-text-dim:#605860;
-  --px-primary:#C8A050;--px-primary-hover:#D8B060;--px-primary-dim:#A88840;
-  --px-accent:#A0A8B8;--px-accent-dim:#8090A0;
+  --px-primary:#B0A8C0;--px-primary-hover:#C0B8D0;--px-primary-dim:#9890A8;
+  --px-accent:#D0A848;--px-accent-dim:#B89038;
   --px-success:#58B070;--px-warning:#C8A050;--px-danger:#B84040;
-  --px-glow:rgba(200,160,80,0.10);--px-glow-strong:rgba(200,160,80,0.22);--px-scanline:rgba(200,160,80,0.015);
+  --px-glow:rgba(176,168,192,0.10);--px-glow-strong:rgba(176,168,192,0.22);--px-scanline:rgba(176,168,192,0.015);
 }
 
 /* ── 爆裂鼓手（爵士黑金 × 聚光灯白） ── */
@@ -1140,10 +1140,10 @@
   --px-bg:#0A0806;--px-surface:#141008;--px-elevated:#1C180E;--px-hover:#242016;
   --px-border:#342C20;--px-border-dim:#242014;
   --px-text:#D0C8B0;--px-text-sec:#908870;--px-text-dim:#585040;
-  --px-primary:#A08850;--px-primary-hover:#B09860;--px-primary-dim:#887040;
+  --px-primary:#886040;--px-primary-hover:#987050;--px-primary-dim:#705030;
   --px-accent:#C8A870;--px-accent-dim:#A89060;
   --px-success:#60A060;--px-warning:#A08850;--px-danger:#903028;
-  --px-glow:rgba(160,136,80,0.08);--px-glow-strong:rgba(160,136,80,0.18);--px-scanline:rgba(160,136,80,0.012);
+  --px-glow:rgba(136,96,64,0.08);--px-glow-strong:rgba(136,96,64,0.18);--px-scanline:rgba(136,96,64,0.012);
 }
 
 /* ── 第一归正会（苦修绿 × 教堂石灰） ── */
@@ -1162,10 +1162,10 @@
   --px-bg:#0A0808;--px-surface:#141010;--px-elevated:#1E1818;--px-hover:#282020;
   --px-border:#3A2C28;--px-border-dim:#28201C;
   --px-text:#E0D4C8;--px-text-sec:#A09488;--px-text-dim:#686058;
-  --px-primary:#C89058;--px-primary-hover:#D8A068;--px-primary-dim:#A87848;
+  --px-primary:#D87030;--px-primary-hover:#E08040;--px-primary-dim:#B85820;
   --px-accent:#808078;--px-accent-dim:#606060;
   --px-success:#60A060;--px-warning:#C89058;--px-danger:#A83830;
-  --px-glow:rgba(200,144,88,0.10);--px-glow-strong:rgba(200,144,88,0.22);--px-scanline:rgba(200,144,88,0.015);
+  --px-glow:rgba(216,112,48,0.10);--px-glow-strong:rgba(216,112,48,0.22);--px-scanline:rgba(216,112,48,0.015);
 }
 
 /* ── 犬之力（蒙大拿土 × 冷空蓝） ── */
@@ -1206,10 +1206,10 @@
   --px-bg:#08080A;--px-surface:#121214;--px-elevated:#1C1C1E;--px-hover:#26262A;
   --px-border:#363638;--px-border-dim:#262628;
   --px-text:#D0CCC0;--px-text-sec:#908C80;--px-text-dim:#585650;
-  --px-primary:#C8B058;--px-primary-hover:#D8C068;--px-primary-dim:#A89840;
+  --px-primary:#E8D080;--px-primary-hover:#F0D890;--px-primary-dim:#C8B068;
   --px-accent:#808088;--px-accent-dim:#606068;
   --px-success:#60A060;--px-warning:#C8B058;--px-danger:#A04030;
-  --px-glow:rgba(200,176,88,0.10);--px-glow-strong:rgba(200,176,88,0.22);--px-scanline:rgba(200,176,88,0.015);
+  --px-glow:rgba(232,208,128,0.10);--px-glow-strong:rgba(232,208,128,0.22);--px-scanline:rgba(232,208,128,0.015);
 }
 
 /* ── 未来罪行（手术台青 × 器官红） ── */
@@ -1217,10 +1217,10 @@
   --px-bg:#040808;--px-surface:#081010;--px-elevated:#0E1A1A;--px-hover:#142424;
   --px-border:#1C3030;--px-border-dim:#102424;
   --px-text:#C8D8D0;--px-text-sec:#7898A0;--px-text-dim:#406060;
-  --px-primary:#189888;--px-primary-hover:#28A898;--px-primary-dim:#108070;
+  --px-primary:#10706C;--px-primary-hover:#20807C;--px-primary-dim:#08585C;
   --px-accent:#B03040;--px-accent-dim:#902030;
   --px-success:#38C078;--px-warning:#C8A040;--px-danger:#B03040;
-  --px-glow:rgba(24,152,136,0.12);--px-glow-strong:rgba(24,152,136,0.25);--px-scanline:rgba(24,152,136,0.02);
+  --px-glow:rgba(16,112,108,0.12);--px-glow-strong:rgba(16,112,108,0.25);--px-scanline:rgba(24,152,136,0.02);
 }
 
 /* ── 瑞士军刀男（森林苔绿 × 漂流木） ── */
@@ -1228,10 +1228,10 @@
   --px-bg:#06080A;--px-surface:#0C1210;--px-elevated:#141C18;--px-hover:#1C2620;
   --px-border:#243428;--px-border-dim:#1C281C;
   --px-text:#D0D8C8;--px-text-sec:#88A088;--px-text-dim:#506858;
-  --px-primary:#50A070;--px-primary-hover:#60B080;--px-primary-dim:#408858;
+  --px-primary:#38886C;--px-primary-hover:#48987C;--px-primary-dim:#28705C;
   --px-accent:#A89878;--px-accent-dim:#888068;
   --px-success:#50A870;--px-warning:#C0A048;--px-danger:#A84840;
-  --px-glow:rgba(80,160,112,0.10);--px-glow-strong:rgba(80,160,112,0.22);--px-scanline:rgba(80,160,112,0.015);
+  --px-glow:rgba(56,136,108,0.10);--px-glow-strong:rgba(56,136,108,0.22);--px-scanline:rgba(80,160,112,0.015);
 }
 
 /* ══════ 浅色主题 ══════ */
@@ -1241,10 +1241,10 @@
   --px-bg:#FFFFF5;--px-surface:#FFFFFF;--px-elevated:#F8F8F0;--px-hover:#F0EEE4;
   --px-border:#D8D4C0;--px-border-dim:#E8E4D0;
   --px-text:#282420;--px-text-sec:#585048;--px-text-dim:#989088;
-  --px-primary:#C8A020;--px-primary-hover:#D8B030;--px-primary-dim:#A88818;
+  --px-primary:#A89828;--px-primary-hover:#B8A838;--px-primary-dim:#888018;
   --px-accent:#488838;--px-accent-dim:#387028;
   --px-success:#48A048;--px-warning:#C8A020;--px-danger:#C03030;
-  --px-glow:rgba(200,160,32,0.10);--px-glow-strong:rgba(200,160,32,0.20);--px-scanline:rgba(200,160,32,0.012);
+  --px-glow:rgba(168,152,40,0.10);--px-glow-strong:rgba(168,152,40,0.20);--px-scanline:rgba(200,160,32,0.012);
 }
 
 /* ── 月升王国（童军黄 × 海军蓝） ── */
@@ -1274,10 +1274,10 @@
   --px-bg:#FDF5EC;--px-surface:#FFFFFF;--px-elevated:#F8EDE0;--px-hover:#F0E4D0;
   --px-border:#D8C4A0;--px-border-dim:#E8D4B8;
   --px-text:#302820;--px-text-sec:#685840;--px-text-dim:#A09078;
-  --px-primary:#D07038;--px-primary-hover:#D88048;--px-primary-dim:#B05828;
+  --px-primary:#C85030;--px-primary-hover:#D06040;--px-primary-dim:#A84020;
   --px-accent:#2898A0;--px-accent-dim:#208088;
   --px-success:#48A060;--px-warning:#D07038;--px-danger:#C03838;
-  --px-glow:rgba(208,112,56,0.10);--px-glow-strong:rgba(208,112,56,0.20);--px-scanline:rgba(208,112,56,0.012);
+  --px-glow:rgba(200,80,48,0.10);--px-glow-strong:rgba(200,80,48,0.20);--px-scanline:rgba(200,80,48,0.012);
 }
 
 /* ── 佛罗里达乐园（魔幻紫 × 日落橘） ── */

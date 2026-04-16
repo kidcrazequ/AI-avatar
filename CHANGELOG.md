@@ -1,20 +1,38 @@
 # 更新日志
 
-## v0.6.16 (2026-04-15)
+## v0.6.16 (2026-04-16)
 
 ### 新功能
 
-- **RAG 检索三件套优化** — 实体提取侧超时保护、数字密集查询快通路径、检索过程 UI 进度条，降低长耗时与黑盒等待感。
-- **内置 `draw-infographic` 技能（@antv/infographic）** — 集成 AntV Infographic 为默认模板技能，聊天中可生成信息图类可视化（与现有 draw-chart / mermaid 能力并列）。
+- **✨ Skill 路由系统 v1.0** — 三层架构（索引 + grep 路由 + 按需注入）。skill-index.yaml 定义 4 个内置 skill 的 name / keywords / when / priority，SkillRouter 用 segmentit 分词 + bigram 提取 + keyword 反向索引在 < 1ms 内路由到最合适的 skill，命中时把完整 SKILL.md 注入 RAG 结果，省去 load_skill 工具调用的一次 LLM 往返
+- **✨ 内置 `draw-infographic` 技能** — 集成 @antv/infographic（84+ 信息图模板：列表/对比/SWOT/序列阶梯/金字塔/词云），`InfographicRenderer.tsx` 懒加载 + 错误边界，`MessageBubble.tsx` 加 `language-infographic` 代码块分支
+- **✨ 技能 CRUD UI + AI 自然语言生成** — SkillsPanel 支持新建/删除技能，内置技能不可删除（`[BUILTIN]` 标签），新建对话框默认 AI 辅助模式（用户一段话描述 → LLM 基于 templates/skill-template.md + 现有 skill few-shot 生成草稿 → 自动切到手动模式编辑）
+- **✨ Mermaid 图表渲染器** — 支持甘特/流程/时序/思维导图/看板/状态机/ER/类/Git 等 14+ 种 mermaid 语法，LED 粉 × void-black 像素主题，draw-mermaid skill + CLAUDE.md 技能导航
+- **RAG 检索优化三件套** — 实体提取 30s 软超时 + 数字密集查询快通（≥4 数字 token 跳过实体提取）+ UI 阶段进度条（替代彩虹伞）
 
 ### 修复
 
-- **rag-retrieve 实体提取模型** — 实体抽取改用 `qwen-turbo`，缓解原先路线约 177s 级的阻塞，目标落在数十秒量级内。
-- **ECharts 像素主题** — 修复标题挤压、Y 轴范围与颜色覆盖三处视觉回归。
+- **🔥 searchChunks 260s → 155ms (1677x)** — `loadIndex` 在 contexts.json 不存在时 return null → `setTokens` 永远不执行 → 全量 segmentit 分词。修复：`tool-router.getRetriever` 独立调 `loadTokensCache`，不依赖 loadIndex 的前置检查
+- **🔥 rag-retrieve 后保存 tokens 到 _index/tokens.json** — 此前只有 executeToolCall 路径会保存 tokens，rag-retrieve 路径漏了 → 每次重启都在 rag-retrieve 阶段重新分词
+- **🔥 纯图片 / 图片型 docx 的 OCR 结果被静默丢弃** — main.ts 三处 merge 分支 `parsed.perPageChars` 判断只对 PDF 有效，parseImage / parseWord 不设此字段 → Vision OCR 结果整段跳过
+- **🔥 LLM 请求超时不生效** — fetchWithTimeout 的 clearTimeout 在 response headers 到达后 finally 立即触发，body 读取无保护。llm-factory 改用 fetchJsonWithTimeout 覆盖 fetch + json 全周期
+- **🔥 formatDocument 表格型章节跳过 LLM** — isTableLikeContent 预检测（Tab > 3% 或短行 > 45%），避免 LLM 卡 32 分钟。实测 2591 字 .doc 表单：32 分钟 → 2ms
+- **批量导入产物运行时 rag_only** — SoulLoader 把有 `source:` frontmatter 的文件（批量导入产物）运行时当 rag_only 处理，不塞 system prompt
+- **rag-retrieve 实体提取模型** — qwen-plus → qwen-turbo，177s → 预期 < 30s
+- **ECharts 像素主题 3 处视觉修复** — grid.top 100 / yAxis.scale:true / stripExplicitSeriesColors 强制主题 palette + forceLegendBottom 防图例重叠标题 + grid.right 96 防 markLine 截断
+- **parser setTimeout 泄漏** — parseFile 的超时保护未 clearTimeout，批量 300+ 文件后 CLI 进程不退出
+- **docx 表格 fallback** — mammoth 提取过短时从 word/document.xml 直抽 `<w:t>` 节点
+- **docx 图片提取** — parseWord 补充 word/media/* 图片提取为 base64 dataURL
+- **PDF 分页 fallback** — parsePdf 分页信息缺失时 fallback 截图前 N 页
+- **pdfjs 批量 flake 缓解** — parsePdf 末尾调 destroy() 释放 document 引用
+- **章节切分 6 处 regex + 早 return bug + MAX_CHAPTER_CHARS 6000→3000 + embedding slice 500→3000**
 
-### 调试
+### 测试
 
-- **rag-answerer 阶段计时日志** — 为检索与生成各阶段增加耗时打印，便于定位百秒级慢点。
+- **格式化样本测试** — testdocs/format-samples.ts 覆盖 10 种格式端到端
+- **Mermaid e2e 测试** — testdocs/test-mermaid-e2e.ts 3 用例（gantt/flowchart/mindmap）3/3 通过
+- **Token cache 预热验证** — testdocs/warm-tokens.ts + diag-cache.ts
+- **dry-run 递归脚本** — testdocs/dry-run-format-product.ts 支持归档解压 walk + 7 类分类
 
 ## v0.6.15 (2026-04-15)
 

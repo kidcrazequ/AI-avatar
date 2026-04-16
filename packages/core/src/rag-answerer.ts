@@ -23,6 +23,48 @@ import type { EmbeddingCallFn } from './knowledge-indexer'
 export interface RAGConfig {
   callLLM: LLMCallFn
   callEmbedding: EmbeddingCallFn
+  /** 进度回调（可选，UI 用于显示当前阶段，避免长时间无反馈被当成卡死） */
+  onProgress?: (phase: RAGProgressPhase, detail?: string) => void
+}
+
+/** RAG 检索的可观测阶段 */
+export type RAGProgressPhase =
+  | 'embedding'         // 注入查询向量（callEmbedding API）
+  | 'searching'         // BM25 + 向量 RRF 第一跳
+  | 'extracting'        // LLM 实体提取（最慢的一步）
+  | 'multi-hop'         // 多跳检索
+  | 'building'          // 拼装最终 prompt
+  | 'done'
+
+/** 实体提取超时（毫秒）：超过此值放弃，回退到 hop1-only。
+ *  fetchJsonWithTimeout 本身有 5 分钟硬超时，这里设 30s 是为 UX 兜底，
+ *  避免单次 RAG 调用拖到分钟级让用户以为应用挂了。 */
+const ENTITY_EXTRACT_TIMEOUT_MS = 30_000
+
+/** 数字密集查询阈值：query 中 ≥ 此数量的"数字/型号/日期" token 时跳过实体提取，
+ *  直接用 hop1。这类查询 BM25 命中率本来就高，跨组件关联收益小。 */
+const NUMERIC_DENSE_TOKEN_THRESHOLD = 4
+
+/** 判断一个 token 是否为数字 / 型号 / 日期类（非常具体的事实类 token） */
+function isNumericOrIdToken(token: string): boolean {
+  if (!token || token.length === 0) return false
+  // 纯数字（含百分号、点、千分位逗号）
+  if (/^[\d.,%]+$/.test(token)) return true
+  // 含 ≥ 2 位数字 + 字母或连字符的型号 / 编号（如 215、ENS-L262、HC-L315A、TS-7001826、262kWh）
+  if (/^[A-Za-z\u4E00-\u9FFF\d-]*\d{2,}[A-Za-z\u4E00-\u9FFF\d-]*$/.test(token) && /[A-Za-z\u4E00-\u9FFF-]/.test(token)) return true
+  // 年份 / 月份 / 日期片段
+  if (/^(20\d{2}|\d{1,2}月|\d{1,2}日)$/.test(token)) return true
+  return false
+}
+
+function countNumericTokens(query: string): number {
+  // 用空白和常见标点切分，简单粗暴，不依赖中文分词（中文分词时数字本身就是独立 token）
+  const tokens = query.split(/[\s,，。、；：！？\(\)（）\[\]【】"""'']+/).filter(t => t.length > 0)
+  let count = 0
+  for (const t of tokens) {
+    if (isNumericOrIdToken(t)) count++
+  }
+  return count
 }
 
 /**
@@ -91,10 +133,15 @@ export async function retrieveAndBuildPrompt(
   const keywords = tokenize(question)
   const query = keywords.join(' ')
 
+  const emit = (phase: RAGProgressPhase, detail?: string): void => {
+    try { config.onProgress?.(phase, detail) } catch { /* 不让进度回调影响主流程 */ }
+  }
+
   // 注入查询向量（用于 RRF 融合）
   // 在 per-retriever 串行锁保护下，直接操作内部 embeddingMap（零拷贝），完成后清除恢复
   let injectedQueryVector = false
   if (embeddingMap || retriever.hasEmbeddings()) {
+    emit('embedding', '正在分析问题…')
     try {
       const [queryEmb] = await config.callEmbedding([question])
       retriever.injectQueryVector(queryEmb)
@@ -106,8 +153,10 @@ export async function retrieveAndBuildPrompt(
 
   try {
     // 第一跳检索
+    emit('searching', '正在检索知识库…')
     const hop1Chunks = retriever.searchChunks(query, 8)
     if (hop1Chunks.length === 0) {
+      emit('done')
       return `${question}\n\n[系统提示] 知识库检索无结果。知识库可能为空或不包含相关内容。请直接告知用户"当前知识库中没有相关数据，请先导入知识文件"，不要反复调用 search_knowledge / query_excel 等工具尝试搜索。`
     }
 
@@ -118,28 +167,48 @@ export async function retrieveAndBuildPrompt(
     const top1Score = hop1Chunks[0]?.score ?? 0
     let entities: string[] = []
 
-    if (top1Score < HOP1_SCORE_THRESHOLD) {
+    // (b) 数字密集查询快通：query 中包含 ≥ NUMERIC_DENSE_TOKEN_THRESHOLD 个具体数字 / 型号 /
+    // 日期 token 时，认为这是高度具体的事实型查询，BM25 已经能精确命中，跳过实体提取
+    // 节省一次 LLM 调用（10-30 秒）。覆盖典型场景如 "215 机型 2026 1月 3月 效率"。
+    const numericTokenCount = countNumericTokens(question)
+    const isNumericDense = numericTokenCount >= NUMERIC_DENSE_TOKEN_THRESHOLD
+
+    if (top1Score < HOP1_SCORE_THRESHOLD && !isNumericDense) {
       // 实体提取：从第一跳结果中提取组件/设备名
+      emit('extracting', '正在分析关联组件…')
       const hop1Text = hop1Chunks
         .slice(0, 5)
         .map(c => `【${c.heading}】\n${c.content.trim().slice(0, 500)}`)
         .join('\n\n')
 
       try {
-        const entityResponse = await config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
+        // (a) 30s 软超时：超时 fallback 到 hop1-only。fetchJsonWithTimeout 本身有 5min 硬超时，
+        // 这里 30s 是为 UX 兜底，避免单次 rag-retrieve 拖到分钟级让用户以为应用挂了。
+        const entityPromise = config.callLLM(ENTITY_EXTRACT_PROMPT, hop1Text, 200)
+        const timeoutPromise = new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error(`实体提取软超时 ${ENTITY_EXTRACT_TIMEOUT_MS}ms`)), ENTITY_EXTRACT_TIMEOUT_MS),
+        )
+        const entityResponse = await Promise.race([entityPromise, timeoutPromise])
         entities = entityResponse
           .split('\n')
           .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
           .filter(e => e.length >= 2 && e.length <= 20)
       } catch (err) {
-        console.warn('[RAG] 实体提取失败，跳过多跳检索:', err instanceof Error ? err.message : String(err))
+        console.warn('[RAG] 实体提取失败/超时，退回 hop1-only:', err instanceof Error ? err.message : String(err))
       }
+    } else if (isNumericDense) {
+      console.log(`[RAG] 数字密集查询（${numericTokenCount} 个具体 token），跳过实体提取`)
     }
 
     // 多跳检索
+    if (entities.length > 0) {
+      emit('multi-hop', `正在二次检索（${entities.length} 个关联实体）…`)
+    }
     const allChunks = entities.length > 0
       ? retriever.multiHopSearch(query, entities, 15)
       : hop1Chunks.map(c => ({ ...c, hop: 1 }))
+
+    emit('building', '正在拼装上下文…')
 
     // 构建参考资料
     const refText = allChunks
@@ -162,6 +231,7 @@ export async function retrieveAndBuildPrompt(
           .join('\n\n---\n\n')
     }
 
+    emit('done')
     return `用户问题：${question}
 
 以下检索结果是回答的起点，但不是你的全部知识。你的完整知识库在 system prompt 中，请同时使用检索结果和 system prompt 中的所有相关章节来回答。

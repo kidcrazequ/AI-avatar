@@ -777,7 +777,16 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   }
 
   console.log(`[rag-retrieve] before retrieveAndBuildPrompt: ${Date.now() - _ragT0}ms`)
-  const result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding }, undefined, wikiChunks)
+  // (d) 把 RAG 阶段进度推回渲染进程，UI 显示 "正在检索…/正在分析关联组件…/正在拼装上下文…"
+  // 避免长 LLM 调用时用户看到彩虹伞以为应用挂了
+  const onProgress = (phase: string, detail?: string): void => {
+    try {
+      mainWindow?.webContents.send('rag-progress', { avatarId, phase, detail })
+    } catch (sendErr) {
+      void sendErr // 渲染进程已销毁不影响主流程
+    }
+  }
+  const result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
   console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
   return result
 })

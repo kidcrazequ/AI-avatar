@@ -208,6 +208,9 @@ interface ElectronAPI {
   deleteSkill: (avatarId: string, skillId: string) => Promise<void>
   generateSkillDraft: (description: string) => Promise<{ draft: string; suggestedId: string }>
 
+  // RAG 检索阶段进度
+  onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
+
   // 工具调用（GAP4）
   executeToolCall: (avatarId: string, name: string, args: Record<string, unknown>) => Promise<{ content: string; error?: string }>
 

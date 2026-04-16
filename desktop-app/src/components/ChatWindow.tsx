@@ -52,12 +52,33 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const conversationIdRef = useRef(conversationId)
   conversationIdRef.current = conversationId
+  /** RAG 检索阶段（"正在检索…/正在分析关联组件…/正在拼装上下文…"），由 main 进程通过 onRagProgress 推送。
+   *  状态在每次新提问时自动清空（done 阶段清空），避免上一轮残留。 */
+  const [ragProgress, setRagProgress] = useState<{ phase: string; detail?: string } | null>(null)
 
   useEffect(() => {
     return () => {
       if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
     }
   }, [])
+
+  // 监听 RAG 检索进度推送：只接受当前 avatarId 的事件，避免跨分身串
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onRagProgress((data) => {
+      if (data.avatarId !== avatarId) return
+      if (data.phase === 'done') {
+        setRagProgress(null)
+      } else {
+        setRagProgress({ phase: data.phase, detail: data.detail })
+      }
+    })
+    return () => unsubscribe()
+  }, [avatarId])
+
+  // isLoading 变成 false 时强制清掉 ragProgress（兜底）
+  useEffect(() => {
+    if (!isLoading) setRagProgress(null)
+  }, [isLoading])
 
   useEffect(() => {
     resetTransientState()
@@ -232,7 +253,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         />
       )}
 
-      {/* 工具调用 / 思考状态 */}
+      {/* 工具调用 / RAG 检索 / 思考状态 */}
       {(isLoading || isRunningTests) && (
         <div className="px-6 py-2 bg-px-surface border-t-2 border-px-border">
           <div className="flex items-center gap-2">
@@ -247,7 +268,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 ? `${TOOL_NAME_MAP[toolCallStatus] ?? toolCallStatus}...`
                 : isRunningTests
                   ? '正在运行测试...'
-                  : '思考中...'}
+                  : ragProgress
+                    ? (ragProgress.detail ?? `${ragProgress.phase}...`)
+                    : '思考中...'}
             </span>
           </div>
         </div>

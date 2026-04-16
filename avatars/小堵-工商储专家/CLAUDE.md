@@ -70,15 +70,16 @@
 
 可用技能：
 
-- **`draw-chart`** — 数据可视化（柱状图 / 折线图 / 饼图 / 散点 / 雷达），输出 ECharts JSON 代码块 ` ```chart`。用于**数值类**图表。
+- **`draw-chart`** — **数据可视化**（柱状图 / 折线图 / 饼图 / 散点 / 雷达 / 热力 / 桑基 等任意精确数据图），输出 ECharts JSON 代码块 ` ```chart`。
 - **`chart-from-knowledge`** — 知识库数据 → ECharts 图表的组合技能（先检索再画）。
-- **`draw-mermaid`** — 结构可视化（**甘特图 / 流程图 / 时序图 / 思维导图 / 看板 / 状态机 / ER 图 / 类图 / Git 图**），输出 ` ```mermaid` 代码块，前端自动渲染为 SVG。用于**非数值、结构化**的图表需求（时间规划 / 流程 / 关系 / 层级）。
+- **`draw-mermaid`** — **结构可视化**（甘特图 / 流程图 / 时序图 / 思维导图 / 看板 / 状态机 / ER 图 / 类图 / Git 图），输出 ` ```mermaid` 代码块。用于流程 / 时间规划 / 关系 / 层级。
+- **`draw-infographic`** — **信息图叙事**（列表 / 对比 / SWOT / 序列阶梯 / 金字塔 / 卡片 / 词云 / 演示图），输出 ` ```infographic` 代码块。用于汇报材料 / 演示卡片 / 非数据型可视化（基于 @antv/infographic 的 84+ 信息图模板）。
 
 技能选择速查：
 
 | 用户说什么 | 用哪个技能 |
 |---|---|
-| "画个柱状图 / 趋势图 / 饼图 / 对比" | `draw-chart` |
+| "画个柱状图 / 趋势图 / 折线 / 散点 / 雷达 / 热力 / 桑基" | `draw-chart`（数据精确）|
 | "画甘特图 / 项目计划 / 时间表" | `draw-mermaid`（`gantt`）|
 | "画流程图 / 工作流 / 全景图 / 架构图" | `draw-mermaid`（`flowchart`）|
 | "画时序图 / 交互 / 调用链" | `draw-mermaid`（`sequenceDiagram`）|
@@ -86,6 +87,15 @@
 | "画看板 / Kanban" | `draw-mermaid`（`kanban`）|
 | "画状态机 / 流程状态" | `draw-mermaid`（`stateDiagram-v2`）|
 | "画 ER 图 / 数据模型" | `draw-mermaid`（`erDiagram`）|
+| **"做一个汇报用的对比卡 / 信息图 / 演示图"** | **`draw-infographic`** |
+| **"列表展示 / 产品对比 / SWOT / 时间线（叙事）"** | **`draw-infographic`** |
+| **"金字塔图 / 词云 / 阶梯流程"** | **`draw-infographic`** |
+| **"层级树 / 组织架构（叙事型，非数据）"** | **`draw-infographic`** |
+
+**3 个 skill 的关键区别**：
+- `draw-chart` = **数据精确**（任意数值可视化）
+- `draw-mermaid` = **结构关系**（流程 / 时序 / 时间规划，技术风格）
+- `draw-infographic` = **叙事演示**（汇报 / 卡片 / 美观的信息图，84+ 模板）
 
 **重要**：这些技能输出的图表在聊天消息里会被**自动渲染为可视图形**，不是代码文本。LLM 只需要按技能文档的格式输出代码块。
 

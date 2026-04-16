@@ -5,6 +5,7 @@ import { ChatMessage, useChatStore } from '../stores/chatStore'
 import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
 import MermaidRenderer from './MermaidRenderer'
+import InfographicRenderer from './InfographicRenderer'
 
 const REMARK_PLUGINS = [remarkGfm]
 
@@ -23,8 +24,23 @@ function isMermaidComplete(code: string): boolean {
 }
 
 /**
- * 自定义 code 组件：拦截 `language-chart` / `language-mermaid` 代码块，
- * 前者用 ECharts，后者用 Mermaid 渲染。其它 language 走默认 <code>/<pre> 样式。
+ * @antv/infographic DSL 流式检测：首行必须是 `infographic <template-name>`。
+ * 流式接收时未结束的 fragment 不渲染，避免 LLM 还在打字时就 SVG 报错。
+ */
+function isInfographicComplete(code: string): boolean {
+  const trimmed = code.trim()
+  if (trimmed.length < 15) return false
+  // 首行必须是 `infographic xxx-xxx` 格式
+  const firstLine = trimmed.split('\n')[0].trim()
+  if (!/^infographic\s+[a-z][a-z0-9-]+/.test(firstLine)) return false
+  // 至少有 data 块开始（说明已经开始填数据，不是只写了模板名）
+  return /\n\s*data\b/.test(trimmed) || /\n\s*-/.test(trimmed)
+}
+
+/**
+ * 自定义 code 组件：拦截 `language-chart` / `language-mermaid` / `language-infographic`
+ * 三类代码块，分别用 ECharts / Mermaid / @antv/infographic 渲染。
+ * 其它 language 走默认 <code>/<pre> 样式。
  */
 function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boolean }): ReactElement {
   const { inline, className, children, ...rest } = props
@@ -50,7 +66,22 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
     return <MermaidRenderer code={raw} />
   }
 
-  // 非 chart / 非 mermaid 代码块走默认渲染
+  // infographic 分支（信息图/列表/对比/序列/SWOT/思维导图等 84+ 模板）
+  if (className.includes('language-infographic')) {
+    if (!isInfographicComplete(raw)) {
+      return (
+        <pre className="my-3 border-2 border-px-primary/30 bg-px-bg p-3 overflow-x-auto animate-pulse">
+          <div className="font-game text-[11px] tracking-wider text-px-text-dim mb-2">
+            ⏳ INFOGRAPHIC 信息图生成中...
+          </div>
+          <code className="text-[12px] text-px-text-dim font-mono">{raw}</code>
+        </pre>
+      )
+    }
+    return <InfographicRenderer dsl={raw} />
+  }
+
+  // 非 chart / 非 mermaid / 非 infographic 代码块走默认渲染
   if (!className.includes('language-chart')) {
     return <code className={className} {...rest}>{children}</code>
   }

@@ -38,6 +38,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@antv/infographic": "^0.2.17",
     "@monaco-editor/react": "^4.7.0",
     "@soul/core": "file:../packages/core",
     "@tailwindcss/postcss": "^4.2.2",

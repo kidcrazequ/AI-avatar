@@ -2,7 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import { KnowledgeRetriever } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
-import { saveTokensCache } from './utils/chunk-cache'
+import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
 import { SubAgentManager } from './sub-agent-manager'
 import { assertSafeSegment } from './utils/path-security'
 
@@ -59,9 +59,20 @@ export class ToolRouter {
       if (index) {
         retriever.setContexts(index.contexts)
         retriever.setEmbeddings(index.embeddings)
-        // v0.6.0: 加载持久化的 BM25 token 缓存，避免每次重启都重跑 segmentit 中文分词
         if (index.tokens.size > 0) {
           retriever.setTokens(index.tokens)
+        }
+      }
+      // v0.6.16: 独立加载 tokens，不依赖 loadIndex（因为 loadIndex 在
+      // contexts.json / embeddings.json 不存在时直接 return null，连 tokens.json
+      // 也不加载 —— 这是"每次重启都 260s segmentit 分词"的根因！）
+      // 只要 _index/tokens.json 存在，就加载到 retriever，不管其他索引文件是否存在。
+      if (!index) {
+        const indexDir = path.join(knowledgePath, '_index')
+        const tokenCache = loadTokensCache(indexDir)
+        if (tokenCache && tokenCache.size > 0) {
+          retriever.setTokens(tokenCache)
+          console.log(`[tool-router] 仅加载 tokens 缓存 (${tokenCache.size} entries)，contexts/embeddings 不存在`)
         }
       }
       this.retrievers.set(avatarId, retriever)

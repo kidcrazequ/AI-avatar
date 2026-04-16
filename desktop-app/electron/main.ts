@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, type WikiAnswer, type LLMCallFn } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, type WikiAnswer, type LLMCallFn } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -66,6 +66,7 @@ let db: DatabaseManager
 let avatarManager: AvatarManager
 let testManager: TestManager
 let skillManager: SkillManager
+let skillRouter: SkillRouter
 let toolRouter: ToolRouter
 const documentParser = new DocumentParser()
 const scheduledTester = new ScheduledTester()
@@ -176,6 +177,7 @@ function initManagers() {
   avatarManager = new AvatarManager(avatarsPath, templatesPath)
   testManager = new TestManager(avatarsPath)
   skillManager = new SkillManager(avatarsPath)
+  skillRouter = new SkillRouter(avatarsPath)
   toolRouter = new ToolRouter(avatarsPath)
   templateLoader = new TemplateLoader(templatesPath)
   logger.activity('app-init', `avatarsPath=${avatarsPath}`)
@@ -776,23 +778,31 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
     void wikiErr
   }
 
+  // ─── Skill 路由（Layer 1 + Layer 2）──────────────────────────────
+  // 在 RAG 检索之前先用 grep 路由选 skill，把选中 skill 的完整 SKILL.md
+  // 注入到 RAG 结果里。LLM 一次性看到 RAG context + 技能指令，不需要
+  // 额外一轮 load_skill 工具调用，省一次 LLM 往返。
+  skillRouter.loadIndex(avatarId)
+  const routeResult = skillRouter.route(avatarId, question)
+  console.log(`[rag-retrieve] skillRouter: ${routeResult.log.durationMs}ms → ${routeResult.selectedSkill ?? 'none'}`)
+
   console.log(`[rag-retrieve] before retrieveAndBuildPrompt: ${Date.now() - _ragT0}ms`)
-  // (d) 把 RAG 阶段进度推回渲染进程，UI 显示 "正在检索…/正在分析关联组件…/正在拼装上下文…"
-  // 避免长 LLM 调用时用户看到彩虹伞以为应用挂了
   const onProgress = (phase: string, detail?: string): void => {
     try {
       mainWindow?.webContents.send('rag-progress', { avatarId, phase, detail })
     } catch (sendErr) {
-      void sendErr // 渲染进程已销毁不影响主流程
+      void sendErr
     }
   }
-  const result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
+  let result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
+
+  // 如果路由命中了 skill，把 SKILL.md 内容注入到 RAG 结果前面
+  // LLM 会看到 "技能指令 + RAG 参考 + 用户问题" 一次性完成，不需要 load_skill 工具
+  if (routeResult.skillContent) {
+    result = `[系统提示] 根据你的问题，自动加载了技能「${routeResult.selectedSkill}」的完整定义。\n请严格按照以下技能指令执行。\n\n---\n\n${routeResult.skillContent}\n\n---\n\n${result}`
+  }
+
   console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
-  // v0.6.16: rag-retrieve 期间如果 searchChunks 触发了 lazy segmentit 分词
-  // （例如旧 tokens.json 的 cache key 因 splitIntoChapters 改 MAX_CHAPTER_CHARS 而失效），
-  // 把新 token 落盘到 _index/tokens.json，下次会话/查询不用再花 150-200 秒重新分词。
-  // 此前只有 executeToolCall 路径会保存 tokens，rag-retrieve 路径漏了 → 每次重启都
-  // 在 rag-retrieve 阶段重新 segmentit 5000 chunks。
   toolRouter.saveRetrieverTokens(avatarId)
   return result
 })

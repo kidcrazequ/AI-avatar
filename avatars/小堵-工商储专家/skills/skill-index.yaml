@@ -1,0 +1,129 @@
+# Skill 路由索引 v1.0
+#
+# 三层架构：
+#   Layer 1 (本文件): 索引层 — name / keywords / when / priority
+#   Layer 2 (SkillRouter): 路由层 — 意图提取 → grep 召回 → 冲突裁决
+#   Layer 3 (执行层): 加载选中 skill 的完整 SKILL.md → 注入对话
+#
+# keywords 在打包阶段由 LLM 扩充到 30-50 个，覆盖口语/简称/行业黑话/同义词。
+# 运行时 grep 匹配，不依赖 LLM。
+#
+# priority: 数字越小优先级越高。同分时按 keywords 命中数排序。
+
+version: "1.0"
+
+skills:
+  - name: draw-chart
+    path: skills/draw-chart.md
+    domain: 数据可视化
+    keywords:
+      - 柱状图
+      - 折线图
+      - 饼图
+      - 散点图
+      - 雷达图
+      - 热力图
+      - 桑基图
+      - 趋势图
+      - 数据图
+      - 图表
+      - 可视化
+      - 对比图
+      - 占比
+      - 分布
+      - 统计
+      - 效率
+      - 折线
+      - 柱状
+      - 环形图
+      - K线
+      - chart
+      - echarts
+      - 画图
+      - 画个图
+      - 生成图
+      - 数据展示
+      - 走势
+      - 变化趋势
+      - 同比
+      - 环比
+    when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: skills/chart-from-knowledge.md
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 基于数据画
+      - 从表格画
+      - 用数据生成
+      - Excel画图
+      - 表格可视化
+    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
+    priority: 2
+
+  - name: draw-mermaid
+    path: skills/draw-mermaid.md
+    domain: 结构可视化
+    keywords:
+      - 甘特图
+      - 流程图
+      - 时序图
+      - 思维导图
+      - 看板
+      - 状态机
+      - ER图
+      - 类图
+      - Git图
+      - 架构图
+      - 工作流
+      - 调用链
+      - 交互图
+      - 关系图
+      - 全景图
+      - 项目计划
+      - 时间表
+      - 排期
+      - 里程碑
+      - gantt
+      - flowchart
+      - mermaid
+      - 脑图
+      - 序列图
+      - 泳道图
+      - 状态流转
+      - 数据模型
+    when: 用户需要结构化可视化（甘特图/流程图/时序图/思维导图/看板/状态机/ER图等），输出 mermaid 语法
+    priority: 1
+
+  - name: draw-infographic
+    path: skills/draw-infographic.md
+    domain: 信息图叙事
+    keywords:
+      - 信息图
+      - 演示图
+      - 卡片
+      - SWOT
+      - 对比卡
+      - 金字塔
+      - 词云
+      - 阶梯图
+      - 列表展示
+      - 汇报材料
+      - 演示用
+      - 给领导看
+      - 漂亮的图
+      - 产品对比
+      - 时间线
+      - 特性展示
+      - 信息展示
+      - infographic
+      - 组织架构图
+      - 层级图
+      - 市场结构
+      - 产品特性
+      - 对比展示
+      - 服务列表
+    when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
+    priority: 1

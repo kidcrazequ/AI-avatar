@@ -23,6 +23,7 @@ export { SkillManager } from './skill-manager'
 export type { Skill } from './skill-manager'
 
 export { ToolRouter } from './tool-router'
+export { SkillRouter } from './skill-router'
 export type { ToolCallRequest, ToolCallResult } from './tool-router'
 
 export { TemplateLoader } from './template-loader'

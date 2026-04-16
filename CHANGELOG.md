@@ -1,5 +1,11 @@
 # 更新日志
 
+## v0.6.18 (2026-04-16)
+
+### 构建
+
+- **afterPack 交叉编译 Windows 时拉取正确 better-sqlite3 prebuild** — 在 macOS 上执行 `electron-builder --win` 时，`@electron/rebuild` 只会产出当前宿主平台的 `.node`，安装包内的 `better_sqlite3.node` 可能仍是 Mach-O。`afterPack` 在检测到交叉编译目标为 Windows 时，使用 `prebuild-install` 下载对应平台的预编译二进制并替换，避免 Windows 用户安装后加载 native 模块失败。
+
 ## v0.6.17 (2026-04-16)
 
 ### 新功能

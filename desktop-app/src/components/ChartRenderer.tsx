@@ -207,13 +207,54 @@ function convertChartJsToECharts(opt: Record<string, unknown>): Record<string, u
   }
 }
 
-/** 进入 ECharts setOption 前的预处理：先做 schema 转换，再注入安全 grid */
+/**
+ * v0.6.16: 强制剥掉 LLM 显式指定的颜色，让像素主题 palette 接管。
+ *
+ * 背景：draw-chart skill 已明确写 "不得硬编码颜色"，但 LLM 训练数据里
+ * Chart.js / 通用 ECharts 例子大量使用蓝色 itemStyle.color，LLM 经常
+ * 复制粘贴默认蓝色覆盖主题。实测 215 机型截图：line 是默认蓝 #5470C6，
+ * 与 LED 粉主题色不协调。
+ *
+ * 策略：剥掉 opt.color (top level) + 每个 series 的 color / itemStyle.color /
+ * lineStyle.color，让 theme palette 完全接管。如果用户真的需要自定义颜色，
+ * 应该改主题而不是单图覆盖（否则颜色一致性失控）。
+ *
+ * markPoint / markLine 的 color 不剥（这俩是注释类元素，需要醒目对比色）。
+ */
+function stripExplicitSeriesColors(opt: Record<string, unknown>): Record<string, unknown> {
+  const stripped = { ...opt }
+
+  // 剥 top-level color（覆盖整个主题 palette）
+  if ('color' in stripped) delete stripped.color
+
+  if (Array.isArray(stripped.series)) {
+    stripped.series = (stripped.series as Array<Record<string, unknown>>).map(s => {
+      const cleanSeries = { ...s }
+      if ('color' in cleanSeries) delete cleanSeries.color
+      if (cleanSeries.itemStyle && typeof cleanSeries.itemStyle === 'object') {
+        const cleanItemStyle = { ...cleanSeries.itemStyle as Record<string, unknown> }
+        if ('color' in cleanItemStyle) delete cleanItemStyle.color
+        cleanSeries.itemStyle = cleanItemStyle
+      }
+      if (cleanSeries.lineStyle && typeof cleanSeries.lineStyle === 'object') {
+        const cleanLineStyle = { ...cleanSeries.lineStyle as Record<string, unknown> }
+        if ('color' in cleanLineStyle) delete cleanLineStyle.color
+        cleanSeries.lineStyle = cleanLineStyle
+      }
+      return cleanSeries
+    })
+  }
+
+  return stripped
+}
+
+/** 进入 ECharts setOption 前的预处理：先做 schema 转换，再剥显式颜色，再注入安全 grid */
 function normalizeOption(opt: Record<string, unknown>): Record<string, unknown> {
   if (detectChartJsFormat(opt)) {
     console.warn('[ChartRenderer] 检测到 Chart.js 格式输入，自动转换为 ECharts。请检查 draw-chart skill 是否被 LLM 正确遵循。')
-    return withSafeGrid(convertChartJsToECharts(opt))
+    return withSafeGrid(stripExplicitSeriesColors(convertChartJsToECharts(opt)))
   }
-  return withSafeGrid(opt)
+  return withSafeGrid(stripExplicitSeriesColors(opt))
 }
 
 /**

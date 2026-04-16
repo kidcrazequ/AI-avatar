@@ -95,7 +95,9 @@ const PIXEL_THEME = {
   grid: {
     left: 56,
     right: 64,   // v0.6.5: 24 → 64，给 markLine 末端标签留出空间（实测"参考"二字被截断）
-    top: 64,
+    // v0.6.16: 64 → 100，给 title (15px) + 适当 padding + yAxis name + 图例 留出空间
+    // 之前 64 太挤，实测 215 机型截图：yAxis name "设备侧效率（%）" 和图例叠在标题正下方
+    top: 100,
     bottom: 56,  // v0.6.3: 40 → 56，给底部 legend 留出空间
     containLabel: true,
   },
@@ -108,6 +110,11 @@ const PIXEL_THEME = {
   },
 
   yAxis: {
+    // v0.6.16: 默认开 scale，让 Y 轴自适应数据范围（不强制含 0）。
+    // 否则效率 / SOH / 温度 / 价格 这类非零基线指标的折线会被压扁到中间，
+    // 实测 215 机型截图：数据 87-90% 但 Y 轴 0-100，趋势完全看不出来。
+    // LLM 想要含 0 时显式设 yAxis.min: 0 即可。
+    scale: true,
     axisLine: { show: false },
     axisTick: { show: false },
     axisLabel: { color: PIXEL_COLORS.textSec, fontSize: 11, margin: 12 },
@@ -122,8 +129,10 @@ const PIXEL_THEME = {
     nameTextStyle: {
       color: PIXEL_COLORS.textDim,
       fontSize: 11,
-      padding: [0, 0, 8, 0],
+      padding: [0, 0, 12, 0],
     },
+    // v0.6.16: nameGap 16 → 给 yAxis name 和顶部刻度之间留视觉间距
+    nameGap: 16,
   },
 
   // 毛玻璃 tooltip
@@ -157,10 +166,17 @@ const PIXEL_THEME = {
     symbol: 'circle',
     symbolSize: 6,
     showSymbol: false,
-    lineStyle: { width: 2.5 },
+    // v0.6.16: 加 LED 粉发光 shadow，提升"高级感"
+    lineStyle: {
+      width: 2.5,
+      shadowColor: 'rgba(255, 176, 200, 0.45)',
+      shadowBlur: 12,
+      shadowOffsetY: 2,
+    },
     emphasis: {
+      focus: 'series' as const,
       lineStyle: { width: 3.5 },
-      itemStyle: { borderWidth: 2 },
+      itemStyle: { borderWidth: 2, shadowBlur: 18 },
     },
     // v0.6.3: 移除默认 areaStyle。之前 line.areaStyle 默认 ON 时多 series
     // 折线图会叠加多层粉色渐变，视觉变浑浊（实测 215 机型截图：2 条 series
@@ -186,14 +202,24 @@ const PIXEL_THEME = {
       symbol: ['none', 'none'],
     },
     markPoint: {
+      // v0.6.16: 把"水滴"风格换成更克制的小圆点 + 边框 glow
+      symbol: 'circle',
+      symbolSize: 12,
       itemStyle: {
         color: PIXEL_COLORS.primary,
-        borderColor: PIXEL_COLORS.primaryDim,
-        borderWidth: 1,
+        borderColor: '#FFFFFF',
+        borderWidth: 1.5,
+        shadowColor: 'rgba(255, 176, 200, 0.6)',
+        shadowBlur: 10,
       },
       label: {
         color: PIXEL_COLORS.text,
-        fontSize: 10,
+        fontSize: 11,
+        position: 'top' as const,
+        offset: [0, -6],
+        backgroundColor: 'rgba(10, 10, 15, 0.85)',
+        padding: [3, 6],
+        borderRadius: 3,
       },
     },
   },

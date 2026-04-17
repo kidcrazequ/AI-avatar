@@ -231,6 +231,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deletePromptTemplate: (id: string, avatarId: string) =>
     ipcRenderer.invoke('delete-prompt-template', id, avatarId),
 
+  // 图表答案 cache（chartConsistencyMode 同问同答）
+  getChartCacheHit: (avatarId: string, queryHash: string) =>
+    ipcRenderer.invoke('get-chart-cache-hit', avatarId, queryHash),
+  saveChartCacheEntry: (avatarId: string, payload: { queryHash: string; queryPreview: string; assistantContent: string; excelBasenames?: string[] }) =>
+    ipcRenderer.invoke('save-chart-cache-entry', avatarId, payload),
+
   // 检查更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
 })

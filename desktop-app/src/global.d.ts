@@ -291,6 +291,24 @@ interface ElectronAPI {
   getPromptTemplates: (avatarId: string) => Promise<PromptTemplate[]>
   updatePromptTemplate: (id: string, avatarId: string, title: string, content: string) => Promise<void>
   deletePromptTemplate: (id: string, avatarId: string) => Promise<void>
+  /**
+   * 查询 chart 答案 cache（chartConsistencyMode 同问同答）。
+   * 命中 → { hit:true, assistantContent, createdAt }；未命中/快照失效 → { hit:false }
+   */
+  getChartCacheHit: (avatarId: string, queryHash: string) => Promise<
+    | { hit: true; assistantContent: string; createdAt: number }
+    | { hit: false }
+  >
+  /**
+   * 写入 chart 答案 cache。主进程侧自动快照 <avatar>/soul.md 与
+   * payload.excelBasenames 指向的 <avatar>/knowledge/_excel/<basename>.json。
+   */
+  saveChartCacheEntry: (avatarId: string, payload: {
+    queryHash: string
+    queryPreview: string
+    assistantContent: string
+    excelBasenames?: string[]
+  }) => Promise<void>
   checkUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion?: string; downloadUrl?: string; releaseNotes?: string }>
   /** 用系统文件管理器打开日志目录，返回目录路径 */
   openLogsFolder: () => Promise<string>

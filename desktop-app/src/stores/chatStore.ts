@@ -287,6 +287,132 @@ const MAX_TOOL_ROUNDS = 10
 const MAX_CONTEXT_MESSAGES = 40
 /** 单轮 LLM 调用超时（3 分钟），防止流式响应挂死永久阻塞 */
 const ROUND_TIMEOUT_MS = 180_000
+/**
+ * query_excel 优化开关（可快速回滚）。
+ * 回滚方式：将该常量改为 false，恢复旧行为（不限制调用次数，不做同参缓存）。
+ */
+const ENABLE_QUERY_EXCEL_GUARD = true
+/**
+ * 单次对话里 query_excel 的实际执行上限（超限后返回收敛提示，不再执行工具）。
+ * B1 改造：从 2 改为 1，让 LLM 必须用第一次查到的数据回答，
+ * 路径变短 → 同问一致性显著提升、总耗时显著降低。
+ * 回滚方式：恢复为 2。
+ */
+const MAX_QUERY_EXCEL_CALLS_PER_REQUEST = 1
+/**
+ * load_skill 守卫开关（B1 改造）。
+ * 启用后限制 load_skill 在单次对话里的调用次数，防止 LLM 中途切换技能导致路径变长。
+ * 回滚方式：将该常量改为 false，恢复旧行为（不限制 load_skill 调用次数）。
+ */
+const ENABLE_LOAD_SKILL_GUARD = true
+/**
+ * 单次对话里 load_skill 的实际执行上限（超限后返回收敛提示，不再执行工具）。
+ * 一般情况下 SkillRouter 已在 systemPrompt 注入相关技能，
+ * LLM 不应该再主动 load_skill；如果真要调，最多 1 次。
+ */
+const MAX_LOAD_SKILL_CALLS_PER_REQUEST = 1
+/**
+ * 工具收敛模式开关（可快速回滚）。
+ * 当工具达到上限后，后续轮次禁用工具，强制 LLM 基于现有结果直接收敛回答。
+ */
+const ENABLE_TOOL_CONVERGE_MODE = true
+/** 单条工具结果注入上下文的最大字符数（超长会被本地截断） */
+const MAX_TOOL_RESULT_CONTEXT_CHARS = 6000
+/**
+ * 收敛模式下的最终轮次提速开关（可快速回滚）。
+ * 回滚方式：改为 false，恢复旧行为（不注入收敛提示，不限制最终轮 max_tokens/temperature）。
+ */
+const ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP = true
+/** 收敛最终轮的输出长度上限，避免长篇推理拖慢响应 */
+const CONVERGE_FINAL_ROUND_MAX_TOKENS = 1200
+/**
+ * 图表一致性模式开关（可快速回滚）。
+ * 命中图表请求时固定较低 temperature，并注入统一的降级规则，减少同问多解。
+ */
+const ENABLE_CHART_CONSISTENCY_MODE = true
+/** 图表一致性模式温度：与确定性模式对齐，保持 0，避免图表请求被拉高到 0.2 后同问多解 */
+const CHART_CONSISTENCY_TEMPERATURE = 0
+/** 图表请求关键词（领域无关，用于识别一致性模式场景） */
+const CHART_KEYWORDS = /(图表|可视化|趋势图|折线图|柱状图|柱图|饼图|KPI|对比图|分布图)/i
+/** 时间范围关键词（领域无关，用于识别“时间序列趋势”类场景） */
+const TIME_RANGE_KEYWORDS = /(20\d{2}年|[1-9]|1[0-2])\s*(月|~|～|到|至|-|—)/i
+
+function shouldEnableChartConsistencyMode(content: string, hasImages: boolean): boolean {
+  if (hasImages) return false
+  if (!ENABLE_CHART_CONSISTENCY_MODE) return false
+  return CHART_KEYWORDS.test(content) && TIME_RANGE_KEYWORDS.test(content)
+}
+
+/**
+ * 确定性模式开关（方案 A 轻量加强一致性）。
+ * 启用后：所有 LLM 轮次默认 temperature=0、并基于用户问题文本派生稳定 seed，
+ * 显著降低同问不同答的概率。注意：
+ * - 优先级最低：若 chartConsistencyMode 或 shouldConvergeFast 已指定 temperature，则尊重已有逻辑。
+ * - seed 字段对不支持的服务端会被忽略（OpenAI 兼容协议允许未知字段）。
+ * 回滚方式：将本常量改为 false，恢复旧的"不传 temperature/seed"行为。
+ */
+const ENABLE_DETERMINISTIC_MODE = true
+/** 确定性模式默认温度，0 表示尽量贪心解码 */
+const DETERMINISTIC_TEMPERATURE = 0
+
+/**
+ * 图表请求时跳过 memory_nudge 注入（独立开关，可单独回滚）。
+ * 原因：nudge 文本会在 user 消息末尾追加一段提示，
+ * 这会改变最终送给 LLM 的 prompt → 不同会话状态下同问可能得不同答。
+ * 仅在图表一致性模式命中时跳过；其它场景 nudge 行为完全不变。
+ * 回滚方式：将本常量改为 false。
+ */
+const ENABLE_NUDGE_SKIP_ON_CHART = true
+
+/**
+ * 基于字符串内容生成稳定 seed（FNV-1a 32bit 简化版）。
+ * 同样的 user content 会得到同样的 seed，保证"同问"时 LLM 采样一致；
+ * 不同问题得到不同 seed，避免人为强相关。
+ */
+function deriveSeedFromContent(content: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < content.length; i++) {
+    hash ^= content.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return Math.abs(hash | 0) % 2_147_483_647 || 1
+}
+
+/**
+ * 规范化 query_excel 参数生成稳定 cache key。
+ * 目的：LLM 每轮现场生成 tool args 时常因空白/键序/columns 顺序不同导致
+ *       同语义查询 cache miss，数据若有任何浮动回答就会漂。
+ *
+ * 归一化原则：只做等价写法归一（键序、columns 顺序、字符串 trim），
+ * 不做语义归一（"2026-01" 与 { "": "2026-01" } 仍视为不同 key）。
+ *
+ * - 对象键按 Unicode 排序，深层递归同样处理
+ * - 顶层 columns 数组排序（投影列是集合语义，顺序无关）
+ * - 其它数组保持原顺序（如 \/\ 的值列表顺序可能被 LLM 暗含排序语义）
+ * - 字符串 trim 两端空白
+ */
+function normalizeQueryExcelArgs(args: Record<string, unknown>): string {
+  const normObj = (v: unknown): unknown => {
+    if (v === null || v === undefined) return v
+    if (typeof v === 'string') return v.trim()
+    if (Array.isArray(v)) return v.map(normObj)
+    if (typeof v === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        out[k] = normObj((v as Record<string, unknown>)[k])
+      }
+      return out
+    }
+    return v
+  }
+  const norm = normObj(args) as Record<string, unknown>
+  if (Array.isArray(norm.columns)) {
+    norm.columns = [...norm.columns]
+      .map(c => (typeof c === 'string' ? c.trim() : c))
+      .sort((a, b) => String(a).localeCompare(String(b)))
+  }
+  return JSON.stringify(norm)
+}
 
 /**
  * 工具结果压缩阈值（字符数）。
@@ -329,6 +455,17 @@ function compressOldToolResults(messages: LLMMessage[]): void {
       }
     }
   }
+}
+
+/** 限制单条工具结果长度，避免超大 payload 拉高后续轮次 TTFT */
+function truncateToolResultForContext(toolName: string, content: string): { content: string; truncated: boolean; originalLength: number } {
+  const originalLength = content.length
+  if (originalLength <= MAX_TOOL_RESULT_CONTEXT_CHARS) {
+    return { content, truncated: false, originalLength }
+  }
+  const clipped = content.slice(0, MAX_TOOL_RESULT_CONTEXT_CHARS)
+  const note = `\n\n[系统提示] 工具 ${toolName} 返回内容过长（原始 ${originalLength} 字符），已截断为前 ${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符用于上下文续推。请基于现有结果直接收敛回答，除非用户明确要求新的查询维度。`
+  return { content: clipped + note, truncated: true, originalLength }
 }
 
 let activeChatRequest: { id: number; conversationId: string } | null = null
@@ -385,6 +522,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (get().isLoading) return
     set({ isLoading: true })
     const requestId = ++chatRequestSeq
+    const requestStartedAt = Date.now()
+    const perfTag = `[chat-perf][conv:${conversationId}][req:${requestId}]`
+    const logPerf = (event: string, extra?: string): void => {
+      const elapsed = Date.now() - requestStartedAt
+      const suffix = extra ? ` ${extra}` : ''
+      // eslint-disable-next-line no-console -- 本地性能诊断日志，便于定位对话链路慢点
+      console.log(`${perfTag} ${event} (+${elapsed}ms)${suffix}`)
+    }
+    logPerf('sendMessage:start', `avatar=${avatarId} contentLen=${content.length} hasImages=${Boolean(images && images.length > 0)}`)
     activeChatRequest = { id: requestId, conversationId }
     if (activeAbortController) activeAbortController.abort()
     const abortController = new AbortController()
@@ -450,6 +596,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (!images || images.length === 0) {
       if (content.trim().length >= MIN_RAG_QUERY_LENGTH) {
         try {
+          const ragStartedAt = Date.now()
+          logPerf('rag:start')
           const [rawRagKey, rawRagUrl] = await Promise.all([
             window.electronAPI.getSetting('ocr_api_key'),
             window.electronAPI.getSetting('ocr_base_url'),
@@ -458,13 +606,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const ragBaseUrl = rawRagUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
           if (ragApiKey) {
             enhancedContent = await window.electronAPI.ragRetrieve(avatarId, content, ragApiKey, ragBaseUrl)
+            logPerf('rag:done', `duration=${Date.now() - ragStartedAt}ms enhancedLen=${enhancedContent.length}`)
+          } else {
+            logPerf('rag:skip-no-key')
           }
         } catch (err) {
           const ragErr = err instanceof Error ? err.message : String(err)
           console.warn('RAG 检索失败，使用原始消息:', ragErr)
           window.electronAPI.logEvent('warn', 'rag-retrieve-error', ragErr)
+          logPerf('rag:error', ragErr)
         }
+      } else {
+        logPerf('rag:skip-short-query', `trimmedLen=${content.trim().length}`)
       }
+    } else {
+      logPerf('rag:skip-images')
     }
 
     // 构建用户消息内容（纯文字 or 多模态）
@@ -475,24 +631,56 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ]
       : enhancedContent
 
+    const chartConsistencyMode = shouldEnableChartConsistencyMode(content, Boolean(images && images.length > 0))
+    if (chartConsistencyMode) {
+      logPerf('chart-consistency:enabled')
+    }
+
+    // 确定性模式：基于 user content 派生稳定 seed，所有轮次共用，提升"同问同答"概率。
+    // 仅当 ENABLE_DETERMINISTIC_MODE 为 true 时生效；不启用时 deterministicSeed 为 undefined，行为不变。
+    const deterministicSeed = ENABLE_DETERMINISTIC_MODE && typeof content === 'string' && content.length > 0
+      ? deriveSeedFromContent(content)
+      : undefined
+    if (deterministicSeed !== undefined) {
+      logPerf('deterministic:enabled', `seed=${deterministicSeed}`)
+    }
+
     // Feature 2: 周期性记忆 Nudge（每 N 轮提醒 AI 是否有内容需要记忆）
     // 合并到 user 内容末尾，避免在 user 消息后插入 system 消息导致 API 兼容性问题
     let nudgedUserContent: LLMMessage['content'] = userContent
-    try {
-      const nudgeIntervalStr = await window.electronAPI.getSetting('memory_nudge_interval')
-      const nudgeInterval = nudgeIntervalStr ? parseInt(nudgeIntervalStr, 10) : 5
-      if (!isNaN(nudgeInterval) && nudgeInterval > 0) {
-        const userRounds = messages.filter(m => m.role === 'user').length + 1
-        if (userRounds > 0 && userRounds % nudgeInterval === 0) {
-          // 仅文字消息时拼接，多模态消息不附加（视觉模型一般不处理记忆提醒）
-          if (typeof nudgedUserContent === 'string') {
-            nudgedUserContent = nudgedUserContent + '\n\n' + MEMORY_NUDGE_TEXT
+    if (chartConsistencyMode && typeof nudgedUserContent === 'string') {
+      nudgedUserContent = `${nudgedUserContent}
+
+[系统提示] 图表一致性模式：
+1) 当用户要求时间范围图且数据点不足 3 个时，默认推荐降级（1 点→KPI，2 点→柱图）；若用户明确指定图型，可按指定图型输出。
+2) 若按用户指定图型输出但数据点不足，必须明确提示“数据点不足，趋势解释受限”。
+3) 不要自动拼接历史数据补齐趋势，除非用户明确要求。
+4) 使用已有数据直接收敛输出，不要重复调用同参数工具。`
+    }
+
+    // 图表请求时跳过 nudge，保证"同问"时 user prompt 内容稳定（独立开关，可单独回滚）
+    const skipNudgeForChart = ENABLE_NUDGE_SKIP_ON_CHART && chartConsistencyMode
+    if (skipNudgeForChart) {
+      logPerf('nudge:skip-for-chart')
+    }
+
+    if (!skipNudgeForChart) {
+      try {
+        const nudgeIntervalStr = await window.electronAPI.getSetting('memory_nudge_interval')
+        const nudgeInterval = nudgeIntervalStr ? parseInt(nudgeIntervalStr, 10) : 5
+        if (!isNaN(nudgeInterval) && nudgeInterval > 0) {
+          const userRounds = messages.filter(m => m.role === 'user').length + 1
+          if (userRounds > 0 && userRounds % nudgeInterval === 0) {
+            // 仅文字消息时拼接，多模态消息不附加（视觉模型一般不处理记忆提醒）
+            if (typeof nudgedUserContent === 'string') {
+              nudgedUserContent = nudgedUserContent + '\n\n' + MEMORY_NUDGE_TEXT
+            }
           }
         }
+      } catch (nudgeErr) {
+        // Nudge 失败不影响正常对话
+        void nudgeErr
       }
-    } catch (nudgeErr) {
-      // Nudge 失败不影响正常对话
-      void nudgeErr
     }
 
     // 构建 API 消息列表（包含 system prompt），截取最近消息避免 token 超限
@@ -539,6 +727,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let assistantText = ''
     let pendingToolCalls: ToolCall[] | undefined
     const assistantMsgId = nextMessageId()
+    let toolCallCount = 0
+    let toolLoopStartedAt: number | null = null
+    let roundStartedAt = 0
+    let roundFirstTokenAt: number | null = null
+    let queryExcelCallCount = 0
+    const queryExcelResultCache = new Map<string, string>()
+    let loadSkillCallCount = 0
+    let forceConvergeNoTools = false
+    let convergeHintInjected = false
 
     /** 取消残留的 rAF，防止跨对话消息污染 */
     const cancelPendingChunk = () => {
@@ -551,11 +748,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const runRound = (): Promise<void> =>
       new Promise((resolve, reject) => {
         assistantText = ''
+        roundStartedAt = Date.now()
+        roundFirstTokenAt = null
+        logPerf('llm-round:start', `round=${round}`)
 
+        const shouldConvergeFast = ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP && forceConvergeNoTools
+        // temperature 优先级：收敛模式 > 确定性模式 > 图表一致性模式（fallback）
+        // 确定性模式优先，避免图表场景命中时反而把 temp 拉高于确定性档位
+        const effectiveTemperature = shouldConvergeFast
+          ? 0.2
+          : (ENABLE_DETERMINISTIC_MODE
+              ? DETERMINISTIC_TEMPERATURE
+              : (chartConsistencyMode ? CHART_CONSISTENCY_TEMPERATURE : undefined))
         llm.chat(
           apiMessages,
           (chunk) => {
             if (isStale()) return
+            if (roundFirstTokenAt === null) {
+              roundFirstTokenAt = Date.now()
+              logPerf('llm-round:first-token', `round=${round} ttft=${roundFirstTokenAt - roundStartedAt}ms`)
+            }
             assistantText += chunk
             // 工具调用中间轮次（round > 0）不实时显示文字给用户，
             // 避免 LLM 在中间轮输出半成品分析后最终轮又重复一遍。
@@ -579,6 +791,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               return
             }
             pendingToolCalls = toolCalls
+            logPerf(
+              'llm-round:done',
+              `round=${round} duration=${Date.now() - roundStartedAt}ms textLen=${assistantText.length} toolCalls=${toolCalls?.length ?? 0}`,
+            )
             // 本轮没有 tool_calls → 最终轮，立即刷新显示最终文字
             if (!toolCalls || toolCalls.length === 0) {
               const text = assistantText
@@ -590,9 +806,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           },
           (error) => {
             cancelPendingChunk()
+            const errMsg = error instanceof Error ? error.message : String(error)
+            logPerf('llm-round:error', `round=${round} duration=${Date.now() - roundStartedAt}ms ${errMsg}`)
             reject(error)
           },
-          { tools: tools.length > 0 ? tools : undefined, signal: abortController.signal }
+          {
+            tools: (!forceConvergeNoTools && tools.length > 0) ? tools : undefined,
+            signal: abortController.signal,
+            maxTokens: shouldConvergeFast ? CONVERGE_FINAL_ROUND_MAX_TOKENS : undefined,
+            temperature: effectiveTemperature,
+            seed: deterministicSeed,
+          }
         )
       })
 
@@ -614,6 +838,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       while (pendingToolCalls && pendingToolCalls.length > 0 && round < MAX_TOOL_ROUNDS) {
         if (isStale()) return
         round++
+        if (toolLoopStartedAt === null) {
+          toolLoopStartedAt = Date.now()
+          logPerf('tool-loop:start')
+        }
+        logPerf('tool-loop:round-start', `round=${round} calls=${pendingToolCalls.length}`)
 
         // 将 LLM 的工具调用请求追加到消息历史（保留 LLM 在工具调用前生成的文本）
         apiMessages.push({
@@ -625,6 +854,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // 执行所有工具调用
         for (const tc of pendingToolCalls) {
           if (isStale()) return
+          const toolStartedAt = Date.now()
+          toolCallCount++
           // GAP8: 更新工具调用状态，供 UI 显示
           set({ toolCallStatus: tc.function.name })
 
@@ -639,15 +870,67 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           let resultText = ''
           try {
-            const result = await window.electronAPI.executeToolCall(avatarId, tc.function.name, toolArgs)
-            if (isStale()) return
-            resultText = result.error
-              ? `工具执行失败: ${result.error}`
-              : result.content
+            if (ENABLE_QUERY_EXCEL_GUARD && tc.function.name === 'query_excel') {
+              const queryExcelCacheKey = normalizeQueryExcelArgs(toolArgs)
+              const cached = queryExcelResultCache.get(queryExcelCacheKey)
+              if (cached) {
+                resultText = cached
+                logPerf('tool-call:cache-hit', `round=${round} name=query_excel`)
+              } else if (queryExcelCallCount >= MAX_QUERY_EXCEL_CALLS_PER_REQUEST) {
+                resultText = `工具执行已跳过：query_excel 在当前对话已执行 ${MAX_QUERY_EXCEL_CALLS_PER_REQUEST} 次。请基于已有查询结果直接完成回答，不要继续调用 query_excel。仅当用户明确要求新增筛选条件时，再发起新一轮对话查询。`
+                logPerf('tool-call:blocked', `round=${round} name=query_excel reason=max-calls(${MAX_QUERY_EXCEL_CALLS_PER_REQUEST})`)
+                if (ENABLE_TOOL_CONVERGE_MODE) {
+                  forceConvergeNoTools = true
+                  logPerf('tool-loop:converge-mode-on', `round=${round} reason=query_excel-max-calls`)
+                }
+              } else {
+                const result = await window.electronAPI.executeToolCall(avatarId, tc.function.name, toolArgs)
+                if (isStale()) return
+                queryExcelCallCount++
+                resultText = result.error
+                  ? `工具执行失败: ${result.error}`
+                  : result.content
+                queryExcelResultCache.set(queryExcelCacheKey, resultText)
+              }
+            } else if (ENABLE_LOAD_SKILL_GUARD && tc.function.name === 'load_skill') {
+              if (loadSkillCallCount >= MAX_LOAD_SKILL_CALLS_PER_REQUEST) {
+                resultText = `工具执行已跳过：load_skill 在当前对话已执行 ${MAX_LOAD_SKILL_CALLS_PER_REQUEST} 次。相关技能内容已在 systemPrompt 中提供，请基于已有上下文直接完成回答，不要继续调用 load_skill。`
+                logPerf('tool-call:blocked', `round=${round} name=load_skill reason=max-calls(${MAX_LOAD_SKILL_CALLS_PER_REQUEST})`)
+                if (ENABLE_TOOL_CONVERGE_MODE) {
+                  forceConvergeNoTools = true
+                  logPerf('tool-loop:converge-mode-on', `round=${round} reason=load_skill-max-calls`)
+                }
+              } else {
+                const result = await window.electronAPI.executeToolCall(avatarId, tc.function.name, toolArgs)
+                if (isStale()) return
+                loadSkillCallCount++
+                resultText = result.error
+                  ? `工具执行失败: ${result.error}`
+                  : result.content
+              }
+            } else {
+              const result = await window.electronAPI.executeToolCall(avatarId, tc.function.name, toolArgs)
+              if (isStale()) return
+              resultText = result.error
+                ? `工具执行失败: ${result.error}`
+                : result.content
+            }
           } catch (toolErr) {
             const msg = toolErr instanceof Error ? toolErr.message : String(toolErr)
             resultText = `工具执行失败: ${msg}`
           }
+          const truncatedResult = truncateToolResultForContext(tc.function.name, resultText)
+          if (truncatedResult.truncated) {
+            logPerf(
+              'tool-call:truncate',
+              `round=${round} name=${tc.function.name} originalLen=${truncatedResult.originalLength} clippedLen=${truncatedResult.content.length}`,
+            )
+          }
+          resultText = truncatedResult.content
+          logPerf(
+            'tool-call:done',
+            `round=${round} name=${tc.function.name} duration=${Date.now() - toolStartedAt}ms resultLen=${resultText.length}`,
+          )
 
           // 将工具结果追加到消息历史
           apiMessages.push({
@@ -670,6 +953,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // 压缩更早轮次的 tool 结果，防止累积撑爆 context
         compressOldToolResults(apiMessages)
 
+        // 收敛模式下仅注入一次简短指令，强制下一轮直接给最终答案，避免冗长分析。
+        if (ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP && forceConvergeNoTools && !convergeHintInjected) {
+          apiMessages.push({
+            role: 'user',
+            content: '[系统提示] 立即基于当前已获得的数据直接输出最终答案。不要继续分析过程，不要再请求任何工具，不要重复列出中间推理。',
+          })
+          convergeHintInjected = true
+          logPerf('tool-loop:converge-hint-injected', `round=${round}`)
+        }
+
         // 继续下一轮对话
         await runRoundWithTimeout()
         if (isStale()) return
@@ -678,6 +971,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (pendingToolCalls && pendingToolCalls.length > 0 && round >= MAX_TOOL_ROUNDS) {
         assistantText = `${assistantText}\n\n[系统提示] 工具调用轮数达到上限，已提前结束本轮。`
         pendingToolCalls = undefined
+        logPerf('tool-loop:hit-max-round', `maxRounds=${MAX_TOOL_ROUNDS}`)
+      }
+      if (toolLoopStartedAt !== null) {
+        logPerf('tool-loop:done', `rounds=${round} calls=${toolCallCount} duration=${Date.now() - toolLoopStartedAt}ms`)
       }
 
       // 所有工具调用结束，处理最终回复
@@ -788,12 +1085,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         console.error('[chatStore] 保存助手消息失败:', msg)
         window.electronAPI.logEvent('error', 'save-assistant-message-error', msg)
       }
+      logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms displayLen=${displayText.length}`)
       if (!isStale()) activeChatRequest = null
     } catch (error) {
       if (isStale()) return
       const errMsg = error instanceof Error ? error.message : String(error)
       console.error('对话失败:', errMsg)
       window.electronAPI.logEvent('error', 'chat-error', errMsg)
+      logPerf('sendMessage:error', errMsg)
       const errorMessage = `抱歉，发生了错误：${errMsg}`
       set((state) => ({
         messages: upsertLastAssistant(state.messages, nextMessageId(), errorMessage),

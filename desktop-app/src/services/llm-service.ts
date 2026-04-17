@@ -49,6 +49,12 @@ export interface ChatOptions {
   tools?: LLMTool[]
   maxTokens?: number
   temperature?: number
+  /**
+   * 采样种子（OpenAI 兼容字段）。在支持的服务端（OpenAI / DeepSeek 新版等）下，
+   * 同样的 messages + temperature + seed 会显著降低输出差异；
+   * 不支持的服务端会忽略该字段（OpenAI 兼容协议允许未知字段），不影响调用。
+   */
+  seed?: number
   signal?: AbortSignal
 }
 
@@ -140,6 +146,7 @@ export class LLMService {
       }
       if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
       if (options.temperature !== undefined) body.temperature = options.temperature
+      if (options.seed !== undefined) body.seed = options.seed
 
       const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
       const mergedSignal = options.signal

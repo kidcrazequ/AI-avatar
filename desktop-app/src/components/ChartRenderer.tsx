@@ -95,6 +95,7 @@ async function ensureEchartsLoaded(): Promise<void> {
       charts.LineChart,
       charts.BarChart,
       charts.PieChart,
+      charts.GaugeChart,
       charts.ScatterChart,
       charts.RadarChart,
       charts.HeatmapChart,

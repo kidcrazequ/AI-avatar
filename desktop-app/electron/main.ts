@@ -9,7 +9,7 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, type WikiAnswer, type LLMCallFn } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, type WikiAnswer, type LLMCallFn, type ChartCacheEntry } from '@soul/core'
 import { DatabaseManager } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -805,6 +805,72 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
   toolRouter.saveRetrieverTokens(avatarId)
   return result
+})
+
+// ─── 图表答案持久化 cache（chartConsistencyMode 同问同答） ───────────────────
+/**
+ * 构造一条 ChartCacheEntry，自动给关键文件做 (mtimeMs, size) 快照：
+ *  - <avatar>/soul.md（人格改 → 缓存应失效）
+ *  - <avatar>/knowledge/_excel/<basename>.json（每条 excelBasename 对应一个）
+ * excelBasenames 由渲染进程从对话里出现过的 query_excel.args.file 收集；
+ * 不存在的 basename 也会被快照（mtime=0,size=0），"原不存在现存在"同样视为失效。
+ */
+function buildChartCacheEntry(
+  avatarRoot: string,
+  payload: { queryHash: string; queryPreview: string; assistantContent: string; excelBasenames?: string[] },
+): ChartCacheEntry {
+  const fileSnapshots = [
+    captureFileSnapshot(path.join(avatarRoot, 'soul.md')),
+  ]
+  for (const basename of payload.excelBasenames ?? []) {
+    assertSafeSegment(basename, 'Excel basename')
+    fileSnapshots.push(
+      captureFileSnapshot(path.join(avatarRoot, 'knowledge', '_excel', `${basename}.json`)),
+    )
+  }
+  return {
+    queryHash: payload.queryHash,
+    queryPreview: payload.queryPreview.slice(0, 200),
+    assistantContent: payload.assistantContent,
+    fileSnapshots,
+    createdAt: Date.now(),
+  }
+}
+
+/**
+ * get-chart-cache-hit: 查询并验证 chart 答案 cache。
+ * 命中 → { hit:true, assistantContent, createdAt }；未命中 / 快照失效 → { hit:false }
+ */
+wrapHandler('get-chart-cache-hit', (_, avatarId: string, queryHash: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (typeof queryHash !== 'string' || !/^[0-9a-f]{8}$/.test(queryHash)) {
+    return { hit: false as const }
+  }
+  const cachePath = path.join(avatarsPath, avatarId, CHART_CACHE_REL_PATH)
+  const cache = loadChartCache(cachePath)
+  const entry = findChartCacheHit(cache, queryHash)
+  if (!entry) return { hit: false as const }
+  return { hit: true as const, assistantContent: entry.assistantContent, createdAt: entry.createdAt }
+})
+
+/**
+ * save-chart-cache-entry: 写入 chart 答案 cache。主进程侧自动给 soul.md 和
+ * excelBasenames 指向的 _excel/<basename>.json 做快照。
+ */
+wrapHandler('save-chart-cache-entry', (_, avatarId: string, payload: { queryHash: string; queryPreview: string; assistantContent: string; excelBasenames?: string[] }) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (!payload || typeof payload.queryHash !== 'string' || !/^[0-9a-f]{8}$/.test(payload.queryHash)) {
+    return
+  }
+  if (typeof payload.queryPreview !== 'string' || typeof payload.assistantContent !== 'string') {
+    return
+  }
+  const avatarRoot = path.join(avatarsPath, avatarId)
+  const cachePath = path.join(avatarRoot, CHART_CACHE_REL_PATH)
+  const cache = loadChartCache(cachePath)
+  const entry = buildChartCacheEntry(avatarRoot, payload)
+  const next = insertChartCacheEntry(cache, entry)
+  saveChartCache(cachePath, next)
 })
 
 // ─── 知识百科（Wiki 融合层）───────────────────────────────────────────────────

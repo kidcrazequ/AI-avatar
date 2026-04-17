@@ -65,5 +65,7 @@ export type { FetchWithTimeoutOptions } from './utils/http'
 export { callVisionOcr, DEFAULT_VISION_MODEL, DEFAULT_VISION_CONCURRENCY, DEFAULT_VISION_PROMPT, DEFAULT_VISION_TIMEOUT_MS } from './utils/vision-ocr'
 export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './utils/vision-ocr'
 export { loadTokensCache, saveTokensCache, TOKENS_FILE } from './utils/chunk-cache'
+export { loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, verifySnapshots, normalizeQueryForHash, hashQueryContent, CHART_CACHE_REL_PATH, DEFAULT_MAX_CHART_CACHE_ENTRIES } from './utils/chart-cache'
+export type { ChartCacheEntry, ChartCache, FileSnapshot } from './utils/chart-cache'
 export type { PersistedTokens } from './utils/chunk-cache'
 

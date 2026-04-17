@@ -387,7 +387,7 @@ export class KnowledgeRetriever {
     // ── 纯 BM25 ──
     return bm25Results
       .filter(c => c.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => (b.score - a.score) || a.file.localeCompare(b.file) || a.heading.localeCompare(b.heading))
       .slice(0, topN)
   }
 
@@ -425,8 +425,8 @@ export class KnowledgeRetriever {
       }
     }
 
-    // 合并：第一跳优先，第二跳按 score 排序追加
-    hop2.sort((a, b) => b.score - a.score)
+    // 合并：第一跳优先，第二跳按 score 排序追加；平分时按 (file, heading) 稳定排序
+    hop2.sort((a, b) => (b.score - a.score) || a.file.localeCompare(b.file) || a.heading.localeCompare(b.heading))
     const merged = [...hop1, ...hop2]
     return merged.slice(0, topN)
   }
@@ -442,9 +442,9 @@ export class KnowledgeRetriever {
   ): Array<{ file: string; heading: string; content: string; score: number }> {
     const k = 60
 
-    // BM25 排名
+    // BM25 排名（平分时按 (file, heading) 二级排序，保证跨查询排名稳定）
     const bm25Sorted = [...bm25Results]
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => (b.score - a.score) || a.file.localeCompare(b.file) || a.heading.localeCompare(b.heading))
     const bm25Rank = new Map<string, number>()
     bm25Sorted.forEach((r, i) => bm25Rank.set(`${r.file}::${r.heading}`, i + 1))
 
@@ -461,7 +461,7 @@ export class KnowledgeRetriever {
       const chunkEmb = this.embeddingMap.get(chunkKey)
       const sim = chunkEmb ? cosineSimilarity(queryEmb, chunkEmb) : 0
       return { key: chunkKey, sim }
-    }).sort((a, b) => b.sim - a.sim)
+    }).sort((a, b) => (b.sim - a.sim) || a.key.localeCompare(b.key))
 
     const vectorRank = new Map<string, number>()
     vectorScored.forEach((r, i) => vectorRank.set(r.key, i + 1))
@@ -494,7 +494,7 @@ export class KnowledgeRetriever {
     }
 
     return fusedResults
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => (b.score - a.score) || a.file.localeCompare(b.file) || a.heading.localeCompare(b.heading))
       .slice(0, topN)
   }
 

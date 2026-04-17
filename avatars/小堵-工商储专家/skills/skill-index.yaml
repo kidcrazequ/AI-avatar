@@ -48,7 +48,7 @@ skills:
       - 同比
       - 环比
     when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
-    priority: 1
+    priority: 2
 
   - name: chart-from-knowledge
     path: skills/chart-from-knowledge.md
@@ -60,8 +60,17 @@ skills:
       - 用数据生成
       - Excel画图
       - 表格可视化
+      - 统计周期
+      - 时间范围
+      - 1到3月
+      - 2026年
+      - 按月趋势
+      - 查询数据
+      - 数据筛选
+      - 指标趋势
+      - 机型
     when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
-    priority: 2
+    priority: 1
 
   - name: draw-mermaid
     path: skills/draw-mermaid.md

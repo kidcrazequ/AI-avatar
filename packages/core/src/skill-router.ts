@@ -19,7 +19,6 @@
 import fs from 'fs'
 import path from 'path'
 import { tokenize } from './knowledge-retriever'
-import type { LLMCallFn } from './document-formatter'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -180,8 +179,19 @@ export class SkillRouter {
       return { selectedSkill: null, skillContent: null, log }
     }
 
-    // 命中 ≥ 1：选 top-1
-    const selected = candidates[0]
+    // 命中 ≥ 1：默认选 top-1，图表类按通用规则做二次裁决
+    let selected = candidates[0]
+    const candidateNames = new Set(candidates.map(c => c.name))
+    if (candidateNames.has('chart-from-knowledge') && candidateNames.has('draw-chart')) {
+      const preferChartFromKnowledge = this.shouldPreferChartFromKnowledge(userMessage)
+      if (preferChartFromKnowledge) {
+        const chartFromKnowledgeCandidate = candidates.find(c => c.name === 'chart-from-knowledge')
+        if (chartFromKnowledgeCandidate) selected = chartFromKnowledgeCandidate
+      } else {
+        const drawChartCandidate = candidates.find(c => c.name === 'draw-chart')
+        if (drawChartCandidate) selected = drawChartCandidate
+      }
+    }
     log.selectedSkill = selected.name
     log.durationMs = Date.now() - t0
 
@@ -246,6 +256,30 @@ export class SkillRouter {
   }
 
   /**
+   * 图表路由通用判定：
+   * - 数据查询型意图（时间范围/指标查询/筛选）优先 chart-from-knowledge
+   * - 用户已在消息中直接给出结构化数值时优先 draw-chart
+   */
+  private shouldPreferChartFromKnowledge(userMessage: string): boolean {
+    const msg = userMessage.toLowerCase()
+    const hasDataQueryIntent = /(查询|筛选|统计|趋势|同比|环比|指标|数据源|excel|csv|sheet|月份|按月|按周|按年|区间|范围|机型|项目)/.test(msg)
+    const hasTimeRangeIntent = /(20\d{2}\s*年|[0-9]{1,2}\s*月).*(到|至|~|～|-|—)|(到|至|~|～|-|—).*(20\d{2}\s*年|[0-9]{1,2}\s*月)/.test(msg)
+    const hasInlineStructuredData = this.hasInlineStructuredData(msg)
+    if (hasInlineStructuredData) return false
+    return hasDataQueryIntent || hasTimeRangeIntent
+  }
+
+  /** 粗粒度识别“用户已贴数据”的场景：表格/列表数值/键值对 */
+  private hasInlineStructuredData(msg: string): boolean {
+    if (msg.includes('|') && msg.includes('\n')) return true // markdown 表格
+    if (/[:：]\s*[-+]?\d+(\.\d+)?(%|万|元|kwh|kw|mw|mwh)?/i.test(msg)) return true // 键值数值
+    if (/(\d+(\.\d+)?%[\s,，;；、]*){3,}/.test(msg)) return true // 连续百分比
+    if (/([a-z\u4e00-\u9fa5]{1,8}\s*[=:：]\s*[-+]?\d+(\.\d+)?[\s,，;；、]*){3,}/i.test(msg)) return true // 键值列表
+    if (/(已给你数据|如下数据|根据以下数据|按这组数据)/.test(msg)) return true
+    return false
+  }
+
+  /**
    * 极简 YAML 解析器（只支持 skill-index.yaml 的固定结构）。
    * 不引入 js-yaml 依赖，手动解析 key: value 和 - item 列表。
    */
@@ -289,7 +323,7 @@ export class SkillRouter {
         // 检查是否内联数组 [a, b, c]
         const inline = kv.replace('keywords:', '').trim()
         if (inline.startsWith('[')) {
-          currentSkill.keywords = inline.replace(/[\[\]]/g, '').split(',').map(s => s.trim())
+          currentSkill.keywords = inline.replace(/\[|\]/g, '').split(',').map(s => s.trim())
           inKeywords = false
         }
         continue

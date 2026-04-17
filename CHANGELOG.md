@@ -1,5 +1,23 @@
 # 更新日志
 
+## v0.7.1 (2026-04-16)
+
+### 新功能
+
+- **图表答案持久化 cache** — `@soul/core` 存储层 + 主进程 IPC（`get-chart-cache-hit` / `save-chart-cache-entry`），`preload` 暴露给渲染进程，为同图复用打基础。
+- **同问同答确定性** — 聊天与 `draw-chart` 参数模板等基础设施；LLM 服务透传 **`seed`**；`ChartRenderer` 注册 **GaugeChart**。
+- **Skill 路由图表二次裁决** — `chart-from-knowledge` 与 `draw-chart` 场景智能再选路。
+
+### 修复与优化
+
+- **知识检索排序稳定性** — 五处 `sort` 补全 `(file, heading)` 二级键，结果顺序可复现。
+- **Electron** — `^41.1.0` → `^41.2.0`。
+
+### 文档与工程
+
+- **架构文档** — README / CONVENTIONS 与主题系统对齐（`cc39b92`）。
+- **分身与 CI** — 小堵知识 README / wiki 元数据；`.github/workflows/desktop-build-win.yml`；`desktop-app/scripts/build-win.bat`。
+
 ## v0.7.0 (2026-04-16)
 
 ### 新功能

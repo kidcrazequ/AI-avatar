@@ -1,7 +1,21 @@
 import fs from 'fs'
 import path from 'path'
+import { KnowledgeManager, isKnowledgeRootReadme } from './knowledge-manager'
 import { collectFilesRecursive } from './utils/common'
 import { resolveUnderRoot } from './utils/path-security'
+
+/**
+ * Excel/CSV 导入生成的 .md（rag_only + source:excel / excel_json）：全文是大表，
+ * search_knowledge 会抽到与「用户问的年月」无关或误导性的碎片（如 Summary 里泛化「1月」），
+ * 模型易误判「2026 未收录」。此类文件**不参与** BM25/向量 chunk 索引，行级数据**只**走 query_excel。
+ */
+function isExcelStructuredRagOnlyMd(content: string): boolean {
+  const head = content.slice(0, Math.min(content.length, 6144))
+  if (!/^---\r?\n/m.test(head)) return false
+  const hasRagOnly = /\brag_only\s*:\s*true\b/.test(head)
+  const hasExcelMarker = /\bsource\s*:\s*excel\b/.test(head) || /^\s*excel_json\s*:/m.test(head)
+  return hasRagOnly && hasExcelMarker
+}
 
 // segmentit 仅发布 CJS 格式，不支持 ESM import
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -523,6 +537,10 @@ export class KnowledgeRetriever {
       return fs.readFileSync(resolved, 'utf-8')
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT' && isKnowledgeRootReadme(relativePath)) {
+        const km = new KnowledgeManager(this.knowledgePath)
+        return km.readFile(relativePath)
+      }
       if (code === 'ENOENT') {
         throw new Error(`文件不存在: ${relativePath}`)
       }
@@ -578,6 +596,10 @@ export class KnowledgeRetriever {
         content = fs.readFileSync(filePath, 'utf-8')
       } catch (err) {
         console.warn(`[KnowledgeRetriever] 跳过文件 ${relativePath}: ${err instanceof Error ? err.message : String(err)}`)
+        continue
+      }
+
+      if (isExcelStructuredRagOnlyMd(content)) {
         continue
       }
 

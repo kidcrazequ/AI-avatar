@@ -13,6 +13,36 @@
 version: "1.0"
 
 skills:
+  - name: query-product-quality
+    path: skills/query-product-quality.md
+    domain: 产品质量数据查询
+    keywords:
+      - 产品质量
+      - 质量指标
+      - 设备侧效率
+      - 系统效率
+      - 故障率
+      - 机型
+      - 215机型
+      - 372机型
+      - 工商储
+      - dashboard
+      - 统计周期
+      - 指标折线
+      - 指标趋势
+      - 质量趋势
+      - 质量折线
+      - 质量柱状
+      - 质量数据
+      - 月度指标
+      - 年度指标
+      - KPI查询
+      - 指标对比
+      - 项目效率
+      - 月份效率
+    when: 用户询问工商储产品质量 KPI（机型/项目/统计周期/设备侧效率/系统效率/故障率等），需要查询 Excel 质量数据看板再画图
+    priority: 0
+
   - name: draw-chart
     path: skills/draw-chart.md
     domain: 数据可视化
@@ -60,16 +90,13 @@ skills:
       - 用数据生成
       - Excel画图
       - 表格可视化
-      - 统计周期
       - 时间范围
       - 1到3月
       - 2026年
       - 按月趋势
       - 查询数据
       - 数据筛选
-      - 指标趋势
-      - 机型
-    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
+    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用（非产品质量 KPI 场景）
     priority: 1
 
   - name: draw-mermaid

@@ -122,7 +122,7 @@ export class SoulLoader {
       '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找产品参数、政策文件、项目案例等',
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
-      '- **query_excel(file, sheet, filter, columns, limit)**: **精确**查询已导入的 Excel / CSV 数据。当用户问涉及表格数据、要按条件筛选行、生成图表时，必须用此工具（不要用 search_knowledge 查 Excel）。filter 支持 MongoDB 风格（$eq/$ne/$gt/$gte/$lt/$lte/$in）。系统 prompt 顶部的"可查询 Excel 数据源"列出所有可用 file 和 sheet',
+      '- **query_excel(file, sheet, filter?, columns?, limit?, mode?)**: **精确**查询已导入的 Excel / CSV 数据。当用户问涉及表格数据、要按条件筛选行、生成图表时，必须用此工具（不要用 search_knowledge 查 Excel）。filter 支持 MongoDB 风格（$eq/$ne/$gt/$gte/$lt/$lte/$in）。传 `mode:"schema"` 可获取指定 sheet 的完整列定义（列名/类型/范围/样例），不返回行数据。',
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
       '- **lookup_policy(province, policy_type)**: 查询省份电价政策或补贴信息',
       '- **compare_products(products)**: 对比多款产品的技术参数',
@@ -190,23 +190,23 @@ export class SoulLoader {
         })
       }
 
-      // Excel 结构化数据源 schema 摘要（供 query_excel 工具调用）
+      // Excel 结构化数据源清单（F1 按需 schema：只列 sheet 名，不注入完整列 schema，
+      // LLM 需要列详情时调 query_excel({mode:'schema', file, sheet}) 按需获取）
       const excelSchemas = this.loadExcelSchemas(path.join(avatarPath, 'knowledge', '_excel'))
       if (excelSchemas.length > 0) {
         parts.push('\n\n---\n\n# 可查询 Excel 数据源\n\n')
-        parts.push('以下 Excel 已导入并建立索引，请使用 `query_excel({file, sheet, filter, columns, limit})` 按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
+        parts.push('以下 Excel 已导入并建立索引，请使用 `query_excel` 工具按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
         parts.push('## Excel 查询纪律（严格执行，不依赖技能加载）\n\n')
-        parts.push('1. **schema 相关问题**（"有没有 X 列"、"X 列是什么类型"、"是否包含月份/日期"、"这张表有哪些字段"、"数据范围"）→ **直接从下方 Schema 摘要回答，不要调 query_excel**。Schema 摘要已包含列名、类型、唯一值数量、数值范围、样例值，足以回答绝大多数 meta 问题。\n')
+        parts.push('1. **schema 相关问题**（"有没有 X 列"、"X 列是什么类型"、"这张表有哪些字段"、"数据范围"）→ 调 `query_excel({mode:"schema", file, sheet})` 获取列详情，再回答；**不要编造字段名**。\n')
         parts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
-        parts.push('3. **单次回答最多 3 次 `query_excel` 调用**。超过说明过滤条件太散，应回退到 Schema 确认字段，而不是继续试探。\n')
-        parts.push('4. **禁止"探索式试探"**（不带 filter 的 `limit: 5` 这种）—— Schema 里已有列名、样例、范围，试探只浪费工具调用轮数。\n')
-        parts.push('5. **画图/图表需求的工具顺序（关键）**：当用户要求生成图表（折线图/柱状图/饼图/趋势对比等），**必须先** `load_skill(\'draw-chart\')` **再** `query_excel`，**不要反过来**。draw-chart 技能内部会告诉你图表 JSON 格式、数据过滤策略、"最多 2 次 query_excel"的纪律。先加载技能再查数据可以让你在技能约束下高效完成，避免烧完轮数才想起要加载技能。\n')
-        parts.push('   - ❌ 错误顺序：`query_excel` × 多次 → 想起要加载 draw-chart 技能 → 轮数已耗尽\n')
-        parts.push('   - ✅ 正确顺序：`load_skill(\'draw-chart\')` → `query_excel` × 1-2 次（带精确 filter）→ 输出 ` ```chart ` 代码块\n')
-        parts.push('6. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n\n')
-        parts.push('## Schema 摘要\n')
+        parts.push('3. **单次回答最多 3 次 `query_excel` 调用**。超过说明过滤条件太散，应先调 `{mode:"schema"}` 确认字段，而不是继续试探。\n')
+        parts.push('4. **禁止"探索式试探"**（不带 filter 的 `limit: 5` 这种）—— 先用 `{mode:"schema"}` 看列名。\n')
+        parts.push('5. **画图/图表需求的工具顺序（关键）**：`load_skill(\'draw-chart\')` → `query_excel` × 1-2 次（带精确 filter）→ 输出 ` ```chart ` 代码块。不要反过来。\n')
+        parts.push('6. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n')
+        parts.push('7. **禁止仅凭 `search_knowledge` / `read_knowledge_file` 命中 Excel 对应 .md 的片段推断行级数值**。**表格数值以 `query_excel` 返回的 JSON 为准**。\n\n')
+        parts.push('## 可用 Excel 清单\n\n')
         excelSchemas.forEach(schema => {
-          parts.push(this.formatExcelSchema(schema))
+          parts.push(this.formatExcelSchemaBrief(schema))
           parts.push('\n')
         })
       }
@@ -391,25 +391,70 @@ export class SoulLoader {
     return schemas
   }
 
-  /** 把单个 Excel 的 schema 格式化为 LLM 可读的 markdown 段。 */
+  /**
+   * 把单个 Excel 的 schema 格式化为 LLM 可读的 markdown 段。
+   *
+   * 优化策略（降低 system prompt 体积 ~50%，减少 TTFT）：
+   *   1. 每列 samples 从 5 个降至 2 个
+   *   2. 超过 MAX_COLS_FULL_DETAIL 列的 sheet，只完整列出前 MAX_COLS_FULL_DETAIL 列；
+   *      剩余列仅列出名称（数值枚举型扩展到 MAX_ENUM_COLS 列）
+   *   3. 字符串样例截断至 MAX_SAMPLE_STR_LEN 字符，避免超长值撑大 prompt
+   *   4. 连续数值列（uniqueCount >= NUM_UNIQUE_THRESHOLD）仅保留 min/max，省略样例
+   */
   private formatExcelSchema(schema: ExcelFileSchema): string {
+    const MAX_COLS_FULL_DETAIL = 20
+    const MAX_SAMPLES = 2
+    const MAX_SAMPLE_STR_LEN = 30
+    const NUM_UNIQUE_THRESHOLD = 20
+
     const lines: string[] = []
     lines.push(`## ${schema.fileName}`)
     lines.push(`- **file** (query_excel 参数): \`${schema.basename}\``)
+
     for (const sheet of schema.sheets) {
       lines.push(``)
       lines.push(`### sheet \`${sheet.name}\` — ${sheet.rowCount} 行`)
-      for (const col of sheet.columns) {
+
+      const fullCols = sheet.columns.slice(0, MAX_COLS_FULL_DETAIL)
+      const remainCols = sheet.columns.slice(MAX_COLS_FULL_DETAIL)
+
+      for (const col of fullCols) {
         const parts: string[] = [`  - \`${col.name}\` (${col.dtype}, ${col.uniqueCount} 唯一值)`]
         if (col.min !== undefined && col.max !== undefined) {
           parts.push(`范围 ${JSON.stringify(col.min)} ~ ${JSON.stringify(col.max)}`)
         }
-        if (col.samples.length > 0) {
-          const sample = col.samples.slice(0, 5).map(s => JSON.stringify(s)).join(', ')
+        // 连续数值列（唯一值多）仅保留范围，不附 samples
+        if (col.samples.length > 0 && col.uniqueCount < NUM_UNIQUE_THRESHOLD) {
+          const sample = col.samples.slice(0, MAX_SAMPLES).map(s => {
+            const raw = JSON.stringify(s)
+            return raw.length > MAX_SAMPLE_STR_LEN ? raw.slice(0, MAX_SAMPLE_STR_LEN) + '…"' : raw
+          }).join(', ')
           parts.push(`样例 ${sample}`)
         }
         lines.push(parts.join(' · '))
       }
+
+      if (remainCols.length > 0) {
+        const names = remainCols.map(c => `\`${c.name}\``).join(', ')
+        lines.push(`  - （另有 ${remainCols.length} 列，调 query_excel 时自动可用：${names}）`)
+      }
+    }
+    return lines.join('\n')
+  }
+
+  /**
+   * 列名级 Excel 清单（方案 A）：
+   * 输出文件名、file 参数、各 sheet 名 + 行数 + 所有列名（无 dtype/samples/range）。
+   * 列名让 LLM 能准确路由到正确 sheet，详细 dtype/range/samples 通过
+   * query_excel({mode:'schema'}) 按需获取。
+   * 体积约 8-12KB（vs 原始含 samples 的 25-30KB，vs 仅 sheet 名的 0.3KB）。
+   */
+  private formatExcelSchemaBrief(schema: ExcelFileSchema): string {
+    const lines: string[] = []
+    lines.push(`- **${schema.fileName}** (file 参数: \`${schema.basename}\`)`)
+    for (const sheet of schema.sheets) {
+      const colNames = sheet.columns.map(c => c.name).join(', ')
+      lines.push(`  - sheet \`${sheet.name}\` (${sheet.rowCount} 行, ${sheet.columns.length} 列)：${colNames}`)
     }
     return lines.join('\n')
   }

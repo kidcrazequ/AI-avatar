@@ -1,5 +1,14 @@
 # 更新日志
 
+## v0.7.3 (2026-04-17)
+
+### 修复与优化
+
+- **FORMAT 按钮与 Excel 数据源** — v0.5.x 起约定「Excel / PPT 隐藏 FORMAT」依赖 `raw_file` 扩展名，但 Excel/PPTX **快速导入**的 `.md` 只写 `source: excel` / `source: pptx`（无 `raw_file`），导致 FORMAT 误显。现根据 frontmatter 的 `source` / `excel_json` 一并隐藏；`parseFrontmatter` 抽到 `desktop-app/src/utils/knowledge-frontmatter.ts` 与 Viewer 共用。
+- **缺失的 knowledge/README.md** — 清空知识库等操作删掉 `README.md` 后，`read-knowledge-file` / `read_knowledge_file` 会 ENOENT。`KnowledgeManager.readFile` 在根路径 `README.md` 缺失时用父目录名调用 `updateReadme` 自动补空库索引；`KnowledgeRetriever.readFile` 同步委托，避免工具链与 UI 双失败。
+- **query_excel 零行诊断** — 模拟「215 + 2026 年 1～3 月设备侧效率图」三种典型 LLM 过滤策略（错列名、ISO 月与 YYMM 数字比较、正确 $in）；零命中时在 JSON 中附带 `zero_match_hint` 与 `invalid_filter_keys`，便于首轮自愈。回归：`testdocs/test-query-excel-215-chart-simulation.ts`（`desktop-app` 下 `tsx` 运行）。
+- **Excel .md 不参与 search_knowledge** — `rag_only`+`source:excel`（或 `excel_json:`）的表格导出 `.md` 仍被全文切片进 BM25，RAG 易命中 Summary 等片段，模型编造「2026 未收录/只有 2024-2025」。现 `KnowledgeRetriever.buildChunks` 跳过此类文件；`soul-loader` Excel 纪律新增第 7 条：行级数值以 `query_excel` JSON 为准，禁止仅凭 RAG 片段下结论。
+
 ## v0.7.2 (2026-04-17)
 
 ### 新功能

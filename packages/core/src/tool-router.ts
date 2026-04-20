@@ -224,7 +224,7 @@ export class ToolRouter {
       sheets?: Array<{
         name: string
         rowCount: number
-        columns: Array<{ name: string; dtype: string }>
+        columns: Array<{ name: string; dtype: string; uniqueCount?: number; samples?: Array<string | number>; min?: string | number; max?: string | number }>
         rows: Array<Record<string, string | number | null>>
       }>
     }
@@ -238,6 +238,23 @@ export class ToolRouter {
     if (!sheet) {
       const available = (parsed.sheets ?? []).map(s => s.name).join(', ')
       return { content: '', error: `sheet 不存在: "${sheetName}"（可用: ${available}）` }
+    }
+
+    // F1 按需 schema 模式：返回完整列 schema（包含类型、唯一值数、范围、样例）
+    if (args.mode === 'schema') {
+      const schemaPayload = {
+        file,
+        sheet: sheetName,
+        sheet_row_count: sheet.rowCount,
+        columns: sheet.columns.map(c => ({
+          name: c.name,
+          dtype: c.dtype,
+          uniqueCount: c.uniqueCount,
+          ...(c.min !== undefined && c.max !== undefined ? { min: c.min, max: c.max } : {}),
+          samples: (c.samples ?? []).slice(0, 3),
+        })),
+      }
+      return { content: JSON.stringify(schemaPayload, null, 2) }
     }
 
     const filter = (args.filter as Record<string, unknown>) || {}
@@ -277,6 +294,38 @@ export class ToolRouter {
       }
     }
 
+    const colNames = new Set(sheet.columns.map(c => c.name))
+    const invalidFilterKeys = Object.keys(filter).filter(k => !colNames.has(k))
+    let zeroMatchHint: string | undefined
+    if (hasFilter && matched.length === 0) {
+      const parts: string[] = []
+      if (invalidFilterKeys.length > 0) {
+        parts.push(
+          `filter 中的列名在本 sheet「${sheetName}」不存在: ${invalidFilterKeys.join(', ')}。仅可使用本次返回的 schema 中的 name（注意空格，如「项目 类型」「装机 容量」）。`,
+        )
+        // 当大部分 filter key 都不在该 sheet 时，提示 LLM 很可能选错了 sheet
+        const invalidRatio = invalidFilterKeys.length / Object.keys(filter).length
+        if (invalidRatio >= 0.5) {
+          const otherSheets = (parsed.sheets ?? [])
+            .filter(s => s.name !== sheetName)
+            .map(s => `「${s.name}」(${s.columns.map(c => c.name).join(', ')})`)
+            .join('；\n')
+          if (otherSheets) {
+            parts.push(
+              `⚠️ 你可能选错了 sheet。本文件其他可用 sheet 及其列名如下，请根据列名重新选择合适的 sheet 再查询：\n${otherSheets}`,
+            )
+          }
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(filter, '统计周期') || invalidFilterKeys.length === 0) {
+        parts.push(
+          '若按「年/月」筛选：本表「统计周期」列多为 YYMM 整数（如 2601≈2026年1月）；勿用「2026-01」等与数字做 $gte/$lte 比较，否则常得到 0 行。可用 $in: [2601,2602,2603] 或先只筛「机型」再用 limit 试探。',
+        )
+      }
+      parts.push('若放宽后仍无 2～3 月，可能是源 Excel 尚未录入对应月份行（非工具故障）。')
+      zeroMatchHint = parts.join('\n')
+    }
+
     const truncatedByLimit = matched.length >= limit
 
     // 二级保护：返回内容字符数上限。若 JSON serialize 后超过阈值，按行截断。
@@ -311,6 +360,12 @@ export class ToolRouter {
           ? `数据被按 limit=${limit} 截断，原匹配 ${matched.length} 行，请加 filter 缩小或翻页`
           : undefined,
       rows: resultRows,
+      ...(zeroMatchHint
+        ? {
+            zero_match_hint: zeroMatchHint,
+            ...(invalidFilterKeys.length > 0 ? { invalid_filter_keys: invalidFilterKeys } : {}),
+          }
+        : {}),
     }
 
     return { content: JSON.stringify(payload, null, 2) }

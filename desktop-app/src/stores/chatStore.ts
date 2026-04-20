@@ -648,10 +648,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // 程序化 RAG：纯文字消息且长度足够时，通过多跳检索 + 5 规则增强 user 消息
     // 短消息（<4字符）如"好的""谢谢"等不含实质查询意图，跳过 RAG 避免浪费 API 调用
+    // C2 优化：图表一致性模式命中时跳过 RAG，图表类问题通过 query_excel 工具获取真实数据，
+    // RAG 注入的 PDF chunks 对绘图基本无帮助，且 RAG 全路径耗时 3-4s
     const MIN_RAG_QUERY_LENGTH = 4
+    const skipRagForChart = shouldEnableChartConsistencyMode(content, Boolean(images && images.length > 0))
     let enhancedContent = content
     if (!images || images.length === 0) {
-      if (content.trim().length >= MIN_RAG_QUERY_LENGTH) {
+      if (content.trim().length >= MIN_RAG_QUERY_LENGTH && !skipRagForChart) {
         try {
           const ragStartedAt = Date.now()
           logPerf('rag:start')
@@ -674,7 +677,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           logPerf('rag:error', ragErr)
         }
       } else {
-        logPerf('rag:skip-short-query', `trimmedLen=${content.trim().length}`)
+        if (skipRagForChart) {
+          logPerf('rag:skip-chart-mode', `contentLen=${content.trim().length}`)
+        } else {
+          logPerf('rag:skip-short-query', `trimmedLen=${content.trim().length}`)
+        }
       }
     } else {
       logPerf('rag:skip-images')
@@ -688,7 +695,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ]
       : enhancedContent
 
-    const chartConsistencyMode = shouldEnableChartConsistencyMode(content, Boolean(images && images.length > 0))
+    const chartConsistencyMode = skipRagForChart
     if (chartConsistencyMode) {
       logPerf('chart-consistency:enabled')
     }
@@ -953,6 +960,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   ? `工具执行失败: ${result.error}`
                   : result.content
                 queryExcelResultCache.set(queryExcelCacheKey, resultText)
+                // C1 优化：配额用满时追加提示，让 LLM 在下一轮直接收敛，
+                // 避免 LLM 再次试探调用 query_excel 被守卫挡掉（浪费 1 轮 ~7s）
+                if (queryExcelCallCount >= MAX_QUERY_EXCEL_CALLS_PER_REQUEST) {
+                  resultText += `\n\n[系统提示] query_excel 配额已用完（${queryExcelCallCount}/${MAX_QUERY_EXCEL_CALLS_PER_REQUEST}）。请立即基于以上数据给出最终答案（如需图表，请直接输出 \`\`\`chart 代码块），不要再调用任何工具。`
+                  logPerf('tool-call:budget-hint-appended', `round=${round} name=query_excel used=${queryExcelCallCount}/${MAX_QUERY_EXCEL_CALLS_PER_REQUEST}`)
+                }
               }
             } else if (ENABLE_LOAD_SKILL_GUARD && tc.function.name === 'load_skill') {
               if (loadSkillCallCount >= MAX_LOAD_SKILL_CALLS_PER_REQUEST) {

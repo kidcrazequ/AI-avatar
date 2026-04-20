@@ -18,6 +18,7 @@ import { TemplateLoader } from '../template-loader'
 import { KnowledgeRetriever } from '../knowledge-retriever'
 import { SkillManager } from '../skill-manager'
 import { AvatarManager } from '../avatar-manager'
+import { KnowledgeManager } from '../knowledge-manager'
 import { extractTitle, extractFrontmatter, extractFrontmatterField, extractListItems } from '../utils/markdown-parser'
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,32 @@ describe('KnowledgeRetriever', () => {
     const retriever = new KnowledgeRetriever(tmpDir)
     const results = retriever.searchChunks('xxxxxxxxxxxxxxxxx')
     assert.equal(results.length, 0)
+  })
+})
+
+describe('KnowledgeRetriever Excel rag_only .md 不参与 RAG', () => {
+  let tmpExcelDir: string
+
+  before(() => {
+    tmpExcelDir = makeTempDir()
+    fs.writeFileSync(
+      path.join(tmpExcelDir, 'dashboard-fake.md'),
+      '---\nrag_only: true\nsource: excel\nexcel_json: _excel/x.json\n---\n\n## 总原始表\n\n| 机型 | 统计周期 | 设备侧效率 |\n| --- | --- | --- |\n| 215 | 2503 | 90.1% |\n',
+      'utf-8',
+    )
+    fs.writeFileSync(
+      path.join(tmpExcelDir, 'guide.md'),
+      '# 指南\n\n215 机型设备侧效率请使用 query_excel 查询总原始表，勿用本文件代替表格。\n',
+      'utf-8',
+    )
+  })
+
+  after(() => cleanupDir(tmpExcelDir))
+
+  it('searchChunks 不索引 Excel 结构 rag_only .md，避免误导性 BM25 命中', () => {
+    const retriever = new KnowledgeRetriever(tmpExcelDir)
+    const results = retriever.searchChunks('215 设备侧效率 2601', 10)
+    assert.ok(!results.some(r => r.file === 'dashboard-fake.md'), 'Excel rag_only 导出 .md 不应进入检索结果')
   })
 })
 
@@ -283,6 +310,23 @@ describe('AvatarManager', () => {
     manager.deleteAvatar('avatar-001')
     assert.equal(fs.existsSync(path.join(tmpAvatarsDir, 'avatar-001')), false)
     assert.deepEqual(manager.listAvatars(), [])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// KnowledgeManager
+// ---------------------------------------------------------------------------
+
+describe('KnowledgeManager', () => {
+  it('readFile 在 README.md 缺失时自动补全空库索引并可读', () => {
+    const root = makeTempDir()
+    const knowledgePath = path.join(root, 'avatar-readme-heal', 'knowledge')
+    fs.mkdirSync(knowledgePath, { recursive: true })
+    const km = new KnowledgeManager(knowledgePath)
+    const text = km.readFile('README.md')
+    assert.ok(text.includes('avatar-readme-heal'), 'README 标题应使用分身目录名')
+    assert.ok(fs.existsSync(path.join(knowledgePath, 'README.md')))
+    cleanupDir(root)
   })
 })
 

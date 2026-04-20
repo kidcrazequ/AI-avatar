@@ -18,6 +18,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
   compare_products: '对比产品参数',
   load_skill: '加载技能定义',
   delegate_task: '委派子任务',
+  query_excel: '查询表格数据',
 }
 
 interface Props {
@@ -55,6 +56,17 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   /** RAG 检索阶段（"正在检索…/正在分析关联组件…/正在拼装上下文…"），由 main 进程通过 onRagProgress 推送。
    *  状态在每次新提问时自动清空（done 阶段清空），避免上一轮残留。 */
   const [ragProgress, setRagProgress] = useState<{ phase: string; detail?: string } | null>(null)
+  /** 已耗时（秒，精度 0.1s），isLoading 期间递增，用于在"思考中..."旁显示进度感知 */
+  const [elapsedSec, setElapsedSec] = useState(0)
+
+  useEffect(() => {
+    if (!isLoading) {
+      setElapsedSec(0)
+      return
+    }
+    const timer = setInterval(() => setElapsedSec(s => +(s + 0.1).toFixed(1)), 100)
+    return () => clearInterval(timer)
+  }, [isLoading])
 
   useEffect(() => {
     return () => {
@@ -271,6 +283,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                   : ragProgress
                     ? (ragProgress.detail ?? `${ragProgress.phase}...`)
                     : '思考中...'}
+              {isLoading && !isRunningTests && (
+                <span className="ml-1 opacity-60">{elapsedSec.toFixed(1)}s</span>
+              )}
             </span>
           </div>
         </div>

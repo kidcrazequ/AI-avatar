@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import KnowledgeTree from './KnowledgeTree'
 import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
+import { parseFrontmatter, shouldHideKnowledgeFormatButton } from '../utils/knowledge-frontmatter'
 import { LLMService, ModelConfig } from '../services/llm-service'
 import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, type LLMCallFn } from '@soul/core'
 import { generateTestCasesFromContent } from '../services/test-generator'
@@ -945,12 +946,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                           {isGeneratingTests ? '...' : 'GEN TEST'}
                         </button>
                       )}
-                      {/* Excel / PPT / 图片等结构化文件不需要 LLM 格式化 */}
+                      {/* Excel / PPT / 图片等结构化文件不需要 LLM 格式化（见 shouldHideKnowledgeFormatButton） */}
                       {(() => {
-                        const rawMatch = fileContent.match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
-                        const rawExt = rawMatch ? rawMatch[1].split('.').pop()?.toLowerCase() : ''
-                        const noFormat = ['xlsx', 'xls', 'csv', 'pptx', 'ppt', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(rawExt || '')
-                        if (noFormat) return null
+                        const { meta } = parseFrontmatter(fileContent)
+                        if (shouldHideKnowledgeFormatButton(meta)) return null
                         return (
                           <button
                             onClick={async () => {

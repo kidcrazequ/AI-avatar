@@ -34,6 +34,12 @@ export interface ImageKnowledgeInfo {
   targetSection: string
 }
 
+/** 是否为知识库根目录下的 README.md（用于缺失时自动补全索引） */
+export function isKnowledgeRootReadme(relativePath: string): boolean {
+  const parts = relativePath.replace(/\\/g, '/').replace(/^\.\/+/, '').split('/').filter(Boolean)
+  return parts.length === 1 && parts[0].toLowerCase() === 'readme.md'
+}
+
 export class KnowledgeManager {
   private knowledgePath: string
 
@@ -97,6 +103,21 @@ export class KnowledgeManager {
       const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
       return fs.readFileSync(fullPath, 'utf-8')
     } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      // 清空知识库或误删后 README.md 不存在 → 按空库索引自动补一份，避免 IPC read-knowledge-file 抛 ENOENT
+      if (err.code === 'ENOENT' && isKnowledgeRootReadme(relativePath)) {
+        try {
+          if (!fs.existsSync(this.knowledgePath)) {
+            fs.mkdirSync(this.knowledgePath, { recursive: true })
+          }
+          const avatarLabel = path.basename(path.dirname(this.knowledgePath))
+          this.updateReadme(avatarLabel, [], [])
+          const fullPath = resolveUnderRoot(this.knowledgePath, relativePath)
+          return fs.readFileSync(fullPath, 'utf-8')
+        } catch (healErr) {
+          console.error(`[KnowledgeManager] 补全 README.md 失败: ${relativePath}`, healErr)
+        }
+      }
       console.error(`读取文件失败: ${relativePath}`, error)
       throw error
     }

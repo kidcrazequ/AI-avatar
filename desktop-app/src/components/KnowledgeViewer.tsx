@@ -3,40 +3,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { parseFrontmatter } from '../utils/knowledge-frontmatter'
 
 interface Props {
   content: string
-}
-
-/**
- * 解析 YAML frontmatter（仅支持 key: value 和简单数组，不引 yaml 依赖）。
- * 返回 { meta, body }；无 frontmatter 时 meta 为空对象。
- */
-function parseFrontmatter(src: string): { meta: Record<string, unknown>; body: string } {
-  if (!src.startsWith('---\n') && !src.startsWith('---\r\n')) {
-    return { meta: {}, body: src }
-  }
-  const endMatch = src.match(/\n---\r?\n/)
-  if (!endMatch || endMatch.index === undefined) {
-    return { meta: {}, body: src }
-  }
-  const fmText = src.slice(4, endMatch.index)
-  const body = src.slice(endMatch.index + endMatch[0].length)
-  const meta: Record<string, unknown> = {}
-  for (const line of fmText.split(/\r?\n/)) {
-    const m = line.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/)
-    if (!m) continue
-    const key = m[1]
-    const raw = m[2].trim()
-    if (raw === 'true') meta[key] = true
-    else if (raw === 'false') meta[key] = false
-    else if (raw.startsWith('[') && raw.endsWith(']')) {
-      meta[key] = raw.slice(1, -1).split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
-    } else {
-      meta[key] = raw.replace(/^["']|["']$/g, '')
-    }
-  }
-  return { meta, body }
 }
 
 /** 大文件阈值：超过此字符数的 markdown 不直接渲染（react-markdown 处理巨型表格会卡死渲染器） */

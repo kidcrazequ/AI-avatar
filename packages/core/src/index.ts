@@ -69,3 +69,24 @@ export { loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntr
 export type { ChartCacheEntry, ChartCache, FileSnapshot } from './utils/chart-cache'
 export type { PersistedTokens } from './utils/chunk-cache'
 
+
+export { resolvePolicy, shouldEnableChartConsistencyMode, deriveSeedFromContent, CHART_CONSISTENCY_HINT, CHART_KEYWORDS, TIME_RANGE_KEYWORDS, DETERMINISTIC_TEMPERATURE } from './consistency-policy'
+export type { ConsistencyMode, ConsistencyPolicy, ResolvePolicyOptions } from './consistency-policy'
+export { ToolBudget, DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints, normalizeQueryExcelArgs } from './tool-budget'
+export type { ToolPolicy, ToolBudgetConsumeResult, ToolBudgetMessage } from './tool-budget'
+export { buildApiMessages } from './prompt-builder'
+export { rerankChunksWithDiversity, computeJaccardSimilarity } from './rag-rerank'
+export type { RerankableChunk, RerankOptions } from './rag-rerank'
+export type { BuildApiMessagesOptions, HistoryMessageLike, ApiMessageLike } from './prompt-builder'
+export { DYNAMIC_SYSTEM_PROMPT_MARKER, combineSystemPromptSections, splitSystemPromptSections, normalizeSystemPromptSections } from './prompt-sections'
+export type { SystemPromptSections } from './prompt-sections'
+export { buildKnowledgeLinkGraph, extractExplicitLinks, expandLinkedFiles, selectRelevantSnippet } from './link-graph'
+export type { LinkGraph, KnowledgeLinkEntry, LinkedFileCandidate, ExpandLinkedFilesOptions, SelectRelevantSnippetOptions } from './link-graph'
+export { routeConversation } from './conversation-router'
+export type { RouteConversationOptions, RoutingDecision, ContextStrategy, ToolProfile, ConversationMode } from './conversation-router'
+
+export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'
+export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from './provider-capabilities'
+
+export { buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, buildExcelSourceAnchor, formatKnowledgeSourceAnchor, formatExcelSourceAnchor, formatSourceAnchor, buildSourceAnchorPromptHint, buildSourceAnchorReferenceBlock, extractSourceAnchors, extractSourceAnchorsFromContent, extractSourceAnchorsFromMessages, extractParsedSourceAnchors, parseSourceAnchor, splitTextBySourceAnchors, normalizeSourceAnchorsInText, normalizeAvailableSourceAnchors, rewriteSourceAnchorsInText, filterSourceAnchorsInText, isSourceAnchorCoveredByAvailable, isSourceAnchorCoveredByAnyAvailable, filterSourceAnchorsByAvailableContext, ensureAnswerSourceCoverage, SOURCE_ANCHOR_REGEX } from './source-anchor'
+export type { KnowledgeSourceAnchor, ExcelSourceAnchor, SourceAnchor, ParsedSourceAnchor, SourceAnchorSegment, NormalizeSourceAnchorsResult, RewriteSourceAnchorsResult, SourceCoverageResult, FilterAvailableSourceAnchorsResult, SourceAnchorReferenceBlockOptions, EnsureSourceCoverageOptions } from './source-anchor'

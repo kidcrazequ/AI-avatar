@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { SkillManager } from './skill-manager'
+import { DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints } from './tool-budget'
+import { combineSystemPromptSections } from './prompt-sections'
 import { assertSafeSegment } from './utils/path-security'
 import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 
@@ -8,6 +10,8 @@ export interface AvatarConfig {
   id: string
   name: string
   systemPrompt: string
+  stableSystemPrompt: string
+  dynamicSystemPrompt: string
 }
 
 /** Excel 列 schema（与 document-parser.ts 的 ExcelColumnSchema 对应） */
@@ -119,26 +123,27 @@ export class SoulLoader {
       '',
       '你可以调用以下工具来辅助回答，请在需要查询具体数据时主动调用：',
       '',
-      '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找产品参数、政策文件、项目案例等',
+      '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找政策、电价、产品参数、项目案例、PDF/Word/Markdown/手写笔记等非结构化资料。结果会附 `[来源: knowledge/...#Lx-Ly]` 锚点，最终回答应尽量沿用。',
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
-      '- **query_excel(file, sheet, filter?, columns?, limit?, mode?)**: **精确**查询已导入的 Excel / CSV 数据。当用户问涉及表格数据、要按条件筛选行、生成图表时，必须用此工具（不要用 search_knowledge 查 Excel）。filter 支持 MongoDB 风格（$eq/$ne/$gt/$gte/$lt/$lte/$in）。传 `mode:"schema"` 可获取指定 sheet 的完整列定义（列名/类型/范围/样例），不返回行数据。',
+      '- **query_excel(file, sheet, filter?, columns?, limit?, mode?)**: **精确**查询已导入的 Excel / CSV 数据。涉及表格行级数值、统计周期、筛选、排行、图表时，必须优先用此工具。若不确定字段，先传 `mode:"schema"` 获取列定义，再做精确查询。返回 JSON 会带 `source_anchor` 与 `_source_row`，引用数字时尽量沿用。',
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
-      '- **lookup_policy(province, policy_type)**: 查询省份电价政策或补贴信息',
-      '- **compare_products(products)**: 对比多款产品的技术参数',
-      '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤（system prompt 中只含摘要，执行前必须先调用此工具获取完整流程）',
+      '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤。通常相关技能已由系统自动注入，只有在系统未注入、且确实需要完整流程时再调用。',
       '- **delegate_task(task)**: 将独立子任务委派给子代理并行执行，子代理使用相同的知识库但独立对话上下文',
       '',
-      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息，不要凭记忆回答。**涉及 Excel 表格数据必须用 query_excel**，不要用 search_knowledge 模糊匹配表格。需要执行某项技能时，必须先调用 load_skill 获取完整定义。',
+      '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息。涉及 Excel 表格数据必须用 `query_excel`，不要用 `search_knowledge` 模糊匹配表格。涉及技能时优先使用系统已注入的技能内容，不要把 `load_skill` 当成默认第一步。',
+      '',
+      buildToolPolicyPromptHints(DEFAULT_TOOL_POLICY),
     ].join('\n')
 
-    // 构建 system prompt
-    const parts: string[] = [claudeMd, '\n\n---\n\n', soulMd]
+    // 构建 system prompt：stable 在前，dynamic（记忆/用户画像）放在尾部，利好前缀缓存。
+    const stableParts: string[] = [claudeMd, '\n\n---\n\n', soulMd]
+    const dynamicParts: string[] = []
 
     // 共享知识（所有分身通用）
     if (sharedKnowledgeFiles.length > 0) {
-      parts.push('\n\n---\n\n# 共享知识库\n\n')
-      sharedKnowledgeFiles.forEach(f => parts.push(f.content + '\n\n'))
+      stableParts.push('\n\n---\n\n# 共享知识库\n\n')
+      sharedKnowledgeFiles.forEach(f => stableParts.push(f.content + '\n\n'))
     }
 
     // 知识库文件（递归读取所有 knowledge/ 子目录文件）
@@ -175,18 +180,18 @@ export class SoulLoader {
       }
 
       if (stuffEntries.length > 0) {
-        parts.push('\n\n---\n\n# 知识库\n\n')
+        stableParts.push('\n\n---\n\n# 知识库\n\n')
         stuffEntries.forEach(e => {
-          parts.push(`<!-- 文件: knowledge/${e.relPath} -->\n${e.body}\n\n`)
+          stableParts.push(`<!-- 文件: knowledge/${e.relPath} -->\n${e.body}\n\n`)
         })
       }
 
       // RAG-only 文件索引（只告诉 LLM 有哪些文件可通过 search_knowledge 检索）
       if (ragOnlyEntries.length > 0) {
-        parts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
+        stableParts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
         ragOnlyEntries.forEach(e => {
           const source = typeof e.meta.source === 'string' ? e.meta.source : 'document'
-          parts.push(`- \`knowledge/${e.relPath}\`（${source}）\n`)
+          stableParts.push(`- \`knowledge/${e.relPath}\`（${source}）\n`)
         })
       }
 
@@ -194,71 +199,66 @@ export class SoulLoader {
       // LLM 需要列详情时调 query_excel({mode:'schema', file, sheet}) 按需获取）
       const excelSchemas = this.loadExcelSchemas(path.join(avatarPath, 'knowledge', '_excel'))
       if (excelSchemas.length > 0) {
-        parts.push('\n\n---\n\n# 可查询 Excel 数据源\n\n')
-        parts.push('以下 Excel 已导入并建立索引，请使用 `query_excel` 工具按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
-        parts.push('## Excel 查询纪律（严格执行，不依赖技能加载）\n\n')
-        parts.push('1. **schema 相关问题**（"有没有 X 列"、"X 列是什么类型"、"这张表有哪些字段"、"数据范围"）→ 调 `query_excel({mode:"schema", file, sheet})` 获取列详情，再回答；**不要编造字段名**。\n')
-        parts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
-        parts.push('3. **单次回答最多 3 次 `query_excel` 调用**。超过说明过滤条件太散，应先调 `{mode:"schema"}` 确认字段，而不是继续试探。\n')
-        parts.push('4. **禁止"探索式试探"**（不带 filter 的 `limit: 5` 这种）—— 先用 `{mode:"schema"}` 看列名。\n')
-        parts.push('5. **画图/图表需求的工具顺序（关键）**：`load_skill(\'draw-chart\')` → `query_excel` × 1-2 次（带精确 filter）→ 输出 ` ```chart ` 代码块。不要反过来。\n')
-        parts.push('6. 违反以上纪律可能导致工具调用轮数耗尽（`MAX_TOOL_ROUNDS = 10`），用户得不到答案。\n')
-        parts.push('7. **禁止仅凭 `search_knowledge` / `read_knowledge_file` 命中 Excel 对应 .md 的片段推断行级数值**。**表格数值以 `query_excel` 返回的 JSON 为准**。\n\n')
-        parts.push('## 可用 Excel 清单\n\n')
+        stableParts.push('\n\n---\n\n# 可查询 Excel 数据源\n\n')
+        stableParts.push('以下 Excel 已导入并建立索引，请使用 `query_excel` 工具按条件精确过滤行，**不要**用 search_knowledge 去查 Excel 数据。\n\n')
+        stableParts.push('## Excel 查询纪律（严格执行，不依赖技能加载）\n\n')
+        stableParts.push('1. **schema 相关问题**（"有没有 X 列"、"X 列是什么类型"、"这张表有哪些字段"、"数据范围"）→ 调 `query_excel({mode:"schema", file, sheet})` 获取列详情，再回答；**不要编造字段名**。\n')
+        stableParts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
+        stableParts.push(`3. **单次回答最多 ${DEFAULT_TOOL_POLICY.maxQueryExcelCallsPerRequest} 次 \`query_excel\` 调用**（以运行时预算为准）。超过说明过滤条件太散，应先调 \`{mode:"schema"}\` 确认字段，而不是继续试探。\n`)
+        stableParts.push('4. **禁止“探索式试探”**（不带 filter 的 `limit:5` 这种）—— 先用 `{mode:"schema"}` 看列名。\n')
+        stableParts.push('5. **画图/图表需求的工具顺序（关键）**：优先使用系统已注入的图表技能与 `query_excel` 返回的数据直接收敛输出；只有系统未注入该技能且确实需要完整步骤时，才调用 `load_skill(\'draw-chart\')`。\n')
+        stableParts.push(`6. 违反以上纪律可能导致工具调用轮数耗尽（当前运行时上限 \`${DEFAULT_TOOL_POLICY.maxRounds}\` 轮），用户得不到答案。\n`)
+        stableParts.push('7. **禁止仅凭 `search_knowledge` / `read_knowledge_file` 命中 Excel 对应 .md 的片段推断行级数值**。**表格数值以 `query_excel` 返回的 JSON 为准**。\n\n')
+        stableParts.push('## 可用 Excel 清单\n\n')
         excelSchemas.forEach(schema => {
-          parts.push(this.formatExcelSchemaBrief(schema))
-          parts.push('\n')
+          stableParts.push(this.formatExcelSchemaBrief(schema))
+          stableParts.push('\n')
         })
       }
     }
 
-    // GAP2: 长期记忆（始终注入，用于对话一致性）
+    // GAP2: 长期记忆 / 用户画像改为 dynamic 段，放在 system prompt 尾部，利好前缀缓存。
     if (memoryContent.trim()) {
-      parts.push('\n\n---\n\n# 长期记忆\n\n')
-      parts.push(memoryContent)
+      dynamicParts.push('\n\n---\n\n# 长期记忆\n\n')
+      dynamicParts.push(memoryContent)
     }
 
-    // Feature 3: 用户画像（沟通风格、偏好等）
     if (userProfileContent.trim()) {
-      parts.push('\n\n---\n\n# 用户画像\n\n')
-      parts.push(userProfileContent)
+      dynamicParts.push('\n\n---\n\n# 用户画像\n\n')
+      dynamicParts.push(userProfileContent)
     }
 
     // 回答质量规则（确保 LLM 充分利用知识库并保持回答完整性）
-    parts.push('\n\n---\n\n')
-    parts.push([
+    stableParts.push('\n\n---\n\n')
+    stableParts.push([
       '## 回答规则（强制执行）',
       '',
-      '1. **来源标注**：每个关键数据必须标注来源，格式为 `[来源: knowledge/文件路径 - 章节/表格名]`',
-      '2. **禁止编造**：禁止使用"根据我的经验"等措辞，所有数据必须来自知识库文件，知识库没有就说"知识库中未收录"',
-      '3. **数值准确**：引用数值时必须与知识库原文完全一致，禁止对原始数值做近似或四舍五入',
-      '4. **原文复述校验**：回答中每个关键数值必须执行"引用-复述-校对"三步：',
-      '   - 引用：从知识库中定位原文所在行',
-      '   - 复述：将该数值逐字符抄写到回答中',
-      '   - 校对：将回答中的数值与知识库原文逐位比对，发现不一致必须修正后再输出',
-      '   - 示例：知识库写"2470.5"，回答中必须写"2470.5"，不可写"2478.5"或"约2471"',
-      '5. **计算校验**：涉及面积/体积等计算时，列出完整计算公式和每一步的数值，公式中的每个数值必须标注来源，计算结果必须附验算过程',
-      '6. **完整检索**：涉及设备/组件时，检索知识库中该组件出现的所有位置，合并分散信息后再回答',
-      '7. **缺失声明**：只有知识库中确实不存在的数据，才标注为"知识库中未收录"',
-      '8. **空间布局**：涉及空间布局、位置关系的问题，用 ASCII 图直观展示组件相对位置',
+      '1. **来源标注**：每个关键数据必须优先复用上下文或工具结果里已有的 `[来源: ...]` 锚点。知识片段优先使用 `[来源: knowledge/文件路径#Lx-Ly]`，Excel 数据优先使用 `query_excel` 返回的 `source_anchor`。',
+      '2. **禁止编造**：所有结论必须来自知识库、工具返回或用户提供信息；资料不足时明确说“知识库中未收录”或“当前上下文不足”。',
+      '3. **数值准确**：引用数值时必须与原文或工具结果一致，禁止擅自近似、改写或补全缺失数字。',
+      '4. **缺失声明与计算透明**：需要计算时列出公式与关键输入；知识缺失时不要硬答。',
     ].join('\n'))
 
     // GAP11: 工具调用说明（始终注入，告知 LLM 其工具能力）
-    parts.push('\n\n---\n\n')
-    parts.push(toolsNote)
+    stableParts.push('\n\n---\n\n')
+    stableParts.push(toolsNote)
 
     // GAP3: 已启用的技能（通过 SkillManager 过滤）
     if (skillsContent) {
-      parts.push('\n\n---\n\n')
-      parts.push(skillsContent)
+      stableParts.push('\n\n---\n\n')
+      stableParts.push(skillsContent)
     }
 
-    const systemPrompt = parts.join('')
+    const stableSystemPrompt = stableParts.join('')
+    const dynamicSystemPrompt = dynamicParts.join('')
+    const systemPrompt = combineSystemPromptSections(stableSystemPrompt, dynamicSystemPrompt)
 
     return {
       id: avatarId,
       name: this.extractAvatarName(claudeMd),
       systemPrompt,
+      stableSystemPrompt,
+      dynamicSystemPrompt,
     }
   }
 

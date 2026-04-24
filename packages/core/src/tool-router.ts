@@ -5,6 +5,9 @@ import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
 import { SubAgentManager } from './sub-agent-manager'
 import { assertSafeSegment } from './utils/path-security'
+import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
+import { rerankChunksWithDiversity } from './rag-rerank'
+import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
 
 /**
  * 工具调用路由器（GAP4）
@@ -21,6 +24,14 @@ export interface ToolCallResult {
   error?: string
 }
 
+export interface KnowledgeSearchResult {
+  file: string
+  heading: string
+  content: string
+  score: number
+  anchor?: KnowledgeSourceAnchor
+}
+
 // ─── query_excel 限流常量 ─────────────────────────────────────────────────────
 // 防止单次工具调用 dump 几百行 × 几十列 × 几十字符 = 几十 KB 数据进 chat history
 // 累积起来撞破 LLM context 上限。
@@ -35,6 +46,21 @@ const QUERY_EXCEL_HARD_LIMIT = 200
  */
 const QUERY_EXCEL_MAX_CONTENT_CHARS = 8000
 
+
+interface CachedExcelSource {
+  mtimeMs: number
+  size: number
+  parsed: {
+    fileName?: string
+    sheets?: Array<{
+      name: string
+      rowCount: number
+      columns: Array<{ name: string; dtype: string; uniqueCount?: number; samples?: Array<string | number>; min?: string | number; max?: string | number }>
+      rows: Array<Record<string, string | number | null>>
+    }>
+  }
+}
+
 export class ToolRouter {
   private avatarsPath: string
   private retrievers = new Map<string, KnowledgeRetriever>()
@@ -42,6 +68,10 @@ export class ToolRouter {
   readonly subAgentManager = new SubAgentManager()
   /** 主代理 system prompt（用于子代理共享上下文） */
   private systemPromptCache = new Map<string, string>()
+  /** Excel 导入 JSON 的内存缓存（按文件 mtime + size 失效） */
+  private excelSourceCache = new Map<string, CachedExcelSource>()
+  /** 显式引用图缓存（knowledge/*.md -> linked files） */
+  private linkGraphCache = new Map<string, LinkGraph>()
 
   constructor(avatarsPath: string) {
     this.avatarsPath = avatarsPath
@@ -103,6 +133,10 @@ export class ToolRouter {
    */
   invalidateRetriever(avatarId: string): void {
     this.retrievers.delete(avatarId)
+    this.linkGraphCache.delete(avatarId)
+    for (const key of this.excelSourceCache.keys()) {
+      if (key.startsWith(`${avatarId}:`)) this.excelSourceCache.delete(key)
+    }
   }
 
   /**
@@ -110,6 +144,165 @@ export class ToolRouter {
    */
   setSystemPrompt(avatarId: string, systemPrompt: string): void {
     this.systemPromptCache.set(avatarId, systemPrompt)
+  }
+
+
+  private getKnowledgeFiles(avatarId: string): string[] {
+    return this.getRetriever(avatarId).listFiles().filter((file) => file.toLowerCase().endsWith('.md'))
+  }
+
+  private getLinkGraph(avatarId: string): LinkGraph {
+    const cached = this.linkGraphCache.get(avatarId)
+    if (cached) return cached
+
+    const retriever = this.getRetriever(avatarId)
+    const files = this.getKnowledgeFiles(avatarId)
+    const entries = files.map((file) => ({ file, content: retriever.readFile(file) }))
+    const graph = buildKnowledgeLinkGraph(entries)
+    this.linkGraphCache.set(avatarId, graph)
+    return graph
+  }
+
+  anchorKnowledgeChunks(
+    avatarId: string,
+    chunks: Array<{ file: string; heading: string; content: string; score: number }>,
+  ): KnowledgeSearchResult[] {
+    const retriever = this.getRetriever(avatarId)
+    const fileCache = new Map<string, string>()
+
+    const readMarkdown = (file: string): string => {
+      if (!fileCache.has(file)) fileCache.set(file, retriever.readFile(file))
+      return fileCache.get(file)!
+    }
+
+    return chunks.map((chunk) => {
+      const heading = chunk.heading?.trim() || ''
+      try {
+        const markdown = readMarkdown(chunk.file)
+        return {
+          ...chunk,
+          anchor: buildKnowledgeSourceAnchor(chunk.file, markdown, chunk.content, heading || undefined),
+        }
+      } catch {
+        return {
+          ...chunk,
+          anchor: { kind: 'knowledge', file: chunk.file, heading: heading || undefined },
+        }
+      }
+    })
+  }
+
+  getRelatedKnowledgeChunks(
+    avatarId: string,
+    question: string,
+    seedFiles: string[],
+    options: { maxRelatedFiles?: number; maxChars?: number; baseScore?: number } = {},
+  ): KnowledgeSearchResult[] {
+    const {
+      maxRelatedFiles = 4,
+      maxChars = 650,
+      baseScore = 0.52,
+    } = options
+
+    const uniqueSeedFiles = Array.from(new Set(seedFiles.filter((file) => typeof file === 'string' && file.trim().length > 0)))
+    if (uniqueSeedFiles.length === 0) return []
+
+    const graph = this.getLinkGraph(avatarId)
+    const linkedFiles = expandLinkedFiles(graph, uniqueSeedFiles, { maxDepth: 2, maxFiles: maxRelatedFiles })
+    if (linkedFiles.length === 0) return []
+
+    const retriever = this.getRetriever(avatarId)
+    const results: KnowledgeSearchResult[] = []
+
+    for (const linked of linkedFiles) {
+      let markdown = ''
+      try {
+        markdown = retriever.readFile(linked.file)
+      } catch {
+        continue
+      }
+      const snippet = selectRelevantSnippet(markdown, question, { maxChars })
+      if (!snippet.content) continue
+      const score = Number((baseScore + linked.relationCount * 0.03 - (linked.depth - 1) * 0.08).toFixed(4))
+      const heading = snippet.heading ? `${snippet.heading}（关联文件）` : '关联文件'
+      results.push({
+        file: linked.file,
+        heading,
+        content: snippet.content,
+        score,
+        anchor: buildKnowledgeSourceAnchor(linked.file, markdown, snippet.content, snippet.heading),
+      })
+    }
+
+    return results
+  }
+
+  buildKnowledgeSearchResults(
+    avatarId: string,
+    query: string,
+    options: { rawTopN?: number; maxChunks?: number; maxPerFile?: number; minDistinctFiles?: number; maxRelatedFiles?: number } = {},
+  ): KnowledgeSearchResult[] {
+    const {
+      rawTopN = 14,
+      maxChunks = 8,
+      maxPerFile = 3,
+      minDistinctFiles = 3,
+      maxRelatedFiles = 4,
+    } = options
+
+    const rawChunks = this.anchorKnowledgeChunks(avatarId, this.getRetriever(avatarId).searchChunks(query, rawTopN))
+    const reranked = rerankChunksWithDiversity(rawChunks, {
+      maxChunks,
+      maxPerFile,
+      minDistinctFiles,
+      similarityThreshold: 0.82,
+    })
+    const seedFiles = reranked.slice(0, 4).map((chunk) => chunk.file)
+    const relatedChunks = this.getRelatedKnowledgeChunks(avatarId, query, seedFiles, { maxRelatedFiles })
+    return rerankChunksWithDiversity([...reranked, ...relatedChunks], {
+      maxChunks,
+      maxPerFile,
+      minDistinctFiles,
+      similarityThreshold: 0.82,
+    })
+  }
+
+  private loadExcelSource(avatarId: string, file: string): CachedExcelSource['parsed'] {
+    const jsonPath = path.join(this.avatarsPath, avatarId, 'knowledge', '_excel', `${file}.json`)
+    const cacheKey = `${avatarId}:${file}`
+
+    let stat
+    try {
+      stat = fs.statSync(jsonPath)
+    } catch {
+      throw new Error(`Excel 数据源不存在: _excel/${file}.json`)
+    }
+
+    const cached = this.excelSourceCache.get(cacheKey)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.parsed
+    }
+
+    let raw: string
+    try {
+      raw = fs.readFileSync(jsonPath, 'utf-8')
+    } catch {
+      throw new Error(`Excel 数据源不存在: _excel/${file}.json`)
+    }
+
+    let parsed: CachedExcelSource['parsed']
+    try {
+      parsed = JSON.parse(raw) as CachedExcelSource['parsed']
+    } catch (e) {
+      throw new Error(`Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`)
+    }
+
+    this.excelSourceCache.set(cacheKey, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      parsed,
+    })
+    return parsed
   }
 
   /** 执行工具调用 */
@@ -158,21 +351,31 @@ export class ToolRouter {
     const filePath = args.file_path as string
     if (!filePath) return { content: '', error: '缺少 file_path 参数' }
     const content = this.getRetriever(avatarId).readFile(filePath)
-    return { content }
+    const anchor = formatSourceAnchor(buildWholeFileKnowledgeAnchor(filePath, content))
+    return { content: `${anchor}
+${content}` }
   }
 
   private searchKnowledge(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const query = args.query as string
     if (!query) return { content: '', error: '缺少 query 参数' }
     const topN = (args.top_n as number) ?? 5
-    const results = this.getRetriever(avatarId).searchChunks(query, topN)
+    const results = this.buildKnowledgeSearchResults(avatarId, query, {
+      rawTopN: Math.max(topN + 6, 10),
+      maxChunks: topN,
+      maxPerFile: 3,
+      minDistinctFiles: Math.min(3, Math.max(1, topN)),
+      maxRelatedFiles: Math.min(4, Math.max(2, topN)),
+    })
     // tokens 落盘由 execute() 末尾统一处理（覆盖所有内部 searchChunks 调用方）
     if (results.length === 0) {
       return { content: '未找到相关知识内容。' }
     }
-    const content = results.map(r =>
-      `### [${r.file}] ${r.heading}\n${r.content}`
-    ).join('\n\n---\n\n')
+    const content = results.map((r) => {
+      const heading = r.heading?.trim() ? r.heading : '命中片段'
+      const anchor = r.anchor ? formatSourceAnchor(r.anchor) : `[来源: knowledge/${r.file}]`
+      return `### [${r.file}] ${heading}\n${anchor}\n${r.content}`
+    }).join('\n\n---\n\n')
     return { content }
   }
 
@@ -211,27 +414,11 @@ export class ToolRouter {
       return { content: '', error: e instanceof Error ? e.message : String(e) }
     }
 
-    const jsonPath = path.join(this.avatarsPath, avatarId, 'knowledge', '_excel', `${file}.json`)
-    let raw: string
+    let parsed: CachedExcelSource['parsed']
     try {
-      raw = fs.readFileSync(jsonPath, 'utf-8')
-    } catch {
-      return { content: '', error: `Excel 数据源不存在: _excel/${file}.json` }
-    }
-
-    let parsed: {
-      fileName?: string
-      sheets?: Array<{
-        name: string
-        rowCount: number
-        columns: Array<{ name: string; dtype: string; uniqueCount?: number; samples?: Array<string | number>; min?: string | number; max?: string | number }>
-        rows: Array<Record<string, string | number | null>>
-      }>
-    }
-    try {
-      parsed = JSON.parse(raw)
+      parsed = this.loadExcelSource(avatarId, file)
     } catch (e) {
-      return { content: '', error: `Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}` }
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
     }
 
     const sheet = parsed.sheets?.find(s => s.name === sheetName)
@@ -245,6 +432,7 @@ export class ToolRouter {
       const schemaPayload = {
         file,
         sheet: sheetName,
+        source_anchor: formatSourceAnchor(buildExcelSourceAnchor(file, sheetName)),
         sheet_row_count: sheet.rowCount,
         columns: sheet.columns.map(c => ({
           name: c.name,
@@ -278,17 +466,17 @@ export class ToolRouter {
     }
 
     // 执行过滤
-    const matched: Array<Record<string, string | number | null>> = []
-    for (const row of sheet.rows) {
+    const matched: Array<{ rowNumber: number; row: Record<string, string | number | null> }> = []
+    for (const [rowIndex, row] of sheet.rows.entries()) {
       if (matchFilter(row, filter)) {
         if (hasColumns) {
           const picked: Record<string, string | number | null> = {}
           for (const col of columns!) {
             if (col in row) picked[col] = row[col]
           }
-          matched.push(picked)
+          matched.push({ rowNumber: rowIndex + 2, row: picked })
         } else {
-          matched.push(row)
+          matched.push({ rowNumber: rowIndex + 2, row })
         }
         if (matched.length >= limit) break
       }
@@ -343,10 +531,19 @@ export class ToolRouter {
     // 避免早先的 tool 结果被 compressOldToolResults 压缩后"记忆模糊"又从头试探列名。
     // 不带 samples / uniqueCount / range（这些在 system prompt 的 Schema 摘要里有）。
     const schemaBrief = sheet.columns.map(c => ({ name: c.name, dtype: c.dtype }))
+    const rowNumbers = resultRows.map((entry) => entry.rowNumber)
+    const sourceAnchor = formatSourceAnchor(buildExcelSourceAnchor(
+      file,
+      sheetName,
+      rowNumbers.length > 0 ? Math.min(...rowNumbers) : undefined,
+      rowNumbers.length > 0 ? Math.max(...rowNumbers) : undefined,
+    ))
 
     const payload = {
       file,
       sheet: sheetName,
+      source_anchor: sourceAnchor,
+      source_rows: rowNumbers,
       sheet_row_count: sheet.rowCount,
       schema: schemaBrief,
       count: resultRows.length,
@@ -359,7 +556,7 @@ export class ToolRouter {
         : truncatedByLimit
           ? `数据被按 limit=${limit} 截断，原匹配 ${matched.length} 行，请加 filter 缩小或翻页`
           : undefined,
-      rows: resultRows,
+      rows: resultRows.map((entry) => ({ _source_row: entry.rowNumber, ...entry.row })),
       ...(zeroMatchHint
         ? {
             zero_match_hint: zeroMatchHint,

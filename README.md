@@ -1,99 +1,39 @@
-# Soul
+# AI-avatar 手工模拟场景测试代码
 
-> 本地运行的 AI 分身框架。给每个专家一个灵魂。
+包含 3 个文件：
 
-[![License](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey.svg)](#)
-[![Release](https://img.shields.io/badge/release-v0.7.3-green.svg)](CHANGELOG.md)
+- `desktop-app/src/services/manual-qa-scenarios.ts`
+- `desktop-app/src/services/manual-qa-scenarios.test.ts`
+- `desktop-app/scripts/manual-qa-scenarios-smoke.ts`
 
-![Soul Desktop](docs/images/desktop-app.png)
+## 覆盖场景
 
-## 为什么是 Soul
+1. 知识库事实问答
+2. Excel 精确数值问答
+3. 连续两轮追问
+4. 诱导系统乱引用
 
-通用 AI 助手什么都懂一点，却没有一个真正"属于你的专家"。Soul 让你为每一个领域养一个分身——有自己的人格、知识库、技能和记忆，回答必须基于你喂给它的资料，而不是模型的幻觉。
+## 建议加入 package.json 的 scripts
 
-全部数据留在本地。
+```json
+{
+  "test:manual-qa-scenarios": "NODE_PATH=./test-support/node_modules npx --yes tsx --test src/services/manual-qa-scenarios.test.ts",
+  "test:manual-qa-smoke": "NODE_PATH=./test-support/node_modules npx --yes tsx scripts/manual-qa-scenarios-smoke.ts"
+}
+```
 
-## 和同类产品的区别
-
-|  | Soul | LM Studio | AnythingLLM | Ollama WebUI |
-|---|:---:|:---:|:---:|:---:|
-| 本地运行              | ● | ● | ● | ● |
-| 多角色人格（soul.md） | ● | ○ | ◐ | ○ |
-| 技能树（渐进披露）    | ● | ○ | ○ | ○ |
-| 长期记忆（自动纠偏）  | ● | ○ | ◐ | ○ |
-| Wiki / 矛盾检测       | ● | ○ | ○ | ○ |
-| 质量测试体系          | ● | ○ | ○ | ○ |
-| BM25 + 向量双路检索   | ● | ○ | ● | ○ |
-| Excel 作结构化数据源  | ● | ○ | ○ | ○ |
-| 条件过滤 + 图表生成   | ● | ○ | ○ | ○ |
-| 批量 / 压缩包导入     | ● | ○ | ◐ | ○ |
-
-<sub>● 支持　◐ 部分支持　○ 不支持</sub>
-
-Soul 的重心不是"再做一个聊天界面"，而是让 AI 分身**像一个真正的同事**——有稳定人格、有专业知识边界、会记住纠正、回答可溯源。
-
-## 特性
-
-- **人格** — 一份 `soul.md` 定义身份、风格、边界，知识库优先、数据可溯源
-- **知识库** — PDF / Word（**.doc + .docx**）/ **PowerPoint / Excel / CSV** 一键导入，OCR + 章节切分，BM25 + 向量双路检索
-- **检索性能持久化** — BM25 中文分词结果落盘到 `_index/tokens.json`，**重启后首次查询从 30-180 秒降到 < 2 秒**（v0.6.0），跨 session 复用，hash 失效时自动重建
-- **Excel 作结构化数据源** — Excel 不占用 system prompt，AI 通过 `query_excel` 工具按 MongoDB 风格条件精确过滤行；返回值带列 schema 帮 LLM 单次决策
-- **批量导入 + 自动优化** — 文件夹 / zip / tar.gz / 7z / rar 一次性导入，**嵌套归档自动解压**（文件夹内的 zip/rar 递归展开），原始文件保留到 `_raw/`，导入后 ENHANCE 走完整管线，支持断点续跑
-- **三引擎图表可视化** — 3 个内置技能覆盖全场景：`draw-chart`（ECharts 数据精确图）/ `draw-mermaid`（14+ 种结构图：甘特/流程/时序/思维导图/看板/状态机/ER/类/Git）/ `draw-infographic`（@antv/infographic 84+ 信息图模板：列表/对比/SWOT/金字塔/词云）。**Skill 路由系统**自动按关键词 < 1ms 路由到最合适的引擎并注入完整技能定义，省去 load_skill 工具调用
-- **技能 CRUD + AI 生成** — SkillsPanel 支持新建/编辑/删除技能，内置技能不可删除（`[BUILTIN]`）。新建默认"AI 辅助"模式：用户一段话描述 → LLM 基于模板 + few-shot 生成 skill 草稿 → 切到手动模式编辑
-- **81 个电影风格主题** — 运行时一键切换，覆盖赛博朋克、太空史诗、犯罪惊悚、文艺浪漫、韦斯安德森等美学流派（9 浅色 + 72 暗色），CSS 变量驱动全局色彩体系
-- **自动更新** — 启动时检查 GitHub Releases 新版本，有更新显示横幅提示
-- **对话可折叠** — 超长回答一键折叠，节省屏幕空间
-- **长期记忆** — 跨会话持久化，自动纠偏
-- **Wiki** — 实体自动聚合，跨文件矛盾检测
-- **测试体系** — 红线测试 + 知识溯源，可量化迭代
-- **Context 智能压缩** — 工具结果 + 历史回答两层自动压缩，防止多轮对话撑爆上下文；压缩摘要采用禁止性提示而非诱导性文字，避免 LLM 陷入"重复调用工具"循环
-- **跨平台打包 afterPack 自动修正** — macOS 交叉编译 Windows 时，afterPack 钩子自动下载正确平台的 better-sqlite3 prebuild，无需手动 rebuild
-
-## 快速开始
+## 运行
 
 ```bash
 cd desktop-app
-npm install
-npm run dev
+npm run test:manual-qa-scenarios
+npm run test:manual-qa-smoke
 ```
 
-打包：`npm run dist:mac` / `npm run dist:win`
-
-### 安装包与分身数据
-
-- **安装包不内含任何分身目录**：`electron-builder` 只打包应用本体，并附带只读资源 `templates/`、`shared/`；**不会**把仓库里的 `avatars/`（例如「小堵-工商储专家」等示例）打进 DMG / NSIS。
-- **首次安装默认没有分身**：运行时数据在用户目录下的 `userData/avatars/`，初始为空列表，需在应用内「新建分身」。
-- **从源码 `npm run dev` 开发时**，才会指向仓库内的 `avatars/`，便于本地调试；与正式安装包行为不同。
-
-### 给已有分身安装默认技能（v0.5.0 新增）
-
-新分身创建时会自动安装 `templates/skills/` 下的默认技能。已有分身可以用以下命令一次性回填：
+如果你还没加 scripts，也可以直接运行：
 
 ```bash
-cd desktop-app && npm run retrofit:skills
+cd desktop-app
+NODE_PATH=./test-support/node_modules npx --yes tsx --test src/services/manual-qa-scenarios.test.ts
+NODE_PATH=./test-support/node_modules npx --yes tsx scripts/manual-qa-scenarios-smoke.ts
 ```
-
-幂等安全，重复运行只会把缺失的技能加进去，不会覆盖用户自定义。
-
-### 数据可视化示例
-
-导入一个销售 Excel，然后问分身「用图表展示 2024 年各月销售额」——分身会基于知识库真实数据输出一张 ECharts 图表，直接在聊天中渲染，遵循 UED 设计规范（Y 轴从 0、无 3D、最多 5 系列、色盲友好图案）。
-
-如果数据稀疏（比如 Excel 里只有 1 个月数据），分身会**诚实告知** "数据源仅有 N 个月数据" 并改用 KPI 卡片或近期历史对比，**不会硬画占位的折线图**（v0.6.1 数据守护规则）。
-
-## 文档
-
-- [系统指南](docs/system-guide.md)
-- [架构说明](docs/architecture.md)
-- [编码规范](CONVENTIONS.md)
-- [更新日志](CHANGELOG.md)
-
-## License
-
-ISC
-
----
-
-<div align="center"><sub>对知识准确性的偏执追求</sub></div>

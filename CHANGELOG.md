@@ -1,5 +1,43 @@
 # 更新日志
 
+## v0.8.0 (2026-05-01)
+
+### 新功能
+
+- **桌面端完整实现** — Electron 桌面应用全量上线，主进程模块全部就位：
+  - **主进程**：`main.ts` / `preload.ts` / `database.ts` / `logger.ts` / `cron-scheduler.ts` / `test-manager.ts` / `scheduled-tester.ts` / `kb-question-generator.ts` / `tool-result-spool.ts` / `folder-importer.ts` / `llm-factory.ts` / `skill-generator-prompt.ts`
+  - **子模块**：`connectors/github-connector.ts`、`exporters/`（HTML→PPTX、内联 HTML、本地静态文件服务）、`preview/`（PreviewManager、tweaks-writer、preview-preload）、`verifier/VerifierAgent.ts`、`workspace/WorkspaceManager.ts`、`__smoke__/`（静态与 verifier 烟囱测试）
+  - **渲染层**：`App.tsx` + 35+ 组件（ChatWindow / MessageBubble / KnowledgeTree / KnowledgeEditor / KnowledgeViewer / SkillsPanel / SoulEditorPanel / TestPanel / BatchRegressionPanel / PreviewPane / SettingsPanel / UserProfilePanel / PromptTemplatePanel / MemoryPanel / SkillProposalCard / AssetReviewPanel / ChartRenderer / MermaidRenderer / InfographicRenderer / FormMessage / AskQuestionCard / L3EventsPanel / TaskListPanel 等），共享原子组件 IconButton / Modal / PanelHeader / Toast
+  - **服务层**：`llm-service`、`batch-regression-runner`、`batch-report-generator`、`regression-telemetry`、`reference-simulation`、`source-anchor-resolver`、`soul-step-generator`、`soul-validator`、`test-generator`、`test-runner`，配套测试覆盖
+  - **状态与工具**：`stores/chatStore` + `themeStore`、`utils/pixelate` + `knowledge-frontmatter`、`lib/echarts-pixel-theme` + `tool-name-map`、像素字体（中文 + 拉丁）
+  - **工程化**：Vite + Tailwind + PostCSS + TS 配置、ESLint flat config、Playwright（journey / demo / e2e）三套配置、`scripts/`（图标生成 / Excel JSON 回填 / 知识索引重建 / tokens 预热 / Win 构建脚本）、`electron-builder.yml` + `after-pack` / `after-sign` 钩子
+
+- **核心九层路由架构** — `@soul/core` `tool-router.ts` 扩展为九层路由（+2882 行），支持工具裁决、委托、阶段化检索；新增模块：
+  - `browser.ts` — 受控浏览器抽象
+  - `mcp-client-manager.ts` — MCP 客户端连接与生命周期
+  - `utils/local-date.ts` — 本地时区日历日格式化（替代 `toISOString().slice(0,10)`）
+  - `utils/query-hash.ts` — 查询规范化与稳定 hash
+  - 新测试：`tool-router-delegate.test.ts` / `tool-router-stage2.test.ts` / `tool-router-stage9.test.ts`
+
+- **设计系统资源库** — `shared/design-systems/` 收录 70+ 知名品牌设计指南（Apple / Stripe / Linear / Vercel / Notion / Figma / Tesla / Spotify 等），分类至 AI 平台、汽车、后端 / DevOps、设计工具、IDE、电商、金融加密、媒体消费科技、生产力 SaaS 等领域，含统一 `INDEX.md` 与 `claude-design-sys-prompt-adapted.md`
+- **Starter 组件包** — `shared/starter-components/` 提供 macOS / iOS / Android / 浏览器机框、动效预设、画布与 deck 舞台等 React / JSX 起步组件
+
+- **Claude 技能模板矩阵** — `templates/skills/claude-*.md` 覆盖动画视频、设计系统、PPT 导出（可编辑 / 截图）、前端设计、handoff、交互原型、Deck、Tweakable、PDF 保存、Standalone HTML、Canva 投递、线框图等 13 个技能，配套 `templates/prompts/claude-design-system.md`
+- **`templates/skill-index.yaml`** — 新增 115 行 skill 路由索引，支持桌面端 Skill 路由系统按需注入
+
+### 文档
+
+- **AI 分身使用介绍** — 新增 `docs/ai-avatar-introduction.md` + 10 张产品截图（首页 / 回答 / 知识 / 记忆 / 提示模板 / 设置 / 技能 / 灵魂 / 用户画像 / Electron 主屏）
+- **CLAUDE.md（根）** — 任务拆分规则引入「触发判定」前置流程，明确 ✅ / ⛔ 两类场景，避免对调研 / 知识检索类问题误触拆分
+
+### 修复与优化
+
+- **`document-parser.ts`** — 文档解析路径与边界修正
+- **`manual-qa-scenarios`** — 用例与实现同步，覆盖更全面的 QA 场景
+- **`conversation-router` / `soul-loader` / `knowledge-retriever`** — 与九层路由架构对齐
+- **`tool-budget` / `chart-cache` / `common`** — 与新路由 / 缓存路径对齐
+- **`agent-template`** — 与新版 CLAUDE.md 拆分规则同步
+
 ## v0.7.3 (2026-04-17)
 
 ### 修复与优化

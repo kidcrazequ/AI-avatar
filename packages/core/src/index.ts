@@ -56,6 +56,15 @@ export type { MemoryStats } from './memory-manager'
 export { SubAgentManager } from './sub-agent-manager'
 export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'
 
+export { McpClientManager } from './mcp-client-manager'
+export type {
+  McpServerConfig,
+  McpServerStatus,
+  McpServerSnapshot,
+  McpToolMeta,
+  McpToolCallResult,
+} from './mcp-client-manager'
+
 export { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 
 export { localDateString, collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
@@ -83,7 +92,7 @@ export type { SystemPromptSections } from './prompt-sections'
 export { buildKnowledgeLinkGraph, extractExplicitLinks, expandLinkedFiles, selectRelevantSnippet } from './link-graph'
 export type { LinkGraph, KnowledgeLinkEntry, LinkedFileCandidate, ExpandLinkedFilesOptions, SelectRelevantSnippetOptions } from './link-graph'
 export { routeConversation } from './conversation-router'
-export type { RouteConversationOptions, RoutingDecision, ContextStrategy, ToolProfile, ConversationMode } from './conversation-router'
+export type { RouteConversationOptions, RoutingDecision, ContextStrategy } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'
 export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from './provider-capabilities'

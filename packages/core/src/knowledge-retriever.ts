@@ -334,6 +334,14 @@ export class KnowledgeRetriever {
     //   1. chunk.tokens 内存缓存（同一 retriever 实例多次 search 复用）
     //   2. tokensMap 持久化缓存（从 _index/tokens.json 加载，跨 session 复用）
     //   3. 都没有 → 调 segmentit tokenize（CPU 重活），结果回填到 tokensMap + 标记 dirty
+    //
+    // ⚠️ 安全上限 3000 字符：pushChunks 在单段落 > CHUNK_SPLIT_THRESHOLD 时不切分（已知 bug），
+    // 导致部分 md（含大表格 / 单行长段 / 含大量重复中文字符）产出 40000+ 字符的巨型 chunk。
+    // 实测某些"签章合同"类 md 的 8000 字符 chunk 仍能让 segmentit 单 chunk 耗时 5-13 秒
+    // （segmentit 词典 trie 在某些重复字符组合下退化为 O(n²)）。3000 字符基本能让任意 chunk
+    // tokenize ≤ 500ms（5000 字测试全部秒级）。BM25 只是排序信号，召回后传给 LLM 的是完整
+    // chunk content，所以前 3000 字索引足够 BM25 排序，不影响最终回答质量。
+    const TOKENIZE_MAX_CHARS = 3000
     for (const chunk of allChunks) {
       if (chunk.tokens) continue
       const cacheKey = `${chunk.file}::${chunk.heading}`
@@ -342,9 +350,12 @@ export class KnowledgeRetriever {
         chunk.tokens = persistedTokens
         continue
       }
-      const searchableText = (chunk.context ? chunk.context + ' ' : '') +
+      const rawText = (chunk.context ? chunk.context + ' ' : '') +
         chunk.heading + ' ' + chunk.content
-      const fresh = tokenize(searchableText.toLowerCase())
+      const safeText = rawText.length > TOKENIZE_MAX_CHARS
+        ? rawText.slice(0, TOKENIZE_MAX_CHARS)
+        : rawText
+      const fresh = tokenize(safeText.toLowerCase())
       chunk.tokens = fresh
       this.tokensMap.set(cacheKey, fresh)
       this.tokensDirty = true

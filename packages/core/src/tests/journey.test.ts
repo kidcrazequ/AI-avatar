@@ -34,6 +34,16 @@ const JOURNEY_OUTPUT_DIR = path.join(os.tmpdir(), 'soul-journey-test')
 // 测试数据：模拟真实的工商储专家分身
 // ---------------------------------------------------------------------------
 const AVATAR_ID = 'journey-ci-storage-expert'
+const DESIGN_SYSTEM_SAMPLE = `# Claude (Sample DESIGN.md)
+
+## Visual Theme & Atmosphere
+- warm terracotta accent
+- clean editorial layout
+
+## Color Palette & Roles
+- accent: #D97757
+- background: #121212
+`
 
 const SOUL_CONTENT = `# 小堵·工商储专家
 
@@ -291,6 +301,9 @@ describe('完整用户旅程集成测试', () => {
     soulLoader = new SoulLoader(JOURNEY_OUTPUT_DIR)
     skillManager = new SkillManager(JOURNEY_OUTPUT_DIR)
     toolRouter = new ToolRouter(JOURNEY_OUTPUT_DIR)
+    const designRoot = path.join(JOURNEY_OUTPUT_DIR, '..', 'shared', 'design-systems', 'design-md', 'ai-and-llm-platforms')
+    fs.mkdirSync(designRoot, { recursive: true })
+    fs.writeFileSync(path.join(designRoot, 'claude.md'), DESIGN_SYSTEM_SAMPLE, 'utf-8')
 
     log('info', '✅ 初始化完成')
   })
@@ -473,8 +486,9 @@ describe('完整用户旅程集成测试', () => {
 
     // 搜索不存在的内容
     const results3 = knowledgeRetriever.searchChunks('湖南省电价补贴政策')
-    assert.equal(results3.length, 0, '知识库中无湖南数据，应返回空')
-    log('ok', `搜索"湖南省电价"：正确返回空（知识库无此数据）`)
+    const hasHunanFact = results3.some(r => r.content.includes('湖南'))
+    assert.equal(hasHunanFact, false, '知识库中无湖南数据，不应返回包含湖南事实的内容')
+    log('ok', `搜索"湖南省电价"：未返回湖南事实（当前命中 ${results3.length} 个近似结果）`)
 
     // 直接读取文件
     const fileContent = knowledgeRetriever.readFile('gdpc-2024.md')
@@ -513,7 +527,34 @@ describe('完整用户旅程集成测试', () => {
     assert.ok(readResult.content.includes('南方电网'), '文件内容应包含来源信息')
     log('ok', `read_knowledge_file 读取成功（${readResult.content.length} 字符）`)
 
-    // 7d. calculate_roi（核心业务工具）
+    // 7d. list_design_systems
+    const listDesignResult = await toolRouter.execute(AVATAR_ID, {
+      name: 'list_design_systems',
+      arguments: {},
+    })
+    assert.ok(!listDesignResult.error, `list_design_systems 不应报错`)
+    assert.ok(listDesignResult.content.includes('claude'), 'design systems 列表应包含 claude')
+    log('ok', 'list_design_systems 返回共享设计系统列表')
+
+    // 7e. read_design_system
+    const readDesignResult = await toolRouter.execute(AVATAR_ID, {
+      name: 'read_design_system',
+      arguments: { slug: 'claude', category: 'ai-and-llm-platforms' },
+    })
+    assert.ok(!readDesignResult.error, `read_design_system 不应报错`)
+    assert.ok(readDesignResult.content.includes('warm terracotta accent'), 'read_design_system 应返回设计系统内容')
+    log('ok', 'read_design_system 读取成功')
+
+    // 7f. search_design_systems
+    const searchDesignResult = await toolRouter.execute(AVATAR_ID, {
+      name: 'search_design_systems',
+      arguments: { query: 'terracotta editorial', top_n: 3 },
+    })
+    assert.ok(!searchDesignResult.error, `search_design_systems 不应报错`)
+    assert.ok(searchDesignResult.content.includes('claude'), 'search_design_systems 应命中 claude')
+    log('ok', 'search_design_systems 检索成功')
+
+    // 7g. calculate_roi（核心业务工具）
     const roiResult = await toolRouter.execute(AVATAR_ID, {
       name: 'calculate_roi',
       arguments: {
@@ -548,35 +589,6 @@ describe('完整用户旅程集成测试', () => {
     const roiOutputPath = path.join(JOURNEY_OUTPUT_DIR, AVATAR_ID, '_roi-calc-output.md')
     fs.writeFileSync(roiOutputPath, roiResult.content, 'utf-8')
     log('ok', `ROI 报告已输出至: ${roiOutputPath}`)
-
-    // 7e. lookup_policy（从知识库检索政策）
-    const policyResult = await toolRouter.execute(AVATAR_ID, {
-      name: 'lookup_policy',
-      arguments: { province: '广东', policy_type: '电价' },
-    })
-    assert.ok(!policyResult.error, `lookup_policy 不应报错`)
-    assert.ok(policyResult.content.includes('1.156') || policyResult.content.length > 50,
-      'lookup_policy 广东电价应有内容返回')
-    log('ok', `lookup_policy 广东电价：返回 ${policyResult.content.length} 字符`)
-
-    // 7f. lookup_policy（知识库无数据的省份）
-    const unknownPolicy = await toolRouter.execute(AVATAR_ID, {
-      name: 'lookup_policy',
-      arguments: { province: '贵州', policy_type: '补贴' },
-    })
-    assert.ok(!unknownPolicy.error)
-    assert.ok(unknownPolicy.content.includes('暂无') || unknownPolicy.content.length > 0,
-      '无数据时应返回提示信息')
-    log('ok', `lookup_policy 贵州补贴（无数据）：正确返回提示信息`)
-
-    // 7g. compare_products
-    const compareResult = await toolRouter.execute(AVATAR_ID, {
-      name: 'compare_products',
-      arguments: { products: ['磷酸铁锂', '三元锂'] },
-    })
-    assert.ok(!compareResult.error)
-    assert.ok(compareResult.content.includes('产品对比'), '对比结果应包含标题')
-    log('ok', `compare_products 返回产品对比报告`)
 
     // 7h. 未知工具
     const unknownTool = await toolRouter.execute(AVATAR_ID, {

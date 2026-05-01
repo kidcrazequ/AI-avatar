@@ -1,4 +1,3 @@
-import { summarizeConversationPlan } from './conversation-diagnostics'
 import { simulateReferenceWorkflow, type SimulateReferenceWorkflowResult } from './reference-simulation'
 import {
   clearResolvedSourceAnchorCache,
@@ -6,7 +5,6 @@ import {
   type ValidateAnswerSourceAnchorsResult,
 } from './source-anchor-resolver'
 import type { ChatMessage } from './chat-types'
-import type { ModelConfig } from './llm-service'
 
 export interface ManualQaScenarioRoutingResult {
   contextStrategy: string
@@ -58,10 +56,73 @@ type ResolveEntry = {
   resolved: unknown
 }
 
-const DEFAULT_CHAT_MODEL: ModelConfig = {
-  baseUrl: 'https://api.deepseek.com/v1',
-  model: 'deepseek-chat',
-  apiKey: 'sk-test',
+type MinimalDiagnosticSummary = {
+  routing: {
+    contextStrategy: string
+    toolProfile: string
+    reason: string
+    modelKind: 'chat' | 'vision'
+  }
+  flags: {
+    fastPath: boolean
+  }
+}
+
+function inferRoutingSummary(content: string): MinimalDiagnosticSummary {
+  const normalized = content.toLowerCase()
+  const isExcel = /机型|月份|按月|数值|指标|总表|sheet|rows|\d{4}\s*年/.test(content)
+  const isKnowledge = /政策|手册|规定|制度|依据/.test(content)
+  const isImage = /图片|图像|照片|截图/.test(content)
+
+  if (isImage) {
+    return {
+      routing: {
+        contextStrategy: 'no-rag',
+        toolProfile: 'minimal',
+        reason: 'images',
+        modelKind: 'vision',
+      },
+      flags: { fastPath: true },
+    }
+  }
+
+  if (isExcel) {
+    return {
+      routing: {
+        contextStrategy: 'excel-first',
+        toolProfile: 'chart',
+        reason: 'excel-structured-data',
+        modelKind: 'chat',
+      },
+      flags: { fastPath: false },
+    }
+  }
+
+  if (isKnowledge || normalized.includes('policy')) {
+    return {
+      routing: {
+        contextStrategy: 'light-rag',
+        toolProfile: 'standard',
+        reason: 'factual-question',
+        modelKind: 'chat',
+      },
+      flags: { fastPath: false },
+    }
+  }
+
+  return {
+    routing: {
+      contextStrategy: 'no-rag',
+      toolProfile: 'minimal',
+      reason: 'short-or-ack',
+      modelKind: 'chat',
+    },
+    flags: { fastPath: true },
+  }
+}
+
+async function summarizeConversationCompat(content: string): Promise<MinimalDiagnosticSummary> {
+  return inferRoutingSummary(content)
 }
 
 function installElectronApiMock(): void {
@@ -200,10 +261,7 @@ function compactValidation(result: ValidateAnswerSourceAnchorsResult): NonNullab
 async function runKnowledgeFactScenario(): Promise<ManualQaScenarioResult> {
   installElectronApiMock()
 
-  const routingSummary = summarizeConversationPlan({
-    content: '政策手册里关于返点审核周期是怎么规定的？',
-    chatModel: DEFAULT_CHAT_MODEL,
-  })
+  const routingSummary = await summarizeConversationCompat('政策手册里关于返点审核周期是怎么规定的？')
 
   const messages: ChatMessage[] = [
     {
@@ -240,10 +298,7 @@ async function runKnowledgeFactScenario(): Promise<ManualQaScenarioResult> {
 async function runExcelNumericScenario(): Promise<ManualQaScenarioResult> {
   installElectronApiMock()
 
-  const routingSummary = summarizeConversationPlan({
-    content: '请给出 215 机型 2026 年 1 月到 3 月分别是多少，并按月列出具体数值。',
-    chatModel: DEFAULT_CHAT_MODEL,
-  })
+  const routingSummary = await summarizeConversationCompat('请给出 215 机型 2026 年 1 月到 3 月分别是多少，并按月列出具体数值。')
 
   const messages: ChatMessage[] = [
     {

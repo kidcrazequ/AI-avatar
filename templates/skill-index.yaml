@@ -127,3 +127,118 @@ skills:
       - 服务列表
     when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
     priority: 1
+
+  - name: claude-design-system
+    path: skills/claude-design-system.md
+    domain: 设计系统
+    keywords:
+      - 设计系统
+      - 品牌规范
+      - 视觉规范
+      - 复刻风格
+      - 界面复刻
+      - design system
+      - design md
+      - DESIGN.md
+      - 组件规范
+      - 视觉语言
+      - token
+      - 颜色体系
+      - 字体规范
+      - 间距规范
+      - 样式指南
+      - 页面规范
+      - 品牌风格
+      - 原型规范
+      - claude 设计
+      - 品牌视觉
+    when: 用户需要基于品牌 DESIGN.md 构建设计系统、复刻视觉风格或输出可执行 UI 规范
+    priority: 2
+    # 推荐委派目标：跨对话维护视觉一致性、需要审美主张的任务，
+    # 优先用 delegate_task({ target_avatar: 'design-master' }) 委派给设计专科分身。
+    # 详见 skills/claude-design-system.md 末尾的"何时把任务委派给 design-master 分身"决策表。
+    recommended_avatar: design-master
+
+  - name: claude-animated-video
+    path: skills/claude-animated-video.md
+    domain: 设计制品
+    keywords: [动画视频, motion, timeline, keyframes, 动效]
+    when: 用户需要时间轴动画设计制品
+    priority: 3
+
+  - name: claude-interactive-prototype
+    path: skills/claude-interactive-prototype.md
+    domain: 设计制品
+    keywords: [交互原型, prototype, 可点击, 交互演示]
+    when: 用户需要可交互原型
+    priority: 2
+
+  - name: claude-make-deck
+    path: skills/claude-make-deck.md
+    domain: 演示文稿
+    keywords: [做个 deck, 幻灯片, 演示文稿, slides]
+    when: 用户需要生成演示文稿
+    priority: 2
+
+  - name: claude-make-tweakable
+    path: skills/claude-make-tweakable.md
+    domain: 设计制品
+    keywords: [可调参数, tweak, 调颜色, 调间距]
+    when: 用户希望在制品中加入可调控件
+    priority: 3
+
+  - name: claude-frontend-design
+    path: skills/claude-frontend-design.md
+    domain: 视觉方向
+    keywords: [前端设计, 美术风格, 视觉方向, aesthetic]
+    when: 用户需要在无品牌基础上确定视觉方向
+    priority: 3
+
+  - name: claude-wireframe
+    path: skills/claude-wireframe.md
+    domain: 结构设计
+    keywords: [线框图, wireframe, 草图, storyboard]
+    when: 用户处于早期结构探索阶段
+    priority: 3
+
+  - name: claude-export-pptx-editable
+    path: skills/claude-export-pptx-editable.md
+    domain: 导出
+    keywords: [导出pptx, editable pptx, 可编辑PPT]
+    when: 用户要求可编辑 PPTX
+    priority: 2
+
+  - name: claude-export-pptx-screenshots
+    path: skills/claude-export-pptx-screenshots.md
+    domain: 导出
+    keywords: [截图pptx, screenshotted pptx, 像素保真]
+    when: 用户要求截图型 PPTX
+    priority: 3
+
+  - name: claude-save-pdf
+    path: skills/claude-save-pdf.md
+    domain: 导出
+    keywords: [导出pdf, 保存pdf, print-ready]
+    when: 用户要求 PDF 导出
+    priority: 2
+
+  - name: claude-save-standalone-html
+    path: skills/claude-save-standalone-html.md
+    domain: 导出
+    keywords: [保存html, 单文件html, 离线html]
+    when: 用户要求可离线 HTML
+    priority: 2
+
+  - name: claude-send-to-canva
+    path: skills/claude-send-to-canva.md
+    domain: 导出
+    keywords: [send to canva, 导入canva, canva]
+    when: 用户要求发送到 Canva
+    priority: 3
+
+  - name: claude-handoff-to-code
+    path: skills/claude-handoff-to-code.md
+    domain: 交付
+    keywords: [开发交付, handoff, 交给开发, claude code 交接]
+    when: 用户要求把设计交付给开发
+    priority: 2

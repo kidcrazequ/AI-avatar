@@ -23,6 +23,7 @@
 
 import fs from 'fs'
 import path from 'path'
+import { hashQueryContent, normalizeQueryForHash } from './query-hash'
 
 /** cache 文件相对分身根目录的路径 */
 export const CHART_CACHE_REL_PATH = '_cache/charts.json'
@@ -61,29 +62,10 @@ export interface ChartCache {
 const CACHE_VERSION = 1
 
 /**
- * 规范化用户问题文本用于生成 cache key。
- * 只做"等价写法归一"：压缩内部空白 + 两端 trim + ASCII 小写。
- * 不去标点、不分词 —— 避免把语义不同的问题误归为同一 key。
+ * 查询哈希函数已抽到 utils/query-hash.ts，本处仅做 re-export 以保持向后兼容
+ * （浏览器子入口直接从 utils/query-hash 导入，避免连带加载 fs/path）。
  */
-export function normalizeQueryForHash(content: string): string {
-  return content
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[A-Z]/g, c => c.toLowerCase())
-}
-
-/**
- * FNV-1a 32bit hex；和 knowledge-indexer / deriveSeedFromContent 同源风格。
- */
-export function hashQueryContent(content: string): string {
-  const s = normalizeQueryForHash(content)
-  let hash = 0x811c9dc5
-  for (let i = 0; i < s.length; i++) {
-    hash ^= s.charCodeAt(i)
-    hash = (hash * 0x01000193) >>> 0
-  }
-  return hash.toString(16).padStart(8, '0')
-}
+export { normalizeQueryForHash, hashQueryContent }
 
 /**
  * 对单个文件取 (mtimeMs, size) 快照。

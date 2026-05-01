@@ -16,15 +16,10 @@ import path from 'path'
 /**
  * 返回本地时区的 YYYY-MM-DD 格式日期字符串。
  *
- * 全项目统一使用此函数生成日期字符串，禁止直接调用
- * `toISOString().slice(0, 10)`（返回 UTC 日期，在 UTC+8 晚间与本地日期差一天）。
- *
- * @param date 可选，默认为当前时间
- * @returns 格式为 "YYYY-MM-DD" 的本地日期字符串
+ * 实现已抽到 utils/local-date.ts，本处仅做 re-export 以保持向后兼容
+ * （浏览器子入口直接从 utils/local-date 导入，避免连带加载 fs/path）。
  */
-export function localDateString(date = new Date()): string {
-  return date.toLocaleDateString('sv-SE')
-}
+export { localDateString } from './local-date'
 
 // ─── 文件系统工具 ─────────────────────────────────────────────────────────────
 

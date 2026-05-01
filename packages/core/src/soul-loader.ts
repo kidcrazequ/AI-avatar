@@ -91,6 +91,19 @@ export class SoulLoader {
     this.skillManager = new SkillManager(avatarsPath)
   }
 
+  private loadBasePrompt(avatarId: string): string {
+    const configPath = path.join(this.avatarsPath, avatarId, 'avatar.config.json')
+    try {
+      const raw = fs.readFileSync(configPath, 'utf-8')
+      const parsed = JSON.parse(raw) as { basePromptId?: string }
+      if (!parsed.basePromptId) return ''
+      const promptPath = path.join(this.avatarsPath, '..', 'templates', 'prompts', `${parsed.basePromptId}.md`)
+      return this.readFileSafe(promptPath)
+    } catch {
+      return ''
+    }
+  }
+
   loadAvatar(avatarId: string): AvatarConfig {
     assertSafeSegment(avatarId, '分身ID')
     const avatarPath = path.join(this.avatarsPath, avatarId)
@@ -126,6 +139,22 @@ export class SoulLoader {
       '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找政策、电价、产品参数、项目案例、PDF/Word/Markdown/手写笔记等非结构化资料。结果会附 `[来源: knowledge/...#Lx-Ly]` 锚点，最终回答应尽量沿用。',
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
+      '- **list_design_systems(category?)**: 列出共享设计系统语料（`shared/design-systems/design-md`）中的品牌与分类，便于先选品牌再读取。',
+      '- **read_design_system(slug, category?)**: 读取指定品牌 DESIGN.md。若 slug 在多个分类重复，需补 category 精确定位。',
+      '- **search_design_systems(query, top_n?)**: 在共享设计系统语料中做关键词检索，返回候选品牌、分类和片段。',
+      '- **read_file(path, offset?, limit?)**: 读取当前会话工作区文件内容（支持 `/projects/<convId>/...` 跨会话只读路径）。',
+      '- **write_file(path, content, asset?, subtitle?)**: 写入当前会话工作区文件；传 asset 会自动进入资产清单。',
+      '- **list_files(path?, depth?, filter?, offset?)**: 列出工作区目录结构。',
+      '- **grep(pattern, path?)**: 在工作区文件里按正则检索文本。',
+      '- **copy_files(files[]) / str_replace_edit(...) / delete_file(paths[])**: 对工作区文件执行复制、替换编辑、删除。',
+      '- **register_assets(items[]) / unregister_assets(items[])**: 维护工作区资产审阅清单。',
+      '- **show_to_user(path) / show_html(path)**: 在用户或隐藏预览窗口打开 HTML。',
+      '- **eval_js(code) / eval_js_user_view(code)**: 在预览页面执行 JS 读取状态。',
+      '- **save_screenshot / multi_screenshot / screenshot_user_view / get_webview_logs**: 预览截图与日志采集。',
+      '- **save_as_html / save_as_pdf / export_pptx / gen_pptx / super_inline_html**: 导出设计制品。',
+      '- **done(path) / fork_verifier_agent(task?)**: 交付与后台校验。',
+      '- **present_fs_item_for_download / open_for_print / get_public_file_url**: 下载与打印交付。',
+      '- **questions_v2 / copy_starter_component / connect_github / github_* / snip**: 表单、starter、连接器与上下文管理。',
       '- **query_excel(file, sheet, filter?, columns?, limit?, mode?)**: **精确**查询已导入的 Excel / CSV 数据。涉及表格行级数值、统计周期、筛选、排行、图表时，必须优先用此工具。若不确定字段，先传 `mode:"schema"` 获取列定义，再做精确查询。返回 JSON 会带 `source_anchor` 与 `_source_row`，引用数字时尽量沿用。',
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
       '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤。通常相关技能已由系统自动注入，只有在系统未注入、且确实需要完整流程时再调用。',
@@ -133,11 +162,31 @@ export class SoulLoader {
       '',
       '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息。涉及 Excel 表格数据必须用 `query_excel`，不要用 `search_knowledge` 模糊匹配表格。涉及技能时优先使用系统已注入的技能内容，不要把 `load_skill` 当成默认第一步。',
       '',
+      // ────────────────────────────────────────────────────────────────
+      // 工具调用诚信铁律（C 层：所有分身一处生效；与工具列表声明在同一处）
+      // 这是回归测试中反复出现的失败模式（伪造 query_excel 调用过程、用 schema sample 推数字、
+      // 编"配额已用尽"借口）的根因防御。任何分身都必须遵守。
+      // ────────────────────────────────────────────────────────────────
+      '**工具调用诚信铁律**（违反任意一条 = 严重失败）：',
+      '',
+      '1. **禁止伪造工具调用过程**：在没有真实发起 `query_excel` 调用的情况下，禁止写出"经查询 ... 返回 ..."、"过滤条件 col1=... 返回 N"、"返回结果如下" 等描述工具响应的话。回答中若出现具体数字，必须能在你本轮的真实工具调用记录里对应到一次 `query_excel` 返回值。',
+      '2. **禁止从 schema sample 推数字（行级答案只能从 rows[] 取）**：`mode:"schema"` 返回的 `samples` 字段是该列独立去重抽样的代表值，**跨列不按行对齐**——`col1.samples[i]` 和 `故障次数.samples[i]` 绝不构成同一行的数据，把它们配对当成"X 行的 Y 列值"是严重错误。回答任何"X 在 Y 列的值是多少"类问题时，必须执行：(a) 调用 query_excel 时**不传 mode**，传 `filter: {对应列: "X"}`；(b) 仅从返回的 `rows[].Y` 字段取值；(c) 若 rows 为空才允许说"未查到"。任何引用 schema 的 samples / sample_values / sample 字段作为答案的回答都直接判失败。',
+      '3. **禁止编不存在的限制借口**：未达本轮上限时，不得以"配额已用尽 / 无法查询 / 系统不允许"等不存在的理由拒绝调用 `query_excel`。真实达到上限时，按系统提示直接基于已查到的数据回答，不得编造未发生的查询过程。',
+      '4. **禁止用模板答案套话**：每次提问都是独立的，上一轮的答案"1"不能套用到下一轮。每个具体数字都要走当前轮的真实查询。',
+      '',
+      '**自检（输出包含数字的回答前必须默念）**：',
+      '> "我即将写出的这个数字，是 `query_excel` 工具刚刚返回的吗？如果不是，立刻删掉数字，先发起 `query_excel` 调用。"',
+      '',
       buildToolPolicyPromptHints(DEFAULT_TOOL_POLICY),
     ].join('\n')
 
     // 构建 system prompt：stable 在前，dynamic（记忆/用户画像）放在尾部，利好前缀缓存。
-    const stableParts: string[] = [claudeMd, '\n\n---\n\n', soulMd]
+    const basePrompt = this.loadBasePrompt(avatarId)
+    const stableParts: string[] = []
+    if (basePrompt.trim()) {
+      stableParts.push(basePrompt, '\n\n---\n\n')
+    }
+    stableParts.push(claudeMd, '\n\n---\n\n', soulMd)
     const dynamicParts: string[] = []
 
     // 共享知识（所有分身通用）
@@ -206,7 +255,7 @@ export class SoulLoader {
         stableParts.push('2. **具体数据问题**（如"2026 年 3 月 215 机型的效率"）→ 调 `query_excel`，**必须带 filter**（MongoDB 风格 `$eq`/`$gte`/`$in` 等）。\n')
         stableParts.push(`3. **单次回答最多 ${DEFAULT_TOOL_POLICY.maxQueryExcelCallsPerRequest} 次 \`query_excel\` 调用**（以运行时预算为准）。超过说明过滤条件太散，应先调 \`{mode:"schema"}\` 确认字段，而不是继续试探。\n`)
         stableParts.push('4. **禁止“探索式试探”**（不带 filter 的 `limit:5` 这种）—— 先用 `{mode:"schema"}` 看列名。\n')
-        stableParts.push('5. **画图/图表需求的工具顺序（关键）**：优先使用系统已注入的图表技能与 `query_excel` 返回的数据直接收敛输出；只有系统未注入该技能且确实需要完整步骤时，才调用 `load_skill(\'draw-chart\')`。\n')
+        stableParts.push('5. **画图/图表需求的工具顺序（关键）**：必须先调用 `load_skill(\'chart-from-knowledge\')` 或 `load_skill(\'draw-chart\')`，再用 `query_excel` 获取表格数值并输出 ` ```chart`；若目标列无有效数值，必须说明无可画数据并标注来源，禁止编造图表。\n')
         stableParts.push(`6. 违反以上纪律可能导致工具调用轮数耗尽（当前运行时上限 \`${DEFAULT_TOOL_POLICY.maxRounds}\` 轮），用户得不到答案。\n`)
         stableParts.push('7. **禁止仅凭 `search_knowledge` / `read_knowledge_file` 命中 Excel 对应 .md 的片段推断行级数值**。**表格数值以 `query_excel` 返回的 JSON 为准**。\n\n')
         stableParts.push('## 可用 Excel 清单\n\n')

@@ -14,8 +14,16 @@ export interface ToolPolicy {
 }
 
 export const DEFAULT_TOOL_POLICY: ToolPolicy = {
-  maxRounds: 10,
-  maxQueryExcelCallsPerRequest: 1,
+  maxRounds: 25,
+  // 单次回答允许 query_excel 调用次数。
+  //   - 之前设为 1：L1 单点查询够，但 L2/L3 跨列对比、Excel 合并单元格 label 写错重试、
+  //     先 schema 再 filter 等场景一次根本不够，反而促使 LLM 编"配额已用尽"作为放弃借口
+  //   - 之前设为 5：仍不足 — 2026-05-01 回归报告显示 L1/L2 大量"先 schema → 多 sheet 试 →
+  //     变体重试"的真实需求被打断（参见 task-router rule A3 约束）；典型 L2 跨表对比要查 4-6
+  //     次（schema, sheet1 filter, sheet2 filter, 命名变体重试 1-2 次）
+  //   - 现设为 8：覆盖典型穷举（schema + 3-4 sheet × 1-2 变体），同时 8×8KB ≈ 64KB 仍远低于
+  //     DeepSeek 131K 窗口；compress() 在第 2 轮后会进一步压缩历史结果，安全余量足够
+  maxQueryExcelCallsPerRequest: 8,
   maxLoadSkillCallsPerRequest: 1,
   enableQueryExcelGuard: true,
   enableLoadSkillGuard: true,
@@ -103,11 +111,13 @@ export class ToolBudget {
 
   tryConsume(name: string): ToolBudgetConsumeResult {
     if (name === 'query_excel' && this.policy.enableQueryExcelGuard) {
+      // 第 N 次调用前检查上限。注意：达到上限时返回的 hint 措辞要克制，
+      // 避免使用"配额"等诱导 LLM 编"配额已用尽"幻觉的字眼。
       if (this.queryExcelCallCount >= this.policy.maxQueryExcelCallsPerRequest) {
         return {
           allowed: false,
           reason: 'query_excel-max-calls',
-          hint: `工具执行已跳过：query_excel 在当前对话已执行 ${this.policy.maxQueryExcelCallsPerRequest} 次。请基于已有查询结果直接完成回答，不要继续调用 query_excel。仅当用户明确要求新增筛选条件时，再发起新一轮对话查询。`,
+          hint: `工具执行已跳过：query_excel 在当前对话已调用 ${this.policy.maxQueryExcelCallsPerRequest} 次（兜底上限）。请立即基于已查到的数据给出最终答案；若仍缺关键数据，请如实说明"在 X 文件 Y sheet 未查到 Z 行"，不要再调用工具，也不要把上限当成"放弃借口"。仅当用户明确发起新对话时才会重置计数。`,
         }
       }
       this.queryExcelCallCount++
@@ -136,7 +146,8 @@ export class ToolBudget {
 
   getBudgetExhaustedHint(name: string): string | undefined {
     if (name === 'query_excel' && this.policy.enableQueryExcelGuard && this.queryExcelCallCount >= this.policy.maxQueryExcelCallsPerRequest) {
-      return `[系统提示] query_excel 配额已用完（${this.queryExcelCallCount}/${this.policy.maxQueryExcelCallsPerRequest}）。请立即基于以上数据给出最终答案（如需图表，请直接输出 \`\`\`chart 代码块），不要再调用任何工具。`
+      // 措辞克制：避免"配额"字眼诱导 LLM 转述为"配额已用尽"作为放弃借口
+      return `[系统提示] query_excel 已达本轮上限（${this.queryExcelCallCount}/${this.policy.maxQueryExcelCallsPerRequest} 次，兜底约束）。请立即基于已查到的数据给最终答案；若仍缺数据，请明确写"在 <文件> 的 <sheet> 中以 filter <X> 未查到对应行"，不要再调用工具，也不要把上限措辞误转为"配额已用尽 / 无法查询"。`
     }
     if (name === 'load_skill' && this.policy.enableLoadSkillGuard && this.loadSkillCallCount >= this.policy.maxLoadSkillCallsPerRequest) {
       return `[系统提示] load_skill 配额已用完（${this.loadSkillCallCount}/${this.policy.maxLoadSkillCallsPerRequest}）。请基于当前已注入的技能与数据直接完成回答，不要再调用工具。`
@@ -201,10 +212,12 @@ export class ToolBudget {
 export function buildToolPolicyPromptHints(policy: ToolPolicy = DEFAULT_TOOL_POLICY): string {
   const lines = [
     '[运行时工具约束｜以此为准]',
-    `1. Excel / CSV 行级数值必须使用 query_excel；单次回答最多 ${policy.maxQueryExcelCallsPerRequest} 次。达到上限后直接基于现有数据给最终答案，不要继续试探。`,
+    // 第 1 条措辞调整：去"配额"，改"按需调用"+ 上限是兜底而非起点；
+    // 同时点明"未达上限就不能编借口偷懒"，从源头堵幻觉路径。
+    `1. Excel / CSV 行级数值必须先调 query_excel 拿真实结果。一次精确 filter 查不全可继续调（本轮上限 ${policy.maxQueryExcelCallsPerRequest} 次，未达上限不得以"已达上限/配额已用尽/无法查询"为由拒绝调用）；上限只是防试探失控的兜底。`,
     `2. load_skill 仅作为兜底路径，通常相关技能已由系统自动注入；单次回答最多 ${policy.maxLoadSkillCallsPerRequest} 次。`,
     '3. search_knowledge 适用于 PDF / Word / Markdown / 手写笔记等非结构化资料；不要用它代替 query_excel 查询表格数值。',
-    '4. 当系统提示“工具预算已耗尽”时，立即直接回答，不要继续调用工具。',
+    `4. 工具循环硬上限为 ${policy.maxRounds} 轮；当系统提示"已达本轮上限"或"系统硬上限"时，立即基于已查到的数据给最终答案，不要继续调用工具，也不要用"上限"为由编造未发生的查询过程。`,
   ]
   return lines.join('\n')
 }

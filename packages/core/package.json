@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
     }
   },
   "scripts": {
@@ -15,6 +19,11 @@
     "test": "node --test dist/tests/core.test.js",
     "test:cleaner": "node --test dist/tests/ocr-html-cleaner.test.js",
     "test:all": "node --test dist/tests/core.test.js dist/tests/ocr-html-cleaner.test.js",
+    "test:import-perf-sim": "npx --yes tsx ../../testdocs/import-perf-sim.ts",
+    "test:knowledge-score": "npx --yes tsx ../../testdocs/knowledge-quality-rescore.js",
+    "test:knowledge-score-compare": "npx --yes tsx ../../testdocs/knowledge-quality-score-compare.js",
+    "test:knowledge-standard-gate": "npx --yes tsx ../../testdocs/knowledge-standard-gate.js",
+    "test:simulate-desktop-format": "npx --yes tsx ../../testdocs/simulate-desktop-format.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --max-warnings 0",
     "lint:fix": "eslint src/ --fix",
@@ -30,12 +39,14 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
+    "@types/turndown": "^5.0.6",
     "eslint": "^10.2.0",
     "globals": "^17.4.0",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.1"
   },
   "dependencies": {
-    "segmentit": "^2.0.3"
+    "segmentit": "^2.0.3",
+    "turndown": "^7.2.4"
   }
 }

@@ -14,12 +14,22 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - "!**/*.map"
+  # 排除 Tailwind/PostCSS 的非 win32 平台 napi-rs 原生绑定（仅构建期使用，运行时不依赖）
+  - "!node_modules/lightningcss-darwin-*/**"
+  - "!node_modules/lightningcss-linux-*/**"
+  - "!node_modules/lightningcss-freebsd-*/**"
+  - "!node_modules/@tailwindcss/oxide-darwin-*/**"
+  - "!node_modules/@tailwindcss/oxide-linux-*/**"
+  - "!node_modules/@tailwindcss/oxide-freebsd-*/**"
+  - "!node_modules/@tailwindcss/oxide-wasm32-*/**"
 
 # 7zip-bin 的平台二进制必须 unpack 才能从子进程执行
 # node-unrar-js 的 wasm 文件也需要 unpack 才能 fetch
 asarUnpack:
   - "node_modules/7zip-bin/**/*"
   - "node_modules/node-unrar-js/**/*"
+  # 原生模块必须 unpack；交叉编译 Windows/Linux 时 afterPack 依赖此路径替换 better_sqlite3.node
+  - "node_modules/better-sqlite3/**/*"
 
 # 打包模板和共享知识库为只读资源（分身由用户在应用内创建，不预置）
 extraResources:
@@ -61,12 +71,16 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # 避免路径含中文时安装脚本异常（NSIS Unicode）
+  unicode: true
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
   installerHeaderIcon: build/icon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: AI分身
+  # 安装结束可选运行应用（用户勾选）
+  runAfterFinish: true
 
 # ========== Linux ==========
 linux:

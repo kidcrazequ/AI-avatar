@@ -43,3 +43,8 @@ desktop-app/build/ios-icons/
 # 本地测试输出（视频、截图、临时报告，勿提交）
 test-output/
 desktop-app/test-output/
+
+# 分身运行时产物（缓存、工作区、动态报告，勿提交）
+avatars/*/_cache/
+avatars/*/workspaces/
+avatars/*/wiki/evolution-report.json

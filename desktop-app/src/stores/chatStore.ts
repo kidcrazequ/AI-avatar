@@ -2413,6 +2413,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 但若同时有附件存在则必须保留 read_attachment / search_attachment 工具，否则模型
     // 拿到 <attachment id /> 元信息却无法读取本体。这里只保留附件相关工具集。
     const ATTACHMENT_REQUIRED_TOOL_NAMES = new Set(['read_attachment', 'search_attachment'])
+    /**
+     * RAG 直答快路径下保留的「联网兜底工具」白名单。
+     * 设计考量：RAG 命中知识库后会清空大部分工具以加速回答，但用户问及"最新政策/新闻/
+     * 实时数据"时，知识库内容可能已过时，需要让 LLM 仍能自主决定联网补全。
+     * 不保留 search_knowledge / query_excel 等"知识层"工具，避免与 RAG 注入内容重复检索。
+     */
+    const RAG_FAST_PATH_NETWORK_TOOLS = new Set(['web_search', 'web_fetch'])
     let tools: LLMTool[]
     const ragDirectAnswerFastPath = shouldUseRagDirectAnswerFastPath(
       content,
@@ -2424,9 +2431,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       chartConsistencyMode,
     )
     if (ragDirectAnswerFastPath) {
-      tools = []
-      logPerf('rag-direct-answer:enabled', `enhancedLen=${enhancedContent.length}`)
-      window.electronAPI.logEvent('info', 'rag-direct-answer-fast-path', `conversation=${conversationId} model=${activeModel.model}`)
+      tools = AVATAR_TOOLS.filter(t => RAG_FAST_PATH_NETWORK_TOOLS.has(t.function.name))
+      logPerf('rag-direct-answer:enabled', `enhancedLen=${enhancedContent.length} keepTools=${tools.length}`)
+      window.electronAPI.logEvent('info', 'rag-direct-answer-fast-path', `conversation=${conversationId} model=${activeModel.model} keepTools=${tools.length}`)
     } else if (images && images.length > 0) {
       if (attachments && attachments.length > 0) {
         tools = AVATAR_TOOLS.filter(t => ATTACHMENT_REQUIRED_TOOL_NAMES.has(t.function.name))

@@ -1,40 +1,42 @@
 /**
- * 渲染层：把 LLM 引用 anchor `[来源: knowledge/<file>.md...]` 解析成对应原始
- * 源文件（_raw/<file>.pdf 等）元信息。带本地缓存，避免每条消息渲染都走 IPC。
+ * 渲染层：把 LLM 引用 `[来源: knowledge/<file>.md...]` 文本块里所有 .md 路径
+ * 提取出来（提取式，不再追逐 LLM 自由格式），并对每个路径独立解析对应原始
+ * 源文件（_raw/<file>.pdf 等）元信息。带本地 LRU 缓存。
  *
- * 实现策略：
- * 1. 用本地宽松正则提取 .md 文件路径（兼容 #L行号 / #章节名 / #section=xxx /
- *    无 # 后缀等所有 LLM 实际产出的格式；不复用 source-anchor-resolver 的严格
- *    `#L行号` 正则——那个用于 mustContain 行级断言，对原文件展开过严）
- * 2. 命中 LRU 缓存（key = `${avatarId}:${mdRelativePath}`）→ 直接返回
- * 3. 未命中 → 走 window.electronAPI.resolveRawFile(...)
- * 4. 主进程返回 null 也要缓存（标记"已知没有 raw_file"，避免重复请求）
- *
- * 排除：knowledge/_excel/ 路径（那是 Excel JSON 引用，原文件由别的链路处理）。
- * 不可解析（非 knowledge .md anchor / IPC 未注入）→ 返回 null，不写缓存。
+ * 设计要点：
+ * 1. **提取阶段**（`extractMdPathsFromAnchor`）：用 `String.prototype.matchAll`
+ *    全局扫描 anchor 文本里所有 `knowledge/<path>.md` 命中，去重后返回。负向
+ *    先行断言排除 `knowledge/_excel/`（Excel JSON 走另一套展开链路）。
+ * 2. **解析阶段**（`resolveRawFile`）：入参就是单个 .md 路径（提取阶段的产物
+ *    之一），LRU 缓存命中直接返回；未命中则走 `window.electronAPI.resolveRawFile`
+ *    IPC。主进程返回 null 也写缓存（"已知没有 raw_file"短路），抛错则不写
+ *    缓存（保留下次重试机会）。
+ * 3. 渲染层接口拆成两个，使「单 anchor 含多个 .md 文件」场景下的并发解析逻辑
+ *    （`Promise.all(paths.map(p => resolveRawFile(avatarId, p)))`）由调用方掌控。
  *
  * @author zhi.qu
  * @date 2026-05-06
  */
 
-import type { ResolveRawFileResult, ResolveRawFileForAnchorFn } from '../types/raw-file-anchor'
+import type {
+  ResolveRawFileResult,
+  ResolveRawFileFn,
+  ExtractMdPathsFromAnchorFn,
+} from '../types/raw-file-anchor'
 
 /**
- * 宽松匹配 `[来源: knowledge/<path>.md...]`：
- * - 必须以 `.md` 结尾（路径段最后一个 `.md` 之前的全部内容是文件路径）
- * - `.md` 之后的任意 `#xxx` / `&xxx` / 空白 都算 anchor 的"段内定位"，不影响文件识别
- * - 排除 `_excel/` 前缀（Excel JSON 走另一套展开逻辑）
- *
- * 例：
- *   `[来源: knowledge/foo.md#L12-L20]`               → file=foo.md
- *   `[来源: knowledge/foo.md#2. 设备布局图]`          → file=foo.md
- *   `[来源: knowledge/sub/foo.md#section=xxx]`       → file=sub/foo.md
- *   `[来源: knowledge/foo.md]`                        → file=foo.md
- *   `[来源: knowledge/_excel/x.json#sheet=A&rows=1]` → 不匹配
+ * 全局扫描 `knowledge/<path>.md`：
+ * - `knowledge/` 前缀固定字面量
+ * - `(?!_excel\/)` 负向先行断言，排除 `knowledge/_excel/` 路径
+ * - `([^,，;；\s\]#]+\.md)` 捕获相对路径，字符类排除半角逗号 / 全角逗号 /
+ *   半角分号 / 全角分号 / 任意空白 / `]` / `#`，确保命中以 `.md` 结尾的最长合法段
+ * - 全局 `g` flag，配合 `matchAll` 一次拿到 anchor 里所有命中
  */
-const KNOWLEDGE_MD_ANCHOR_REGEX = /^\[来源:\s*knowledge\/((?!_excel\/)[^\]]+?\.md)(?:[#\s][^\]]*)?\]$/
+const MD_PATH_GLOBAL_REGEX = /knowledge\/(?!_excel\/)([^,，;；\s\]#]+\.md)/g
 
-/** LRU 上限：覆盖典型一次会话中所有引用，超过则按插入顺序淘汰最早项 */
+/**
+ * LRU 上限：覆盖典型一次会话中所有引用，超过则按插入顺序淘汰最早项。
+ */
 const MAX_CACHE_ENTRIES = 256
 
 /**
@@ -76,48 +78,75 @@ export function clearRawFileCache(): void {
   rawFileCache.clear()
 }
 
-/** 主进程注入的解析函数签名（与 preload 暴露的形状对齐） */
-type ResolveRawFileFn = (avatarId: string, mdRelativePath: string) => Promise<ResolveRawFileResult | null>
+/**
+ * 主进程注入的解析函数签名（与 preload 暴露的形状对齐）。
+ * 与 `ResolveRawFileFn` 同形，但单独命名以隔离"渲染层对外 API"和"IPC bridge"。
+ */
+type IpcResolveRawFileFn = (
+  avatarId: string,
+  mdRelativePath: string,
+) => Promise<ResolveRawFileResult | null>
 
 /**
  * 从全局 window 上获取 electronAPI.resolveRawFile。
  * SSR / Node 测试环境 window 不存在时返回 undefined，由调用方降级。
  */
-function getResolveRawFile(): ResolveRawFileFn | undefined {
+function getResolveRawFile(): IpcResolveRawFileFn | undefined {
   const win = globalThis as unknown as {
-    window?: { electronAPI?: { resolveRawFile?: ResolveRawFileFn } }
+    window?: { electronAPI?: { resolveRawFile?: IpcResolveRawFileFn } }
   }
   return win.window?.electronAPI?.resolveRawFile
 }
 
 /**
- * 渲染层 anchor → 原始源文件解析器主入口。
+ * 提取阶段：从完整 anchor 文本块全局扫描所有 `knowledge/<path>.md` 路径。
  *
- * - anchor 不是 knowledge 类型（excel / 非法 / 缺失） → 直接返回 null，不写缓存
- * - 缓存命中 → 直接返回（包括 null 命中）
- * - IPC 未注入 → 返回 null，不写缓存（保留下次环境就绪后再试的机会）
+ * - 用 `matchAll` + 全局正则一次拿到所有命中
+ * - group 1 是不含 `knowledge/` 前缀的相对路径
+ * - 用 Set 去重，保留首次出现顺序（多文件 anchor 里同一路径只保留第一次出现）
+ * - 没有任何命中（普通文本 / 仅 `_excel/` 引用）时返回空数组 `[]`
+ *
+ * @param anchor 完整 anchor 字符串，如 `[来源: knowledge/a.md, knowledge/b.md#第7页]`
+ * @returns 去重后的 .md 相对路径数组（不含 `knowledge/` 前缀）
+ */
+export const extractMdPathsFromAnchor: ExtractMdPathsFromAnchorFn = (anchor) => {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const match of anchor.matchAll(MD_PATH_GLOBAL_REGEX)) {
+    const path = match[1]
+    if (!seen.has(path)) {
+      seen.add(path)
+      result.push(path)
+    }
+  }
+  return result
+}
+
+/**
+ * 解析阶段：单个 .md 路径 → 原始源文件元信息。
+ *
+ * - 缓存命中（含 null 命中）→ 直接返回
+ * - IPC 未注入（SSR / 测试环境）→ 返回 null，不写缓存（保留环境就绪后再试的机会）
  * - IPC 抛错 → console.error + 返回 null，不写缓存（让调用方下次重试）
  * - IPC 正常返回（含返回 null）→ 写缓存
+ *
+ * @param avatarId 分身目录名，如 `小堵-工商储专家`
+ * @param mdRelativePath 相对 `<avatar>/knowledge/` 的 .md 路径，**不含** `knowledge/` 前缀
  */
-export const resolveRawFileForAnchor: ResolveRawFileForAnchorFn = async (avatarId, anchor) => {
-  const match = anchor.trim().match(KNOWLEDGE_MD_ANCHOR_REGEX)
-  if (!match) return null
-
-  const mdRelativePath = match[1]
+export const resolveRawFile: ResolveRawFileFn = async (avatarId, mdRelativePath) => {
   const cacheKey = `${avatarId}:${mdRelativePath}`
 
   const cached = cacheGet(cacheKey)
   if (cached !== undefined) return cached
 
-  const resolver = getResolveRawFile()
-  if (!resolver) return null
+  const ipcFn = getResolveRawFile()
+  if (!ipcFn) return null
 
   try {
-    const result = await resolver(avatarId, mdRelativePath)
+    const result = await ipcFn(avatarId, mdRelativePath)
     cacheSet(cacheKey, result)
     return result
   } catch (err) {
-    // 主进程报错（路径越界 / 文件不存在等）→ 不缓存，返回 null 让 UI 降级
     console.error('[raw-file-resolver] resolveRawFile failed:', err)
     return null
   }

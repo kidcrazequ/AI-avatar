@@ -12,19 +12,15 @@ import { Children, type ReactNode } from 'react'
 import SourceCitation from './SourceCitation'
 
 /**
- * 完整闭合的 `[来源: ...]` 匹配，覆盖两种 anchor 形态：
+ * 完整闭合的 `[来源: ...]` 文本块匹配（任何内容都接，不挑剔 knowledge/ 前缀）。
  *
- * 1. 结构化锚点：`[来源: knowledge/<path>.md...]`（ASCII 冒号 + 文件路径）
- *    → 由 SourceCitation 解析 raw_file 并提供「打开原文」按钮
+ * `[^\]\n]+` 限定不跨行、不吞 `]`，因此流式中未闭合的 `[来源: ...` 不会被错误捕获。
+ * 冒号同时接受 ASCII `:` 与中文全角 `：`（LLM 偶发产出全角符号）。
  *
- * 2. 自由文本锚点：`[来源：<人类可读文档名>]`（中/英冒号 + 自由描述）
- *    例：`[来源：BOM 图纸系列]`、`[来源：262Kwh工商柜装配说明 > 工序4]`
- *    → SourceCitation 仅渲染样式化 chip（无打开按钮）
- *
- * `[来源[：:]` 同时接受中文 `：` 和 ASCII `:`；
- * `[^\]\n]+` 限定不跨行、不吞 `]`，确保流式输出中未闭合的 `[来源：...` 不会被误捕获。
+ * 块内是否包含 .md 文件路径由 SourceCitation 组件用 `extractMdPathsFromAnchor`
+ * 自行判定 —— 提不到任何 .md 时该组件保留原文本降级，不会"消失"。
  */
-const SOURCE_CITATION_REGEX = /\[来源[：:]\s*[^\]\n]+\]/g
+const SOURCE_CITATION_REGEX = /\[来源[：:][^\]\n]+\]/g
 
 /**
  * 把字符串里所有完整闭合的 `[来源: knowledge/...]` 切成 [文本片段, <SourceCitation/>,

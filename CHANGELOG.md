@@ -1,5 +1,27 @@
 # 更新日志
 
+## v0.9.1 (2026-05-06)
+
+### 打包与分发
+
+- **`desktop-app/electron-builder.yml`** — Windows 中文路径安装兼容性修复：
+  - `nsis.unicode: true` — NSIS 启用 Unicode，避免安装路径含中文时安装脚本异常
+  - `nsis.runAfterFinish: true` — 安装完成可选直接运行应用
+  - `asarUnpack` 增加 `node_modules/better-sqlite3/**/*` — afterPack 交叉编译时依赖此路径替换 `better_sqlite3.node`
+  - `files` 排除非 win32 平台的 napi-rs 原生绑定（`lightningcss-darwin/linux/freebsd-*` / `@tailwindcss/oxide-darwin/linux/freebsd/wasm32-*`），仅构建期使用，运行时不依赖，减小安装包体积
+- **`desktop-app/scripts/after-pack.js`** — 严格化 better-sqlite3 prebuild 替换：未找到 unpack 目录时直接抛错并提示在 `electron-builder.yml` 的 `asarUnpack` 中包含对应路径，避免静默漏配置导致运行时崩溃
+
+### 源文件引用增强
+
+- **`raw-file-resolver.ts` / `raw-file-resolver.test.ts`** — 重构定位逻辑（115 行实现 + 251 行测试），按 frontmatter `raw_file` 锚点稳定定位 Excel / Word / PPT 原文
+- **`SourceCitation.tsx` / `source-citation-utils.tsx`** — 源引用组件渲染路径优化（246 行变更），支持更细粒度的 sheet / row 锚点跳转
+- **`raw-file-anchor.ts` / `chatStore.ts`** — 类型与状态层对齐源引用新链路
+
+### 项目治理
+
+- **`.gitignore`** — 新增分身运行时产物排除：`avatars/*/_cache/`、`avatars/*/workspaces/`、`avatars/*/wiki/evolution-report.json`，避免图表 cache、回归 workspace、动态报告污染版本库
+- **`desktop-app/package.json`** — 0.9.0 → 0.9.1
+
 ## v0.9.0 (2026-05-06)
 
 ### 新功能

@@ -18,23 +18,25 @@ exports.default = async function afterPack(context) {
       context.appOutDir,
       'resources/app.asar.unpacked/node_modules/better-sqlite3'
     )
-    if (fs.existsSync(betterSqliteDir)) {
-      const electronVersion = context.packager.config.electronVersion
-        || require(path.join(context.packager.projectDir, 'node_modules/electron/package.json')).version
-      console.log(`  • afterPack: 为 ${targetPlatform} 下载 better-sqlite3 prebuild (electron ${electronVersion})`)
-      try {
-        execSync(
-          `npx prebuild-install -r electron -t ${electronVersion} --platform ${targetPlatform} --arch x64`,
-          { cwd: betterSqliteDir, stdio: 'inherit' }
-        )
-        // 验证替换结果
-        const nodeFile = path.join(betterSqliteDir, 'build/Release/better_sqlite3.node')
-        const fileInfo = execSync(`file "${nodeFile}"`).toString()
-        console.log(`  • afterPack: ${fileInfo.trim()}`)
-      } catch (e) {
-        console.error(`  • afterPack: better-sqlite3 prebuild 下载失败:`, e.message)
-        throw e
-      }
+    if (!fs.existsSync(betterSqliteDir)) {
+      throw new Error(
+        `afterPack: 未找到解包目录 ${betterSqliteDir}。请在 electron-builder.yml 的 asarUnpack 中包含 node_modules/better-sqlite3/**/*`
+      )
+    }
+    const electronVersion = context.packager.config.electronVersion
+      || require(path.join(context.packager.projectDir, 'node_modules/electron/package.json')).version
+    console.log(`  • afterPack: 为 ${targetPlatform} 下载 better-sqlite3 prebuild (electron ${electronVersion})`)
+    try {
+      execSync(
+        `npx prebuild-install -r electron -t ${electronVersion} --platform ${targetPlatform} --arch x64`,
+        { cwd: betterSqliteDir, stdio: 'inherit' }
+      )
+      const nodeFile = path.join(betterSqliteDir, 'build/Release/better_sqlite3.node')
+      const fileInfo = execSync(`file "${nodeFile}"`).toString()
+      console.log(`  • afterPack: ${fileInfo.trim()}`)
+    } catch (e) {
+      console.error(`  • afterPack: better-sqlite3 prebuild 下载失败:`, e.message)
+      throw e
     }
   }
 

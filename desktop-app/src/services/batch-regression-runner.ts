@@ -50,11 +50,21 @@ export interface ExpectedValue {
   tolerancePct: number
 }
 
+/**
+ * expectedTools 项：
+ *   - string                     → 该工具必须被调用（AND 项）
+ *   - string[]（嵌套数组）       → 内层语义为 OR：任一工具被调用即视为命中（用于 query_excel | search_knowledge 这类等价路径）
+ *
+ * 例：[["query_excel", "search_knowledge"], "load_skill"]
+ *   → load_skill 必须命中，且 (query_excel ∨ search_knowledge) 命中。
+ */
+export type ExpectedToolItem = string | string[]
+
 export interface GeneratedQuestion {
   id: string
   category: QuestionCategory
   prompt: string
-  expectedTools?: string[]
+  expectedTools?: ExpectedToolItem[]
   expectedSkills?: string[]
   expectedValue?: ExpectedValue
   mustContain?: string[]
@@ -71,6 +81,16 @@ export interface GeneratedQuestion {
   setupPrompts?: string[]
 }
 
+/** 本次运行使用的题库来源快照（完整题库 JSON 由主进程单独落盘） */
+export interface QuestionBankRunSource {
+  sourcePath: string
+  cached: boolean
+  loadedAt: number
+  generatedAt?: string
+  totalQuestionCount: number
+  selectedQuestionCount: number
+}
+
 // ─── 断言层 ────────────────────────────────────────────────────────────
 
 export interface AssertionResult {
@@ -83,20 +103,44 @@ export interface AssertionResult {
 
 /**
  * 校验所有 expectedTools 都被调用过且至少一次成功。
- * - 任一缺失 → fail
- * - 全部出现但都 ok=false → fail（说明工具失败）
+ * - 平铺项 string         → 该工具必须命中且至少一次 ok=true（AND）
+ * - 嵌套项 string[]       → 内层 OR：任一工具命中且至少一次 ok=true 即可
+ *
+ * 任一项不满足 → fail
+ *
+ * @author zhi.qu
+ * @date 2026-05-02
  */
-export function assertExpectedTools(events: TelemetryEvent[], expected: string[] | undefined): AssertionResult {
+export function assertExpectedTools(events: TelemetryEvent[], expected: ExpectedToolItem[] | undefined): AssertionResult {
   if (!expected || expected.length === 0) return { name: 'expectedTools', pass: true }
   const calls = events.filter((e): e is ToolCallEndEvent => e.type === 'tool-call-end')
+
+  /** 单个工具是否"命中且至少一次成功" */
+  const isToolSatisfied = (tool: string): { hit: boolean; ok: boolean } => {
+    const callsOfThis = calls.filter(c => c.name === tool)
+    if (callsOfThis.length === 0) return { hit: false, ok: false }
+    return { hit: true, ok: callsOfThis.some(c => c.ok) }
+  }
+
   const missing: string[] = []
   const failed: string[] = []
-  for (const tool of expected) {
-    const callsOfThis = calls.filter(c => c.name === tool)
-    if (callsOfThis.length === 0) {
-      missing.push(tool)
-    } else if (!callsOfThis.some(c => c.ok)) {
-      failed.push(tool)
+  for (const item of expected) {
+    if (Array.isArray(item)) {
+      // OR 子句：任一命中且 ok 即视为该子句满足
+      const orResults = item.map(t => ({ tool: t, ...isToolSatisfied(t) }))
+      const anyOk = orResults.some(r => r.hit && r.ok)
+      if (anyOk) continue
+      const anyHit = orResults.some(r => r.hit)
+      const label = `(${item.join(' | ')})`
+      if (!anyHit) {
+        missing.push(label)
+      } else {
+        failed.push(label)
+      }
+    } else {
+      const r = isToolSatisfied(item)
+      if (!r.hit) missing.push(item)
+      else if (!r.ok) failed.push(item)
     }
   }
   if (missing.length > 0 || failed.length > 0) {
@@ -275,6 +319,8 @@ export interface BatchRunResult {
   errorCount: number
   /** 按类别聚合的 pass / total */
   categorySummary: Record<string, { total: number; pass: number; fail: number }>
+  /** 本次运行使用的题库来源信息，用于让报告可追溯到当次快照 */
+  questionBankSource?: QuestionBankRunSource
   cases: CaseResult[]
 }
 
@@ -307,6 +353,8 @@ export interface RunBatchOptions {
   perCaseTimeoutMs?: number
   /** 题目之间的固定间隔（默认 500ms，给 UI 喘息） */
   interCaseDelayMs?: number
+  /** 题库来源信息；调用方负责把完整题库 JSON 交给持久化层保存 */
+  questionBankSource?: QuestionBankRunSource
   /** 进度回调；返回 false 可主动停止 */
   onProgress?: (event: BatchProgressEvent) => void | Promise<void>
   /** 取消信号 */
@@ -542,6 +590,7 @@ export async function runBatchRegression(opts: RunBatchOptions): Promise<BatchRu
     failCount,
     errorCount,
     categorySummary,
+    questionBankSource: opts.questionBankSource,
     cases,
   }
 }

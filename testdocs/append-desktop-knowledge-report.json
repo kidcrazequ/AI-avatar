@@ -1,0 +1,4076 @@
+{
+  "avatarId": "小堵-工商储专家",
+  "sourceRoot": "/Users/cnlm007398/堵杰的文档/堵杰的文档",
+  "knowledgeRoot": "/Users/cnlm007398/Library/Application Support/soul-desktop/avatars/小堵-工商储专家/knowledge",
+  "totalDiscovered": 400,
+  "skipped": [
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/.DS_Store",
+      "reason": "skip pattern: .DS_Store"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/模板/0.EPD管理类模板.zip",
+      "reason": "archive extract failed: ENOENT: no such file or directory, chmod '/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-12b0b46016b0/0.EPD������ģ��/0.EPD������ģ��/EPD-TR�߻�.xlsx'"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/模板/TBBCBB交付物模板 -20221207(1).zip",
+      "reason": "archive extract failed: EILSEQ: illegal byte sequence, mkdir '/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-f45bfd8639f2/TBBCBB������ģ�� -20221207(1)/TBBCBB������ģ�� -20221207/04-�����߻�Action��WBS'"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/530Ah电池/530Ah尺寸图/3D - 73275 Cell Model  - 250724.stp",
+      "reason": "unsupported extension: .stp"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/262kWh液冷柜地基参考图1台2台3台.dwg",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/262户外柜原理图(1).dwg",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/通讯拓扑图和接线图.dwg",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/3D图/ENS-L262-LD.stp",
+      "reason": "unsupported extension: .stp"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/3D模型/262KWh工商柜新.STEP",
+      "reason": "unsupported extension: .step"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/Artwork/250704-Envision-IES Niche 30mm Led.stp",
+      "reason": "unsupported extension: .stp"
+    },
+    {
+      "path": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/ODM2.0/02.01.03.0072_声光报警器安装底座.STEP",
+      "reason": "unsupported extension: .step"
+    },
+    {
+      "path": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-152c9cfc7417/02.01.03.0080 ˮ�ܴ����֧��.DWG",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-3359f89778f4/02.07.99.0048 CR2030����.DWG",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-61c070802ec3/02.07.99.0060����¶������.dwg",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-f72c1288ad5a/02-07-99-0062����¶������.dwg",
+      "reason": "unsupported extension: .dwg"
+    },
+    {
+      "path": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-9ca14253d44b/消防型式试验报告/DH1501-火灾声光警报器-1.0.01.36.14911",
+      "reason": "depth > 8"
+    }
+  ],
+  "imported": 400,
+  "failed": 0,
+  "results": [
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/储能系统效率.xlsx",
+      "targetPath": "储能系统效率.md",
+      "rawPath": "_raw/储能系统效率.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2704,
+      "cleanedChars": 2704,
+      "ms": 458
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/DFS/EM-EHS-Rec-0196 远景储能产品本质安全风险(DFS)专项审核表 V1.0(1).xlsx",
+      "targetPath": "EM-EHS-Rec-0196_远景储能产品本质安全风险_DFS_专项审核表_V1_0_1.md",
+      "rawPath": "_raw/EM-EHS-Rec-0196 远景储能产品本质安全风险(DFS)专项审核表 V1.0(1).xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 20483,
+      "cleanedChars": 20483,
+      "ms": 203
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/DFS/储能 EHS 压力耐力模型（20230505正式发布版）.xlsx",
+      "targetPath": "储能_EHS_压力耐力模型_20230505正式发布版.md",
+      "rawPath": "_raw/储能 EHS 压力耐力模型（20230505正式发布版）.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 19733,
+      "cleanedChars": 19733,
+      "ms": 97
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/DFS/原版EM-EHS-0060 基于EDV和ITR流程的产品开发安全风险管理标准 V1.2.docx",
+      "targetPath": "原版EM-EHS-0060_基于EDV和ITR流程的产品开发安全风险管理标准_V1_2.md",
+      "rawPath": "_raw/原版EM-EHS-0060 基于EDV和ITR流程的产品开发安全风险管理标准 V1.2.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10186,
+      "cleanedChars": 9983,
+      "ms": 1354
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/DFS/基于EDV和ITR流程的产品开发安全风险管理标准_宣贯及赋能培训材料.pdf",
+      "targetPath": "基于EDV和ITR流程的产品开发安全风险管理标准_宣贯及赋能培训材料.md",
+      "rawPath": "_raw/基于EDV和ITR流程的产品开发安全风险管理标准_宣贯及赋能培训材料.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 22310,
+      "cleanedChars": 21757,
+      "ms": 33010
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/DFS/附件 1：EM-EHS-Rec-0168 EHS风险管理关键岗位EHS能力矩阵.xlsx",
+      "targetPath": "附件_1_EM-EHS-Rec-0168_EHS风险管理关键岗位EHS能力矩阵.md",
+      "rawPath": "_raw/附件 1：EM-EHS-Rec-0168 EHS风险管理关键岗位EHS能力矩阵.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 22283,
+      "cleanedChars": 22283,
+      "ms": 102
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/EDV流程概览.png",
+      "targetPath": "EDV流程概览.md",
+      "rawPath": "_raw/EDV流程概览.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 7
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/EDV流程通用培训  V3.0.pptx",
+      "targetPath": "EDV流程通用培训_V3_0.md",
+      "rawPath": "_raw/EDV流程通用培训  V3.0.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 12016,
+      "cleanedChars": 12016,
+      "ms": 45
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/EM-DBPED-Rec-0030 Pre-CRCCB评审模板 V8.0.xlsx",
+      "targetPath": "EM-DBPED-Rec-0030_Pre-CRCCB评审模板_V8_0.md",
+      "rawPath": "_raw/EM-DBPED-Rec-0030 Pre-CRCCB评审模板 V8.0.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 44720,
+      "cleanedChars": 44720,
+      "ms": 131
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/EPD 二级流程和赛道裁剪逻辑.pptx",
+      "targetPath": "EPD_二级流程和赛道裁剪逻辑.md",
+      "rawPath": "_raw/EPD 二级流程和赛道裁剪逻辑.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 2525,
+      "cleanedChars": 2525,
+      "ms": 15
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/EPD流程通用培训  V4.pdf",
+      "targetPath": "EPD流程通用培训_V4.md",
+      "rawPath": "_raw/EPD流程通用培训  V4.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26923,
+      "cleanedChars": 26594,
+      "ms": 6075
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审材料模板 20250420.pptx",
+      "targetPath": "TR评审材料模板_20250420.md",
+      "rawPath": "_raw/TR评审材料模板 20250420.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 2213,
+      "cleanedChars": 2213,
+      "ms": 20
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/培训-EDV流程通用培训  V3.1.pptx",
+      "targetPath": "培训-EDV流程通用培训_V3_1.md",
+      "rawPath": "_raw/培训-EDV流程通用培训  V3.1.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 12018,
+      "cleanedChars": 12018,
+      "ms": 40
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/综能MPO--DPP填写要点说明.pptx",
+      "targetPath": "综能MPO--DPP填写要点说明.md",
+      "rawPath": "_raw/综能MPO--DPP填写要点说明.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 6284,
+      "cleanedChars": 6284,
+      "ms": 40
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/脱敏版TR评审材料.pptx",
+      "targetPath": "脱敏版TR评审材料.md",
+      "rawPath": "_raw/脱敏版TR评审材料.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 3855,
+      "cleanedChars": 3855,
+      "ms": 31
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/议题1：XXX机型PDTR4A评审与决策 - 脱敏版范本.pptx",
+      "targetPath": "议题1_XXX机型PDTR4A评审与决策_-_脱敏版范本.md",
+      "rawPath": "_raw/议题1：XXX机型PDTR4A评审与决策 - 脱敏版范本.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 18769,
+      "cleanedChars": 18735,
+      "ms": 52
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/RFQ/工商业储能柜技术和商务响应 V1.xlsx",
+      "targetPath": "工商业储能柜技术和商务响应_V1.md",
+      "rawPath": "_raw/工商业储能柜技术和商务响应 V1.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 9613,
+      "cleanedChars": 9613,
+      "ms": 21
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/RFQ/工商业储能柜技术和商务响应 V2.xlsx",
+      "targetPath": "工商业储能柜技术和商务响应_V2.md",
+      "rawPath": "_raw/工商业储能柜技术和商务响应 V2.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 10331,
+      "cleanedChars": 10331,
+      "ms": 20
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/单供申请/EM-Shared Biddi-Rec-0003单供偏差增补审批-模板V1.0.pptx",
+      "targetPath": "EM-Shared_Biddi-Rec-0003单供偏差增补审批-模板V1_0.md",
+      "rawPath": "_raw/EM-Shared Biddi-Rec-0003单供偏差增补审批-模板V1.0.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 1871,
+      "cleanedChars": 1871,
+      "ms": 40
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/单供申请/综能工商储海外单供偏差增补审批-Leon.pptx",
+      "targetPath": "综能工商储海外单供偏差增补审批-Leon.md",
+      "rawPath": "_raw/综能工商储海外单供偏差增补审批-Leon.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 2705,
+      "cleanedChars": 2705,
+      "ms": 37
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/售后服务/26年交付和售后规划V1.1.pptx",
+      "targetPath": "26年交付和售后规划V1_1.md",
+      "rawPath": "_raw/26年交付和售后规划V1.1.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 4827,
+      "cleanedChars": 4671,
+      "ms": 35
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/售后服务/综能产品售后服务体系策划V5.pptx",
+      "targetPath": "综能产品售后服务体系策划V5.md",
+      "rawPath": "_raw/综能产品售后服务体系策划V5.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 4340,
+      "cleanedChars": 4340,
+      "ms": 55
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/招标技术打分/EM-Shared Biddi-M-0001 远景能源综合标（技术分）管理规范  V2.2.pdf",
+      "targetPath": "EM-Shared_Biddi-M-0001_远景能源综合标_技术分_管理规范_V2_2.md",
+      "rawPath": "_raw/EM-Shared Biddi-M-0001 远景能源综合标（技术分）管理规范  V2.2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 6070,
+      "cleanedChars": 5956,
+      "ms": 1825
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/招标技术打分/商务及技术评分汇总(24.10.30).xlsx",
+      "targetPath": "商务及技术评分汇总_24_10_30.md",
+      "rawPath": "_raw/商务及技术评分汇总(24.10.30).xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 3819,
+      "cleanedChars": 3819,
+      "ms": 27
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/招标技术打分/技术评分参考示例.png",
+      "targetPath": "技术评分参考示例.md",
+      "rawPath": "_raw/技术评分参考示例.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 6
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/最终签章版(明美）.pdf",
+      "targetPath": "最终签章版_明美.md",
+      "rawPath": "_raw/最终签章版(明美）.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2452,
+      "cleanedChars": 0,
+      "ms": 52931
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/物料分类及属性/物料分类及属性定义表单_储能交直流一体柜V2.0-1105.xlsx",
+      "targetPath": "物料分类及属性定义表单_储能交直流一体柜V2_0-1105.md",
+      "rawPath": "_raw/物料分类及属性定义表单_储能交直流一体柜V2.0-1105.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1312,
+      "cleanedChars": 1312,
+      "ms": 17
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/2025年综能BESS质量数据.pptx",
+      "targetPath": "2025年综能BESS质量数据.md",
+      "rawPath": "_raw/2025年综能BESS质量数据.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 2271,
+      "cleanedChars": 2264,
+      "ms": 57
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/供应商初步交流表-部件类 Leon.xlsx",
+      "targetPath": "供应商初步交流表-部件类_Leon.md",
+      "rawPath": "_raw/供应商初步交流表-部件类 Leon.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 4291,
+      "cleanedChars": 4291,
+      "ms": 25
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/质量赋能.pptx",
+      "targetPath": "质量赋能.md",
+      "rawPath": "_raw/质量赋能.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 4720,
+      "cleanedChars": 4720,
+      "ms": 76
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/280Ah315Ah-比较 - Leon.docx",
+      "targetPath": "280Ah315Ah-比较_-_Leon.md",
+      "rawPath": "_raw/280Ah315Ah-比较 - Leon.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 6628,
+      "cleanedChars": 5928,
+      "ms": 252
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/Envision AESC 315Ah cell RTE and SOH prediction value 2025.5.docx",
+      "targetPath": "Envision_AESC_315Ah_cell_RTE_and_SOH_prediction_value_2025_5.md",
+      "rawPath": "_raw/Envision AESC 315Ah cell RTE and SOH prediction value 2025.5.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2260,
+      "cleanedChars": 2256,
+      "ms": 66
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025.5.docx",
+      "targetPath": "Envision_AESC_315Ah_cell_RTE_and_SOH_10_years_prediction_value_2025_5.md",
+      "rawPath": "_raw/Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025.5.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2311,
+      "cleanedChars": 2307,
+      "ms": 48
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/仿真报告 to 综能315 20250818.xlsx",
+      "targetPath": "仿真报告_to_综能315_20250818.md",
+      "rawPath": "_raw/仿真报告 to 综能315 20250818.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 3685,
+      "cleanedChars": 3685,
+      "ms": 13
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/仿真报告-远景综能315 B档电芯曲线 2025-02-20.xlsx",
+      "targetPath": "仿真报告-远景综能315_B档电芯曲线_2025-02-20.md",
+      "rawPath": "_raw/仿真报告-远景综能315 B档电芯曲线 2025-02-20.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1820,
+      "cleanedChars": 1820,
+      "ms": 11
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/仿真报告-远景综能315 B档电芯曲线0.33C 2025-08-05.xlsx",
+      "targetPath": "仿真报告-远景综能315_B档电芯曲线0_33C_2025-08-05.md",
+      "rawPath": "_raw/仿真报告-远景综能315 B档电芯曲线0.33C 2025-08-05.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 3937,
+      "cleanedChars": 3937,
+      "ms": 15
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/仿真报告-远景综能315 B档电芯曲线0.33C 20250905.xlsx",
+      "targetPath": "仿真报告-远景综能315_B档电芯曲线0_33C_20250905.md",
+      "rawPath": "_raw/仿真报告-远景综能315 B档电芯曲线0.33C 20250905.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 4006,
+      "cleanedChars": 4006,
+      "ms": 10
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/明美集采AESC电芯跟综能标准电芯的比较.pptx",
+      "targetPath": "明美集采AESC电芯跟综能标准电芯的比较.md",
+      "rawPath": "_raw/明美集采AESC电芯跟综能标准电芯的比较.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 484,
+      "cleanedChars": 484,
+      "ms": 18
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/远景动力储能专用电芯优势介绍-280&315.pdf",
+      "targetPath": "远景动力储能专用电芯优势介绍-280_315.md",
+      "rawPath": "_raw/远景动力储能专用电芯优势介绍-280&315.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 8692,
+      "cleanedChars": 8155,
+      "ms": 38226
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/远景综能315-质保曲线需求(730660cycles) 2025-04-15.xlsx",
+      "targetPath": "远景综能315-质保曲线需求_730660cycles_2025-04-15.md",
+      "rawPath": "_raw/远景综能315-质保曲线需求(730660cycles) 2025-04-15.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2010,
+      "cleanedChars": 2010,
+      "ms": 16
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/2.6 机型外观渲染图素材（定稿） - 液冷0909.pptx",
+      "targetPath": "2_6_机型外观渲染图素材_定稿_-_液冷0909.md",
+      "rawPath": "_raw/2.6 机型外观渲染图素材（定稿） - 液冷0909.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 139,
+      "cleanedChars": 139,
+      "ms": 31
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ENS-L262渲染图 洛希和量道.pptx",
+      "targetPath": "ENS-L262渲染图_洛希和量道.md",
+      "rawPath": "_raw/ENS-L262渲染图 洛希和量道.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 163,
+      "cleanedChars": 163,
+      "ms": 20
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0丝印要求.pptx",
+      "targetPath": "ODM2_0丝印要求.md",
+      "rawPath": "_raw/ODM2.0丝印要求.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 411,
+      "cleanedChars": 411,
+      "ms": 10
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/分布式储能外观设计.pptx",
+      "targetPath": "分布式储能外观设计.md",
+      "rawPath": "_raw/分布式储能外观设计.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 252,
+      "cleanedChars": 252,
+      "ms": 69
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/工商业储能柜标识规范V2.pdf",
+      "targetPath": "工商业储能柜标识规范V2.md",
+      "rawPath": "_raw/工商业储能柜标识规范V2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2417,
+      "cleanedChars": 2345,
+      "ms": 1248
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/洛希工商业储能柜标识规范.pdf",
+      "targetPath": "洛希工商业储能柜标识规范.md",
+      "rawPath": "_raw/洛希工商业储能柜标识规范.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 2259
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/竞品外观.pptx",
+      "targetPath": "竞品外观.md",
+      "rawPath": "_raw/竞品外观.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 1076,
+      "cleanedChars": 1048,
+      "ms": 65
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/DVP-xxxxxx_远景能源工商业储能一体机测试验证大纲_A.xlsx",
+      "targetPath": "DVP-xxxxxx_远景能源工商业储能一体机测试验证大纲_A.md",
+      "rawPath": "_raw/DVP-xxxxxx_远景能源工商业储能一体机测试验证大纲_A.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 48185,
+      "cleanedChars": 48185,
+      "ms": 428
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/1.15.2.3_TR技术评审管理流程_2025-07-21_综合能源服务（IE）.docx",
+      "targetPath": "1_15_2_3_TR技术评审管理流程_2025-07-21_综合能源服务_IE.md",
+      "rawPath": "_raw/1.15.2.3_TR技术评审管理流程_2025-07-21_综合能源服务（IE）.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 4051,
+      "cleanedChars": 3998,
+      "ms": 161
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-PM&S Dept.-F-0007 TR技术评审管理流程 V1.0.docx",
+      "targetPath": "EM-PM_S_Dept_-F-0007_TR技术评审管理流程_V1_0.md",
+      "rawPath": "_raw/EM-PM&S Dept.-F-0007 TR技术评审管理流程 V1.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 4096,
+      "cleanedChars": 4043,
+      "ms": 109
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-PM&S Dept.-F-0007 TR技术评审管理流程 V1.0.pdf",
+      "targetPath": "EM-PM_S_Dept_-F-0007_TR技术评审管理流程_V1_0_2.md",
+      "rawPath": "_raw/EM-PM&S Dept.-F-0007 TR技术评审管理流程 V1.0.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 7395,
+      "cleanedChars": 7242,
+      "ms": 4137
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-QAD-F-0020 TR技术评审管理流程 V1.0 - 综能实例化V0.docx",
+      "targetPath": "EM-QAD-F-0020_TR技术评审管理流程_V1_0_-_综能实例化V0.md",
+      "rawPath": "_raw/EM-QAD-F-0020 TR技术评审管理流程 V1.0 - 综能实例化V0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 12143,
+      "cleanedChars": 10585,
+      "ms": 632
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-QAD-F-0020 TR技术评审管理流程 V1.0 - 综能实例化V1.docx",
+      "targetPath": "EM-QAD-F-0020_TR技术评审管理流程_V1_0_-_综能实例化V1.md",
+      "rawPath": "_raw/EM-QAD-F-0020 TR技术评审管理流程 V1.0 - 综能实例化V1.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 4887,
+      "cleanedChars": 4694,
+      "ms": 144
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-QAD-F-0020 TR技术评审管理流程 V1.0.docx",
+      "targetPath": "EM-QAD-F-0020_TR技术评审管理流程_V1_0.md",
+      "rawPath": "_raw/EM-QAD-F-0020 TR技术评审管理流程 V1.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 6966,
+      "cleanedChars": 6903,
+      "ms": 135
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/EM-QAD-F-0020 TR技术评审管理流程 V1.0.pdf",
+      "targetPath": "EM-QAD-F-0020_TR技术评审管理流程_V1_0_2.md",
+      "rawPath": "_raw/EM-QAD-F-0020 TR技术评审管理流程 V1.0.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 12914,
+      "cleanedChars": 12697,
+      "ms": 7298
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/TR技术评审管理流程-意见收集与评审.xlsx",
+      "targetPath": "TR技术评审管理流程-意见收集与评审.md",
+      "rawPath": "_raw/TR技术评审管理流程-意见收集与评审.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2098,
+      "cleanedChars": 2098,
+      "ms": 22
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/TR评审/实例化修改内容.pptx",
+      "targetPath": "实例化修改内容.md",
+      "rawPath": "_raw/实例化修改内容.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 158,
+      "cleanedChars": 158,
+      "ms": 12
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/说明/EM-BRPCS-Rec-0001 流程MPO工作手册-20240702-V1.0发布版.pdf",
+      "targetPath": "EM-BRPCS-Rec-0001_流程MPO工作手册-20240702-V1_0发布版.md",
+      "rawPath": "_raw/EM-BRPCS-Rec-0001 流程MPO工作手册-20240702-V1.0发布版.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 21001,
+      "cleanedChars": 20656,
+      "ms": 9187
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/EDV/说明/综能MPO--DPP填写要点说明.pptx",
+      "targetPath": "综能MPO--DPP填写要点说明_2.md",
+      "rawPath": "_raw/综能MPO--DPP填写要点说明-1777291221360.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 6284,
+      "cleanedChars": 6284,
+      "ms": 111
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/1.附件一 远景采购说明书模板（含工厂）V1.0.xlsx",
+      "targetPath": "1_附件一_远景采购说明书模板_含工厂_V1_0.md",
+      "rawPath": "_raw/1.附件一 远景采购说明书模板（含工厂）V1.0.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2593,
+      "cleanedChars": 2593,
+      "ms": 43
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/10..附件十：知识产权保护特别要求-2025版.docx",
+      "targetPath": "10_附件十_知识产权保护特别要求-2025版.md",
+      "rawPath": "_raw/10..附件十：知识产权保护特别要求-2025版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1566,
+      "cleanedChars": 1543,
+      "ms": 59
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/2.附件二 订单样式.docx",
+      "targetPath": "2_附件二_订单样式.md",
+      "rawPath": "_raw/2.附件二 订单样式.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1716,
+      "cleanedChars": 1507,
+      "ms": 54
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/2025 产品采购主合同【通用版】-final.docx",
+      "targetPath": "2025_产品采购主合同_通用版_-final.md",
+      "rawPath": "_raw/2025 产品采购主合同【通用版】-final.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 15922,
+      "cleanedChars": 15852,
+      "ms": 413
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/3.附件三 关联公司-2025版.docx",
+      "targetPath": "3_附件三_关联公司-2025版.md",
+      "rawPath": "_raw/3.附件三 关联公司-2025版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2669,
+      "cleanedChars": 2663,
+      "ms": 651
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/5.附件五 质量保证协议-20250430.docx",
+      "targetPath": "5_附件五_质量保证协议-20250430.md",
+      "rawPath": "_raw/5.附件五 质量保证协议-20250430.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 12243,
+      "cleanedChars": 12153,
+      "ms": 148
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/6.附件六 技术协议.docx",
+      "targetPath": "6_附件六_技术协议.md",
+      "rawPath": "_raw/6.附件六 技术协议.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 145,
+      "cleanedChars": 97,
+      "ms": 35
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/7.附件七 备品备件清单.docx",
+      "targetPath": "7_附件七_备品备件清单.md",
+      "rawPath": "_raw/7.附件七 备品备件清单.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 234,
+      "cleanedChars": 132,
+      "ms": 68
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/8.附件八 质保件清单.docx",
+      "targetPath": "8_附件八_质保件清单.md",
+      "rawPath": "_raw/8.附件八 质保件清单.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 210,
+      "cleanedChars": 140,
+      "ms": 45
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/9.附件九  物流运输要求-2024版.docx",
+      "targetPath": "9_附件九_物流运输要求-2024版.md",
+      "rawPath": "_raw/9.附件九  物流运输要求-2024版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 983,
+      "cleanedChars": 981,
+      "ms": 1331
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/1.附件一 采购说明书2024版.xlsx",
+      "targetPath": "1_附件一_采购说明书2024版.md",
+      "rawPath": "_raw/1.附件一 采购说明书2024版.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2477,
+      "cleanedChars": 2477,
+      "ms": 13
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/12.附件十二 供应链协同协议-最新版.docx",
+      "targetPath": "12_附件十二_供应链协同协议-最新版.md",
+      "rawPath": "_raw/12.附件十二 供应链协同协议-最新版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2065,
+      "cleanedChars": 2046,
+      "ms": 130
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/13.附件十三 远景能源供应商行为准则-2023版.docx",
+      "targetPath": "13_附件十三_远景能源供应商行为准则-2023版.md",
+      "rawPath": "_raw/13.附件十三 远景能源供应商行为准则-2023版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 47617,
+      "cleanedChars": 47583,
+      "ms": 115
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/14.附件十四：知识产权保护特别要求-2022版.docx",
+      "targetPath": "14_附件十四_知识产权保护特别要求-2022版.md",
+      "rawPath": "_raw/14.附件十四：知识产权保护特别要求-2022版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1482,
+      "cleanedChars": 1458,
+      "ms": 36
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/15.附件十五  物流运输要求-2024版.docx",
+      "targetPath": "15_附件十五_物流运输要求-2024版.md",
+      "rawPath": "_raw/15.附件十五  物流运输要求-2024版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 984,
+      "cleanedChars": 982,
+      "ms": 429
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/2.附件二 订单样式.docx",
+      "targetPath": "2_附件二_订单样式_2.md",
+      "rawPath": "_raw/2.附件二 订单样式-1777291225033.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1716,
+      "cleanedChars": 1507,
+      "ms": 62
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/2024产品采购主合同【技术保护版】.docx",
+      "targetPath": "2024产品采购主合同_技术保护版.md",
+      "rawPath": "_raw/2024产品采购主合同【技术保护版】.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 14355,
+      "cleanedChars": 14287,
+      "ms": 187
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/2024年远景合同偏差表.xlsx",
+      "targetPath": "2024年远景合同偏差表.md",
+      "rawPath": "_raw/2024年远景合同偏差表.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 279,
+      "cleanedChars": 279,
+      "ms": 20
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/3.附件三 关联公司-2024版.docx",
+      "targetPath": "3_附件三_关联公司-2024版.md",
+      "rawPath": "_raw/3.附件三 关联公司-2024版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 8322,
+      "cleanedChars": 8316,
+      "ms": 490
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/5.附件五 质量保证协议-2024年4月版 - 国内.docx",
+      "targetPath": "5_附件五_质量保证协议-2024年4月版_-_国内.md",
+      "rawPath": "_raw/5.附件五 质量保证协议-2024年4月版 - 国内.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10871,
+      "cleanedChars": 10721,
+      "ms": 168
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/6.附件六 技术协议.docx",
+      "targetPath": "6_附件六_技术协议_2.md",
+      "rawPath": "_raw/6.附件六 技术协议-1777291225946.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 145,
+      "cleanedChars": 97,
+      "ms": 50
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/7.附件七 备品备件清单.docx",
+      "targetPath": "7_附件七_备品备件清单_2.md",
+      "rawPath": "_raw/7.附件七 备品备件清单-1777291225981.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 234,
+      "cleanedChars": 132,
+      "ms": 33
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/8.附件八 质量保证期内服务要求-2024版.docx",
+      "targetPath": "8_附件八_质量保证期内服务要求-2024版.md",
+      "rawPath": "_raw/8.附件八 质量保证期内服务要求-2024版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2274,
+      "cleanedChars": 2270,
+      "ms": 92
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/框架合同2024/9.附件九 质保件清单.docx",
+      "targetPath": "9_附件九_质保件清单.md",
+      "rawPath": "_raw/9.附件九 质保件清单.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 210,
+      "cleanedChars": 140,
+      "ms": 31
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/DC24000506.pdf",
+      "targetPath": "DC24000506.md",
+      "rawPath": "_raw/DC24000506.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 279,
+      "cleanedChars": 0,
+      "ms": 16502
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/ENV-MAS-RBR-QAC-003 FAT Report Template of AC Unit for Royle Barn Road Rev. A.docx",
+      "targetPath": "ENV-MAS-RBR-QAC-003_FAT_Report_Template_of_AC_Unit_for_Royle_Barn_Road_Rev_A.md",
+      "rawPath": "_raw/ENV-MAS-RBR-QAC-003 FAT Report Template of AC Unit for Royle Barn Road Rev. A.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 27817,
+      "cleanedChars": 27495,
+      "ms": 750
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/QTY-ES000174  远景能源标准集装箱式液冷储能直流产品工厂测试报告_B.docx",
+      "targetPath": "QTY-ES000174_远景能源标准集装箱式液冷储能直流产品工厂测试报告_B.md",
+      "rawPath": "_raw/QTY-ES000174  远景能源标准集装箱式液冷储能直流产品工厂测试报告_B.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 11814,
+      "cleanedChars": 10402,
+      "ms": 296
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/QTY-ES000174  远景能源标准集装箱式液冷储能直流产品工厂测试报告_B.pdf",
+      "targetPath": "QTY-ES000174_远景能源标准集装箱式液冷储能直流产品工厂测试报告_B_2.md",
+      "rawPath": "_raw/QTY-ES000174  远景能源标准集装箱式液冷储能直流产品工厂测试报告_B.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 13278,
+      "cleanedChars": 13061,
+      "ms": 803
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/产品出厂检验报告.xlsx",
+      "targetPath": "产品出厂检验报告.md",
+      "rawPath": "_raw/产品出厂检验报告.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1561,
+      "cleanedChars": 1561,
+      "ms": 24
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/华致-出厂检验报告(1).pdf",
+      "targetPath": "华致-出厂检验报告_1.md",
+      "rawPath": "_raw/华致-出厂检验报告(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48,
+      "cleanedChars": 0,
+      "ms": 1369
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/合格证37-060059-01G.pdf",
+      "targetPath": "合格证37-060059-01G.md",
+      "rawPath": "_raw/合格证37-060059-01G.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 148,
+      "cleanedChars": 132,
+      "ms": 687
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/明美-远景工商业(372)液冷1P416S 出货报告(1).xlsx",
+      "targetPath": "明美-远景工商业_372_液冷1P416S_出货报告_1.md",
+      "rawPath": "_raw/明美-远景工商业(372)液冷1P416S 出货报告(1).xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 289893,
+      "cleanedChars": 289893,
+      "ms": 516
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/柜体检验标准.xlsx",
+      "targetPath": "柜体检验标准.md",
+      "rawPath": "_raw/柜体检验标准.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 14290,
+      "cleanedChars": 14290,
+      "ms": 55
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/远景215液冷1P240S出货报告- -2EA - 20250324（绿珈能创泸州君和彩金）.xlsx",
+      "targetPath": "远景215液冷1P240S出货报告-_-2EA_-_20250324_绿珈能创泸州君和彩金.md",
+      "rawPath": "_raw/远景215液冷1P240S出货报告- -2EA - 20250324（绿珈能创泸州君和彩金）.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 73104,
+      "cleanedChars": 73104,
+      "ms": 321
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/远景出货报告模板 - V1 明美的副本.xlsx",
+      "targetPath": "远景出货报告模板_-_V1_明美的副本.md",
+      "rawPath": "_raw/远景出货报告模板 - V1 明美的副本.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1428,
+      "cleanedChars": 1428,
+      "ms": 22
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/远景出货报告模板 - V1.xlsx",
+      "targetPath": "远景出货报告模板_-_V1.md",
+      "rawPath": "_raw/远景出货报告模板 - V1.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1068,
+      "cleanedChars": 1068,
+      "ms": 22
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/远景合格证 V1.pdf",
+      "targetPath": "远景合格证_V1.md",
+      "rawPath": "_raw/远景合格证 V1.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 232,
+      "cleanedChars": 216,
+      "ms": 375
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/远景合格证 V1.xlsx",
+      "targetPath": "远景合格证_V1_2.md",
+      "rawPath": "_raw/远景合格证 V1.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 560,
+      "cleanedChars": 560,
+      "ms": 9
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/合格证和出厂测试报告/量道-PR-31QHSEPR-QC-03  液冷柜261KWh检验报告 A1(1).doc",
+      "targetPath": "量道-PR-31QHSEPR-QC-03_液冷柜261KWh检验报告_A1_1.md",
+      "rawPath": "_raw/量道-PR-31QHSEPR-QC-03  液冷柜261KWh检验报告 A1(1).doc",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2597,
+      "cleanedChars": 2591,
+      "ms": 127
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/PCS机柜户外柜技术质量全属性清单.xlsx",
+      "targetPath": "PCS机柜户外柜技术质量全属性清单.md",
+      "rawPath": "_raw/PCS机柜户外柜技术质量全属性清单.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 10163,
+      "cleanedChars": 10163,
+      "ms": 787
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/PCS柜体发货检验规范.xlsx",
+      "targetPath": "PCS柜体发货检验规范.md",
+      "rawPath": "_raw/PCS柜体发货检验规范.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 8734,
+      "cleanedChars": 8733,
+      "ms": 33
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/TS-0006864远景风力发电机组通用防腐技术工艺规范V7.0.pdf",
+      "targetPath": "TS-0006864远景风力发电机组通用防腐技术工艺规范V7_0.md",
+      "rawPath": "_raw/TS-0006864远景风力发电机组通用防腐技术工艺规范V7.0.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 145506,
+      "cleanedChars": 144153,
+      "ms": 2335
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/冷通道检验规范.xls",
+      "targetPath": "冷通道检验规范.md",
+      "rawPath": "_raw/冷通道检验规范.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 27062,
+      "cleanedChars": 27061,
+      "ms": 68
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/变频器空机柜验收清单.png",
+      "targetPath": "变频器空机柜验收清单.md",
+      "rawPath": "_raw/变频器空机柜验收清单.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 7
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/机柜成品终检记录.xlsx",
+      "targetPath": "机柜成品终检记录.md",
+      "rawPath": "_raw/机柜成品终检记录.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 13159,
+      "cleanedChars": 13159,
+      "ms": 121
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/质量/验收标准/机柜通道外观件通用检验标准.xls",
+      "targetPath": "机柜通道外观件通用检验标准.md",
+      "rawPath": "_raw/机柜通道外观件通用检验标准.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 15789,
+      "cleanedChars": 15789,
+      "ms": 333
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/305Ah电池报告/AESC_305pro_IEC62619_Certificate(Jiangsu+Hubei+ordos+US).pdf",
+      "targetPath": "AESC_305pro_IEC62619_Certificate_Jiangsu_Hubei_ordos_US.md",
+      "rawPath": "_raw/AESC_305pro_IEC62619_Certificate(Jiangsu+Hubei+ordos+US).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2023,
+      "cleanedChars": 1993,
+      "ms": 61
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/305Ah电池报告/AESC_305pro_IEC62619_Test report.pdf",
+      "targetPath": "AESC_305pro_IEC62619_Test_report.md",
+      "rawPath": "_raw/AESC_305pro_IEC62619_Test report.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 33520,
+      "cleanedChars": 33191,
+      "ms": 633
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/305Ah电池报告/AESC_305pro_UL1973_Certificate.pdf",
+      "targetPath": "AESC_305pro_UL1973_Certificate.md",
+      "rawPath": "_raw/AESC_305pro_UL1973_Certificate.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2005,
+      "cleanedChars": 1975,
+      "ms": 46
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/305Ah电池报告/AESC_305pro_UL1973_Test report(Hubei compliance).pdf",
+      "targetPath": "AESC_305pro_UL1973_Test_report_Hubei_compliance.md",
+      "rawPath": "_raw/AESC_305pro_UL1973_Test report(Hubei compliance).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 5261,
+      "cleanedChars": 5203,
+      "ms": 111
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/315电芯-GBT36276-2023报告 鉴衡 2h 全版.pdf",
+      "targetPath": "315电芯-GBT36276-2023报告_鉴衡_2h_全版.md",
+      "rawPath": "_raw/315电芯-GBT36276-2023报告 鉴衡 2h 全版.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48549,
+      "cleanedChars": 47178,
+      "ms": 44540
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GBT36276-2023_Test report(interim report).pdf",
+      "targetPath": "GBT36276-2023_Test_report_interim_report.md",
+      "rawPath": "_raw/GBT36276-2023_Test report(interim report).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 45615,
+      "cleanedChars": 44286,
+      "ms": 63603
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/530Ah电池/20250604_V1.0_AESC 530_电芯规格书.pdf",
+      "targetPath": "20250604_V1_0_AESC_530_电芯规格书.md",
+      "rawPath": "_raw/20250604_V1.0_AESC 530_电芯规格书.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 23268,
+      "cleanedChars": 23019,
+      "ms": 7418
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/530Ah电池/Working File.xlsx",
+      "targetPath": "Working_File.md",
+      "rawPath": "_raw/Working File.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1018,
+      "cleanedChars": 1018,
+      "ms": 28
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/L05 Pack报告/01-PACK-ENS-1P52S-L-01-(十堰)-(GBT36276-2018)-CERT.pdf",
+      "targetPath": "01-PACK-ENS-1P52S-L-01-_十堰_-_GBT36276-2018_-CERT.md",
+      "rawPath": "_raw/01-PACK-ENS-1P52S-L-01-(十堰)-(GBT36276-2018)-CERT.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 32,
+      "cleanedChars": 0,
+      "ms": 5071
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/L05 Pack报告/1P52S PACK-报告-鉴衡.pdf",
+      "targetPath": "1P52S_PACK-报告-鉴衡.md",
+      "rawPath": "_raw/1P52S PACK-报告-鉴衡.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1053,
+      "cleanedChars": 0,
+      "ms": 108448
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/L05 Pack报告/外部公开315Pack 2018老标准.pdf",
+      "targetPath": "外部公开315Pack_2018老标准.md",
+      "rawPath": "_raw/外部公开315Pack 2018老标准.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 80,
+      "cleanedChars": 0,
+      "ms": 2659
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/L05 Pack报告/外部公开315Pack 2023新标准.pdf",
+      "targetPath": "外部公开315Pack_2023新标准.md",
+      "rawPath": "_raw/外部公开315Pack 2023新标准.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 96,
+      "cleanedChars": 0,
+      "ms": 9118
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/07&08 电池充电特性曲线&电池放电特性曲线.png",
+      "targetPath": "07_08_电池充电特性曲线_电池放电特性曲线.md",
+      "rawPath": "_raw/07&08 电池充电特性曲线&电池放电特性曲线.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 8
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/18-OCV-SOC充、放电曲线.png",
+      "targetPath": "18-OCV-SOC充_放电曲线.md",
+      "rawPath": "_raw/18-OCV-SOC充、放电曲线.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 4
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/2.10 远景工商业储能一体柜ENS-L256技术协议-对外完整版.docx",
+      "targetPath": "2_10_远景工商业储能一体柜ENS-L256技术协议-对外完整版.md",
+      "rawPath": "_raw/2.10 远景工商业储能一体柜ENS-L256技术协议-对外完整版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 8085,
+      "cleanedChars": 7936,
+      "ms": 193
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/【Final】工商储315电池单体技术协议（ZN&AESC）_ver.25ov_250827.docx",
+      "targetPath": "Final_工商储315电池单体技术协议_ZN_AESC_ver_25ov_250827.md",
+      "rawPath": "_raw/【Final】工商储315电池单体技术协议（ZN&AESC）_ver.25ov_250827.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 26729,
+      "cleanedChars": 26035,
+      "ms": 329
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/工商储315电池单体技术协议（ZN&AESC）_ver.25ov_250805.docx",
+      "targetPath": "工商储315电池单体技术协议_ZN_AESC_ver_25ov_250805.md",
+      "rawPath": "_raw/工商储315电池单体技术协议（ZN&AESC）_ver.25ov_250805.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 26565,
+      "cleanedChars": 25871,
+      "ms": 264
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/远景小工商-280电芯技术协议VF -  Leon.docx",
+      "targetPath": "远景小工商-280电芯技术协议VF_-_Leon.md",
+      "rawPath": "_raw/远景小工商-280电芯技术协议VF -  Leon.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 6481,
+      "cleanedChars": 5787,
+      "ms": 149
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/远景小工商-315电芯技术协议-1107.docx",
+      "targetPath": "远景小工商-315电芯技术协议-1107.md",
+      "rawPath": "_raw/远景小工商-315电芯技术协议-1107.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 6628,
+      "cleanedChars": 5928,
+      "ms": 163
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/远景小工商-315电芯技术协议-1205-纯净版.docx",
+      "targetPath": "远景小工商-315电芯技术协议-1205-纯净版.md",
+      "rawPath": "_raw/远景小工商-315电芯技术协议-1205-纯净版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 7132,
+      "cleanedChars": 6424,
+      "ms": 200
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/远景小工商-315电芯技术协议-1205.docx",
+      "targetPath": "远景小工商-315电芯技术协议-1205.md",
+      "rawPath": "_raw/远景小工商-315电芯技术协议-1205.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 7130,
+      "cleanedChars": 6424,
+      "ms": 208
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/技术协议/远景小工商-315电芯技术协议-25新版-修订版.docx",
+      "targetPath": "远景小工商-315电芯技术协议-25新版-修订版.md",
+      "rawPath": "_raw/远景小工商-315电芯技术协议-25新版-修订版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 7794,
+      "cleanedChars": 7086,
+      "ms": 193
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/质保协议/280Ah 电芯质量保证协议（标准版）.docx",
+      "targetPath": "280Ah_电芯质量保证协议_标准版.md",
+      "rawPath": "_raw/280Ah 电芯质量保证协议（标准版）.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 3299,
+      "cleanedChars": 3136,
+      "ms": 53
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/质保协议/AESC电芯质量保证协议-250306.docx",
+      "targetPath": "AESC电芯质量保证协议-250306.md",
+      "rawPath": "_raw/AESC电芯质量保证协议-250306.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 3258,
+      "cleanedChars": 3105,
+      "ms": 59
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/质保协议/AESC电芯质量保证协议.docx",
+      "targetPath": "AESC电芯质量保证协议.md",
+      "rawPath": "_raw/AESC电芯质量保证协议.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 3252,
+      "cleanedChars": 3103,
+      "ms": 55
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/质保协议/AESC电芯质量保证协议（海外版）.docx",
+      "targetPath": "AESC电芯质量保证协议_海外版.md",
+      "rawPath": "_raw/AESC电芯质量保证协议（海外版）.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 3409,
+      "cleanedChars": 3270,
+      "ms": 70
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0/2500609-Envision-IES Niche Studio White.png",
+      "targetPath": "2500609-Envision-IES_Niche_Studio_White.md",
+      "rawPath": "_raw/2500609-Envision-IES Niche Studio White.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 36
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0/2500609-Envision-IES Niche Studio.png",
+      "targetPath": "2500609-Envision-IES_Niche_Studio.md",
+      "rawPath": "_raw/2500609-Envision-IES Niche Studio.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 86
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0/IES INDUSTRIAL PARK Framed large.jpg",
+      "targetPath": "IES_INDUSTRIAL_PARK_Framed_large.md",
+      "rawPath": "_raw/IES INDUSTRIAL PARK Framed large.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 225
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0/IES INDUSTRIAL PARK Framed2.jpg",
+      "targetPath": "IES_INDUSTRIAL_PARK_Framed2.md",
+      "rawPath": "_raw/IES INDUSTRIAL PARK Framed2.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 172
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ID设计/ODM2.0/WeChatWorkScreenshot_ed10c807-43d1-45f3-853c-4cf9eaa54945(2).png",
+      "targetPath": "WeChatWorkScreenshot_ed10c807-43d1-45f3-853c-4cf9eaa54945_2.md",
+      "rawPath": "_raw/WeChatWorkScreenshot_ed10c807-43d1-45f3-853c-4cf9eaa54945(2).png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 87
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/2.10 远景工商业储能一体柜ENS-L256技术协议-对外完整版.docx",
+      "targetPath": "2_10_远景工商业储能一体柜ENS-L256技术协议-对外完整版_2.md",
+      "rawPath": "_raw/2.10 远景工商业储能一体柜ENS-L256技术协议-对外完整版-1777291496155.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 8085,
+      "cleanedChars": 7936,
+      "ms": 183
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/3.2 ENS-L314技术协议-对外完整版v2.docx",
+      "targetPath": "3_2_ENS-L314技术协议-对外完整版v2.md",
+      "rawPath": "_raw/3.2 ENS-L314技术协议-对外完整版v2.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10051,
+      "cleanedChars": 9822,
+      "ms": 264
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/DFMEA-2024.12.03.xls",
+      "targetPath": "DFMEA-2024_12_03.md",
+      "rawPath": "_raw/DFMEA-2024.12.03.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 99211,
+      "cleanedChars": 99211,
+      "ms": 136
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/ENS-L314 液冷储能柜产品图纸V1.0-20241226.pdf",
+      "targetPath": "ENS-L314_液冷储能柜产品图纸V1_0-20241226.md",
+      "rawPath": "_raw/ENS-L314 液冷储能柜产品图纸V1.0-20241226.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1681,
+      "cleanedChars": 1623,
+      "ms": 9033
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/ENS-L314技术协议-对外完整版v3.docx",
+      "targetPath": "ENS-L314技术协议-对外完整版v3.md",
+      "rawPath": "_raw/ENS-L314技术协议-对外完整版v3.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10051,
+      "cleanedChars": 9824,
+      "ms": 318
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/ENS-L314用户手册V2.0 - Leon.pdf",
+      "targetPath": "ENS-L314用户手册V2_0_-_Leon.md",
+      "rawPath": "_raw/ENS-L314用户手册V2.0 - Leon.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 28417,
+      "cleanedChars": 26027,
+      "ms": 12717
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/ES125风冷液冷控制策略.pdf",
+      "targetPath": "ES125风冷液冷控制策略.md",
+      "rawPath": "_raw/ES125风冷液冷控制策略.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1060,
+      "cleanedChars": 1016,
+      "ms": 590
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.0评审版20241129）- Leon.docx",
+      "targetPath": "TS-7001726_远景能源工商业储能柜一体机技术规范书_V1_0评审版20241129_-_Leon.md",
+      "rawPath": "_raw/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.0评审版20241129）- Leon.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 18227,
+      "cleanedChars": 17890,
+      "ms": 248
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.2评审版20241203）.docx",
+      "targetPath": "TS-7001726_远景能源工商业储能柜一体机技术规范书_V1_2评审版20241203.md",
+      "rawPath": "_raw/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.2评审版20241203）.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 18289,
+      "cleanedChars": 17988,
+      "ms": 239
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.3评审版20241205）.docx",
+      "targetPath": "TS-7001726_远景能源工商业储能柜一体机技术规范书_V1_3评审版20241205.md",
+      "rawPath": "_raw/TS-7001726_远景能源工商业储能柜一体机技术规范书（V1.3评审版20241205）.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 18193,
+      "cleanedChars": 17892,
+      "ms": 298
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/储能柜子零件设计寿命及质保期调研清单 .xlsx",
+      "targetPath": "储能柜子零件设计寿命及质保期调研清单.md",
+      "rawPath": "_raw/储能柜子零件设计寿命及质保期调研清单 .xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 712,
+      "cleanedChars": 712,
+      "ms": 11
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/华致消防相关逻辑材料.xlsx",
+      "targetPath": "华致消防相关逻辑材料.md",
+      "rawPath": "_raw/华致消防相关逻辑材料.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 216,
+      "cleanedChars": 216,
+      "ms": 39
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/备品备件管理.pdf",
+      "targetPath": "备品备件管理.md",
+      "rawPath": "_raw/备品备件管理.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2131,
+      "cleanedChars": 2073,
+      "ms": 965
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/消防逻辑流程图.pdf",
+      "targetPath": "消防逻辑流程图.md",
+      "rawPath": "_raw/消防逻辑流程图.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 193,
+      "cleanedChars": 177,
+      "ms": 194
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/液冷插箱1P52S314Ah-GB36276-2023-RT-SCUD-20241031(V2).pdf",
+      "targetPath": "液冷插箱1P52S314Ah-GB36276-2023-RT-SCUD-20241031_V2.md",
+      "rawPath": "_raw/液冷插箱1P52S314Ah-GB36276-2023-RT-SCUD-20241031(V2).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 18823,
+      "cleanedChars": 18382,
+      "ms": 6522
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/系统保护策略.docx",
+      "targetPath": "系统保护策略.md",
+      "rawPath": "_raw/系统保护策略.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 565,
+      "cleanedChars": 561,
+      "ms": 15
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/远景能源ENS-L314工商业储能一体机用户手册 (1).docx",
+      "targetPath": "远景能源ENS-L314工商业储能一体机用户手册_1.md",
+      "rawPath": "_raw/远景能源ENS-L314工商业储能一体机用户手册 (1).docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 883,
+      "cleanedChars": 826,
+      "ms": 64
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/（华致256液冷定稿）远景工商业储能技术规范-定稿0626.docx",
+      "targetPath": "华致256液冷定稿_远景工商业储能技术规范-定稿0626.md",
+      "rawPath": "_raw/（华致256液冷定稿）远景工商业储能技术规范-定稿0626.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 15297,
+      "cleanedChars": 15090,
+      "ms": 155
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/技术协议/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11.pdf",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A_-洛希-12_31-洛希签字版本_IT22-250106-11.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 567,
+      "cleanedChars": 0,
+      "ms": 9041
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/技术协议/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_终版1227 OK_IT22-250103-7.pdf",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_终版1227_OK_IT22-250103-7.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_终版1227 OK_IT22-250103-7.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 567,
+      "cleanedChars": 0,
+      "ms": 31817
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/技术协议/远景-卓阳233样机采购合同（双方盖章版）（合同+技术协议+质量协议）.pdf",
+      "targetPath": "远景-卓阳233样机采购合同_双方盖章版_合同_技术协议_质量协议.md",
+      "rawPath": "_raw/远景-卓阳233样机采购合同（双方盖章版）（合同+技术协议+质量协议）.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1071,
+      "cleanedChars": 0,
+      "ms": 14644
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/原辅料属性添加记录清单_EMS选项.docx",
+      "targetPath": "原辅料属性添加记录清单_EMS选项.md",
+      "rawPath": "_raw/原辅料属性添加记录清单_EMS选项.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 631,
+      "cleanedChars": 623,
+      "ms": 48
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/原辅料属性添加记录清单_ENS-262-EA.docx",
+      "targetPath": "原辅料属性添加记录清单_ENS-262-EA.md",
+      "rawPath": "_raw/原辅料属性添加记录清单_ENS-262-EA.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 556,
+      "cleanedChars": 546,
+      "ms": 43
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/原辅料属性添加记录清单_ENS-262-EU.docx",
+      "targetPath": "原辅料属性添加记录清单_ENS-262-EU.md",
+      "rawPath": "_raw/原辅料属性添加记录清单_ENS-262-EU.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 515,
+      "cleanedChars": 505,
+      "ms": 41
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/工商储的一级物料号管理表-BOM L262 250324V3.xlsx",
+      "targetPath": "工商储的一级物料号管理表-BOM_L262_250324V3.md",
+      "rawPath": "_raw/工商储的一级物料号管理表-BOM L262 250324V3.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 23610,
+      "cleanedChars": 23610,
+      "ms": 49
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/工商储的一级物料号管理表-BOM L262 250324V4.xlsx",
+      "targetPath": "工商储的一级物料号管理表-BOM_L262_250324V4.md",
+      "rawPath": "_raw/工商储的一级物料号管理表-BOM L262 250324V4.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 23857,
+      "cleanedChars": 23857,
+      "ms": 30
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/料号/工商储的一级物料号管理表-BOM L262 250416V5.xlsx",
+      "targetPath": "工商储的一级物料号管理表-BOM_L262_250416V5.md",
+      "rawPath": "_raw/工商储的一级物料号管理表-BOM L262 250416V5.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 24619,
+      "cleanedChars": 24619,
+      "ms": 28
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/03077洛希电池簇报告（签字盖章）.pdf",
+      "targetPath": "03077洛希电池簇报告_签字盖章.md",
+      "rawPath": "_raw/03077洛希电池簇报告（签字盖章）.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 261,
+      "cleanedChars": 0,
+      "ms": 21631
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/4.附件四 通用包装要求-2024版.docx",
+      "targetPath": "4_附件四_通用包装要求-2024版.md",
+      "rawPath": "_raw/4.附件四 通用包装要求-2024版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1194,
+      "cleanedChars": 1190,
+      "ms": 586
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/EU Batteries Regulation (EU) 2023/48.400.24.0422.01-00,01 Battery Regulation_HC-L315B.pdf",
+      "targetPath": "48_400_24_0422_01-00_01_Battery_Regulation_HC-L315B.md",
+      "rawPath": "_raw/48.400.24.0422.01-00,01 Battery Regulation_HC-L315B.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 8123,
+      "cleanedChars": 8051,
+      "ms": 188
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GB44240-2024/CGC2025003016219-证书_远景-315Ah锂蓄电池.pdf",
+      "targetPath": "CGC2025003016219-证书_远景-315Ah锂蓄电池.md",
+      "rawPath": "_raw/CGC2025003016219-证书_远景-315Ah锂蓄电池.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1083,
+      "cleanedChars": 1053,
+      "ms": 138
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GB44240-2024/Test report key pages-GB44240-2024.docx",
+      "targetPath": "Test_report_key_pages-GB44240-2024.md",
+      "rawPath": "_raw/Test report key pages-GB44240-2024.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2,
+      "cleanedChars": 0,
+      "ms": 29
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GBT36276-2023/20240616_AESC ESS_315_GBT36276-2023 Cetification.pdf",
+      "targetPath": "20240616_AESC_ESS_315_GBT36276-2023_Cetification.md",
+      "rawPath": "_raw/20240616_AESC ESS_315_GBT36276-2023 Cetification.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48,
+      "cleanedChars": 0,
+      "ms": 4738
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GBT36276-2023/20240616_AESC ESS_315_GBT36276-2023 Test Report.pdf",
+      "targetPath": "20240616_AESC_ESS_315_GBT36276-2023_Test_Report.md",
+      "rawPath": "_raw/20240616_AESC ESS_315_GBT36276-2023 Test Report.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 46287,
+      "cleanedChars": 44919,
+      "ms": 29562
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/GBT36276-2023/电芯-报告 鉴衡 2h 全版.pdf",
+      "targetPath": "电芯-报告_鉴衡_2h_全版.md",
+      "rawPath": "_raw/电芯-报告 鉴衡 2h 全版.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48549,
+      "cleanedChars": 47178,
+      "ms": 60495
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/IEC 62619-2022/IEC62619 Certification-JPTUV-158992-A1 M1_extsigned.pdf",
+      "targetPath": "IEC62619_Certification-JPTUV-158992-A1_M1_extsigned.md",
+      "rawPath": "_raw/IEC62619 Certification-JPTUV-158992-A1 M1_extsigned.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1204,
+      "cleanedChars": 1174,
+      "ms": 112
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/IEC 62619-2022/IEC62619 Test Report-CN24DZ91 003 signed_extsigned.pdf",
+      "targetPath": "IEC62619_Test_Report-CN24DZ91_003_signed_extsigned.md",
+      "rawPath": "_raw/IEC62619 Test Report-CN24DZ91 003 signed_extsigned.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 14705,
+      "cleanedChars": 14504,
+      "ms": 5201
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/MSDS/20240520_AESC ESS_315_Cell MSDS.pdf",
+      "targetPath": "20240520_AESC_ESS_315_Cell_MSDS.md",
+      "rawPath": "_raw/20240520_AESC ESS_315_Cell MSDS.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 10568,
+      "cleanedChars": 10440,
+      "ms": 408
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/REACH/48.400.24.0422.01-00,02 REACH XVII.pdf",
+      "targetPath": "48_400_24_0422_01-00_02_REACH_XVII.md",
+      "rawPath": "_raw/48.400.24.0422.01-00,02 REACH XVII.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 24023,
+      "cleanedChars": 23742,
+      "ms": 486
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/REACH/48.400.24.0422.01-00,03 REACH SVHCs.pdf",
+      "targetPath": "48_400_24_0422_01-00_03_REACH_SVHCs.md",
+      "rawPath": "_raw/48.400.24.0422.01-00,03 REACH SVHCs.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 33254,
+      "cleanedChars": 32989,
+      "ms": 746
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/RoHS/48.400.24.0422.01-00,04 RoHS.pdf",
+      "targetPath": "48_400_24_0422_01-00_04_RoHS.md",
+      "rawPath": "_raw/48.400.24.0422.01-00,04 RoHS.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 14277,
+      "cleanedChars": 14092,
+      "ms": 321
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UL1642（280 305 315）/20240620_AESC ESS_315_UL1642.pdf",
+      "targetPath": "20240620_AESC_ESS_315_UL1642.md",
+      "rawPath": "_raw/20240620_AESC ESS_315_UL1642.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2747,
+      "cleanedChars": 2717,
+      "ms": 54
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UL1973-2023 3rd ED/20240620_AESC ESS_315_UL1973.pdf",
+      "targetPath": "20240620_AESC_ESS_315_UL1973.md",
+      "rawPath": "_raw/20240620_AESC ESS_315_UL1973.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 5365,
+      "cleanedChars": 5307,
+      "ms": 84
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UL9540A/20240621_AESC ESS_315_UL9540A.pdf",
+      "targetPath": "20240621_AESC_ESS_315_UL9540A.md",
+      "rawPath": "_raw/20240621_AESC ESS_315_UL9540A.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26362,
+      "cleanedChars": 25825,
+      "ms": 18035
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【UN报告】1124000246-1远景动力技术（江苏）有限公司.pdf",
+      "targetPath": "UN报告_1124000246-1远景动力技术_江苏_有限公司.md",
+      "rawPath": "_raw/【UN报告】1124000246-1远景动力技术（江苏）有限公司.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 4495,
+      "cleanedChars": 4409,
+      "ms": 5774
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【UN概要】1124000246-2远景动力技术（江苏）有限公司.pdf",
+      "targetPath": "UN概要_1124000246-2远景动力技术_江苏_有限公司.md",
+      "rawPath": "_raw/【UN概要】1124000246-2远景动力技术（江苏）有限公司.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1946,
+      "cleanedChars": 1930,
+      "ms": 106
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【危特】1124000246-3远景动力技术（江苏）有限公司.pdf",
+      "targetPath": "危特_1124000246-3远景动力技术_江苏_有限公司.md",
+      "rawPath": "_raw/【危特】1124000246-3远景动力技术（江苏）有限公司.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1062,
+      "cleanedChars": 1018,
+      "ms": 4155
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【海运】1124000246-4远景动力技术（江苏）有限公司.pdf",
+      "targetPath": "海运_1124000246-4远景动力技术_江苏_有限公司.md",
+      "rawPath": "_raw/【海运】1124000246-4远景动力技术（江苏）有限公司.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 5154,
+      "cleanedChars": 5068,
+      "ms": 6887
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【空运】远景动力 HC-L315A(1).pdf",
+      "targetPath": "空运_远景动力_HC-L315A_1.md",
+      "rawPath": "_raw/【空运】远景动力 HC-L315A(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 96,
+      "cleanedChars": 0,
+      "ms": 5540
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/UN38.3/【陆运】1124000246-5远景动力技术（江苏）有限公司.pdf",
+      "targetPath": "陆运_1124000246-5远景动力技术_江苏_有限公司.md",
+      "rawPath": "_raw/【陆运】1124000246-5远景动力技术（江苏）有限公司.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 5061,
+      "cleanedChars": 4975,
+      "ms": 5713
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/530Ah电池/530Ah尺寸图/2D - 73275 Cell drawing - 01 -20250724.pdf",
+      "targetPath": "2D_-_73275_Cell_drawing_-_01_-20250724.md",
+      "rawPath": "_raw/2D - 73275 Cell drawing - 01 -20250724.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 1514
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/314 PPAP/生产性零部件开发PPAP交付物说明.xlsx",
+      "targetPath": "生产性零部件开发PPAP交付物说明.md",
+      "rawPath": "_raw/生产性零部件开发PPAP交付物说明.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1971,
+      "cleanedChars": 1971,
+      "ms": 1257
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/华致/保险/华致能源-保单文件（2024-2025）.pdf",
+      "targetPath": "华致能源-保单文件_2024-2025.md",
+      "rawPath": "_raw/华致能源-保单文件（2024-2025）.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 8295,
+      "cleanedChars": 8142,
+      "ms": 2800
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/ODM2.0_262户外柜改制-产品信息输入确认清单 - Leon.xlsx",
+      "targetPath": "ODM2_0_262户外柜改制-产品信息输入确认清单_-_Leon.md",
+      "rawPath": "_raw/ODM2.0_262户外柜改制-产品信息输入确认清单 - Leon.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 963,
+      "cleanedChars": 961,
+      "ms": 12
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/包装技术规范-2025版/TS-0022423 远景能源通用包装技术规范 General Packaging Technical Specification_Rev B.pdf",
+      "targetPath": "TS-0022423_远景能源通用包装技术规范_General_Packaging_Technical_Specification_Rev_B.md",
+      "rawPath": "_raw/TS-0022423 远景能源通用包装技术规范 General Packaging Technical Specification_Rev B.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 124072,
+      "cleanedChars": 123228,
+      "ms": 1760
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/包装技术规范-2025版/包装确认单 Packaging Approval Form（PAF）.xls",
+      "targetPath": "包装确认单_Packaging_Approval_Form_PAF.md",
+      "rawPath": "_raw/包装确认单 Packaging Approval Form（PAF）.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 11746,
+      "cleanedChars": 11746,
+      "ms": 82
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/包装技术规范-2025版/包装运输及承重测试 Package Transport & Bearing Test.xls",
+      "targetPath": "包装运输及承重测试_Package_Transport_Bearing_Test.md",
+      "rawPath": "_raw/包装运输及承重测试 Package Transport & Bearing Test.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2607,
+      "cleanedChars": 2607,
+      "ms": 33
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/包装技术规范-2025版/远景能源标准唛头（物流标签）模板 Envision standard Mark (delivery label) Format.xlsx",
+      "targetPath": "远景能源标准唛头_物流标签_模板_Envision_standard_Mark_delivery_label_Format.md",
+      "rawPath": "_raw/远景能源标准唛头（物流标签）模板 Envision standard Mark (delivery label) Format.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 4557,
+      "cleanedChars": 4557,
+      "ms": 28
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Process/框架合同/2025年产品采购合同 (通用完整版）/4.附件四  通用包装要求-2025版/包装技术规范-2025版/远景能源标准箱单  Envision standard Packing list.xls",
+      "targetPath": "远景能源标准箱单_Envision_standard_Packing_list.md",
+      "rawPath": "_raw/远景能源标准箱单  Envision standard Packing list.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1626,
+      "cleanedChars": 1626,
+      "ms": 7
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-8cfd1b5c02a2/11.附件十一健康、安全与环保协议-2024版/EM-EHS-Rec-0046 远景能源外部供方健康、安全与环保协议-通用版 V2.0.docx",
+      "targetPath": "EM-EHS-Rec-0046_远景能源外部供方健康_安全与环保协议-通用版_V2_0.md",
+      "rawPath": "_raw/EM-EHS-Rec-0046 远景能源外部供方健康、安全与环保协议-通用版 V2.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 36770,
+      "cleanedChars": 36550,
+      "ms": 218
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-8cfd1b5c02a2/11.附件十一健康、安全与环保协议-2024版/EM-EHS-Rec-0047 远景能源外部供方健康、安全与环保协议-建筑施工 V3.0.docx",
+      "targetPath": "EM-EHS-Rec-0047_远景能源外部供方健康_安全与环保协议-建筑施工_V3_0.md",
+      "rawPath": "_raw/EM-EHS-Rec-0047 远景能源外部供方健康、安全与环保协议-建筑施工 V3.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 14193,
+      "cleanedChars": 14017,
+      "ms": 262
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-8cfd1b5c02a2/11.附件十一健康、安全与环保协议-2024版/EM-EHS-Rec-0048 远景能源外部供方健康、安全与环保协议-测风塔 V2.0.docx",
+      "targetPath": "EM-EHS-Rec-0048_远景能源外部供方健康_安全与环保协议-测风塔_V2_0.md",
+      "rawPath": "_raw/EM-EHS-Rec-0048 远景能源外部供方健康、安全与环保协议-测风塔 V2.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 9932,
+      "cleanedChars": 9660,
+      "ms": 140
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-8cfd1b5c02a2/11.附件十一健康、安全与环保协议-2024版/EM-EHS-Rec-0050 远景能源外部供方健康、安全与环保协议-物流 V2.0.docx",
+      "targetPath": "EM-EHS-Rec-0050_远景能源外部供方健康_安全与环保协议-物流_V2_0.md",
+      "rawPath": "_raw/EM-EHS-Rec-0050 远景能源外部供方健康、安全与环保协议-物流 V2.0.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 25994,
+      "cleanedChars": 25704,
+      "ms": 125
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/4.附件四 通用包装要求-2024版.docx",
+      "targetPath": "4_附件四_通用包装要求-2024版_2.md",
+      "rawPath": "_raw/4.附件四 通用包装要求-2024版-1777291763409.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1194,
+      "cleanedChars": 1190,
+      "ms": 480
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/IEC 62619-2022/作废/20240517_AESC ESS_315_IEC62619 Certification.pdf",
+      "targetPath": "20240517_AESC_ESS_315_IEC62619_Certification.md",
+      "rawPath": "_raw/20240517_AESC ESS_315_IEC62619 Certification.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1268,
+      "cleanedChars": 1230,
+      "ms": 26
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/Battery and Pack/315Ah电池报告/IEC 62619-2022/作废/20240517_AESC ESS_315_IEC62619 Test Report.pdf",
+      "targetPath": "20240517_AESC_ESS_315_IEC62619_Test_Report.md",
+      "rawPath": "_raw/20240517_AESC ESS_315_IEC62619 Test Report.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 32095,
+      "cleanedChars": 31742,
+      "ms": 810
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/262户外柜原理图-主柜.pdf",
+      "targetPath": "262户外柜原理图-主柜.md",
+      "rawPath": "_raw/262户外柜原理图-主柜.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 10768,
+      "cleanedChars": 10514,
+      "ms": 10150
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/262户外柜原理图-从柜.pdf",
+      "targetPath": "262户外柜原理图-从柜.md",
+      "rawPath": "_raw/262户外柜原理图-从柜.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 10413,
+      "cleanedChars": 10159,
+      "ms": 10760
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/通用场景(2).pptx",
+      "targetPath": "通用场景_2.md",
+      "rawPath": "_raw/通用场景(2).pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 695,
+      "cleanedChars": 695,
+      "ms": 17
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/3.1 【标准版】ENS-L262-01技术协议-对外完整版.docx",
+      "targetPath": "3_1_标准版_ENS-L262-01技术协议-对外完整版.md",
+      "rawPath": "_raw/3.1 【标准版】ENS-L262-01技术协议-对外完整版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10077,
+      "cleanedChars": 9928,
+      "ms": 305
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/3.1 【标准版】ENS-L262-03技术协议-对外完整版.docx",
+      "targetPath": "3_1_标准版_ENS-L262-03技术协议-对外完整版.md",
+      "rawPath": "_raw/3.1 【标准版】ENS-L262-03技术协议-对外完整版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10082,
+      "cleanedChars": 9933,
+      "ms": 247
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/3.1 【高阶版】ENS-L262-01技术协议-对外完整版.docx",
+      "targetPath": "3_1_高阶版_ENS-L262-01技术协议-对外完整版.md",
+      "rawPath": "_raw/3.1 【高阶版】ENS-L262-01技术协议-对外完整版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10091,
+      "cleanedChars": 9942,
+      "ms": 349
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/3.1 【高阶版】ENS-L262-03技术协议-对外完整版.docx",
+      "targetPath": "3_1_高阶版_ENS-L262-03技术协议-对外完整版.md",
+      "rawPath": "_raw/3.1 【高阶版】ENS-L262-03技术协议-对外完整版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 10093,
+      "cleanedChars": 9944,
+      "ms": 235
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.28.docx",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A_-洛希-12_28.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.28.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 20450,
+      "cleanedChars": 20099,
+      "ms": 634
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11.pdf",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A_-洛希-12_31-洛希签字版本_IT22-250106-11_2.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11-1777291803856.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 567,
+      "cleanedChars": 0,
+      "ms": 16913
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/技术协议签署版/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_C -洛希.docx",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_C_-洛希.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_C -洛希.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 20540,
+      "cleanedChars": 20187,
+      "ms": 693
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/投标全表/ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.xlsx",
+      "targetPath": "ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.md",
+      "rawPath": "_raw/ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 11744,
+      "cleanedChars": 11744,
+      "ms": 49
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/125kW新国标报告最终版 -对外简版带水印(1)---洛希-恩玖 pcs.pdf",
+      "targetPath": "125kW新国标报告最终版_-对外简版带水印_1_---洛希-恩玖_pcs.md",
+      "rawPath": "_raw/125kW新国标报告最终版 -对外简版带水印(1)---洛希-恩玖 pcs.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 24317,
+      "cleanedChars": 24004,
+      "ms": 11167
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/LXKJ2EAO02W (洛希--314模块-新版委托）2025.01.06(1).pdf",
+      "targetPath": "LXKJ2EAO02W_洛希--314模块-新版委托_2025_01_06_1.md",
+      "rawPath": "_raw/LXKJ2EAO02W (洛希--314模块-新版委托）2025.01.06(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26759,
+      "cleanedChars": 26270,
+      "ms": 21686
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/LXKJ2EAO02W (洛希--楚能314模块-新版委托）2025.01.06(1)-CORNEX 楚能314电芯-严禁外发客户.pdf",
+      "targetPath": "LXKJ2EAO02W_洛希--楚能314模块-新版委托_2025_01_06_1_-CORNEX_楚能314电芯-严禁外发客户.md",
+      "rawPath": "_raw/LXKJ2EAO02W (洛希--楚能314模块-新版委托）2025.01.06(1)-CORNEX 楚能314电芯-严禁外发客户.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26759,
+      "cleanedChars": 26270,
+      "ms": 31119
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/检验报告.pdf",
+      "targetPath": "检验报告.md",
+      "rawPath": "_raw/检验报告.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 279,
+      "cleanedChars": 0,
+      "ms": 7739
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/鉴定证书.jpg",
+      "targetPath": "鉴定证书.md",
+      "rawPath": "_raw/鉴定证书.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 12
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/核心部件认证报告（仅远景内部使用，禁外发）/防爆合格证.pdf",
+      "targetPath": "防爆合格证.md",
+      "rawPath": "_raw/防爆合格证.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 1867
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册 ODM2.0 V1.docx",
+      "targetPath": "ENS-L262用户手册_ODM2_0_V1.md",
+      "rawPath": "_raw/ENS-L262用户手册 ODM2.0 V1.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 21383,
+      "cleanedChars": 20645,
+      "ms": 588
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册 ODM2.0 V2-2026.2.26 修正B版.docx",
+      "targetPath": "ENS-L262用户手册_ODM2_0_V2-2026_2_26_修正B版.md",
+      "rawPath": "_raw/ENS-L262用户手册 ODM2.0 V2-2026.2.26 修正B版.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 21537,
+      "cleanedChars": 20819,
+      "ms": 462
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册 ODM2.0 V2-2026.2.26 修正B版.pdf",
+      "targetPath": "ENS-L262用户手册_ODM2_0_V2-2026_2_26_修正B版_2.md",
+      "rawPath": "_raw/ENS-L262用户手册 ODM2.0 V2-2026.2.26 修正B版.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 31491,
+      "cleanedChars": 28857,
+      "ms": 12954
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册 ODM2.0 V2.docx",
+      "targetPath": "ENS-L262用户手册_ODM2_0_V2.md",
+      "rawPath": "_raw/ENS-L262用户手册 ODM2.0 V2.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 21474,
+      "cleanedChars": 20758,
+      "ms": 484
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册.docx",
+      "targetPath": "ENS-L262用户手册.md",
+      "rawPath": "_raw/ENS-L262用户手册.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 20780,
+      "cleanedChars": 20054,
+      "ms": 603
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册.pdf",
+      "targetPath": "ENS-L262用户手册_2.md",
+      "rawPath": "_raw/ENS-L262用户手册.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 30763,
+      "cleanedChars": 28190,
+      "ms": 14640
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/ENS-L262用户手册（添加定期巡检内容）-0827.docx",
+      "targetPath": "ENS-L262用户手册_添加定期巡检内容_-0827.md",
+      "rawPath": "_raw/ENS-L262用户手册（添加定期巡检内容）-0827.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 21160,
+      "cleanedChars": 20434,
+      "ms": 689
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/PCS 应用能力说明V1.1(1).pdf",
+      "targetPath": "PCS_应用能力说明V1_1_1.md",
+      "rawPath": "_raw/PCS 应用能力说明V1.1(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 7788,
+      "cleanedChars": 7635,
+      "ms": 8159
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作 V1.docx",
+      "targetPath": "手动并离网操作_V1.md",
+      "rawPath": "_raw/手动并离网操作 V1.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1987,
+      "cleanedChars": 1705,
+      "ms": 183
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作-0314.docx",
+      "targetPath": "手动并离网操作-0314.md",
+      "rawPath": "_raw/手动并离网操作-0314.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 1987,
+      "cleanedChars": 1705,
+      "ms": 209
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作-0314.pdf",
+      "targetPath": "手动并离网操作-0314_2.md",
+      "rawPath": "_raw/手动并离网操作-0314.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1728,
+      "cleanedChars": 1670,
+      "ms": 1310
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作-0317.docx",
+      "targetPath": "手动并离网操作-0317.md",
+      "rawPath": "_raw/手动并离网操作-0317.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2024,
+      "cleanedChars": 1748,
+      "ms": 182
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作-0317.pdf",
+      "targetPath": "手动并离网操作-0317_2.md",
+      "rawPath": "_raw/手动并离网操作-0317.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1769,
+      "cleanedChars": 1711,
+      "ms": 1077
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/手动并离网操作-更改版2025.12.30.docx",
+      "targetPath": "手动并离网操作-更改版2025_12_30.md",
+      "rawPath": "_raw/手动并离网操作-更改版2025.12.30.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 496,
+      "cleanedChars": 490,
+      "ms": 203
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/远景262柜安装单页-2026.2.27.pdf",
+      "targetPath": "远景262柜安装单页-2026_2_27.md",
+      "rawPath": "_raw/远景262柜安装单页-2026.2.27.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 222,
+      "cleanedChars": 206,
+      "ms": 735
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/用户手册/远景并离网项目.docx",
+      "targetPath": "远景并离网项目.md",
+      "rawPath": "_raw/远景并离网项目.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 2438,
+      "cleanedChars": 2400,
+      "ms": 46
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/EMS切换/简捷EMS硬件对比.xlsx",
+      "targetPath": "简捷EMS硬件对比.md",
+      "rawPath": "_raw/简捷EMS硬件对比.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1681,
+      "cleanedChars": 1679,
+      "ms": 19
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/EMS切换/远景262KWh户外柜项目 站端EMS产品 生产计划0414.xlsx",
+      "targetPath": "远景262KWh户外柜项目_站端EMS产品_生产计划0414.md",
+      "rawPath": "_raw/远景262KWh户外柜项目 站端EMS产品 生产计划0414.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 5709,
+      "cleanedChars": 5709,
+      "ms": 35
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/TR6A/ENS-L262洛希pre-PDTR6A评审与决策 - Leon.pptx",
+      "targetPath": "ENS-L262洛希pre-PDTR6A评审与决策_-_Leon.md",
+      "rawPath": "_raw/ENS-L262洛希pre-PDTR6A评审与决策 - Leon.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 7105,
+      "cleanedChars": 7105,
+      "ms": 180
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/TR6A/PPAP审核记录.xlsx",
+      "targetPath": "PPAP审核记录.md",
+      "rawPath": "_raw/PPAP审核记录.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 863,
+      "cleanedChars": 863,
+      "ms": 15
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/TR6A/TR6A评审材料 V1.pptx",
+      "targetPath": "TR6A评审材料_V1.md",
+      "rawPath": "_raw/TR6A评审材料 V1.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 3350,
+      "cleanedChars": 3328,
+      "ms": 16
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/TR6A/TR6A评审材料 V2.pptx",
+      "targetPath": "TR6A评审材料_V2.md",
+      "rawPath": "_raw/TR6A评审材料 V2.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 3586,
+      "cleanedChars": 3586,
+      "ms": 22
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/TR6A/TR评审要素.xlsx",
+      "targetPath": "TR评审要素.md",
+      "rawPath": "_raw/TR评审要素.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1743,
+      "cleanedChars": 1743,
+      "ms": 16
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/保险/产品责任险.png",
+      "targetPath": "产品责任险.md",
+      "rawPath": "_raw/产品责任险.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 10
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/照片/6dcac384-bc33-45c9-ba05-30f72496c4a0.jpg",
+      "targetPath": "6dcac384-bc33-45c9-ba05-30f72496c4a0.md",
+      "rawPath": "_raw/6dcac384-bc33-45c9-ba05-30f72496c4a0.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 12
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/照片/8ef34e18-2084-4c73-8aed-74f1dc781a36.jpg",
+      "targetPath": "8ef34e18-2084-4c73-8aed-74f1dc781a36.md",
+      "rawPath": "_raw/8ef34e18-2084-4c73-8aed-74f1dc781a36.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 10
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/照片/c43cd9e6-b666-4910-80b3-b7a20d842c4e.jpg",
+      "targetPath": "c43cd9e6-b666-4910-80b3-b7a20d842c4e.md",
+      "rawPath": "_raw/c43cd9e6-b666-4910-80b3-b7a20d842c4e.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 9
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/照片/d39f88f4-1855-4e9e-93a1-9543bd9fe7fc.jpg",
+      "targetPath": "d39f88f4-1855-4e9e-93a1-9543bd9fe7fc.md",
+      "rawPath": "_raw/d39f88f4-1855-4e9e-93a1-9543bd9fe7fc.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 9
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/照片/f4ff723f-62ea-4e7c-9ed9-1f5f5b0c7de1.jpg",
+      "targetPath": "f4ff723f-62ea-4e7c-9ed9-1f5f5b0c7de1.md",
+      "rawPath": "_raw/f4ff723f-62ea-4e7c-9ed9-1f5f5b0c7de1.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 11
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/设计变更/远景能源ENS-L262技术变更联络单_Rev.A - 洛希.docx",
+      "targetPath": "远景能源ENS-L262技术变更联络单_Rev_A_-_洛希.md",
+      "rawPath": "_raw/远景能源ENS-L262技术变更联络单_Rev.A - 洛希.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 642,
+      "cleanedChars": 622,
+      "ms": 40
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/设计变更/远景能源ENS-L262技术变更联络单_Rev.A - 洛希.pdf",
+      "targetPath": "远景能源ENS-L262技术变更联络单_Rev_A_-_洛希_2.md",
+      "rawPath": "_raw/远景能源ENS-L262技术变更联络单_Rev.A - 洛希.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 563,
+      "cleanedChars": 530,
+      "ms": 96
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/3D模型/ODM2.0项目变更点.docx",
+      "targetPath": "ODM2_0项目变更点.md",
+      "rawPath": "_raw/ODM2.0项目变更点.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 841,
+      "cleanedChars": 833,
+      "ms": 33
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/Artwork/250704-Envision-IES ID Spec.pdf",
+      "targetPath": "250704-Envision-IES_ID_Spec.md",
+      "rawPath": "_raw/250704-Envision-IES ID Spec.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 3240,
+      "cleanedChars": 2959,
+      "ms": 25107
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/TS-0022423_Envision Energy General Packaging Technical Specification(Oversea Delivery)_A.pdf",
+      "targetPath": "TS-0022423_Envision_Energy_General_Packaging_Technical_Specification_Oversea_Delivery_A.md",
+      "rawPath": "_raw/TS-0022423_Envision Energy General Packaging Technical Specification(Oversea Delivery)_A.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 64498,
+      "cleanedChars": 63945,
+      "ms": 792
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/TS-0022423_远景能源通用包装技术规范（海外发运）_A.pdf",
+      "targetPath": "TS-0022423_远景能源通用包装技术规范_海外发运_A.md",
+      "rawPath": "_raw/TS-0022423_远景能源通用包装技术规范（海外发运）_A.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26083,
+      "cleanedChars": 25591,
+      "ms": 11595
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/TS-0022509_远景能源通用包装技术规范（国内运输）_A.pdf",
+      "targetPath": "TS-0022509_远景能源通用包装技术规范_国内运输_A.md",
+      "rawPath": "_raw/TS-0022509_远景能源通用包装技术规范（国内运输）_A.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 35557,
+      "cleanedChars": 35020,
+      "ms": 13996
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/TS-0022512_Envision Energy General Packaging Specification（Local Delivery)_A.pdf",
+      "targetPath": "TS-0022512_Envision_Energy_General_Packaging_Specification_Local_Delivery_A.md",
+      "rawPath": "_raw/TS-0022512_Envision Energy General Packaging Specification（Local Delivery)_A.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 77605,
+      "cleanedChars": 77020,
+      "ms": 884
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/包装确认单 Packaging Approval Form（PAF）.xls",
+      "targetPath": "包装确认单_Packaging_Approval_Form_PAF_2.md",
+      "rawPath": "_raw/包装确认单 Packaging Approval Form（PAF）-1777291973674.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 11746,
+      "cleanedChars": 11746,
+      "ms": 59
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/包装运输及承重测试 Package Transport & Bearing Test.xls",
+      "targetPath": "包装运输及承重测试_Package_Transport_Bearing_Test_2.md",
+      "rawPath": "_raw/包装运输及承重测试 Package Transport & Bearing Test-1777291973716.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 2607,
+      "cleanedChars": 2607,
+      "ms": 14
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/远景能源标准唛头（物流标签）模板 Envision standard Mark (delivery label) Format.xlsx",
+      "targetPath": "远景能源标准唛头_物流标签_模板_Envision_standard_Mark_delivery_label_Format_2.md",
+      "rawPath": "_raw/远景能源标准唛头（物流标签）模板 Envision standard Mark (delivery label) Format-1777291973734.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 4557,
+      "cleanedChars": 4557,
+      "ms": 18
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-585df11be60a/4.附件四  通用包装要求-2024版/包装相关规范技术文件及附件/远景能源标准箱单  Envision standard Packing list.xls",
+      "targetPath": "远景能源标准箱单_Envision_standard_Packing_list_2.md",
+      "rawPath": "_raw/远景能源标准箱单  Envision standard Packing list-1777291973739.xls",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1626,
+      "cleanedChars": 1626,
+      "ms": 5
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/外形图-手册3.2章节/02.07.02.0.011 262KWh柜体组件-Model.pdf",
+      "targetPath": "02_07_02_0_011_262KWh柜体组件-Model.md",
+      "rawPath": "_raw/02.07.02.0.011 262KWh柜体组件-Model.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 372,
+      "cleanedChars": 356,
+      "ms": 711
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/接线图-手册6.2章节/262KWh工商柜 Model (1).pdf",
+      "targetPath": "262KWh工商柜_Model_1.md",
+      "rawPath": "_raw/262KWh工商柜 Model (1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 1907
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/施工基础图/ENS-L262储能一体机施工地基图20250217.pdf",
+      "targetPath": "ENS-L262储能一体机施工地基图20250217.md",
+      "rawPath": "_raw/ENS-L262储能一体机施工地基图20250217.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 568,
+      "cleanedChars": 552,
+      "ms": 116
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/电气一次系统图/262kWh工商柜电气原理图 (1).pdf",
+      "targetPath": "262kWh工商柜电气原理图_1.md",
+      "rawPath": "_raw/262kWh工商柜电气原理图 (1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 5350,
+      "cleanedChars": 5181,
+      "ms": 3080
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/电气一次系统图/ENS-L262储能一体机一次电气图.pdf",
+      "targetPath": "ENS-L262储能一体机一次电气图.md",
+      "rawPath": "_raw/ENS-L262储能一体机一次电气图.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 265
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ENS-L262营销资料汇总（洛希ODM）/EPC设计院图纸/通讯拓扑（多柜并联模式）/储能系统方案 标准柜 (ESCU).pdf",
+      "targetPath": "储能系统方案_标准柜_ESCU.md",
+      "rawPath": "_raw/储能系统方案 标准柜 (ESCU).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1368,
+      "cleanedChars": 1282,
+      "ms": 3490
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/1.零部件测试验证大纲（有）/远景262KWh户外柜测试报告20250124.pdf",
+      "targetPath": "远景262KWh户外柜测试报告20250124.md",
+      "rawPath": "_raw/远景262KWh户外柜测试报告20250124.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 43336,
+      "cleanedChars": 40875,
+      "ms": 34393
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/11.供应商过程质量检验报告（有）/检验记录-Pack.pdf",
+      "targetPath": "检验记录-Pack.md",
+      "rawPath": "_raw/检验记录-Pack.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 32,
+      "cleanedChars": 0,
+      "ms": 1281
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/12.全尺寸检查报告（有）/全尺寸报告-柜体.pdf",
+      "targetPath": "全尺寸报告-柜体.md",
+      "rawPath": "_raw/全尺寸报告-柜体.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48,
+      "cleanedChars": 0,
+      "ms": 1287
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/205-复合探测器出厂检验.pdf",
+      "targetPath": "205-复合探测器出厂检验.md",
+      "rawPath": "_raw/205-复合探测器出厂检验.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1418,
+      "cleanedChars": 1402,
+      "ms": 90
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/lQDPJwN1sh8ZWwPNBaDNB4CwEQKlLY-9pMUHzeflXn-nAA_1920_1440.jpg",
+      "targetPath": "lQDPJwN1sh8ZWwPNBaDNB4CwEQKlLY-9pMUHzeflXn-nAA_1920_1440.md",
+      "rawPath": "_raw/lQDPJwN1sh8ZWwPNBaDNB4CwEQKlLY-9pMUHzeflXn-nAA_1920_1440.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 13
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/lQDPJx-0LduFeMPNBaDNB4Cw5C4pNXYj3I4Hzef1MHtkAA_1920_1440.jpg",
+      "targetPath": "lQDPJx-0LduFeMPNBaDNB4Cw5C4pNXYj3I4Hzef1MHtkAA_1920_1440.md",
+      "rawPath": "_raw/lQDPJx-0LduFeMPNBaDNB4Cw5C4pNXYj3I4Hzef1MHtkAA_1920_1440.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 9
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/lQDPJxAumLU2XEPNBaDNB4CwEJ_Dg6fBkS4Hzef8KoJaAA_1920_1440.jpg",
+      "targetPath": "lQDPJxAumLU2XEPNBaDNB4CwEJ_Dg6fBkS4Hzef8KoJaAA_1920_1440.md",
+      "rawPath": "_raw/lQDPJxAumLU2XEPNBaDNB4CwEJ_Dg6fBkS4Hzef8KoJaAA_1920_1440.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 8
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/lQDPJxgi9GxtMcPNBaDNB4Cwund8bVkHGucHzefuRmpkAA_1920_1440.jpg",
+      "targetPath": "lQDPJxgi9GxtMcPNBaDNB4Cwund8bVkHGucHzefuRmpkAA_1920_1440.md",
+      "rawPath": "_raw/lQDPJxgi9GxtMcPNBaDNB4Cwund8bVkHGucHzefuRmpkAA_1920_1440.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 7
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/消防喷头出厂报告  PACK喷头.pdf",
+      "targetPath": "消防喷头出厂报告_PACK喷头.md",
+      "rawPath": "_raw/消防喷头出厂报告  PACK喷头.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 563,
+      "cleanedChars": 547,
+      "ms": 55
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/火灾声光警报.pdf",
+      "targetPath": "火灾声光警报.md",
+      "rawPath": "_raw/火灾声光警报.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 629,
+      "cleanedChars": 613,
+      "ms": 69
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/13.原材料 子部件质量报告（有）/电爆阀  全氟   小瓶组  2.5Mpa.pdf",
+      "targetPath": "电爆阀_全氟_小瓶组_2_5Mpa.md",
+      "rawPath": "_raw/电爆阀  全氟   小瓶组  2.5Mpa.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 985,
+      "cleanedChars": 969,
+      "ms": 55
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/14.分供方及原材料清单（BOM）（有）/262 电气 bom.pptx",
+      "targetPath": "262_电气_bom.md",
+      "rawPath": "_raw/262 电气 bom.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 62,
+      "cleanedChars": 62,
+      "ms": 12
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/14.分供方及原材料清单（BOM）（有）/远景262KWh液冷户外柜BOM.pdf",
+      "targetPath": "远景262KWh液冷户外柜BOM.md",
+      "rawPath": "_raw/远景262KWh液冷户外柜BOM.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 13935,
+      "cleanedChars": 13905,
+      "ms": 167
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/15.零部件出厂检验报告（有）/柜体出货报告..pdf",
+      "targetPath": "柜体出货报告.md",
+      "rawPath": "_raw/柜体出货报告..pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 856,
+      "cleanedChars": 826,
+      "ms": 1437
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/15.零部件出厂检验报告（有）/消防管道出货报告.pdf",
+      "targetPath": "消防管道出货报告.md",
+      "rawPath": "_raw/消防管道出货报告.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 64,
+      "cleanedChars": 0,
+      "ms": 3241
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/15.零部件出厂检验报告（有）/液冷机组.pdf",
+      "targetPath": "液冷机组.md",
+      "rawPath": "_raw/液冷机组.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 1014
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/15.零部件出厂检验报告（有）/除湿机.pdf",
+      "targetPath": "除湿机.md",
+      "rawPath": "_raw/除湿机.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 986
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/15.零部件出厂检验报告（有）/高压线PCS一体机.pdf",
+      "targetPath": "高压线PCS一体机.md",
+      "rawPath": "_raw/高压线PCS一体机.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 820
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/16.零部件测试验证报告（供应商端）（有）/125kW新国标报告最终版 -对外简版带水印(5)(1).pdf",
+      "targetPath": "125kW新国标报告最终版_-对外简版带水印_5_1.md",
+      "rawPath": "_raw/125kW新国标报告最终版 -对外简版带水印(5)(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 24317,
+      "cleanedChars": 24004,
+      "ms": 6461
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/16.零部件测试验证报告（供应商端）（有）/检测报告-ADSBD-500ML.pdf",
+      "targetPath": "检测报告-ADSBD-500ML.md",
+      "rawPath": "_raw/检测报告-ADSBD-500ML.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 112,
+      "cleanedChars": 0,
+      "ms": 4008
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/17.样件试装和调试报告（有）/洛希-ENS-L262储能一体机试装报告20250206.pdf",
+      "targetPath": "洛希-ENS-L262储能一体机试装报告20250206.md",
+      "rawPath": "_raw/洛希-ENS-L262储能一体机试装报告20250206.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1660,
+      "cleanedChars": 1616,
+      "ms": 1507
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/18.零部件测试验证报告(远景端)（有）/零部件测试验证报告.pdf",
+      "targetPath": "零部件测试验证报告.md",
+      "rawPath": "_raw/零部件测试验证报告.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 96,
+      "cleanedChars": 0,
+      "ms": 4830
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.01.0221_BMU吸塑盖板.pdf",
+      "targetPath": "02_01_01_0221_BMU吸塑盖板.md",
+      "rawPath": "_raw/02.01.01.0221_BMU吸塑盖板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 814,
+      "cleanedChars": 798,
+      "ms": 441
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.02.0012_1P52S冷板.pdf",
+      "targetPath": "02_01_02_0012_1P52S冷板.md",
+      "rawPath": "_raw/02.01.02.0012_1P52S冷板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48,
+      "cleanedChars": 0,
+      "ms": 4803
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.02.0014_262KWh柜体组件.pdf",
+      "targetPath": "02_01_02_0014_262KWh柜体组件.md",
+      "rawPath": "_raw/02.01.02.0014_262KWh柜体组件.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2244,
+      "cleanedChars": 2214,
+      "ms": 2861
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.03.0023_断路器安装支架.pdf",
+      "targetPath": "02_01_03_0023_断路器安装支架.md",
+      "rawPath": "_raw/02.01.03.0023_断路器安装支架.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 785,
+      "cleanedChars": 769,
+      "ms": 772
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.03.0025_挡板2固定支架.pdf",
+      "targetPath": "02_01_03_0025_挡板2固定支架.md",
+      "rawPath": "_raw/02.01.03.0025_挡板2固定支架.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 752,
+      "cleanedChars": 736,
+      "ms": 917
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.03.0027_新BMU固定支架左.pdf",
+      "targetPath": "02_01_03_0027_新BMU固定支架左.md",
+      "rawPath": "_raw/02.01.03.0027_新BMU固定支架左.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 716,
+      "cleanedChars": 700,
+      "ms": 713
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.03.0028_新BMU固定支架右.pdf",
+      "targetPath": "02_01_03_0028_新BMU固定支架右.md",
+      "rawPath": "_raw/02.01.03.0028_新BMU固定支架右.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 706,
+      "cleanedChars": 690,
+      "ms": 676
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.12.0001_接插件压条板.pdf",
+      "targetPath": "02_01_12_0001_接插件压条板.md",
+      "rawPath": "_raw/02.01.12.0001_接插件压条板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 872,
+      "cleanedChars": 856,
+      "ms": 856
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.12.0017 1P52S前端板平板压条.pdf",
+      "targetPath": "02_01_12_0017_1P52S前端板平板压条.md",
+      "rawPath": "_raw/02.01.12.0017 1P52S前端板平板压条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 695,
+      "cleanedChars": 679,
+      "ms": 813
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.12.0018 1P52S后端板平板压条.pdf",
+      "targetPath": "02_01_12_0018_1P52S后端板平板压条.md",
+      "rawPath": "_raw/02.01.12.0018 1P52S后端板平板压条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 694,
+      "cleanedChars": 678,
+      "ms": 813
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.12.0019 1P52S长边平板左压条.pdf",
+      "targetPath": "02_01_12_0019_1P52S长边平板左压条.md",
+      "rawPath": "_raw/02.01.12.0019 1P52S长边平板左压条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 697,
+      "cleanedChars": 681,
+      "ms": 950
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.12.0022 1P52S长边平板右压条.pdf",
+      "targetPath": "02_01_12_0022_1P52S长边平板右压条.md",
+      "rawPath": "_raw/02.01.12.0022 1P52S长边平板右压条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 696,
+      "cleanedChars": 680,
+      "ms": 751
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.13.0020_中航+6P 接插件安装板.pdf",
+      "targetPath": "02_01_13_0020_中航_6P_接插件安装板.md",
+      "rawPath": "_raw/02.01.13.0020_中航+6P 接插件安装板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 869,
+      "cleanedChars": 853,
+      "ms": 1340
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.13.0220_电气安装板.pdf",
+      "targetPath": "02_01_13_0220_电气安装板.md",
+      "rawPath": "_raw/02.01.13.0220_电气安装板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 970,
+      "cleanedChars": 954,
+      "ms": 1199
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.01.13.0225_进线安装板.pdf",
+      "targetPath": "02_01_13_0225_进线安装板.md",
+      "rawPath": "_raw/02.01.13.0225_进线安装板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 801,
+      "cleanedChars": 785,
+      "ms": 1173
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.02.99.0069_高压亚克力观察板.pdf",
+      "targetPath": "02_02_99_0069_高压亚克力观察板.md",
+      "rawPath": "_raw/02.02.99.0069_高压亚克力观察板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 702,
+      "cleanedChars": 686,
+      "ms": 1127
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.02.99.0070_进线环氧挡板.pdf",
+      "targetPath": "02_02_99_0070_进线环氧挡板.md",
+      "rawPath": "_raw/02.02.99.0070_进线环氧挡板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 742,
+      "cleanedChars": 726,
+      "ms": 1093
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.02.99.0074_进线环氧挡板2.pdf",
+      "targetPath": "02_02_99_0074_进线环氧挡板2.md",
+      "rawPath": "_raw/02.02.99.0074_进线环氧挡板2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 678,
+      "cleanedChars": 662,
+      "ms": 973
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0023_进线转接铜排1.pdf",
+      "targetPath": "02_03_01_0023_进线转接铜排1.md",
+      "rawPath": "_raw/02.03.01.0023_进线转接铜排1.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 750,
+      "cleanedChars": 734,
+      "ms": 1158
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0024_进线转接铜排2.pdf",
+      "targetPath": "02_03_01_0024_进线转接铜排2.md",
+      "rawPath": "_raw/02.03.01.0024_进线转接铜排2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 764,
+      "cleanedChars": 748,
+      "ms": 880
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0026_进线转接铜排3.pdf",
+      "targetPath": "02_03_01_0026_进线转接铜排3.md",
+      "rawPath": "_raw/02.03.01.0026_进线转接铜排3.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 762,
+      "cleanedChars": 746,
+      "ms": 882
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0027_进线转接铜排4.pdf",
+      "targetPath": "02_03_01_0027_进线转接铜排4.md",
+      "rawPath": "_raw/02.03.01.0027_进线转接铜排4.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 733,
+      "cleanedChars": 717,
+      "ms": 918
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0029_进线转接铜排5.pdf",
+      "targetPath": "02_03_01_0029_进线转接铜排5.md",
+      "rawPath": "_raw/02.03.01.0029_进线转接铜排5.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 756,
+      "cleanedChars": 740,
+      "ms": 1277
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0031_进线地排.pdf",
+      "targetPath": "02_03_01_0031_进线地排.md",
+      "rawPath": "_raw/02.03.01.0031_进线地排.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 742,
+      "cleanedChars": 726,
+      "ms": 1318
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0266_面板到模组正极铜排.pdf",
+      "targetPath": "02_03_01_0266_面板到模组正极铜排.md",
+      "rawPath": "_raw/02.03.01.0266_面板到模组正极铜排.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1072,
+      "cleanedChars": 1056,
+      "ms": 1040
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0267_熔断器到面板负极铜排.pdf",
+      "targetPath": "02_03_01_0267_熔断器到面板负极铜排.md",
+      "rawPath": "_raw/02.03.01.0267_熔断器到面板负极铜排.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1090,
+      "cleanedChars": 1074,
+      "ms": 643
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0268_熔断器到模组负极铜排.pdf",
+      "targetPath": "02_03_01_0268_熔断器到模组负极铜排.md",
+      "rawPath": "_raw/02.03.01.0268_熔断器到模组负极铜排.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1035,
+      "cleanedChars": 1019,
+      "ms": 740
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0277_进线铜排1.pdf",
+      "targetPath": "02_03_01_0277_进线铜排1.md",
+      "rawPath": "_raw/02.03.01.0277_进线铜排1.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 750,
+      "cleanedChars": 734,
+      "ms": 709
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.03.01.0278_进线铜排2.pdf",
+      "targetPath": "02_03_01_0278_进线铜排2.md",
+      "rawPath": "_raw/02.03.01.0278_进线铜排2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 746,
+      "cleanedChars": 730,
+      "ms": 836
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.04.01.0175_模组左右隔离板.pdf",
+      "targetPath": "02_04_01_0175_模组左右隔离板.md",
+      "rawPath": "_raw/02.04.01.0175_模组左右隔离板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 736,
+      "cleanedChars": 720,
+      "ms": 638
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/02.08.99.0.0094 户外柜铭牌.pdf",
+      "targetPath": "02_08_99_0_0094_户外柜铭牌.md",
+      "rawPath": "_raw/02.08.99.0.0094 户外柜铭牌.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 212,
+      "cleanedChars": 196,
+      "ms": 751
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/06.01.03.0001_木栈板、护角.pdf",
+      "targetPath": "06_01_03_0001_木栈板_护角.md",
+      "rawPath": "_raw/06.01.03.0001_木栈板、护角.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 2331
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/07.02.01.0.0267 1P26S模组A(1).pdf",
+      "targetPath": "07_02_01_0_0267_1P26S模组A_1.md",
+      "rawPath": "_raw/07.02.01.0.0267 1P26S模组A(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1767,
+      "cleanedChars": 1737,
+      "ms": 2599
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/07.02.01.0.0268 1P26S模组B(1).pdf",
+      "targetPath": "07_02_01_0_0268_1P26S模组B_1.md",
+      "rawPath": "_raw/07.02.01.0.0268 1P26S模组B(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1769,
+      "cleanedChars": 1739,
+      "ms": 2463
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.01.0197(V03)BMU盖板衬板.pdf",
+      "targetPath": "DPX-C-02_01_01_0197_V03_BMU盖板衬板.md",
+      "rawPath": "_raw/DPX-C-02.01.01.0197(V03)BMU盖板衬板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 914,
+      "cleanedChars": 898,
+      "ms": 779
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.03.0105(V02)线束固定架.pdf",
+      "targetPath": "DPX-C-02_01_03_0105_V02_线束固定架.md",
+      "rawPath": "_raw/DPX-C-02.01.03.0105(V02)线束固定架.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 723,
+      "cleanedChars": 707,
+      "ms": 80
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.03.0170(V02)探测器固定架-ZHTA.pdf",
+      "targetPath": "DPX-C-02_01_03_0170_V02_探测器固定架-ZHTA.md",
+      "rawPath": "_raw/DPX-C-02.01.03.0170(V02)探测器固定架-ZHTA.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 760,
+      "cleanedChars": 744,
+      "ms": 632
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.05.0003(V02)1P26S钢扎带.pdf",
+      "targetPath": "DPX-C-02_01_05_0003_V02_1P26S钢扎带.md",
+      "rawPath": "_raw/DPX-C-02.01.05.0003(V02)1P26S钢扎带.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 773,
+      "cleanedChars": 757,
+      "ms": 300
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.09.0019(V02)52S双排端板.pdf",
+      "targetPath": "DPX-C-02_01_09_0019_V02_52S双排端板.md",
+      "rawPath": "_raw/DPX-C-02.01.09.0019(V02)52S双排端板.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 832,
+      "cleanedChars": 816,
+      "ms": 522
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.01.99.0066(V02)泄压阀压环.pdf",
+      "targetPath": "DPX-C-02_01_99_0066_V02_泄压阀压环.md",
+      "rawPath": "_raw/DPX-C-02.01.99.0066(V02)泄压阀压环.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 814,
+      "cleanedChars": 798,
+      "ms": 512
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.02.02.0016(V02)1P52S标准吸塑上盖.pdf",
+      "targetPath": "DPX-C-02_02_02_0016_V02_1P52S标准吸塑上盖.md",
+      "rawPath": "_raw/DPX-C-02.02.02.0016(V02)1P52S标准吸塑上盖.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1551,
+      "cleanedChars": 1535,
+      "ms": 124
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.02.06.0031(V02)注塑件输出极底座.pdf",
+      "targetPath": "DPX-C-02_02_06_0031_V02_注塑件输出极底座.md",
+      "rawPath": "_raw/DPX-C-02.02.06.0031(V02)注塑件输出极底座.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 977,
+      "cleanedChars": 961,
+      "ms": 116
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.02.99.0043(V02)气凝胶垫.pdf",
+      "targetPath": "DPX-C-02_02_99_0043_V02_气凝胶垫.md",
+      "rawPath": "_raw/DPX-C-02.02.99.0043(V02)气凝胶垫.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 669,
+      "cleanedChars": 653,
+      "ms": 456
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.02.99.0044(V02)防火泡棉.pdf",
+      "targetPath": "DPX-C-02_02_99_0044_V02_防火泡棉.md",
+      "rawPath": "_raw/DPX-C-02.02.99.0044(V02)防火泡棉.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 652,
+      "cleanedChars": 636,
+      "ms": 548
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.03.01.0167(V02)模组跨接铜排.pdf",
+      "targetPath": "DPX-C-02_03_01_0167_V02_模组跨接铜排.md",
+      "rawPath": "_raw/DPX-C-02.03.01.0167(V02)模组跨接铜排.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 981,
+      "cleanedChars": 965,
+      "ms": 122
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.04.01.0014(V02)绝缘片.pdf",
+      "targetPath": "DPX-C-02_04_01_0014_V02_绝缘片.md",
+      "rawPath": "_raw/DPX-C-02.04.01.0014(V02)绝缘片.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 619,
+      "cleanedChars": 603,
+      "ms": 80
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.04.01.0015(V02)绝缘片.pdf",
+      "targetPath": "DPX-C-02_04_01_0015_V02_绝缘片.md",
+      "rawPath": "_raw/DPX-C-02.04.01.0015(V02)绝缘片.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 620,
+      "cleanedChars": 604,
+      "ms": 75
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.04.01.0181(V02)双排模组前端整体防护绝缘片.pdf",
+      "targetPath": "DPX-C-02_04_01_0181_V02_双排模组前端整体防护绝缘片.md",
+      "rawPath": "_raw/DPX-C-02.04.01.0181(V02)双排模组前端整体防护绝缘片.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 877,
+      "cleanedChars": 861,
+      "ms": 452
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.06.01.0013(V02)接插件安装板密封条.pdf",
+      "targetPath": "DPX-C-02_06_01_0013_V02_接插件安装板密封条.md",
+      "rawPath": "_raw/DPX-C-02.06.01.0013(V02)接插件安装板密封条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 703,
+      "cleanedChars": 687,
+      "ms": 81
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.06.01.0049(V02)1P52S-BMU钣金盖板密封条.pdf",
+      "targetPath": "DPX-C-02_06_01_0049_V02_1P52S-BMU钣金盖板密封条.md",
+      "rawPath": "_raw/DPX-C-02.06.01.0049(V02)1P52S-BMU钣金盖板密封条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 860,
+      "cleanedChars": 844,
+      "ms": 429
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.06.01.0061(V02)1P52S箱体密封条.pdf",
+      "targetPath": "DPX-C-02_06_01_0061_V02_1P52S箱体密封条.md",
+      "rawPath": "_raw/DPX-C-02.06.01.0061(V02)1P52S箱体密封条.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1007,
+      "cleanedChars": 991,
+      "ms": 548
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-02.06.01.0064(V02)1P52S-BMU钣金盖板密封条2.pdf",
+      "targetPath": "DPX-C-02_06_01_0064_V02_1P52S-BMU钣金盖板密封条2.md",
+      "rawPath": "_raw/DPX-C-02.06.01.0064(V02)1P52S-BMU钣金盖板密封条2.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 857,
+      "cleanedChars": 841,
+      "ms": 445
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-0201030068(V03)BMU-64-安装支架左.pdf",
+      "targetPath": "DPX-C-0201030068_V03_BMU-64-安装支架左.md",
+      "rawPath": "_raw/DPX-C-0201030068(V03)BMU-64-安装支架左.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 919
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/DPX-C-0201030069(V02)BMU-64-安装支架右.pdf",
+      "targetPath": "DPX-C-0201030069_V02_BMU-64-安装支架右.md",
+      "rawPath": "_raw/DPX-C-0201030069(V02)BMU-64-安装支架右.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 902
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/FF.01.01.0013_1P52S插箱(4).pdf",
+      "targetPath": "FF_01_01_0013_1P52S插箱_4.md",
+      "rawPath": "_raw/FF.01.01.0013_1P52S插箱(4).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2870,
+      "cleanedChars": 2826,
+      "ms": 1743
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/FF.06.06.0060_262KWh工商柜(3).pdf",
+      "targetPath": "FF_06_06_0060_262KWh工商柜_3.md",
+      "rawPath": "_raw/FF.06.06.0060_262KWh工商柜(3).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2802,
+      "cleanedChars": 2758,
+      "ms": 4218
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/LX52S-V1.0-20250307.pdf",
+      "targetPath": "LX52S-V1_0-20250307.md",
+      "rawPath": "_raw/LX52S-V1.0-20250307.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 48,
+      "cleanedChars": 0,
+      "ms": 3565
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/3.技术规范（有）/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11 (1).pdf",
+      "targetPath": "TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A_-洛希-12_31-洛希签字版本_IT22-250106-11_1.md",
+      "rawPath": "_raw/TS-7001826_远景能源262kWh工商业储能柜一体机技术规范书_A -洛希-12.31-洛希签字版本_IT22-250106-11 (1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 567,
+      "cleanedChars": 0,
+      "ms": 8942
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/4.DFMEA（有）/262kWh户外柜-DFMEA(2).pdf",
+      "targetPath": "262kWh户外柜-DFMEA_2.md",
+      "rawPath": "_raw/262kWh户外柜-DFMEA(2).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 7895,
+      "cleanedChars": 7851,
+      "ms": 159
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/4.DFMEA（有）/262kWh户外柜-DFMEA.pdf",
+      "targetPath": "262kWh户外柜-DFMEA.md",
+      "rawPath": "_raw/262kWh户外柜-DFMEA.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 12652,
+      "cleanedChars": 12594,
+      "ms": 1376
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/03.01.09.0007 开关电源 AIF120-Bxx.pdf",
+      "targetPath": "03_01_09_0007_开关电源_AIF120-Bxx.md",
+      "rawPath": "_raw/03.01.09.0007 开关电源 AIF120-Bxx.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 4093,
+      "cleanedChars": 4021,
+      "ms": 1779
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/100泄压口　规格书5.20.pdf",
+      "targetPath": "100泄压口_规格书5_20.md",
+      "rawPath": "_raw/100泄压口　规格书5.20.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 939,
+      "cleanedChars": 881,
+      "ms": 1016
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/二级BMS架构-协能科技通用保护策略.xlsx",
+      "targetPath": "二级BMS架构-协能科技通用保护策略.md",
+      "rawPath": "_raw/二级BMS架构-协能科技通用保护策略.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 9015,
+      "cleanedChars": 9015,
+      "ms": 27
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/储能电池管理系统产品手册_V1.0_20250401.pdf",
+      "targetPath": "储能电池管理系统产品手册_V1_0_20250401.md",
+      "rawPath": "_raw/储能电池管理系统产品手册_V1.0_20250401.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 85022,
+      "cleanedChars": 83159,
+      "ms": 72044
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/正华同安·探测器-规格书-2023.10.pdf",
+      "targetPath": "正华同安_探测器-规格书-2023_10.md",
+      "rawPath": "_raw/正华同安·探测器-规格书-2023.10.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 3767,
+      "cleanedChars": 3681,
+      "ms": 1460
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/零部件关键质量特性管控清单.pdf",
+      "targetPath": "零部件关键质量特性管控清单.md",
+      "rawPath": "_raw/零部件关键质量特性管控清单.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2766,
+      "cleanedChars": 2750,
+      "ms": 108
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/5.零部件关键质量特性管控清单（有）/预置式全氟己酮灭火装置YF4 YF6 YF8 YF10 2.5N-ZHTA.pdf",
+      "targetPath": "预置式全氟己酮灭火装置YF4_YF6_YF8_YF10_2_5N-ZHTA.md",
+      "rawPath": "_raw/预置式全氟己酮灭火装置YF4 YF6 YF8 YF10 2.5N-ZHTA.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 910,
+      "cleanedChars": 852,
+      "ms": 842
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/6.制造工艺过程计划（有）/户外柜-过程流程图(连云港）(1).pdf",
+      "targetPath": "户外柜-过程流程图_连云港_1.md",
+      "rawPath": "_raw/户外柜-过程流程图(连云港）(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 2500,
+      "cleanedChars": 2484,
+      "ms": 95
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/7.PFMEA（有）/户外柜-PFMEA(1).pdf",
+      "targetPath": "户外柜-PFMEA_1.md",
+      "rawPath": "_raw/户外柜-PFMEA(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 33459,
+      "cleanedChars": 33331,
+      "ms": 4112
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/8.过程关键质量特性管控清单（有）/户外柜关键特殊特性清单(连云港）(1).pdf",
+      "targetPath": "户外柜关键特殊特性清单_连云港_1.md",
+      "rawPath": "_raw/户外柜关键特殊特性清单(连云港）(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1924,
+      "cleanedChars": 1894,
+      "ms": 500
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/9.控制计划（有）/远景户外柜-CP洛希（连云港）+扭力20250331.pdf",
+      "targetPath": "远景户外柜-CP洛希_连云港_扭力20250331.md",
+      "rawPath": "_raw/远景户外柜-CP洛希（连云港）+扭力20250331.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 17318,
+      "cleanedChars": 17246,
+      "ms": 2821
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/电池pack型式测试报告/LXKJ2EAO02W (洛希--314模块-新版委托）2025.01.06(1).pdf",
+      "targetPath": "LXKJ2EAO02W_洛希--314模块-新版委托_2025_01_06_1_2.md",
+      "rawPath": "_raw/LXKJ2EAO02W (洛希--314模块-新版委托）2025.01.06(1)-1777292221498.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26759,
+      "cleanedChars": 26270,
+      "ms": 22052
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/电池pack型式测试报告/LXKJ2EAO02W (洛希--楚能314模块-新版委托）2025.01.06(1)-CORNEX 楚能314电芯-严禁外发客户.pdf",
+      "targetPath": "LXKJ2EAO02W_洛希--楚能314模块-新版委托_2025_01_06_1_-CORNEX_楚能314电芯-严禁外发客户_2.md",
+      "rawPath": "_raw/LXKJ2EAO02W (洛希--楚能314模块-新版委托）2025.01.06(1)-CORNEX 楚能314电芯-严禁外发客户-1777292250190.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 26759,
+      "cleanedChars": 26270,
+      "ms": 28690
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/2025010041-1-ENS-L262-01-GBT2423.2电子电工产品环境试验-高温.pdf",
+      "targetPath": "2025010041-1-ENS-L262-01-GBT2423_2电子电工产品环境试验-高温.md",
+      "rawPath": "_raw/2025010041-1-ENS-L262-01-GBT2423.2电子电工产品环境试验-高温.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 387,
+      "cleanedChars": 0,
+      "ms": 16142
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/2025010041-2-ENS-L262-01-GBT2423.1电子电工产品环境试验-低温.pdf",
+      "targetPath": "2025010041-2-ENS-L262-01-GBT2423_1电子电工产品环境试验-低温.md",
+      "rawPath": "_raw/2025010041-2-ENS-L262-01-GBT2423.1电子电工产品环境试验-低温.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 387,
+      "cleanedChars": 0,
+      "ms": 16441
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/2025010041-3-ENS-L262-01 IP等级防水测试-CNAS.pdf",
+      "targetPath": "2025010041-3-ENS-L262-01_IP等级防水测试-CNAS.md",
+      "rawPath": "_raw/2025010041-3-ENS-L262-01 IP等级防水测试-CNAS.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 128,
+      "cleanedChars": 0,
+      "ms": 11356
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/2025010041-4-ENS-L262-01适配1P52S Pack T3振动测试.pdf",
+      "targetPath": "2025010041-4-ENS-L262-01适配1P52S_Pack_T3振动测试.md",
+      "rawPath": "_raw/2025010041-4-ENS-L262-01适配1P52S Pack T3振动测试.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 128,
+      "cleanedChars": 0,
+      "ms": 11232
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/262kWh柜体检验标准.xlsx",
+      "targetPath": "262kWh柜体检验标准.md",
+      "rawPath": "_raw/262kWh柜体检验标准.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 14296,
+      "cleanedChars": 14296,
+      "ms": 186
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/ENS-L262-01工商储能柜结构仿真报告.pptx",
+      "targetPath": "ENS-L262-01工商储能柜结构仿真报告.md",
+      "rawPath": "_raw/ENS-L262-01工商储能柜结构仿真报告.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 1110,
+      "cleanedChars": 1110,
+      "ms": 27
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/ENS-L262-01用户手册 -V1.pdf",
+      "targetPath": "ENS-L262-01用户手册_-V1_2.md",
+      "rawPath": "_raw/ENS-L262-01用户手册 -V1.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 30763,
+      "cleanedChars": 28190,
+      "ms": 14069
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/ENS-L562-01 恩玖PCS 125kW新国标报告最终版 -对外完整版带水印.pdf",
+      "targetPath": "ENS-L562-01_恩玖PCS_125kW新国标报告最终版_-对外完整版带水印.md",
+      "rawPath": "_raw/ENS-L562-01 恩玖PCS 125kW新国标报告最终版 -对外完整版带水印.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 125659,
+      "cleanedChars": 122867,
+      "ms": 85190
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/LX52S-零件性能测试报告-发泡胶阻燃测试.pdf",
+      "targetPath": "LX52S-零件性能测试报告-发泡胶阻燃测试.md",
+      "rawPath": "_raw/LX52S-零件性能测试报告-发泡胶阻燃测试.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 471,
+      "cleanedChars": 455,
+      "ms": 165
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/交变湿热试验报告_482.pdf",
+      "targetPath": "交变湿热试验报告_482.md",
+      "rawPath": "_raw/交变湿热试验报告_482.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 3632,
+      "cleanedChars": 3457,
+      "ms": 7651
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/抗震测试原始记录_481.pdf",
+      "targetPath": "抗震测试原始记录_481.md",
+      "rawPath": "_raw/抗震测试原始记录_481.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 351,
+      "cleanedChars": 0,
+      "ms": 7345
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/振动试验 ZC85090425X019_QFZ(1).pdf",
+      "targetPath": "振动试验_ZC85090425X019_QFZ_1.md",
+      "rawPath": "_raw/振动试验 ZC85090425X019_QFZ(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 6578,
+      "cleanedChars": 6073,
+      "ms": 29319
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/整改清单记录.pdf",
+      "targetPath": "整改清单记录.md",
+      "rawPath": "_raw/整改清单记录.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 698,
+      "cleanedChars": 682,
+      "ms": 96
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/江苏→河南南阳 运输-业绩证明.pdf",
+      "targetPath": "江苏_河南南阳_运输-业绩证明.md",
+      "rawPath": "_raw/江苏→河南南阳 运输-业绩证明.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 250,
+      "cleanedChars": 120,
+      "ms": 5648
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/洛希-ENS-L262储能一体机试装报告20250206(1).pdf",
+      "targetPath": "洛希-ENS-L262储能一体机试装报告20250206_1.md",
+      "rawPath": "_raw/洛希-ENS-L262储能一体机试装报告20250206(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1660,
+      "cleanedChars": 1616,
+      "ms": 2648
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/液冷机策略.pdf",
+      "targetPath": "液冷机策略.md",
+      "rawPath": "_raw/液冷机策略.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 21,
+      "cleanedChars": 5,
+      "ms": 421
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/调试问题top10.xlsx",
+      "targetPath": "调试问题top10.md",
+      "rawPath": "_raw/调试问题top10.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 3608,
+      "cleanedChars": 3608,
+      "ms": 26
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景 262KWh 工商柜装配说明.pdf",
+      "targetPath": "远景_262KWh_工商柜装配说明.md",
+      "rawPath": "_raw/远景 262KWh 工商柜装配说明.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 29760,
+      "cleanedChars": 29607,
+      "ms": 12896
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景 262KWh 户外柜 首批出货问题点.pdf",
+      "targetPath": "远景_262KWh_户外柜_首批出货问题点.md",
+      "rawPath": "_raw/远景 262KWh 户外柜 首批出货问题点.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1479,
+      "cleanedChars": 1463,
+      "ms": 191
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景 262KWh 更换作业指导书(连云港) .pdf",
+      "targetPath": "远景_262KWh_更换作业指导书_连云港.md",
+      "rawPath": "_raw/远景 262KWh 更换作业指导书(连云港) .pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 12258,
+      "cleanedChars": 11705,
+      "ms": 14919
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景 262KWh 第二次评审问题记录清单（专家评审）(2).pdf",
+      "targetPath": "远景_262KWh_第二次评审问题记录清单_专家评审_2.md",
+      "rawPath": "_raw/远景 262KWh 第二次评审问题记录清单（专家评审）(2).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 286,
+      "cleanedChars": 270,
+      "ms": 468
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景262KWh 户外柜(主柜)SOP 气密和液冷测试.pptx",
+      "targetPath": "远景262KWh_户外柜_主柜_SOP_气密和液冷测试.md",
+      "rawPath": "_raw/远景262KWh 户外柜(主柜)SOP 气密和液冷测试.pptx",
+      "status": "imported",
+      "fileType": "pptx",
+      "rawChars": 2573,
+      "cleanedChars": 2552,
+      "ms": 31
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景262KWh户外柜测试报告20250312.docx",
+      "targetPath": "远景262KWh户外柜测试报告20250312.md",
+      "rawPath": "_raw/远景262KWh户外柜测试报告20250312.docx",
+      "status": "imported",
+      "fileType": "word",
+      "rawChars": 22314,
+      "cleanedChars": 21587,
+      "ms": 4266
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景262KWh整柜包装方案20250218.pdf",
+      "targetPath": "远景262KWh整柜包装方案20250218.md",
+      "rawPath": "_raw/远景262KWh整柜包装方案20250218.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 279,
+      "cleanedChars": 235,
+      "ms": 1213
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/远景通讯拓扑图和接线图(1).pdf",
+      "targetPath": "远景通讯拓扑图和接线图_1.md",
+      "rawPath": "_raw/远景通讯拓扑图和接线图(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 1063,
+      "cleanedChars": 1047,
+      "ms": 3854
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/通用柜体检验指导书.xlsx",
+      "targetPath": "通用柜体检验指导书.md",
+      "rawPath": "_raw/通用柜体检验指导书.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 3846,
+      "cleanedChars": 3846,
+      "ms": 24
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/补充资料/首批洛希三台现场反馈.xlsx",
+      "targetPath": "首批洛希三台现场反馈.md",
+      "rawPath": "_raw/首批洛希三台现场反馈.xlsx",
+      "status": "imported",
+      "fileType": "excel",
+      "rawChars": 1221,
+      "cleanedChars": 1221,
+      "ms": 229
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/3D模型/戴乐克锁具/243-9204.00-00000.05(1).pdf",
+      "targetPath": "243-9204_00-00000_05_1.md",
+      "rawPath": "_raw/243-9204.00-00000.05(1).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 36,
+      "cleanedChars": 20,
+      "ms": 727
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/3D模型/戴乐克锁具/82190df0-0f8e-4fbd-bb18-57f4363d899a.png",
+      "targetPath": "82190df0-0f8e-4fbd-bb18-57f4363d899a.md",
+      "rawPath": "_raw/82190df0-0f8e-4fbd-bb18-57f4363d899a.png",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 5
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM2.0/3D模型/戴乐克锁具/DIRAK-209-0202.V0-00000.01.pdf",
+      "targetPath": "DIRAK-209-0202_V0-00000_01.md",
+      "rawPath": "_raw/DIRAK-209-0202.V0-00000.01.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 900,
+      "cleanedChars": 884,
+      "ms": 175
+    },
+    {
+      "sourcePath": "/Users/cnlm007398/堵杰的文档/堵杰的文档/Product/ODM产品/洛希/ODM1.0/PPAP资料/2.图纸（有）/ODM2.0/02.01.03.0072_声光报警器安装底座.pdf",
+      "targetPath": "02_01_03_0072_声光报警器安装底座.md",
+      "rawPath": "_raw/02.01.03.0072_声光报警器安装底座.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 955
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-9ca14253d44b/消防型式试验报告/复合型探测器防爆证.pdf",
+      "targetPath": "复合型探测器防爆证.md",
+      "rawPath": "_raw/复合型探测器防爆证.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 16,
+      "cleanedChars": 0,
+      "ms": 2331
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-9ca14253d44b/消防型式试验报告/复合探测器3c.jpg",
+      "targetPath": "复合探测器3c.md",
+      "rawPath": "_raw/复合探测器3c.jpg",
+      "status": "imported",
+      "fileType": "image",
+      "rawChars": 0,
+      "cleanedChars": 0,
+      "ms": 20
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-9ca14253d44b/消防型式试验报告/多合一火灾探测器检测报告 (2).pdf",
+      "targetPath": "多合一火灾探测器检测报告_2.md",
+      "rawPath": "_raw/多合一火灾探测器检测报告 (2).pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 279,
+      "cleanedChars": 0,
+      "ms": 7411
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-9ca14253d44b/消防型式试验报告/预制式全氟己酮YF4、2.5N-ZHTA.PDF",
+      "targetPath": "预制式全氟己酮YF4_2_5N-ZHTA.md",
+      "rawPath": "_raw/预制式全氟己酮YF4、2.5N-ZHTA.PDF",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 96,
+      "cleanedChars": 0,
+      "ms": 5120
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-152c9cfc7417/02.01.03.0080 ˮ�ܴ����֧��.pdf",
+      "targetPath": "02_01_03_0080.md",
+      "rawPath": "_raw/02.01.03.0080 ˮ�ܴ����֧��.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 636,
+      "cleanedChars": 620,
+      "ms": 700
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-3359f89778f4/02.07.99.0048 CR2030����.pdf",
+      "targetPath": "02_07_99_0048_CR2030.md",
+      "rawPath": "_raw/02.07.99.0048 CR2030����.pdf",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 573,
+      "cleanedChars": 557,
+      "ms": 726
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-61c070802ec3/02.07.99.0060����¶������.PDF",
+      "targetPath": "02_07_99_0060.md",
+      "rawPath": "_raw/02.07.99.0060����¶������.PDF",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 697,
+      "cleanedChars": 681,
+      "ms": 1540
+    },
+    {
+      "sourcePath": "/var/folders/82/qw5j0tps2hx6_8s8hsml92840000gn/T/soul-import-f72c1288ad5a/02-07-99-0062����¶������.PDF",
+      "targetPath": "02-07-99-0062.md",
+      "rawPath": "_raw/02-07-99-0062����¶������.PDF",
+      "status": "imported",
+      "fileType": "pdf",
+      "rawChars": 734,
+      "cleanedChars": 718,
+      "ms": 245
+    }
+  ]
+}

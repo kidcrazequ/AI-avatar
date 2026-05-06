@@ -67,7 +67,26 @@ export type {
 
 export { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 
+export { parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock } from './utils/knowledge-frontmatter'
+export type { FrontmatterParseResult } from './utils/knowledge-frontmatter'
+
 export { localDateString, collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+
+export {
+  MAX_ATTACHMENT_SIZE_BYTES,
+  INLINE_TEXT_BYTE_THRESHOLD,
+  MAX_ATTACHMENT_COUNT_PER_MESSAGE,
+  ATTACHMENT_DOCUMENT_EXTENSIONS,
+  ATTACHMENT_TEXT_EXTENSIONS,
+  ATTACHMENT_CODE_EXTENSIONS,
+  ATTACHMENT_REJECTED_EXTENSIONS,
+  ATTACHMENT_WHITELIST_EXTENSIONS,
+  ATTACHMENT_SENSITIVE_EXTENSIONS,
+  isAttachmentExtensionAllowed,
+  buildAttachmentAcceptString,
+  classifyAttachmentRoute,
+} from './utils/attachment-types'
+export type { AttachmentRoute } from './utils/attachment-types'
 
 export { fetchWithTimeout, HttpError } from './utils/http'
 export type { FetchWithTimeoutOptions } from './utils/http'

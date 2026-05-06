@@ -1,0 +1,34 @@
+---
+rag_only: false
+source: xlsx
+source_path: Product/Battery and Pack/530Ah电池/Working File.xlsx
+source_ext: .xlsx
+file_size_bytes: 18598
+doc_id: sim-0130
+---
+
+# Working File
+
+## 摘要
+
+该文档由原始文件转换而来，来源路径为 `Product/Battery and Pack/530Ah电池/Working File.xlsx`。
+文档类型为 **xlsx**，用于后续知识检索与问答引用。
+
+## 关键信息
+
+- 文件名：`Working File.xlsx`
+- 扩展名：`.xlsx`
+- 大小：18598 字节
+- 所属主题：Battery and Pack / 530Ah电池 / Working File
+
+## 检索关键词
+
+- Working File
+- Battery and Pack / 530Ah电池 / Working File
+- xlsx
+- Product / Battery and Pack
+
+## 使用建议
+
+- 当问题涉及该文档主题时，优先引用本条目。
+- 如需原始细节，请结合 source_path 回查原始文件。

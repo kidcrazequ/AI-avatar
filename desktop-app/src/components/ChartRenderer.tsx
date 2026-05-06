@@ -15,7 +15,9 @@
  * @date 2026-04-13
  */
 
-import { Component, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import LightboxModal from './LightboxModal'
+import RendererToolbar from './RendererToolbar'
 
 interface ChartRendererProps {
   /** ECharts option 对象（由 LLM 输出的 ```chart JSON 解析得来） */
@@ -277,15 +279,38 @@ function normalizeOption(opt: Record<string, unknown>): Record<string, unknown> 
   return withSafeGrid(forceLegendBottom(stripExplicitSeriesColors(result)))
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EchartsInstance = any
+
+interface ChartRendererInnerProps extends ChartRendererProps {
+  /** 容器宽度（CSS 字符串）。默认 100% 适配气泡版；Lightbox 大图传 '85vw' */
+  width?: string
+  /** 容器高度（CSS 字符串）。默认 320px；Lightbox 大图传 '80vh' */
+  height?: string
+  /** 实例就绪后回调外部，方便外部拿到 instance 调 getDataURL 等 API */
+  onInstanceReady?: (instance: EchartsInstance) => void
+}
+
 /**
  * 主组件。必须给容器固定 width/height，否则 ECharts Canvas 会渲染为空。
+ *
+ * 同一个 ChartRendererInner 既可以渲染气泡内的小图（320px）也可以渲染弹窗里的
+ * 大图（80vh）。Lightbox 打开时会创建第二份 ECharts 实例，确保 tooltip / hover
+ * 在大图上仍然交互正常（canvas 实例不能被两个容器复用）。
  */
-function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
+function ChartRendererInner({
+  option,
+  width = '100%',
+  height = '320px',
+  onInstanceReady,
+}: ChartRendererInnerProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const instanceRef = useRef<any>(null)
+  const instanceRef = useRef<EchartsInstance>(null)
   const [loaded, setLoaded] = useState(_echartsLoaded)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // useCallback 让父组件传入的 onInstanceReady 即使重渲染也不触发 effect 重跑
+  const onInstanceReadyRef = useRef(onInstanceReady)
+  useEffect(() => { onInstanceReadyRef.current = onInstanceReady }, [onInstanceReady])
 
   // 首次挂载：加载 echarts
   useEffect(() => {
@@ -311,6 +336,8 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
       renderer: 'canvas',
     })
     instanceRef.current.setOption(normalizeOption(option), true)
+    // 通过 ref 调用，避免 onInstanceReady 引用变化导致 effect 重跑 → instance 反复创建销毁
+    onInstanceReadyRef.current?.(instanceRef.current)
 
     const handleResize = () => instanceRef.current?.resize()
     window.addEventListener('resize', handleResize)
@@ -335,7 +362,7 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '320px' }}
+      style={{ width, height }}
     >
       {!loaded && (
         <div className="h-full flex items-center justify-center">
@@ -348,8 +375,16 @@ function ChartRendererInner({ option }: ChartRendererProps): ReactElement {
   )
 }
 
-export default function ChartRenderer({ option, rawJson }: ChartRendererProps): ReactElement {
-  // 从 option 中提取标题用于 aria-label
+/**
+ * 外层组件：错误边界 + 工具栏 + Lightbox 状态管理。
+ * Lightbox 打开时多渲染一份 ChartRendererInner，得到大尺寸的独立 ECharts 实例。
+ */
+function ChartRendererCore({ option, rawJson }: ChartRendererProps): ReactElement {
+  const bubbleInstanceRef = useRef<EchartsInstance>(null)
+  const [hasRendered, setHasRendered] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+
+  // 从 option 中提取标题用于 aria-label / 弹窗副标题
   const titleText = (() => {
     const title = option.title as { text?: string; subtext?: string } | Array<{ text?: string }> | undefined
     if (!title) return '数据图表'
@@ -357,16 +392,63 @@ export default function ChartRenderer({ option, rawJson }: ChartRendererProps): 
     return title.text || '数据图表'
   })()
 
+  const handleInstanceReady = useCallback((inst: EchartsInstance) => {
+    bubbleInstanceRef.current = inst
+    setHasRendered(true)
+  }, [])
+
+  /** 用 ECharts 自带的 getDataURL 导出 PNG，比 SVG → Canvas 路径更可靠 */
+  const getPngDataUrl = useCallback(async (): Promise<string> => {
+    const inst = bubbleInstanceRef.current
+    if (!inst) throw new Error('ECharts 实例未初始化')
+    return inst.getDataURL({
+      type: 'png',
+      pixelRatio: 2, // 高分屏锐化
+      backgroundColor: '#0A0A0F', // px.bg，避免透明 PNG 在白底应用里看不清
+    })
+  }, [])
+
+  return (
+    <div
+      role="img"
+      aria-label={titleText}
+      tabIndex={0}
+      className="my-3 border-2 border-px-primary bg-px-bg p-3 shadow-pixel group relative"
+    >
+      <ChartRendererInner
+        option={option}
+        rawJson={rawJson}
+        onInstanceReady={handleInstanceReady}
+      />
+
+      {hasRendered && (
+        <RendererToolbar
+          onZoom={() => setLightboxOpen(true)}
+          getPngDataUrl={getPngDataUrl}
+          filenameBase="chart"
+          ariaLabelPrefix={titleText}
+        />
+      )}
+
+      {hasRendered && (
+        <LightboxModal
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          title="DATA CHART"
+          subtitle={titleText !== '数据图表' ? titleText : undefined}
+        >
+          {/* 大图版独立 ECharts 实例：不传 onInstanceReady，让外层导出仍走气泡版的实例 */}
+          <ChartRendererInner option={option} width="85vw" height="80vh" />
+        </LightboxModal>
+      )}
+    </div>
+  )
+}
+
+export default function ChartRenderer({ option, rawJson }: ChartRendererProps): ReactElement {
   return (
     <ChartErrorBoundary rawJson={rawJson}>
-      <div
-        role="img"
-        aria-label={titleText}
-        tabIndex={0}
-        className="my-3 border-2 border-px-primary bg-px-bg p-3 shadow-pixel"
-      >
-        <ChartRendererInner option={option} rawJson={rawJson} />
-      </div>
+      <ChartRendererCore option={option} rawJson={rawJson} />
     </ChartErrorBoundary>
   )
 }

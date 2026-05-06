@@ -4,7 +4,7 @@ import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
 import { parseFrontmatter, shouldHideKnowledgeFormatButton } from '../utils/knowledge-frontmatter'
 import { LLMService, ModelConfig } from '../services/llm-service'
-import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, type LLMCallFn } from '@soul/core/browser'
+import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, extractFrontmatterFields, buildFrontmatterBlock, mergeFrontmatter, type LLMCallFn } from '@soul/core/browser'
 import { generateTestCasesFromContent } from '../services/test-generator'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
@@ -253,19 +253,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (parsed.fileType === 'excel') {
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
-        const sheetsYaml = parsed.sheetNames && parsed.sheetNames.length > 0
-          ? parsed.sheetNames.map(s => `"${s.replace(/"/g, '\\"')}"`).join(', ')
-          : ''
-        // Frontmatter：rag_only=true 让 SoulLoader 跳过本文件，
-        // source=excel 标记类型，excel_json 指向结构化数据位置
-        const frontmatter = [
-          '---',
-          'rag_only: true',
-          'source: excel',
-          `excel_json: _excel/${baseName}.json`,
-          sheetsYaml ? `sheets: [${sheetsYaml}]` : '',
-          '---',
-        ].filter(Boolean).join('\n')
+        const systemMeta: Record<string, unknown> = {
+          rag_only: true,
+          source: 'excel',
+          excel_json: `_excel/${baseName}.json`,
+        }
+        if (parsed.sheetNames?.length) systemMeta.sheets = parsed.sheetNames
+        const enhanced = extractFrontmatterFields(parsed.fileName, parsed.text)
+        const frontmatter = buildFrontmatterBlock(mergeFrontmatter(systemMeta, enhanced))
         const finalContent = `${frontmatter}\n\n# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
         setImportProgress({ current: 3, total: 5, phase: '写入结构化数据' })
         if (parsed.structuredData) {
@@ -325,7 +320,9 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (parsed.fileType === 'pptx') {
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
-        const frontmatter = `---\nrag_only: true\nsource: pptx\n---\n\n`
+        const pptxSystemMeta: Record<string, unknown> = { rag_only: true, source: 'pptx' }
+        const pptxEnhanced = extractFrontmatterFields(parsed.fileName, parsed.text)
+        const frontmatter = buildFrontmatterBlock(mergeFrontmatter(pptxSystemMeta, pptxEnhanced)) + '\n\n'
         const finalContent = frontmatter + `# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
         setImportProgress({ current: 3, total: 4, phase: '写入知识库' })
         await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)

@@ -19,7 +19,10 @@
  * @date 2026-04-15
  */
 
-import { Component, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Component, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import LightboxModal from './LightboxModal'
+import RendererToolbar from './RendererToolbar'
+import { svgElementToPngDataUrl } from '../utils/export-image'
 
 interface MermaidRendererProps {
   /** mermaid 源码（不含 ```mermaid fence） */
@@ -163,14 +166,18 @@ async function ensureMermaidLoaded(): Promise<void> {
 }
 
 /**
- * 主组件：懒加载 + 渲染 SVG + 注入 DOM。
+ * 主组件：懒加载 + 渲染 SVG + 注入 DOM + 接入工具栏（放大/导出 PNG/复制）。
  * 用唯一 id 避免 mermaid 的 DOM 冲突（同一消息里多个甘特图）。
+ *
+ * 工具栏出现条件：仅在 svg 字符串存在（即渲染完成）后挂载，
+ * 避免流式输出阶段用户误点导致 "SVG 未渲染" 报错。
  */
-function MermaidRendererInner({ code }: MermaidRendererProps): ReactElement {
+function MermaidRendererCore({ code }: MermaidRendererProps): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null)
   const [loaded, setLoaded] = useState(_mermaidLoaded)
   const [svg, setSvg] = useState<string>('')
   const [renderError, setRenderError] = useState<string | null>(null)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   // 首次挂载：加载 mermaid
   useEffect(() => {
@@ -209,23 +216,72 @@ function MermaidRendererInner({ code }: MermaidRendererProps): ReactElement {
     }
   }, [loaded, code])
 
+  /** 工具栏要导出 PNG 时调用：从 bubble 内的真实 DOM 节点拿 SVG，转 PNG */
+  const getPngDataUrl = useCallback(async (): Promise<string> => {
+    const svgEl = containerRef.current?.querySelector('svg')
+    if (!svgEl) throw new Error('Mermaid SVG 尚未渲染')
+    return svgElementToPngDataUrl(svgEl as SVGElement)
+  }, [])
+
   if (renderError) {
     throw new Error(renderError)
   }
 
-  return (
+  // React 限制：同一元素不能同时有 children 与 dangerouslySetInnerHTML
+  // （`{!svg && (...)}` 在 svg 存在时仍会传入 false 作为 children，触发报错）
+  // 因此按渲染状态分两个分支渲染 SVG 容器。
+  const svgContainer = svg ? (
     <div
       ref={containerRef}
       className="mermaid-container overflow-x-auto"
       // mermaid 渲染的 SVG 已做 HTML 转义（securityLevel: 'strict'），安全注入
-      dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}
-    >
-      {!svg && (
-        <div className="h-24 flex items-center justify-center">
-          <div className="font-game text-[11px] text-px-text-dim tracking-wider animate-pulse">
-            LOADING MERMAID...
-          </div>
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  ) : (
+    <div ref={containerRef} className="mermaid-container overflow-x-auto">
+      <div className="h-24 flex items-center justify-center">
+        <div className="font-game text-[11px] text-px-text-dim tracking-wider animate-pulse">
+          LOADING MERMAID...
         </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div
+      role="img"
+      aria-label="Mermaid 图表"
+      tabIndex={0}
+      className="my-3 border-2 border-px-primary bg-px-bg p-3 shadow-pixel group relative"
+    >
+      {svgContainer}
+
+      {/* 工具栏只在渲染完成后显示，避免流式中点击触发 "SVG 未渲染" */}
+      {svg && (
+        <RendererToolbar
+          onZoom={() => setLightboxOpen(true)}
+          getPngDataUrl={getPngDataUrl}
+          filenameBase="mermaid"
+          ariaLabelPrefix="Mermaid 图表"
+        />
+      )}
+
+      {/* 放大查看：直接复用同一份 svg 字符串注入到弹窗 DOM 树。
+          通过 Tailwind 任意选择器覆盖 mermaid 输出 SVG 的 inline `max-width: 100%`，
+          让 SVG 通过 viewBox 撑满 90vw / 80vh 容器，自动按比例缩放。 */}
+      {svg && (
+        <LightboxModal
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          title="MERMAID DIAGRAM"
+        >
+          <div
+            className="w-[90vw] h-[80vh] flex items-center justify-center
+              [&>svg]:!max-w-none [&>svg]:!max-h-full [&>svg]:!w-full [&>svg]:!h-auto"
+            // 同上：mermaid securityLevel:strict 已转义，安全注入
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </LightboxModal>
       )}
     </div>
   )
@@ -234,14 +290,7 @@ function MermaidRendererInner({ code }: MermaidRendererProps): ReactElement {
 export default function MermaidRenderer({ code }: MermaidRendererProps): ReactElement {
   return (
     <MermaidErrorBoundary code={code}>
-      <div
-        role="img"
-        aria-label="Mermaid 图表"
-        tabIndex={0}
-        className="my-3 border-2 border-px-primary bg-px-bg p-3 shadow-pixel"
-      >
-        <MermaidRendererInner code={code} />
-      </div>
+      <MermaidRendererCore code={code} />
     </MermaidErrorBoundary>
   )
 }

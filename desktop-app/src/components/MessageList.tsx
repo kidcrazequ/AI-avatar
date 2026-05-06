@@ -14,9 +14,11 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+  /** 当前对话所属分身 ID，透传给 MessageBubble 用于 [来源:] chip 解析原始文件 */
+  avatarId: string
 }
 
-export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName }: Props) {
+export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName, avatarId }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
 
   /**
@@ -50,10 +52,11 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
           onSaveAnswer={onSaveAnswer}
           avatarImage={avatarImage}
           avatarName={avatarName}
+          avatarId={avatarId}
         />
       </div>
     )
-  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName])
+  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, avatarId])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

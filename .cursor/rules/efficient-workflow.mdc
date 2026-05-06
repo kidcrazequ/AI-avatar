@@ -1,0 +1,107 @@
+---
+description: Soul 项目高效工作流 — 通过并行 Subagent、后台执行、上下文熔断节省 token 并避免主窗口降智
+alwaysApply: true
+---
+
+# Soul 项目高效工作流（省 token + 防降智）
+
+## 核心原则
+
+> **主窗口只做指挥，执行交给 Subagent；Plan 用 markdown 文件落地，而不是对话历史。**
+
+---
+
+## 一、主窗口职责（保持轻量）
+
+主窗口只做这三件事：
+1. **理解需求** + **拆分子任务**（遵循 user_rule 的拆分规则）
+2. **派发任务** 给 subagent / background agent
+3. **审计 subagent 的回执摘要**
+
+主窗口禁止：
+- ❌ 在主窗口里做大规模代码搜索（用 `explore` subagent）
+- ❌ 在主窗口里跑测试 / 反复调试（用 background subagent）
+- ❌ 一个窗口连续完成超过 3 个子任务
+
+---
+
+## 二、并行化规则（Subagent 强制使用）
+
+| 场景 | 必须使用的工具 |
+|---|---|
+| 探索代码、找文件、回答"xxx 在哪里" | `explore` subagent |
+| 涉及 ≥ 3 个独立文件的实现 | 多个 `generalPurpose` subagent **并行** |
+| 跑测试、构建、长时间命令（npm test / build） | `shell` subagent + `run_in_background: true` |
+| 多方案尝试 / 不确定的实现 | `best-of-n-runner`（独立 worktree 隔离） |
+| Electron / Web UI 测试 | `browser-use` subagent |
+
+**并行规则**：多个独立 subagent 必须在**同一条消息里**并发派发（一次 tool_use batch），不要串行。
+
+---
+
+## 三、Plan 与 Execute 物理隔离
+
+不要在同一窗口先 plan 再 execute（plan 阶段已污染上下文）。
+
+正确流程：
+1. **窗口 A（Plan 模式）**：纯规划，输出到 `.cursor/plans/<task>.md`
+2. **窗口 B（新对话）**：用 `@.cursor/plans/<task>.md` 作为唯一上下文，执行单个子任务
+3. 子任务完成后回写结果到 plan 文件，**再开窗口 C** 执行下一个
+
+Soul 项目已有 `.cursor/plans/` 目录，所有计划文件统一放这里。Plan 文件就是「压缩后的上下文」，远比对话历史省 token。
+
+---
+
+## 四、上下文熔断（强制迁移）
+
+出现以下任一信号，**立即停止当前对话**，输出「交接摘要」并提示用户开新窗口：
+
+| 信号 | 动作 |
+|---|---|
+| 完成 3 个子任务 | 强制输出交接摘要 |
+| 主窗口预估上下文 > 50k tokens | 强制迁移 |
+| 同一文件被读取超过 2 次 | 上下文已脏，迁移 |
+| 模型开始绕弯 / 重复之前的错误 | 已降智，迁移 |
+| 单个子任务调试 > 3 轮未解决 | 熔断（按 user_rule） |
+
+### 交接摘要模板
+
+```markdown
+## 🔄 上下文交接摘要
+
+**已完成**：
+- [x] 子任务 1：xxx
+- [x] 子任务 2：xxx
+
+**当前进度**：正在做子任务 3 的 xxx 步骤
+
+**已确认决策**：
+- 采用方案 A，原因：xxx
+- 文件 xxx.ts 已重构为 xxx 结构
+
+**下一步**：在新窗口中 `@.cursor/plans/xxx.md` 继续子任务 3
+
+⚠️ 建议新开对话继续，避免上下文膨胀导致降智。
+```
+
+---
+
+## 五、Soul 项目专属省 token 规则
+
+- ✅ 修改代码必须先精确定位文件（用 `Glob` 找路径，用 `Grep` 找符号）
+- ✅ **禁用 `@codebase`**，Soul 项目代码量大，会瞬间打满上下文
+- ✅ 大文件（如 `CHANGELOG.md`）必须用 `Read` 的 `offset` / `limit` 分段读
+- ✅ 跑 `npm test` / `npm run build` 必须用 background subagent，不阻塞主对话
+- ✅ 涉及 `desktop-app/` 与 `shared/` 跨模块改动时，每个模块派一个独立 subagent
+- ✅ 编码约定参考根目录 `CONVENTIONS.md` 和 `CLAUDE.md`，不要在对话里复述
+
+---
+
+## 六、与现有 rule 的协作关系
+
+Soul 项目已有 rule 分工：
+- `coding-conventions.mdc` —— 怎么写代码（编码规范）
+- `core-utils.mdc` / `electron-main.mdc` / `react-renderer.mdc` —— 各模块特定规则
+- `efficient-workflow.mdc`（本文件）—— **怎么高效执行任务**（流程层）
+
+执行顺序：理解需求 → 拆分子任务 → 并行派发 subagent → 单文件按编码规范修复 → 熔断迁移

@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { JSDOM } from 'jsdom'
 
 export interface ParsedDocument {
   /** 提取的纯文本内容 */
@@ -175,6 +176,8 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
   '.csv',
   '.txt',
   '.md',
+  '.html',
+  '.htm',
   '.jpg',
   '.jpeg',
   '.png',
@@ -250,6 +253,9 @@ export class DocumentParser {
       case '.txt':
       case '.md':
         return this.parseText(filePath, fileName)
+      case '.html':
+      case '.htm':
+        return this.parseHtml(filePath, fileName)
       default:
         throw new Error(`不支持的文件类型: ${ext}`)
     }
@@ -532,6 +538,35 @@ export class DocumentParser {
     }
   }
 
+  private async parseHtml(filePath: string, fileName: string): Promise<ParsedDocument> {
+    const html = await fs.promises.readFile(filePath, 'utf-8')
+    const dom = new JSDOM(html)
+    const { document } = dom.window
+
+    document.querySelectorAll('script, style, noscript, template').forEach(el => el.remove())
+    document.querySelectorAll('br').forEach(el => el.replaceWith(document.createTextNode('\n')))
+    document
+      .querySelectorAll('p, div, section, article, header, footer, main, aside, nav, li, tr, h1, h2, h3, h4, h5, h6')
+      .forEach(el => el.appendChild(document.createTextNode('\n')))
+
+    const title = document.title.trim()
+    const bodyText = (document.body?.textContent ?? document.documentElement.textContent ?? '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n[ \t]+/g, '\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+    const text = title && !bodyText.includes(title) ? `${title}\n\n${bodyText}` : bodyText
+
+    return {
+      text,
+      images: [],
+      fileName,
+      fileType: 'text',
+    }
+  }
+
   /**
    * 解析 Excel/CSV 文件为 Markdown + 结构化数据。每个 sheet 变成一个
    * `## {sheetName}` section，下面跟一个 GFM 表格；同时提取列 schema
@@ -607,35 +642,66 @@ export class DocumentParser {
   }
 
   /**
-   * 把 sheet 的二维数组行转成 ExcelSheetData（对象数组 + 列 schema）。
+   * 智能表头检测 + 列名去重，返回统一的中间结构供 buildSheetData 和 rowsToMarkdownTable 共用。
    *
-   * 智能表头检测（处理 Excel 合并单元格 / 多行表头）：
-   *   1. 扫描前 5 行，对每一行打分：非空字符串单元格越多分越高，纯数字/None 行扣分
-   *   2. 选最高分的行作为表头；若并列，取靠上的
-   *   3. 表头行之前的所有行都跳过（合并标题、空行等）
-   *   4. 单元格中的 \n（多行 merged 表头）替换为空格
-   *   5. 完全没有合适行就 fallback 到 col1..colN
+   * 算法：
+   *   1. 扫描前 10 行，对每一行打分：非空字符串单元格越多分越高，纯数字/None 行扣分
+   *   2. "封面行跳过"启发式：前 3 行内若首 cell 有值但其余 ≥80% 为空 → 视为封面/标题行，不参与打分
+   *   3. 选最高分的行作为表头；若并列，取靠上的
+   *   4. "两行表头合并"：若最佳行仍有 ≥30% 空 cell，检查其下一行能否补全 → 合并两行
+   *   5. 表头行之前的所有行都跳过（合并标题、空行等）
+   *   6. 单元格中的 \n（多行 merged 表头）替换为空格
+   *   7. 完全没有合适行就 fallback 到 col1..colN（表单型 Excel）
+   *   8. 同名列自动加 _2, _3 后缀避免 key 冲突
    */
-  private buildSheetData(name: string, rows: unknown[][]): ExcelSheetData {
-    if (rows.length === 0) {
-      return { name, rowCount: 0, columns: [], rows: [] }
-    }
+  private prepareTable(rows: unknown[][]): {
+    headers: string[]
+    headerRowIndex: number
+    bodyRows: unknown[][]
+    maxCols: number
+  } {
     const maxCols = rows.reduce((acc, row) => Math.max(acc, row.length), 0)
     if (maxCols === 0) {
-      return { name, rowCount: 0, columns: [], rows: [] }
+      return { headers: [], headerRowIndex: -1, bodyRows: rows, maxCols: 0 }
     }
 
-    // 扫前 5 行找最适合作为表头的行
-    const SCAN_DEPTH = Math.min(5, rows.length)
+    // 扫描深度从 5 → 10，覆盖封面行在前几行的 Excel 文件
+    const SCAN_DEPTH = Math.min(10, rows.length)
+
+    // 标记封面/标题行：前 3 行内，首 cell 有值但其余 ≥80% 为空
+    const coverRowSet = new Set<number>()
+    const COVER_CHECK_DEPTH = Math.min(3, rows.length)
+    for (let i = 0; i < COVER_CHECK_DEPTH; i++) {
+      const row = rows[i]
+      if (maxCols <= 1) break
+      const first = row[0]
+      const hasFirst = first !== null && first !== undefined
+        && !(typeof first === 'string' && first.trim() === '')
+      if (!hasFirst) continue
+      let emptyRest = 0
+      for (let j = 1; j < maxCols; j++) {
+        const cell = j < row.length ? row[j] : undefined
+        if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
+          emptyRest++
+        }
+      }
+      if (emptyRest / (maxCols - 1) >= 0.8) {
+        coverRowSet.add(i)
+      }
+    }
+
     let bestHeaderIdx = -1
     let bestScore = -1
     for (let i = 0; i < SCAN_DEPTH; i++) {
+      // 跳过封面/标题行
+      if (coverRowSet.has(i)) continue
+
       const row = rows[i]
       let stringCells = 0
       let numericCells = 0
       let emptyCells = 0
       for (let j = 0; j < maxCols; j++) {
-        const cell = row[j]
+        const cell = j < row.length ? row[j] : undefined
         if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
           emptyCells++
         } else if (typeof cell === 'number') {
@@ -644,8 +710,6 @@ export class DocumentParser {
           stringCells++
         }
       }
-      // 评分：字符串单元格 +2，数字 -1，空格 -0.3
-      // 表头要求至少 50% 的列非空且大部分是字符串
       const score = stringCells * 2 - numericCells - emptyCells * 0.3
       const fillRate = (stringCells + numericCells) / maxCols
       if (fillRate >= 0.5 && stringCells > numericCells && score > bestScore) {
@@ -656,29 +720,81 @@ export class DocumentParser {
 
     let headers: string[]
     let bodyRows: unknown[][]
+    /** 两行表头合并时，body 从合并的下一行开始 */
+    let mergedSecondRow = false
     if (bestHeaderIdx >= 0) {
       const headerRow = rows[bestHeaderIdx]
       headers = Array.from({ length: maxCols }, (_, j) => {
-        const cell = headerRow[j]
-        if (cell === null || cell === undefined) return `col${j + 1}`
+        const cell = j < headerRow.length ? headerRow[j] : undefined
+        if (cell === null || cell === undefined) return ''
         const s = String(cell).trim().replace(/\r?\n/g, ' ').replace(/\s+/g, ' ')
-        return s || `col${j + 1}`
+        return s
       })
-      // 跳过表头行及之前的所有行（合并标题等）
-      bodyRows = rows.slice(bestHeaderIdx + 1)
+
+      // 两行表头合并：若最佳行仍有 ≥30% 空 cell，检查下一行能否补全
+      const emptyCellCount = headers.filter(h => h === '').length
+      const nextIdx = bestHeaderIdx + 1
+      if (emptyCellCount / maxCols >= 0.3 && nextIdx < rows.length) {
+        const nextRow = rows[nextIdx]
+        let canMerge = false
+        let fillCount = 0
+        for (let j = 0; j < maxCols; j++) {
+          if (headers[j] !== '') continue
+          const nextCell = j < nextRow.length ? nextRow[j] : undefined
+          if (nextCell !== null && nextCell !== undefined
+            && typeof nextCell === 'string' && nextCell.trim() !== '') {
+            fillCount++
+          }
+        }
+        // 下一行至少能补全一半的空 cell 才合并
+        if (emptyCellCount > 0 && fillCount >= emptyCellCount * 0.5) {
+          canMerge = true
+        }
+        if (canMerge) {
+          for (let j = 0; j < maxCols; j++) {
+            if (headers[j] !== '') continue
+            const nextCell = j < nextRow.length ? nextRow[j] : undefined
+            if (nextCell !== null && nextCell !== undefined) {
+              const s = String(nextCell).trim().replace(/\r?\n/g, ' ').replace(/\s+/g, ' ')
+              if (s) headers[j] = s
+            }
+          }
+          mergedSecondRow = true
+        }
+      }
+
+      // 仍为空的列位 fallback 到 colN
+      headers = headers.map((h, j) => h || `col${j + 1}`)
+      bodyRows = rows.slice(mergedSecondRow ? bestHeaderIdx + 2 : bestHeaderIdx + 1)
     } else {
-      // 完全没找到合适的表头行 → fallback
+      // 表单型 Excel（类型 B）：无合适表头行，fallback 到 col1..colN
       headers = Array.from({ length: maxCols }, (_, i) => `col${i + 1}`)
       bodyRows = rows
     }
     while (headers.length < maxCols) headers.push(`col${headers.length + 1}`)
-    // 去重：同名列加 _2, _3 后缀
+
     const seen = new Map<string, number>()
     headers = headers.map(h => {
       const count = seen.get(h) || 0
       seen.set(h, count + 1)
       return count === 0 ? h : `${h}_${count + 1}`
     })
+
+    return { headers, headerRowIndex: bestHeaderIdx, bodyRows, maxCols }
+  }
+
+  /**
+   * 把 sheet 的二维数组行转成 ExcelSheetData（对象数组 + 列 schema）。
+   * 表头检测委托给 prepareTable()，保证与 markdown 输出用同一套逻辑。
+   */
+  private buildSheetData(name: string, rows: unknown[][]): ExcelSheetData {
+    if (rows.length === 0) {
+      return { name, rowCount: 0, columns: [], rows: [] }
+    }
+    const { headers, bodyRows, maxCols } = this.prepareTable(rows)
+    if (maxCols === 0) {
+      return { name, rowCount: 0, columns: [], rows: [] }
+    }
 
     // 转对象数组
     const objRows: Array<Record<string, string | number | null>> = bodyRows.map(row => {
@@ -791,8 +907,100 @@ export class DocumentParser {
   }
 
   /**
-   * 将二维数组转为 GFM markdown 表格。第一行若全为字符串则视为表头，
-   * 否则合成 col1..colN 表头。单元格中的 `|`、换行符需转义。
+   * 检测某行是否为"分节标题 / 合计行"，用于 ffill 的重置边界。
+   * 简化版 inferRowMetaRole，直接作用于原始 unknown[] 行（无需列 schema）。
+   */
+  private isMergeResetBoundary(row: unknown[], maxCols: number): boolean {
+    if (maxCols <= 1) return false
+    const first = row[0]
+    if (first === null || first === undefined || (typeof first === 'string' && first.trim() === '')) {
+      return false
+    }
+    const firstStr = String(first).trim()
+    if (/^(总计|合计|总和|累计|小计)/.test(firstStr) || /^(Total|Grand[\s-]?Total|Sub[\s-]?total)$/i.test(firstStr)) {
+      return true
+    }
+    let emptyCount = 0
+    for (let j = 1; j < maxCols; j++) {
+      const cell = j < row.length ? row[j] : undefined
+      if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
+        emptyCount++
+      }
+    }
+    return emptyCount / (maxCols - 1) >= 0.8
+  }
+
+  /**
+   * 对前 N 列做前向填充（forward fill），恢复 Excel 合并单元格的语义。
+   *
+   * 算法：
+   *   1. 扫描前 MAX_FFILL_COLS（3）列，找出"合并候选列"
+   *   2. 候选判定：列的空单元格占比 ≥ 10%（说明存在合并）且至少 2 个非空值
+   *   3. 遇到"全填充列"（空率 < 10%）则中断序列——该列及其后的列不再 ffill
+   *   4. 逐行前向填充：空 cell 复制上方最近非空值
+   *   5. 分节标题 / 合计行作为重置边界，避免跨分组填充
+   *
+   * 只用于 markdown 输出，不影响 _excel/*.json 结构化数据。
+   */
+  private ffillLeadingColumns(bodyRows: unknown[][], maxCols: number): unknown[][] {
+    if (bodyRows.length <= 1 || maxCols === 0) return bodyRows
+
+    const MAX_FFILL_COLS = Math.min(3, maxCols)
+    const ffillCols: number[] = []
+
+    for (let col = 0; col < MAX_FFILL_COLS; col++) {
+      let emptyCount = 0
+      let nonEmptyCount = 0
+      for (const row of bodyRows) {
+        const cell = col < row.length ? row[col] : undefined
+        if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
+          emptyCount++
+        } else {
+          nonEmptyCount++
+        }
+      }
+      const emptyRate = emptyCount / bodyRows.length
+
+      if (emptyRate < 0.1) break
+
+      if (nonEmptyCount >= 2) {
+        ffillCols.push(col)
+      }
+    }
+
+    if (ffillCols.length === 0) return bodyRows
+
+    const result = bodyRows.map(row => [...row])
+    const lastValues: unknown[] = new Array(ffillCols.length).fill(null)
+
+    for (let i = 0; i < result.length; i++) {
+      const row = result[i]
+
+      if (this.isMergeResetBoundary(row, maxCols)) {
+        lastValues.fill(null)
+        continue
+      }
+
+      for (let ci = 0; ci < ffillCols.length; ci++) {
+        const col = ffillCols[ci]
+        const cell = col < row.length ? row[col] : undefined
+        if (cell === null || cell === undefined || (typeof cell === 'string' && cell.trim() === '')) {
+          if (lastValues[ci] !== null) {
+            row[col] = lastValues[ci]
+          }
+        } else {
+          lastValues[ci] = cell
+        }
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * 将二维数组转为 GFM markdown 表格。
+   * 表头检测委托给 prepareTable()，与 buildSheetData 共用同一套智能检测算法。
+   * 前向填充委托给 ffillLeadingColumns()，恢复合并单元格语义。
    */
   private rowsToMarkdownTable(rows: unknown[][]): string {
     if (rows.length === 0) return '_（空）_'
@@ -803,36 +1011,19 @@ export class DocumentParser {
       return s
         .replace(/\\/g, '\\\\')
         .replace(/\|/g, '\\|')
-        .replace(/\r?\n/g, '<br>')
+        .replace(/\r?\n/g, '；')
         .trim()
     }
 
-    // 确定列数：取所有行中最大的列数
-    const maxCols = rows.reduce((acc, row) => Math.max(acc, row.length), 0)
+    const { headers, bodyRows, maxCols } = this.prepareTable(rows)
     if (maxCols === 0) return '_（无列）_'
 
-    // 判断首行是否为表头（所有单元格都是非空字符串）
-    const firstRow = rows[0]
-    const firstRowIsHeader =
-      firstRow.length === maxCols &&
-      firstRow.every(cell => typeof cell === 'string' && cell.toString().trim().length > 0)
+    const filledRows = this.ffillLeadingColumns(bodyRows, maxCols)
 
-    let header: string[]
-    let bodyRows: unknown[][]
-    if (firstRowIsHeader) {
-      header = firstRow.map(c => escapeCell(c))
-      bodyRows = rows.slice(1)
-    } else {
-      header = Array.from({ length: maxCols }, (_, i) => `col${i + 1}`)
-      bodyRows = rows
-    }
-
-    // 补齐 header 到 maxCols
-    while (header.length < maxCols) header.push(`col${header.length + 1}`)
-
-    const headerLine = '| ' + header.join(' | ') + ' |'
-    const separatorLine = '| ' + header.map(() => '---').join(' | ') + ' |'
-    const bodyLines = bodyRows.map(row => {
+    const headerEscaped = headers.map(h => escapeCell(h))
+    const headerLine = '| ' + headerEscaped.join(' | ') + ' |'
+    const separatorLine = '| ' + headerEscaped.map(() => '---').join(' | ') + ' |'
+    const bodyLines = filledRows.map(row => {
       const padded = [...row]
       while (padded.length < maxCols) padded.push('')
       return '| ' + padded.map(c => escapeCell(c)).join(' | ') + ' |'

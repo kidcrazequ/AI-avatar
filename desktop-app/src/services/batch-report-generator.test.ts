@@ -90,6 +90,7 @@ function makeRunResult(cases: CaseResult[], opts: Partial<BatchRunResult> = {}):
     failCount,
     errorCount,
     categorySummary,
+    questionBankSource: opts.questionBankSource,
     cases,
   }
 }
@@ -331,6 +332,24 @@ test('renderMarkdownReport: 包含全部主 section', () => {
   assert.match(md, /## 6\. 性能/)
   // 没传 analysis，section 7 不应出现
   assert.doesNotMatch(md, /## 7\. AI 根因分析/)
+})
+
+test('renderMarkdownReport: 展示题库来源和当次选题数量', () => {
+  const summary = aggregateReport(makeRunResult([makeCase()], {
+    questionBankSource: {
+      sourcePath: '/avatars/test/tests/generated/question-bank.json',
+      cached: true,
+      loadedAt: 1_700_000_000_000,
+      generatedAt: '2026-05-02',
+      totalQuestionCount: 30,
+      selectedQuestionCount: 5,
+    },
+  }))
+  const md = renderMarkdownReport(summary)
+  assert.match(md, /题库来源.*缓存文件/)
+  assert.match(md, /5 \/ 30 题/)
+  assert.match(md, /question-bank\.json/)
+  assert.match(md, /2026-05-02/)
 })
 
 test('renderMarkdownReport: 含 analysis 时出现 section 7', () => {

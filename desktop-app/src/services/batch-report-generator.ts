@@ -21,6 +21,7 @@
 import type {
   BatchRunResult,
   CaseResult,
+  QuestionBankRunSource,
   QuestionCategory,
 } from './batch-regression-runner'
 
@@ -88,6 +89,8 @@ export interface ReportSummary {
   passCount: number
   failCount: number
   errorCount: number
+  /** 本次运行使用的题库来源信息 */
+  questionBankSource?: QuestionBankRunSource
   overallPassRate: number
   /** 触发 todo_write 的 case 比例 */
   todoUsageRate: number
@@ -225,6 +228,7 @@ export function aggregateReport(result: BatchRunResult): ReportSummary {
     passCount: result.passCount,
     failCount: result.failCount,
     errorCount: result.errorCount,
+    questionBankSource: result.questionBankSource,
     overallPassRate: safeRate(result.passCount, total),
     todoUsageRate,
     categoryStats,
@@ -478,6 +482,12 @@ export function renderMarkdownReport(summary: ReportSummary, analysis?: RootCaus
   lines.push(`- **开始时间**: ${fmtDate(summary.startedAt)}`)
   lines.push(`- **结束时间**: ${fmtDate(summary.finishedAt)}`)
   lines.push(`- **总耗时**: ${fmtMs(summary.durationMs)}`)
+  if (summary.questionBankSource) {
+    const source = summary.questionBankSource
+    lines.push(`- **题库来源**: ${source.cached ? '缓存文件' : '本次生成'}（${source.selectedQuestionCount} / ${source.totalQuestionCount} 题）`)
+    lines.push(`- **题库路径**: \`${source.sourcePath}\``)
+    if (source.generatedAt) lines.push(`- **题库生成时间**: ${source.generatedAt}`)
+  }
   lines.push('')
 
   // 摘要

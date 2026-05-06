@@ -62,3 +62,29 @@ export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './util
 // ─── HTTP 工具（纯 fetch 封装） ─────────────────────────────────────────────
 export { fetchWithTimeout, HttpError } from './utils/http'
 export type { FetchWithTimeoutOptions } from './utils/http'
+
+// ─── 知识库 frontmatter 工具（纯字符串处理） ────────────────────────────────
+export {
+  parseFrontmatterCore,
+  extractFrontmatterFields,
+  mergeFrontmatter,
+  buildFrontmatterBlock,
+} from './utils/knowledge-frontmatter'
+export type { FrontmatterParseResult } from './utils/knowledge-frontmatter'
+
+// ─── 对话框附件常量与路由（纯静态白名单 + 纯函数） ──────────────────────────
+export {
+  MAX_ATTACHMENT_SIZE_BYTES,
+  INLINE_TEXT_BYTE_THRESHOLD,
+  MAX_ATTACHMENT_COUNT_PER_MESSAGE,
+  ATTACHMENT_DOCUMENT_EXTENSIONS,
+  ATTACHMENT_TEXT_EXTENSIONS,
+  ATTACHMENT_CODE_EXTENSIONS,
+  ATTACHMENT_REJECTED_EXTENSIONS,
+  ATTACHMENT_WHITELIST_EXTENSIONS,
+  ATTACHMENT_SENSITIVE_EXTENSIONS,
+  isAttachmentExtensionAllowed,
+  buildAttachmentAcceptString,
+  classifyAttachmentRoute,
+} from './utils/attachment-types'
+export type { AttachmentRoute } from './utils/attachment-types'

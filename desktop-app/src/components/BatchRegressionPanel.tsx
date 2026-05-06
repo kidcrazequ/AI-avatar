@@ -38,6 +38,7 @@ import {
   type CaseResult,
   type BatchRunResult,
   type BatchProgressEvent,
+  type QuestionBankRunSource,
 } from '../services/batch-regression-runner'
 import {
   aggregateReport,
@@ -116,6 +117,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
   // ── 状态 ──
   const [bank, setBank] = useState<RegressionQuestionBank | null>(null)
   const [bankCached, setBankCached] = useState(false)
+  const [bankPath, setBankPath] = useState<string | null>(null)
   const [bankErr, setBankErr] = useState<string | null>(null)
   const [runState, setRunState] = useState<RunState>('idle')
   const [runErr, setRunErr] = useState<string | null>(null)
@@ -164,6 +166,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
         if (cancelled) return
         setBank(bankRes.bank)
         setBankCached(bankRes.cached)
+        setBankPath(bankRes.bankPath)
         setHistoryRuns(runs)
         setRunState('idle')
       } catch (err) {
@@ -231,23 +234,53 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
 
   // ── 主流程：运行 ──
   const handleRun = useCallback(async (): Promise<void> => {
-    if (!bank || bank.questions.length === 0) {
-      setRunErr('题库未加载')
-      return
-    }
     if (!chatModel.apiKey) {
       setRunErr('请先在设置中配置聊天模型 API Key')
       return
     }
+    setRunState('loading-bank')
+    setRunErr(null)
+
+    let runBank: RegressionQuestionBank
+    let runBankPath: string
+    let runBankCached = false
+    const loadedAt = Date.now()
+    try {
+      // 开跑前重新从主进程取题库，避免长时间打开面板后继续使用旧的内存缓存。
+      const bankRes = await window.electronAPI.regressionLoadOrGenerateBank(avatarId)
+      runBank = bankRes.bank
+      runBankPath = bankRes.bankPath
+      runBankCached = bankRes.cached
+      setBank(runBank)
+      setBankCached(runBankCached)
+      setBankPath(runBankPath)
+    } catch (err) {
+      setRunErr(`题库加载失败：${err instanceof Error ? err.message : String(err)}`)
+      setRunState('error')
+      return
+    }
+    if (runBank.questions.length === 0) {
+      setRunErr('题库未加载')
+      setRunState('error')
+      return
+    }
+
     const runId = shortRunId()
     const questions = (maxCasesOverride > 0
-      ? bank.questions.slice(0, maxCasesOverride)
-      : bank.questions
+      ? runBank.questions.slice(0, maxCasesOverride)
+      : runBank.questions
     ) as unknown as GeneratedQuestion[]
+    const questionBankSource: QuestionBankRunSource = {
+      sourcePath: runBankPath,
+      cached: runBankCached,
+      loadedAt,
+      generatedAt: runBank.generatedAt,
+      totalQuestionCount: runBank.questions.length,
+      selectedQuestionCount: questions.length,
+    }
 
     setCurrentRunId(runId)
     setCaseResults([])
-    setRunErr(null)
     setSavedReport(null)
     setAiAnalysisStatus('')
     setRunState('running')
@@ -291,6 +324,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
         waitForIdle: waitForIdleAdapter,
         perCaseTimeoutMs: 600_000, // 10 分钟单题超时（包含 LLM 长链路）
         interCaseDelayMs: 300,
+        questionBankSource,
         signal: controller.signal,
         onProgress: (event: BatchProgressEvent) => {
           if (!isMountedRef.current) return
@@ -335,6 +369,8 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
         failCount: finalResult.failCount,
         errorCount: finalResult.errorCount,
         resultJson: JSON.stringify(finalResult, null, 2),
+        questionBankJson: JSON.stringify(runBank, null, 2),
+        questionBankSource,
         reportMd,
         reportHtml,
       })
@@ -366,7 +402,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
       setRunErr(`报告生成失败：${err instanceof Error ? err.message : String(err)}`)
       setRunState('error')
     }
-  }, [bank, avatarId, chatModel, enableAiAnalysis, maxCasesOverride, callLLM])
+  }, [avatarId, chatModel, enableAiAnalysis, maxCasesOverride, callLLM])
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -388,6 +424,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
       const res = await window.electronAPI.regressionLoadOrGenerateBank(avatarId, { force: true })
       setBank(res.bank)
       setBankCached(false)
+      setBankPath(res.bankPath)
       setRunState('idle')
     } catch (err) {
       setBankErr(err instanceof Error ? err.message : String(err))
@@ -449,6 +486,11 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
                   <div className="font-game text-[10px] text-px-text-dim mb-2">
                     {bank.knowledgeSnapshot.mdFiles} md · {bank.knowledgeSnapshot.excelFiles} xlsx
                   </div>
+                  {bankPath && (
+                    <div className="font-mono text-[9px] text-px-text-dim mb-2 break-all" title={bankPath}>
+                      {bankPath}
+                    </div>
+                  )}
                   <div className="space-y-0.5">
                     {Object.entries(bank.summary)
                       .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
@@ -674,7 +716,10 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
                 {currentQuestion.expectedTools && currentQuestion.expectedTools.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-px-border">
                     <div className="font-game text-[10px] text-px-text-dim mb-0.5">期望工具</div>
-                    <div className="font-mono text-[10px] text-px-text-sec">{currentQuestion.expectedTools.join(', ')}</div>
+                    <div className="font-mono text-[10px] text-px-text-sec">{
+                      // 嵌套数组语义为 OR：渲染为 "(a | b)"；平铺项为 AND：直接显示
+                      currentQuestion.expectedTools.map(t => Array.isArray(t) ? `(${t.join(' | ')})` : t).join(', ')
+                    }</div>
                   </div>
                 )}
                 {currentQuestion.sourceFile && (

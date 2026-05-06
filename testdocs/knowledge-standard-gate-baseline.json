@@ -1,0 +1,54 @@
+{
+  "targetRoot": "/Users/cnlm007398/AI/soul/avatars/小堵-工商储专家/knowledge",
+  "gate": {
+    "expectedCount": 396,
+    "totalFileCount": 4,
+    "mdCount": 1,
+    "nonMdCount": 3,
+    "avgReadability": 18,
+    "pass": false
+  },
+  "violations": [
+    {
+      "type": "count_mismatch",
+      "expectedMdCount": 396,
+      "actualMdCount": 1
+    },
+    {
+      "type": "non_md_files_present",
+      "count": 3,
+      "samples": [
+        "_excel/00_工商储-产品质量指标dashboard_260303.json",
+        "_index/tokens.json",
+        "_raw/00 工商储-产品质量指标dashboard 260303.xlsx"
+      ]
+    },
+    {
+      "type": "readability_failures",
+      "count": 1,
+      "threshold": 70,
+      "samples": [
+        {
+          "file": "00_工商储-产品质量指标dashboard_260303.md",
+          "readabilityScore": 18
+        }
+      ]
+    },
+    {
+      "type": "structure_failures",
+      "count": 2,
+      "samples": [
+        {
+          "file": "00_工商储-产品质量指标dashboard_260303.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.47
+        },
+        {
+          "file": "00_工商储-产品质量指标dashboard_260303.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 29.51
+        }
+      ]
+    }
+  ]
+}

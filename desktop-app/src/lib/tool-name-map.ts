@@ -57,6 +57,8 @@ export const TOOL_NAME_MAP: Record<string, string> = {
   read_pdf: '解析 PDF',
   read_docx: '解析 Word',
   read_pptx: '解析 PPTX',
+  read_attachment: '读取对话附件',
+  search_attachment: '检索对话附件',
   apply_tweaks: '应用 Tweaks',
   snip: '登记上下文裁剪',
   list_knowledge_files: '列出知识文件',

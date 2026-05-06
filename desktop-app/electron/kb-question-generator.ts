@@ -112,8 +112,15 @@ export interface GeneratedQuestion {
   scoringPoints?: string[]
   /** 题干文本（直接发给分身） */
   prompt: string
-  /** 应该被调用的工具名（例如 ['query_excel']） */
-  expectedTools?: string[]
+  /**
+   * 应该被调用的工具名。
+   *   - string                     → 该工具必须命中（AND 项）
+   *   - string[]（嵌套数组）       → 内层语义 OR：任一命中即视为该子句通过
+   *
+   * 例：[["query_excel", "search_knowledge"]] 表示 query_excel 或 search_knowledge 任一命中即可。
+   * 适用于"Excel 镜像 .md 同时存在等价数据"的场景（query_excel 走 .json、search_knowledge 走 .md 都能拿到）。
+   */
+  expectedTools?: (string | string[])[]
   /** 应该被加载的技能名 */
   expectedSkills?: string[]
   /** 期望数值（带容差） */
@@ -711,7 +718,8 @@ function generateL2Compare(
       category: 'L2_excel_compare',
       // 真实用户问法：不绑文件，由分身自己识别 colA/colB 来自哪张表
       prompt: `我在看 ${label.trim()} 的质量数据，想确认「${colA.name}」和「${colB.name}」哪个更高。请同时给出两个数字、比较结论和来源。`,
-      expectedTools: ['query_excel'],
+      // L2 比较题：Excel 镜像 .md 与原始 .json 含等价数据，query_excel 与 search_knowledge 任一命中即可
+      expectedTools: [['query_excel', 'search_knowledge']],
       expectedValue: { value: higherVal, tolerancePct: 5 },
       // 答案至少要出现两个对比维度的列名
       mustContain: [colA.name, colB.name],
@@ -850,6 +858,23 @@ function isBomSheet(sheet: ExcelSheet, fileName: string): boolean {
   return /供应商|物料编号|料号|零件号|MPN|Vendor/.test(colNames)
 }
 
+function isDirtyBomExpectedValue(value: string, columnName: string): boolean {
+  const raw = value.trim()
+  if (raw === '') return true
+  if (/[\n\r]/.test(raw)) return true
+  if (/^(?:无|暂无|待定|待确认|N\/A|NA|null|-|—)$/i.test(raw)) return true
+  if (/交付|投运|调试|整改|流程|备注|预计|计划|完成|待补充|待确认|月(?:底|份)?/.test(raw)) return true
+  if (/[。；;].{4,}/.test(raw)) return true
+
+  const isSupplierColumn = /供应商|Vendor|Supplier|厂商/i.test(columnName)
+  if (isSupplierColumn && raw.length > 24) return true
+
+  const isPartColumn = /物料编号|料号|零件号|MPN|Part\s*No/i.test(columnName)
+  if (isPartColumn) return raw.length > 64
+
+  return raw.length > 32
+}
+
 function generateL5Bom(
   excel: ExcelFile,
   sheet: ExcelSheet,
@@ -880,11 +905,19 @@ function generateL5Bom(
     if (count >= limit) break
     const row = sheet.rows[rowIdx]
     const label = row[labelCol]
-    if (typeof label !== 'string' || label.trim() === '') continue
+    if (!isValidRowLabelBasic(label)) continue
+    if (!isLikelyDataRow(sheet, rowIdx)) continue
+    if (!isRowUniquelyAddressableByLabel(sheet, rowIdx, labelCol, label)) continue
 
     const queriedCol = supplierCol ?? partCol!
     const expectedAnswer = row[queriedCol.name]
     if (expectedAnswer === null || expectedAnswer === undefined || String(expectedAnswer).trim() === '') continue
+
+    // 列值合理性校验：
+    //   BOM/供应商列偶尔会被业务方误填"流程备注"（如"1. 交付完成——调试完成"）。
+    //   这种值既不能作为 mustContain，也不该继续生成题，否则会把不可答脏数据混进回归。
+    const expectedRaw = String(expectedAnswer).trim()
+    if (isDirtyBomExpectedValue(expectedRaw, queriedCol.name)) continue
 
     out.push({
       id: `L5-${shortHash(`${excel.fileName}|${sheet.name}|${rowIdx}|${queriedCol.name}`)}`,
@@ -893,7 +926,7 @@ function generateL5Bom(
       prompt: `客户问到 ${label.trim()} 这个物料，我需要确认它对应的「${queriedCol.name}」。请查权威 BOM 或物料资料，给出准确值和来源。`,
       expectedTools: ['query_excel'],
       // 去掉 'knowledge/' 强约束，保留期望值校验（BOM 题答案是字符串，不能用 expectedValue）
-      mustContain: [String(expectedAnswer).trim().slice(0, 20)],
+      mustContain: [expectedRaw.slice(0, 20)],
       sourceFile: relPath,
       sourceCell: { sheet: sheet.name, rowIndex: rowIdx, column: queriedCol.name },
     })
@@ -908,36 +941,48 @@ interface MdChapter {
   content: string
 }
 
+interface MdHeading {
+  level: number
+  title: string
+  lineIndex: number
+}
+
 /**
  * 极简 markdown H2/H3/H4 章节切片。
  *
  * 不复用 @soul/core 的 splitIntoChapters：后者识别中文编号标题（"第一章" / "1.1"）
  * 但不识别 markdown `##` 头，而桌面端导入产出的就是 markdown。
+ *
+ * 同名章节去重（与 fix-l6-l7-section-anchor.ts 保持一致）：
+ *   PDF 提取产出的 markdown 经常出现多个 `### 数据表格`，会让 sourceSection 锚点
+ *   歧义。同标题第 N 次出现时改为 `<title> (N)`，保证标题唯一可寻址。
  */
 export function splitMarkdownByHeading(text: string): MdChapter[] {
   const lines = text.split('\n')
-  const chapters: MdChapter[] = []
-  let currentTitle = ''
-  let currentLines: string[] = []
-
-  const flush = () => {
-    if (currentTitle && currentLines.length > 0) {
-      const content = currentLines.join('\n').trim()
-      if (content.length > 0) chapters.push({ title: currentTitle, content })
-    }
-  }
-
-  for (const line of lines) {
+  const headings: MdHeading[] = []
+  lines.forEach((line, lineIndex) => {
     const m = line.match(/^(#{2,4})\s+(.+?)\s*$/)
     if (m) {
-      flush()
-      currentTitle = m[2].trim()
-      currentLines = []
-    } else {
-      currentLines.push(line)
+      headings.push({ level: m[1].length, title: m[2].trim(), lineIndex })
     }
+  })
+
+  const seen = new Map<string, number>()
+  const chapters: MdChapter[] = []
+  for (let i = 0; i < headings.length; i++) {
+    const heading = headings[i]
+    const nextPeerOrParent = headings.find((candidate, idx) =>
+      idx > i && candidate.level <= heading.level,
+    )
+    const endLine = nextPeerOrParent?.lineIndex ?? lines.length
+    const content = lines.slice(heading.lineIndex + 1, endLine).join('\n').trim()
+    if (content.length === 0) continue
+
+    const n = (seen.get(heading.title) ?? 0) + 1
+    seen.set(heading.title, n)
+    const title = n === 1 ? heading.title : `${heading.title} (${n})`
+    chapters.push({ title, content })
   }
-  flush()
   return chapters
 }
 
@@ -984,6 +1029,8 @@ function generateMdQuestions(
   for (const idx of indices) {
     if (count >= perFileLimit) break
     const ch = chapters[idx]
+    // 章节正文长度过滤：< 50 字（与 fix-l6-l7-section-anchor.ts 保持一致）的章节
+    // 多为占位/空表（"图中未包含..."），出题后 sourceSection 锚点形同虚设
     if (ch.content.length < 50 || ch.content.length > 5000) continue
     if (ch.title.length < 2 || ch.title.length > 60) continue
 
@@ -995,6 +1042,10 @@ function generateMdQuestions(
     let expectedValue: ExpectedValue | undefined
 
     if (numberMatch && (category === 'L6_protocol' || category === 'L7_certification')) {
+      // 章节正文值校验（与 fix-l6-l7-section-anchor.ts 保持一致）：
+      //   numberMatch 来自 ch.content，理论上一定在章节内。但若后续逻辑改动（如改为
+      //   全文匹配），这里再加一次显式校验，确保 expectedValue 必须真实在章节正文内。
+      if (!ch.content.includes(numberMatch[0])) continue
       // 自 2026-05-01 起：prompt 保持用户场景化，不再把 knowledge 路径暴露给用户。
       // 精确锚点留在 sourceFile/sourceSection，供回归评分与溯源断言使用。
       prompt = category === 'L7_certification'

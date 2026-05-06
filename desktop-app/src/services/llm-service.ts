@@ -22,6 +22,11 @@ export interface LLMMessage {
   tool_calls?: ToolCall[]
   tool_call_id?: string
   name?: string
+  /**
+   * 思维链文本（DeepSeek-Reasoner 等 thinking 模型）
+   * 必须在多轮 round-trip 中原样回传到 assistant 消息，否则 API 会直接 400。
+   */
+  reasoning_content?: string
 }
 
 export interface ToolCall {
@@ -50,7 +55,7 @@ export type ReasoningEffort = 'low' | 'medium' | 'high'
 /** 已知支持 thinking/reasoning 输出的模型名匹配 */
 const REASONING_MODEL_REGEX = /(^|[-/])(deepseek-reasoner|deepseek-r1|o1|o3|gpt-5|qwen-?qwq|glm-4-thinking)|claude.*thinking/i
 
-function detectReasoning(modelName: string): { enabled: boolean; effort: ReasoningEffort } {
+export function detectReasoning(modelName: string): { enabled: boolean; effort: ReasoningEffort } {
   return REASONING_MODEL_REGEX.test(modelName)
     ? { enabled: true, effort: 'medium' }
     : { enabled: false, effort: 'low' }
@@ -133,7 +138,11 @@ export class LLMService {
       throw new Error(`请求频率超限或额度用尽，请稍后重试 (429)`)
     } else if (status >= 500) {
       throw new Error(`服务端暂时不可用，请稍后重试 (${status})`)
-    } else if (status === 400 && /reasoning_effort|thinking/i.test(errorText)) {
+    } else if (status === 400 && /must be (passed back|provided|sent back)|reasoning_content/i.test(errorText)) {
+      // DeepSeek-Reasoner 等 thinking 模型要求多轮回传 reasoning_content；这是 client 实现 bug
+      throw new Error(`reasoning_content 未在多轮 round-trip 中回传，请检查 client 是否在 assistant 消息中保留了 thinking 模型的 reasoning_content 字段 (400): ${errorText}`)
+    } else if (status === 400 && /(unknown parameter|not supported|unsupported|invalid parameter).*?(reasoning_effort|thinking)/i.test(errorText)) {
+      // 真正不支持 thinking 参数的模型
       throw new Error(`该模型或服务商不支持 thinking 参数，请切换普通模型或关闭 reasoning 配置 (400): ${errorText}`)
     } else {
       throw new Error(`API 请求失败 (${status}): ${errorText}`)
@@ -144,13 +153,14 @@ export class LLMService {
    * 流式对话，支持工具调用。
    * onChunk: 每收到文本片段时回调
    * onToolCall: 收到工具调用时回调（非流式场景）
-   * onDone: 完成时回调，携带完整回复文本和可能的工具调用列表
+   * onDone: 完成时回调，携带完整回复文本、可能的工具调用列表，以及 thinking 模型的 reasoning_content
+   *         （reasoning_content 必须在多轮 round-trip 时原样回传，否则 DeepSeek-Reasoner 等模型会 400）
    * onError: 错误时回调
    */
   async chat(
     messages: LLMMessage[],
     onChunk: (text: string, kind?: 'content' | 'reasoning') => void,
-    onDone: (fullText: string, toolCalls?: ToolCall[]) => void,
+    onDone: (fullText: string, toolCalls?: ToolCall[], reasoningText?: string) => void,
     onError: (error: Error) => void,
     options: ChatOptions = {}
   ): Promise<void> {
@@ -203,6 +213,8 @@ export class LLMService {
 
       const decoder = new TextDecoder()
       let fullText = ''
+      // 累积 thinking 模型的思维链文本，用于多轮 round-trip 原样回传给服务端
+      let reasoningText = ''
       const toolCallsMap = new Map<number, ToolCall>()
 
       const parser = createParser({
@@ -216,6 +228,7 @@ export class LLMService {
             if (!delta) return
 
             if (delta.reasoning_content) {
+              reasoningText += delta.reasoning_content
               onChunk(delta.reasoning_content, 'reasoning')
             }
 
@@ -262,7 +275,7 @@ export class LLMService {
             .map(([, v]) => v)
         : undefined
 
-      onDone(fullText, toolCalls)
+      onDone(fullText, toolCalls, reasoningText || undefined)
     } catch (error) {
       // 区分网络错误和其他错误，给出更友好的提示
       if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -322,6 +335,8 @@ export class LLMService {
     if (msg.tool_calls) base.tool_calls = msg.tool_calls
     if (msg.tool_call_id) base.tool_call_id = msg.tool_call_id
     if (msg.name) base.name = msg.name
+    // DeepSeek-Reasoner 等 thinking 模型多轮 round-trip 必须原样回传 reasoning_content，否则 API 直接 400
+    if (msg.reasoning_content != null) base.reasoning_content = msg.reasoning_content
     return base
   }
 }

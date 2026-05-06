@@ -6,6 +6,8 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:fresh": "npm run clean:vite && npm run dev",
+    "clean:vite": "node -e \"require('fs').rmSync('node_modules/.vite', { recursive: true, force: true })\"",
     "dev:vite": "vite",
     "dev:electron": "node build-electron.js && wait-on http://localhost:5173 && cross-env NODE_ENV=development NODE_OPTIONS=--max-old-space-size=8192 ELECTRON_RUN_AS_NODE_FLAGS=--max-old-space-size=8192 electron .",
     "build": "node build-electron.js && vite build",

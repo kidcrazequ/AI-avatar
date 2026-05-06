@@ -30,6 +30,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearAgentTasks: (conversationId: string) =>
     ipcRenderer.invoke('agent-tasks:clear', conversationId),
 
+  // 对话框附件（2026-05-01 对话框附件扩展）
+  saveAttachment: (conversationId: string, name: string, base64Data: string, mime?: string) =>
+    ipcRenderer.invoke('save-attachment', conversationId, name, base64Data, mime),
+  getAttachmentMeta: (id: string) =>
+    ipcRenderer.invoke('get-attachment-meta', id),
+  listAttachments: (conversationId: string) =>
+    ipcRenderer.invoke('list-attachments', conversationId),
+  linkAttachmentToMessage: (messageId: string, attachmentIds: string[], conversationId: string) =>
+    ipcRenderer.invoke('link-attachment-to-message', messageId, attachmentIds, conversationId),
+  openAttachmentFile: (id: string) =>
+    ipcRenderer.invoke('open-attachment-file', id),
+
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) =>
     ipcRenderer.invoke('tool-results:list', conversationId),
@@ -164,6 +176,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 知识库管理
   getKnowledgeTree: (avatarId: string) => ipcRenderer.invoke('get-knowledge-tree', avatarId),
   readKnowledgeFile: (avatarId: string, relativePath: string) => ipcRenderer.invoke('read-knowledge-file', avatarId, relativePath),
+  /** 原始源文件溯源：把 knowledge/xxx.md 解析成 _raw/xxx.pdf 的元信息（找不到返回 null） */
+  resolveRawFile: (avatarId: string, mdRelativePath: string) =>
+    ipcRenderer.invoke('knowledge:resolve-raw-file', avatarId, mdRelativePath),
+  /** 原始源文件溯源：用系统默认应用打开 _raw/ 下的原始文件（路径越界由主进程拒绝） */
+  openRawFile: (avatarId: string, rawRelPath: string) =>
+    ipcRenderer.invoke('knowledge:open-raw-file', avatarId, rawRelPath),
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => ipcRenderer.invoke('write-knowledge-file', avatarId, relativePath, content),
   searchKnowledge: (avatarId: string, query: string) => ipcRenderer.invoke('search-knowledge', avatarId, query),
   // GAP7: 知识文件 CRUD（之前缺失）
@@ -412,6 +430,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     failCount: number
     errorCount: number
     resultJson: string
+    questionBankJson?: string
+    questionBankSource?: {
+      sourcePath: string
+      cached: boolean
+      loadedAt: number
+      generatedAt?: string
+      totalQuestionCount: number
+      selectedQuestionCount: number
+    }
     reportMd: string
     reportHtml: string
   }) => ipcRenderer.invoke('regression-save-run-result', avatarId, payload),

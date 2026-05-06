@@ -48,7 +48,7 @@ function App() {
   const [ocrModel, setOcrModel] = useState<ModelConfig>(DEFAULT_OCR_MODEL)
   const [creationModel, setCreationModel] = useState<ModelConfig>(DEFAULT_CREATION_MODEL)
 
-  const [testBadge, setTestBadge] = useState<{ failed: number } | null>(null)
+  const [, setTestBadge] = useState<{ failed: number } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const cronMemoryRunningRef = useRef(false)
   const cronKnowledgeRunningRef = useRef(false)
@@ -329,12 +329,6 @@ function App() {
   const navButtons = [
     { label: '人设', icon: '♦', key: 'soul', onClick: () => setActivePanel('soulEditor'), active: showSoulEditor },
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
-    {
-      label: '测试', icon: '▶', key: 'test',
-      onClick: () => { setActivePanel('test'); setTestBadge(null) },
-      active: showTestPanel, badge: testBadge?.failed,
-    },
-    { label: '回归', icon: '⊕', key: 'regression', onClick: () => setActivePanel('batchRegression'), active: showBatchRegression },
     { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
     { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },

@@ -1,0 +1,12 @@
+{
+  "targetRoot": "/Users/cnlm007398/AI/soul/testdocs/sim-format-396-knowledge",
+  "gate": {
+    "expectedCount": 396,
+    "totalFileCount": 396,
+    "mdCount": 396,
+    "nonMdCount": 0,
+    "avgReadability": 100,
+    "pass": true
+  },
+  "violations": []
+}

@@ -107,6 +107,41 @@ test('assertExpectedTools: 多次调用，至少一次成功 → pass', () => {
   assert.strictEqual(assertExpectedTools(events, ['query_excel']).pass, true)
 })
 
+test('assertExpectedTools: 嵌套 OR — 任一命中即 pass', () => {
+  const events = [toolEnd('c1', 'search_knowledge', true)]
+  // (query_excel | search_knowledge) — 后者命中即可
+  assert.strictEqual(
+    assertExpectedTools(events, [['query_excel', 'search_knowledge']]).pass,
+    true,
+  )
+})
+
+test('assertExpectedTools: 嵌套 OR — 全未命中 → fail', () => {
+  const events = [toolEnd('c1', 'load_skill', true)]
+  const r = assertExpectedTools(events, [['query_excel', 'search_knowledge']])
+  assert.strictEqual(r.pass, false)
+  assert.match(r.reason ?? '', /query_excel \| search_knowledge/)
+})
+
+test('assertExpectedTools: 嵌套 OR + 平铺 AND 混合', () => {
+  const events = [
+    toolEnd('c1', 'search_knowledge', true),
+    toolEnd('c1', 'load_skill', true),
+  ]
+  // 子句 1：(query_excel | search_knowledge) ✓；子句 2：load_skill ✓
+  assert.strictEqual(
+    assertExpectedTools(events, [['query_excel', 'search_knowledge'], 'load_skill']).pass,
+    true,
+  )
+})
+
+test('assertExpectedTools: 嵌套 OR — 命中但全部 ok=false → fail', () => {
+  const events = [toolEnd('c1', 'search_knowledge', false)]
+  const r = assertExpectedTools(events, [['query_excel', 'search_knowledge']])
+  assert.strictEqual(r.pass, false)
+  assert.match(r.reason ?? '', /失败/)
+})
+
 // ─── 断言层：expectedSkills ────────────────────────────────────────────
 
 test('assertExpectedSkills: 任一命中 → pass', () => {
@@ -388,6 +423,29 @@ test('runBatchRegression: 全部题通过', async () => {
   assert.strictEqual(result.failCount, 0)
   assert.strictEqual(result.errorCount, 0)
   assert.deepStrictEqual(result.cases.map(c => c.pass), [true, true])
+})
+
+test('runBatchRegression: 保留题库来源信息用于运行快照追溯', async () => {
+  const harness = buildHarness({ toolsPerCase: ['query_excel'] })
+  const questionBankSource = {
+    sourcePath: '/avatars/test/tests/generated/question-bank.json',
+    cached: true,
+    loadedAt: 1_700_000_000_000,
+    generatedAt: '2026-05-02',
+    totalQuestionCount: 30,
+    selectedQuestionCount: 1,
+  }
+  const result = await runBatchRegression({
+    runId: 'r-source',
+    avatarId: 'a1',
+    questions: [Q_BASIC],
+    sendMessage: harness.sendMessage,
+    waitForIdle: harness.waitForIdle,
+    questionBankSource,
+    interCaseDelayMs: 0,
+  })
+
+  assert.deepStrictEqual(result.questionBankSource, questionBankSource)
 })
 
 test('runBatchRegression: 单题失败不阻断后续', async () => {

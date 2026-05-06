@@ -1,0 +1,34 @@
+---
+rag_only: false
+source: docx
+source_path: Product/Battery and Pack/Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025.5.docx
+source_ext: .docx
+file_size_bytes: 29813
+doc_id: sim-0132
+---
+
+# Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025 5
+
+## 摘要
+
+该文档由原始文件转换而来，来源路径为 `Product/Battery and Pack/Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025.5.docx`。
+文档类型为 **docx**，用于后续知识检索与问答引用。
+
+## 关键信息
+
+- 文件名：`Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025.5.docx`
+- 扩展名：`.docx`
+- 大小：29813 字节
+- 所属主题：Product / Battery and Pack / Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025 5
+
+## 检索关键词
+
+- Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025 5
+- Product / Battery and Pack / Envision AESC 315Ah cell RTE and SOH （10 years）prediction value 2025 5
+- docx
+- Product / Battery and Pack
+
+## 使用建议
+
+- 当问题涉及该文档主题时，优先引用本条目。
+- 如需原始细节，请结合 source_path 回查原始文件。

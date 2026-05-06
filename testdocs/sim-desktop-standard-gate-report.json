@@ -1,0 +1,296 @@
+{
+  "targetRoot": "testdocs/sim-desktop-format-knowledge",
+  "gate": {
+    "expectedCount": 396,
+    "totalFileCount": 396,
+    "mdCount": 396,
+    "nonMdCount": 0,
+    "avgReadability": 89.07,
+    "pass": false
+  },
+  "violations": [
+    {
+      "type": "readability_failures",
+      "count": 42,
+      "threshold": 70,
+      "samples": [
+        {
+          "file": "0001-em-ehs-rec-0196-远景储能产品本质安全风险-dfs-专项审核表-v1-0-1.md",
+          "readabilityScore": 59
+        },
+        {
+          "file": "0002-储能-ehs-压力耐力模型-20230505正式发布版.md",
+          "readabilityScore": 59
+        },
+        {
+          "file": "0005-附件-1-em-ehs-rec-0168-ehs风险管理关键岗位ehs能力矩阵.md",
+          "readabilityScore": 41
+        },
+        {
+          "file": "0008-em-dbped-rec-0030-pre-crccb评审模板-v8-0.md",
+          "readabilityScore": 33
+        },
+        {
+          "file": "0018-tr技术评审管理流程-意见收集与评审.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0029-工商业储能柜技术和商务响应-v1.md",
+          "readabilityScore": 57
+        },
+        {
+          "file": "0030-工商业储能柜技术和商务响应-v2.md",
+          "readabilityScore": 57
+        },
+        {
+          "file": "0036-商务及技术评分汇总-24-10-30.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0038-1-附件一-远景采购说明书模板-含工厂-v1-0.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0045-包装确认单-packaging-approval-form-paf.md",
+          "readabilityScore": 53
+        },
+        {
+          "file": "0046-包装运输及承重测试-package-transport-bearing-test.md",
+          "readabilityScore": 57
+        },
+        {
+          "file": "0047-远景能源标准唛头-物流标签-模板-envision-standard-mark-delivery-label-format.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0048-远景能源标准箱单-envision-standard-packing-list.md",
+          "readabilityScore": 69
+        },
+        {
+          "file": "0055-1-附件一-采购说明书2024版.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0073-供应商初步交流表-部件类-leon.md",
+          "readabilityScore": 57
+        },
+        {
+          "file": "0081-明美-远景工商业-372-液冷1p416s-出货报告-1.md",
+          "readabilityScore": 51
+        },
+        {
+          "file": "0082-柜体检验标准.md",
+          "readabilityScore": 33
+        },
+        {
+          "file": "0083-远景215液冷1p240s出货报告-2ea-20250324-绿珈能创泸州君和彩金.md",
+          "readabilityScore": 59
+        },
+        {
+          "file": "0090-pcs机柜户外柜技术质量全属性清单.md",
+          "readabilityScore": 57
+        },
+        {
+          "file": "0091-pcs柜体发货检验规范.md",
+          "readabilityScore": 41
+        },
+        {
+          "file": "0093-冷通道检验规范.md",
+          "readabilityScore": 50
+        },
+        {
+          "file": "0095-机柜成品终检记录.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0096-机柜通道外观件通用检验标准.md",
+          "readabilityScore": 25
+        },
+        {
+          "file": "0130-working-file.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0137-仿真报告-to-综能315-20250818.md",
+          "readabilityScore": 65
+        },
+        {
+          "file": "0139-仿真报告-远景综能315-b档电芯曲线0-33c-2025-08-05.md",
+          "readabilityScore": 59
+        },
+        {
+          "file": "0140-仿真报告-远景综能315-b档电芯曲线0-33c-20250905.md",
+          "readabilityScore": 59
+        },
+        {
+          "file": "0157-远景综能315-质保曲线需求-730660cycles-2025-04-15.md",
+          "readabilityScore": 69
+        },
+        {
+          "file": "0170-dvp-xxxxxx_远景能源工商业储能一体机测试验证大纲_a.md",
+          "readabilityScore": 53
+        },
+        {
+          "file": "0174-生产性零部件开发ppap交付物说明.md",
+          "readabilityScore": 65
+        }
+      ]
+    },
+    {
+      "type": "structure_failures",
+      "count": 119,
+      "samples": [
+        {
+          "file": "0004-基于edv和itr流程的产品开发安全风险管理标准_宣贯及赋能培训材料.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.18
+        },
+        {
+          "file": "0005-附件-1-em-ehs-rec-0168-ehs风险管理关键岗位ehs能力矩阵.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 30
+        },
+        {
+          "file": "0008-em-dbped-rec-0030-pre-crccb评审模板-v8-0.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 25.76
+        },
+        {
+          "file": "0009-epd-二级流程和赛道裁剪逻辑.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.77
+        },
+        {
+          "file": "0010-epd流程通用培训-v4.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.12
+        },
+        {
+          "file": "0011-1-15-2-3_tr技术评审管理流程_2025-07-21_综合能源服务-ie.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.09
+        },
+        {
+          "file": "0012-em-pm-s-dept-f-0007-tr技术评审管理流程-v1-0.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.09
+        },
+        {
+          "file": "0014-em-qad-f-0020-tr技术评审管理流程-v1-0-综能实例化v0.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.42
+        },
+        {
+          "file": "0015-em-qad-f-0020-tr技术评审管理流程-v1-0-综能实例化v1.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.95
+        },
+        {
+          "file": "0016-em-qad-f-0020-tr技术评审管理流程-v1-0.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.02
+        },
+        {
+          "file": "0026-议题1-xxx机型pdtr4a评审与决策-脱敏版范本.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.97
+        },
+        {
+          "file": "0027-em-brpcs-rec-0001-流程mpo工作手册-20240702-v1-0发布版.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.53
+        },
+        {
+          "file": "0042-3-附件三-关联公司-2025版.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.04
+        },
+        {
+          "file": "0058-13-附件十三-远景能源供应商行为准则-2023版.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 17.78
+        },
+        {
+          "file": "0064-3-附件三-关联公司-2024版.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.6
+        },
+        {
+          "file": "0076-qty-es000174-远景能源标准集装箱式液冷储能直流产品工厂测试报告_b.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.07
+        },
+        {
+          "file": "0077-qty-es000174-远景能源标准集装箱式液冷储能直流产品工厂测试报告_b.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.83
+        },
+        {
+          "file": "0082-柜体检验标准.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 63.75
+        },
+        {
+          "file": "0089-质量赋能.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.45
+        },
+        {
+          "file": "0091-pcs柜体发货检验规范.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 27.54
+        },
+        {
+          "file": "0093-冷通道检验规范.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.74
+        },
+        {
+          "file": "0096-机柜通道外观件通用检验标准.md",
+          "reason": "too_many_long_lines",
+          "longLineRatio": 54.46
+        },
+        {
+          "file": "0097-280ah315ah-比较-leon.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.01
+        },
+        {
+          "file": "0146-远景小工商-280电芯技术协议vf-leon.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.07
+        },
+        {
+          "file": "0147-远景小工商-315电芯技术协议-1107.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.01
+        },
+        {
+          "file": "0148-远景小工商-315电芯技术协议-1205-纯净版.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.87
+        },
+        {
+          "file": "0149-远景小工商-315电芯技术协议-1205.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.87
+        },
+        {
+          "file": "0156-远景动力储能专用电芯优势介绍-280-315.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.35
+        },
+        {
+          "file": "0167-工商业储能柜标识规范v2.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 1.6
+        },
+        {
+          "file": "0171-华致256液冷定稿-远景工商业储能技术规范-定稿0626.md",
+          "reason": "insufficient_headings",
+          "headingRatio": 0.75
+        }
+      ]
+    }
+  ]
+}

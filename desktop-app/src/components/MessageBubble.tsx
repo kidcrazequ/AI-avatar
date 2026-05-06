@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo, type ComponentPropsWithoutRef, type ReactElement } from 'react'
+import { createElement, useState, useRef, useEffect, useMemo, memo, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage, useChatStore } from '../stores/chatStore'
@@ -6,6 +6,8 @@ import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
 import MermaidRenderer from './MermaidRenderer'
 import InfographicRenderer from './InfographicRenderer'
+import LightboxModal from './LightboxModal'
+import { renderChildrenWithCitations } from './source-citation-utils'
 
 const REMARK_PLUGINS = [remarkGfm]
 
@@ -127,7 +129,58 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
   )
 }
 
-const MARKDOWN_COMPONENTS = { code: ChartCodeBlock }
+/**
+ * inline-text 容器渲染拦截：把 children 中的纯文本子节点里
+ * `[来源: knowledge/...]` 切出来替换成可点击的 SourceCitation chip。
+ * 其余 inline 元素（<strong>、<em> 等）原样保留。
+ *
+ * 必须覆盖 markdown 里所有可能"承载段落级文本"的容器：
+ *   - p          段落
+ *   - li         列表项（react-markdown 默认不把列表项内文本包进 p）
+ *   - td / th    表格单元格
+ *   - blockquote 引用块
+ *
+ * 用闭包注入 avatarId + messageId（构造唯一 React key），所以不能写成模块级常量，
+ * 由 MessageBubble 内 useMemo 构造。
+ */
+function buildMarkdownComponents(avatarId: string, messageId: string) {
+  // react-markdown 对每个 tag 的 component 入参类型严格区分（HTMLLIElement /
+  // HTMLQuoteElement 等不兼容）。用最宽的"任意属性 + children + node"形状
+  // 接住，内部用 createElement 透传给真实 tag，避免泛型类型推导踩坑。
+  type ContainerProps = { children?: ReactNode; node?: unknown } & Record<string, unknown>
+
+  function makeContainerRenderer(
+    tag: 'p' | 'li' | 'td' | 'th' | 'blockquote',
+    keySuffix: string,
+  ): (props: ContainerProps) => ReactElement {
+    return function MarkdownContainer(props: ContainerProps): ReactElement {
+      const { children, node: _node, ...rest } = props
+      void _node
+      const processed: ReactNode = renderChildrenWithCitations(children, avatarId, `${messageId}-${keySuffix}`)
+      return createElement(tag, rest, processed)
+    }
+  }
+
+  // react-markdown 的 components 表对 value 类型用了 union of per-tag
+  // FunctionComponent，这里我们的统一 renderer 形状对 TS 来说不严格匹配每个
+  // tag 的 props 类型，但运行时完全等价（只透传属性 + children）。统一用
+  // `as unknown as` 桥接，避免 5 个 tag 各写一份重复实现。
+  type MarkdownComponentLike = (props: ContainerProps) => ReactElement
+  const p = makeContainerRenderer('p', 'p') as unknown as MarkdownComponentLike
+  const li = makeContainerRenderer('li', 'li') as unknown as MarkdownComponentLike
+  const td = makeContainerRenderer('td', 'td') as unknown as MarkdownComponentLike
+  const th = makeContainerRenderer('th', 'th') as unknown as MarkdownComponentLike
+  const blockquote = makeContainerRenderer('blockquote', 'bq') as unknown as MarkdownComponentLike
+
+  return {
+    code: ChartCodeBlock,
+    p,
+    li,
+    td,
+    th,
+    blockquote,
+  } as Record<string, unknown>
+}
 
 /** 超过此字符数的助手消息显示折叠按钮 */
 const COLLAPSE_THRESHOLD = 600
@@ -143,6 +196,8 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+  /** 当前对话所属分身 ID，用于 [来源:] chip 解析原始 PDF/Excel/PPT 文件 */
+  avatarId: string
 }
 
 /**
@@ -168,6 +223,16 @@ function truncateAtBoundary(text: string, maxChars: number): string {
   return head + '...'
 }
 
+/**
+ * 剥离用户消息开头的 [id:mNNNN] 锚点，仅用于 UI 显示。
+ * 锚点由 chatStore 在发送时注入（用于 snip 工具按 ID 范围裁剪上下文），
+ * 数据库与发送给 LLM 的内容仍保留锚点，只在气泡渲染时隐藏。
+ */
+const ID_ANCHOR_PREFIX = /^\[id:m\d+\]\s*/
+function stripIdAnchor(content: string): string {
+  return content.replace(ID_ANCHOR_PREFIX, '')
+}
+
 /** 兜底抽取内联 <think> 块，兼容未走 reasoning_content delta 的服务端 */
 function extractThinking(content: string): { thinking: string; clean: string } {
   const thinking: string[] = []
@@ -191,10 +256,12 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, avatarId }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** 用户上传图片放大查看：null = 关闭，否则展示对应索引的图片 */
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
   useEffect(() => () => { clearTimeout(savedTimerRef.current) }, [])
 
@@ -203,7 +270,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   const collapsed = useChatStore((s) => s.collapsedMessageIds.has(message.id))
   const toggleMessageCollapsed = useChatStore((s) => s.toggleMessageCollapsed)
   const extractedThinking = isUser
-    ? { thinking: '', clean: message.content }
+    ? { thinking: '', clean: stripIdAnchor(message.content) }
     : extractThinking(message.content)
   const contentForDisplay = extractedThinking.clean
   const reasoning = message.reasoning?.trim() || extractedThinking.thinking
@@ -221,6 +288,15 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
     clearTimeout(savedTimerRef.current)
     savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
   }
+
+  /**
+   * markdown 组件渲染器：闭包注入 avatarId + messageId 以拦截 [来源:] chip。
+   * avatarId/messageId 都是稳定值，仅在切换分身/消息时重建。
+   */
+  const markdownComponents = useMemo(
+    () => buildMarkdownComponents(avatarId, message.id),
+    [avatarId, message.id],
+  )
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start gap-3'} animate-fade-in`}>
@@ -266,7 +342,51 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
           )}
 
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <div className="flex flex-col gap-2">
+              {/* 用户上传的图片缩略图（点击在应用内 Lightbox 查看大图） */}
+              {message.imageUrls && message.imageUrls.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  {message.imageUrls.map((url, i) => (
+                    <button
+                      key={`img-${i}`}
+                      type="button"
+                      onClick={() => setLightboxIndex(i)}
+                      className="block p-0 bg-transparent border-2 border-px-border hover:border-px-primary
+                        focus:outline-none focus:border-px-primary cursor-pointer transition-none"
+                      aria-label={`查看图片 ${i + 1} 大图`}
+                    >
+                      <img
+                        src={url}
+                        alt={`附图 ${i + 1}`}
+                        className="w-20 h-20 object-cover block"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {contentForDisplay && (
+                <p className="whitespace-pre-wrap">{contentForDisplay}</p>
+              )}
+              {/* Lightbox：用户上传图片的应用内放大查看，不再跳浏览器 */}
+              {lightboxIndex !== null && message.imageUrls && message.imageUrls[lightboxIndex] && (
+                <LightboxModal
+                  isOpen={true}
+                  onClose={() => setLightboxIndex(null)}
+                  title="USER IMAGE"
+                  subtitle={
+                    message.imageUrls.length > 1
+                      ? `第 ${lightboxIndex + 1} 张 / 共 ${message.imageUrls.length} 张`
+                      : undefined
+                  }
+                >
+                  <img
+                    src={message.imageUrls[lightboxIndex]}
+                    alt={`附图 ${lightboxIndex + 1}`}
+                    className="max-w-full max-h-[80vh] object-contain block"
+                  />
+                </LightboxModal>
+              )}
+            </div>
           ) : (
             <div className="prose prose-sm prose-invert max-w-none prose-pixel
               prose-headings:font-game prose-headings:font-bold prose-headings:tracking-wider prose-headings:text-px-text
@@ -292,7 +412,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               <ReactMarkdown
                 remarkPlugins={REMARK_PLUGINS}
                 urlTransform={safeUrlTransform}
-                components={MARKDOWN_COMPONENTS}
+                components={markdownComponents}
               >
                 {displayContent}
               </ReactMarkdown>

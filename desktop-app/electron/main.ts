@@ -12,11 +12,13 @@ import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electro
 // 注：必须在 app.whenReady() 之前 appendSwitch，且 NODE_OPTIONS / --js-flags 命令行
 // 在 Electron Mac 下经常被 cross-env / shell 嵌套引号丢失，appendSwitch 是最可靠的途径。
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192')
+// macOS + Electron 41 偶发 Chromium GPU overlay mailbox 日志，禁用硬件加速避免渲染层反复报错。
+app.disableHardwareAcceleration()
 
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, type WikiAnswer, type LLMCallFn, type ChartCacheEntry } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, type WikiAnswer, type LLMCallFn, type ChartCacheEntry } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -30,6 +32,7 @@ import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger, redactSensitiveArgs } from './logger'
 import { ToolResultSpool } from './tool-result-spool'
+import { AttachmentStore, MAX_ATTACHMENT_FILE_BYTES } from './attachment-store'
 import { createEmbeddingFn, createLLMFn } from './llm-factory'
 import { SKILL_GEN_SYSTEM_PROMPT, buildSkillGenUserPrompt } from './skill-generator-prompt'
 import { WorkspaceManager } from './workspace/WorkspaceManager'
@@ -123,6 +126,31 @@ let logger: Logger
  * 同样依赖 userData 路径，在 initManagers 中创建。
  */
 let toolResultSpool: ToolResultSpool
+
+/**
+ * 对话框附件落盘器（对话框附件扩展，2026-05-01）。
+ * 文件本体落 userData/attachments/<convId>/<hash>.<ext>，元信息进 attachments 表。
+ */
+let attachmentStore: AttachmentStore
+
+/**
+ * 附件全文解析缓存（read_attachment / search_attachment 共享）。
+ * 同一附件被反复 tool call 时不重复跑 documentParser.parseFile。
+ *
+ * 用 attachment.id 作 key（已含 hash 命名空间，无碰撞风险）；FIFO 简易上限 16 项，
+ * 防止内存堆积（单文档解析结果通常 ~MB 级，16 项 ≈ 数十 MB 上限可接受）。
+ */
+const ATTACHMENT_PARSE_CACHE_LIMIT = 16
+const attachmentParseCache = new Map<string, { fileType: string; text: string; perPageChars?: Array<{ num: number; chars: number }>; sheetNames?: string[] }>()
+function rememberParsedAttachment(id: string, parsed: { fileType: string; text: string; perPageChars?: Array<{ num: number; chars: number }>; sheetNames?: string[] }) {
+  if (attachmentParseCache.has(id)) attachmentParseCache.delete(id)
+  attachmentParseCache.set(id, parsed)
+  while (attachmentParseCache.size > ATTACHMENT_PARSE_CACHE_LIMIT) {
+    const oldestKey = attachmentParseCache.keys().next().value
+    if (oldestKey === undefined) break
+    attachmentParseCache.delete(oldestKey)
+  }
+}
 
 /**
  * 获取数据库实例；若 app.whenReady 初始化失败则延迟创建兜底。
@@ -326,6 +354,9 @@ function initManagers() {
   logger = new Logger(app.getPath('userData'))
   // Stage 三 P2 #15: 工具返回值 spool（>12000 字符自动落盘到 userData/tool-results/）
   toolResultSpool = new ToolResultSpool(app.getPath('userData'))
+  // 对话框附件存储（2026-05-01）：用户上传的 PDF / Word / 文本等文件落到
+  // userData/attachments/<convId>/<hash>.<ext>，元信息进 attachments 表
+  attachmentStore = new AttachmentStore(app.getPath('userData'))
   // 启动时清理 7 天前的 spool 文件，防止磁盘膨胀（异步包装防止初始化超时）
   setImmediate(() => {
     const stat = toolResultSpool.cleanup()
@@ -592,6 +623,13 @@ wrapHandler('update-conversation-title', (_, id: string, title: string) => {
 })
 
 wrapHandler('delete-conversation', (_, id: string) => {
+  // 先清磁盘附件目录，再删 DB（DB 删除会 CASCADE 清理 attachments / messages 行）
+  // 反过来即使附件目录清理失败也不影响主流程：此处兜底捕获日志即可
+  try {
+    attachmentStore?.deleteAttachmentsByConversation(id)
+  } catch (err) {
+    if (logger) logger.error('delete-conversation:cleanup-attachments', err)
+  }
   getDb().deleteConversation(id)
 })
 
@@ -676,6 +714,192 @@ wrapHandler('agent-tasks:clear', (_, conversationId: string) => {
   assertSafeSegment(conversationId, '会话ID')
   return getDb().clearAgentTasks(conversationId)
 })
+
+// ─── 对话框附件（2026-05-01 对话框附件扩展）─────────────────────────────────
+//
+// 设计：
+//   - save-attachment：base64 → buffer → AttachmentStore 落盘 + DocumentParser 抽取
+//     outline+summary（前 500 字）+ DB.insertAttachment
+//   - get-attachment-meta：按 ID 取元信息（id/name/mime/size/summary/outline/parsed_meta）
+//   - list-attachments：列出某会话所有附件，供 ChatWindow 加载历史时恢复 chip
+//
+// 注意：解析失败不阻塞落盘，summary/outline 退化为 null，工具调用时再尝试解析。
+
+/**
+ * save-attachment: 用户上传文件 → 落盘 + 抽取摘要/大纲 + 写入 attachments 表。
+ *
+ * @param conversationId  归属会话 ID
+ * @param name            原始文件名（必须含后缀以便选择解析器）
+ * @param base64Data      base64 编码的文件二进制（不含 data: 前缀）
+ * @param mime            可选 MIME 类型（前端提供更准确，省略时按后缀映射）
+ * @returns AttachmentRow（含 id / hash / 大小 / 摘要 / 大纲）
+ */
+wrapHandler('save-attachment', async (_, conversationId: string, name: string, base64Data: string, mime?: string) => {
+  assertSafeSegment(conversationId, '会话ID')
+  if (typeof name !== 'string' || !name.trim()) throw new Error('name 必填')
+  if (typeof base64Data !== 'string' || !base64Data) throw new Error('base64Data 必填')
+  // 拒绝跨会话误用：保存前确认会话存在（避免渲染进程乱传 ID 导致孤儿目录）
+  const conv = getDb().getConversation(conversationId)
+  if (!conv) throw new Error(`会话不存在: ${conversationId}`)
+
+  // base64 → buffer，超大附件先粗判大小（base64 ≈ 4/3 原始字节），避免无谓 decode
+  const approxBytes = Math.floor(base64Data.length * 0.75)
+  if (approxBytes > MAX_ATTACHMENT_FILE_BYTES + 1024) {
+    const mb = Math.floor(MAX_ATTACHMENT_FILE_BYTES / (1024 * 1024))
+    throw new Error(`附件过大（>${mb}MB），请压缩或拆分后再上传: ${name}`)
+  }
+  const buffer = Buffer.from(base64Data, 'base64')
+
+  const saved = attachmentStore.saveAttachment(conversationId, name, buffer)
+  const ext = saved.ext
+  const finalMime = mime?.trim() || guessMimeFromExt(ext) || 'application/octet-stream'
+
+  getDb().insertAttachment({
+    id: saved.id,
+    conversation_id: conversationId,
+    name: saved.name,
+    mime: finalMime,
+    size: saved.size,
+    hash: saved.hash,
+    ext,
+    created_at: saved.createdAt,
+    summary: null,
+    outline: null,
+    parsed_meta: null,
+  })
+
+  if (logger) logger.activity('save-attachment', `conv=${conversationId} name=${name} size=${saved.size} hash=${saved.hash.slice(0, 12)}`)
+
+  // 摘要 / 大纲在后台抽取，不阻塞 IPC 返回，避免大文件解析让前端长时间看不到附件 chip。
+  // 失败仅记日志：read_attachment / search_attachment 时还会再次按需解析。
+  setImmediate(() => {
+    documentParser.parseFile(saved.storedPath)
+      .then(parsed => {
+        const text = parsed.text || ''
+        const summary = text.slice(0, 500) || null
+        const outline = extractOutline(text) || null
+        const parsedMeta = JSON.stringify({
+          fileType: parsed.fileType,
+          textLength: text.length,
+          imageCount: parsed.images.length,
+          sheetNames: parsed.sheetNames ?? null,
+          pageCount: parsed.perPageChars?.length ?? null,
+        })
+        try {
+          getDb().updateAttachmentParseResult(saved.id, { summary, outline, parsed_meta: parsedMeta })
+        } catch (writeErr) {
+          if (logger) logger.error('save-attachment:write-meta', writeErr instanceof Error ? writeErr : new Error(String(writeErr)))
+        }
+      })
+      .catch(parseErr => {
+        if (logger) logger.activity('save-attachment:parse-skip', `${name}: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`)
+      })
+  })
+
+  return getDb().getAttachmentById(saved.id)
+})
+
+/** get-attachment-meta: 按 ID 取元信息（不返回文件本体） */
+wrapHandler('get-attachment-meta', (_, id: string) => {
+  if (typeof id !== 'string' || !id) throw new Error('id 必填')
+  return getDb().getAttachmentById(id)
+})
+
+/** list-attachments: 列出某会话所有附件元信息（按时间升序） */
+wrapHandler('list-attachments', (_, conversationId: string) => {
+  assertSafeSegment(conversationId, '会话ID')
+  return getDb().listAttachmentsByConversation(conversationId)
+})
+
+/**
+ * link-attachment-to-message: 把附件挂到刚保存的消息上。
+ * 渲染进程在 saveMessage 拿到 messageId 后立即调一次，把上传时未关联的附件回填。
+ */
+wrapHandler('link-attachment-to-message', (_, messageId: string, attachmentIds: string[], conversationId: string) => {
+  assertSafeSegment(conversationId, '会话ID')
+  if (typeof messageId !== 'string' || !messageId) throw new Error('messageId 必填')
+  if (!Array.isArray(attachmentIds)) throw new Error('attachmentIds 必须是数组')
+  return getDb().linkAttachmentToMessage(messageId, attachmentIds, conversationId)
+})
+
+/**
+ * open-attachment-file: 用系统默认应用打开附件本体（chip 点击）。
+ * 必须先校验 attachment 属于已存在会话，再调 shell.openPath。
+ */
+wrapHandler('open-attachment-file', async (_, id: string) => {
+  if (typeof id !== 'string' || !id) throw new Error('id 必填')
+  const row = getDb().getAttachmentById(id)
+  if (!row) throw new Error(`附件不存在: ${id}`)
+  const abs = attachmentStore.getAttachmentAbsPath(row.conversation_id, row.hash, row.ext)
+  const errMsg = await shell.openPath(abs)
+  if (errMsg) throw new Error(`打开附件失败: ${errMsg}`)
+  return { ok: true, path: abs }
+})
+
+/**
+ * 抽取文档大纲：扫描所有 markdown 标题（# / ## / ###）并返回前 30 行。
+ * 非 markdown 文档（PDF / Word 抽出来的纯文本）通常没有 # 标题，则退化为按
+ * 「短行 + 全大写 / 数字编号」启发式抽取段落标题。
+ */
+function extractOutline(text: string): string {
+  if (!text) return ''
+  const lines = text.split(/\r?\n/)
+  const headings: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (/^#{1,6}\s+\S/.test(trimmed)) {
+      headings.push(trimmed)
+    } else if (
+      // 非 markdown 兜底：行 < 60 字、不含句号/逗号、像章节编号或全大写
+      trimmed.length < 60
+      && !/[，。,]$/.test(trimmed)
+      && (/^第\s*[一二三四五六七八九十百千零0-9]+\s*[章节部分]/.test(trimmed)
+        || /^[0-9]+(\.[0-9]+)*\s+\S/.test(trimmed)
+        || /^[A-Z][A-Z0-9\s.-]{4,}$/.test(trimmed))
+    ) {
+      headings.push(trimmed)
+    }
+    if (headings.length >= 30) break
+  }
+  return headings.join('\n')
+}
+
+/** 按后缀名兜底推断 MIME 类型，前端没传时用 */
+function guessMimeFromExt(ext: string): string {
+  const map: Record<string, string> = {
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.csv': 'text/csv',
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.json': 'application/json',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.toml': 'text/plain',
+    '.xml': 'application/xml',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.css': 'text/css',
+    '.ts': 'text/x-typescript',
+    '.tsx': 'text/x-typescript',
+    '.js': 'text/javascript',
+    '.jsx': 'text/javascript',
+    '.py': 'text/x-python',
+    '.java': 'text/x-java-source',
+    '.go': 'text/x-go',
+    '.rs': 'text/rust',
+    '.sh': 'application/x-sh',
+    '.sql': 'application/sql',
+    '.env': 'text/plain',
+  }
+  return map[ext.toLowerCase()] || ''
+}
 
 // ─── 工具结果 spool 查看入口（Stage 三 P2 范围外 2）────────────────────────
 
@@ -908,6 +1132,117 @@ wrapHandler('read-knowledge-file', (_, avatarId: string, relativePath: string) =
   return getKnowledgeManager(avatarId).readFile(relativePath)
 })
 
+/**
+ * 从 .md 顶部 frontmatter 中提取 `raw_file` 字段的轻量实现。
+ *
+ * 设计意图：
+ * - 主进程不能 import `src/` 下的 `parseFrontmatter`（src/ 属于渲染层 Vite 构建产物，
+ *   主进程构建走 esbuild，混引会引入 Vite/electron 复杂依赖）。
+ * - 此处只针对单个字段做行级正则匹配，避免重复实现完整 YAML 解析。
+ *
+ * 安全约束：
+ * - 仅做字符串解析，不做路径解析；越界校验留给 handler 调用方。
+ * - 必须先确认前 2 行是 `---`（CRLF/LF 兼容），再在闭合 `---` 之间匹配 `raw_file:`。
+ *
+ * @param src .md 文件全文
+ * @returns trim 后的 raw_file 值；frontmatter 不存在或字段缺失返回 null
+ */
+function extractRawFileFromFrontmatter(src: string): string | null {
+  if (!src.startsWith('---\n') && !src.startsWith('---\r\n')) {
+    return null
+  }
+  const endMatch = src.match(/\n---\r?\n/)
+  if (!endMatch || endMatch.index === undefined) {
+    return null
+  }
+  const fmText = src.slice(4, endMatch.index)
+  for (const line of fmText.split(/\r?\n/)) {
+    const m = line.match(/^\s*raw_file\s*:\s*(.+?)\s*$/)
+    if (m) {
+      // 去除 YAML 风格的成对引号
+      const value = m[1].trim().replace(/^["']|["']$/g, '')
+      return value.length > 0 ? value : null
+    }
+  }
+  return null
+}
+
+/**
+ * knowledge:resolve-raw-file
+ *
+ * 用途：渲染层从 LLM 引用的 `[来源: knowledge/<file>.md#L12-L20]` anchor 解析出
+ *       原始 PDF/Excel/PPT 路径（写在 .md 顶部 frontmatter `raw_file` 字段）。
+ *       UI 据此展示「📎 原始文件」chip。
+ *
+ * 安全策略（双层防护）：
+ *   1. KnowledgeManager.readFile 内部用 `resolveUnderRoot` 校验 mdRelativePath 不越出
+ *      `<avatar>/knowledge/`；
+ *   2. 解析 frontmatter 拿到的 `raw_file` 必须落在 `<knowledge>/_raw/` 目录下，
+ *      防止恶意 frontmatter 写 `raw_file: ../../../etc/passwd` 越权。
+ *
+ * 任何一层校验失败、frontmatter 缺字段、或 .md 不存在都返回 null，由渲染层降级展示。
+ */
+wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: string) => {
+  const km = getKnowledgeManager(avatarId)
+  let mdContent: string
+  try {
+    mdContent = km.readFile(mdRelativePath)
+  } catch (err) {
+    if (logger) logger.activity('knowledge:resolve-raw-file', `read .md 失败 avatarId=${avatarId} path=${mdRelativePath} err=${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+  const rawValue = extractRawFileFromFrontmatter(mdContent)
+  if (!rawValue) return null
+
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const rawAbsPath = path.resolve(knowledgePath, rawValue)
+  const rawRoot = path.join(knowledgePath, '_raw') + path.sep
+  if (!rawAbsPath.startsWith(rawRoot)) {
+    if (logger) logger.error('knowledge:resolve-raw-file', new Error(`raw_file 路径越界：${rawValue} → ${rawAbsPath}`))
+    return null
+  }
+
+  const displayName = path.basename(rawAbsPath)
+  const ext = path.extname(rawAbsPath).slice(1).toLowerCase()
+  const exists = fs.existsSync(rawAbsPath)
+  // 统一用相对 knowledge/ 的相对路径（POSIX 风格保持与入参 _raw/xxx 一致）
+  const rawRelPath = path.relative(knowledgePath, rawAbsPath).split(path.sep).join('/')
+  return { rawRelPath, displayName, ext, exists }
+})
+
+/**
+ * knowledge:open-raw-file
+ *
+ * 用途：用系统默认应用打开 `<avatar>/knowledge/_raw/` 下的原始文件（PDF/Excel/PPT…）。
+ *
+ * 安全策略：
+ *   1. avatarId 经 `assertSafeSegment` 校验（不含 `/` `\` `..` `\0` 且非保留名）；
+ *   2. 解析后的绝对路径必须以 `<knowledge>/_raw/` 为前缀，否则拒绝（防止
+ *      渲染层伪造 `rawRelPath: ../../etc/passwd`）；
+ *   3. 文件不存在直接返回 ok:false，不调 shell.openPath（避免 macOS 弹错误对话框）。
+ */
+wrapHandler('knowledge:open-raw-file', async (_, avatarId: string, rawRelPath: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const absPath = path.resolve(knowledgePath, rawRelPath)
+  const rawRoot = path.join(knowledgePath, '_raw') + path.sep
+  if (!absPath.startsWith(rawRoot)) {
+    const msg = `raw 路径越界：${rawRelPath}`
+    if (logger) logger.error('knowledge:open-raw-file', new Error(msg))
+    return { ok: false, error: msg }
+  }
+  if (!fs.existsSync(absPath)) {
+    return { ok: false, error: `原始文件不存在：${rawRelPath}` }
+  }
+  // shell.openPath：成功返回 ''，失败返回错误描述字符串
+  const openErr = await shell.openPath(absPath)
+  if (openErr) {
+    if (logger) logger.error('knowledge:open-raw-file', new Error(`shell.openPath 失败：${openErr}`))
+    return { ok: false, error: openErr }
+  }
+  return { ok: true }
+})
+
 wrapHandler('write-knowledge-file', (_, avatarId: string, relativePath: string, content: string) => {
   const km = getKnowledgeManager(avatarId)
   km.writeFile(relativePath, content)
@@ -1070,6 +1405,21 @@ wrapHandler('write-skill-file', (_, avatarId: string, fileName: string, content:
 // BUG4 修复：删除分身时同步清理 DB 中的会话和消息记录
 wrapHandler('delete-avatar', (_, id: string) => {
   assertSafeSegment(id, '分身ID')
+  // 收集该分身下所有会话 ID，先清磁盘附件目录，再走 DB CASCADE 清空
+  try {
+    if (attachmentStore) {
+      const convIds = getDb().getConversations(id).map(c => c.id)
+      for (const cid of convIds) {
+        try {
+          attachmentStore.deleteAttachmentsByConversation(cid)
+        } catch (e) {
+          if (logger) logger.error('delete-avatar:cleanup-attachments', e)
+        }
+      }
+    }
+  } catch (err) {
+    if (logger) logger.error('delete-avatar:list-conversations-for-cleanup', err)
+  }
   getDb().deleteConversationsByAvatar(id)
   avatarManager.deleteAvatar(id)
   knowledgeManagers.delete(id)
@@ -1641,6 +1991,165 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     }
   }
 
+  // ─── 对话框附件按需读取（Tool-use 路径） ────────────────────────────
+  // read_attachment：按 attachment_id 读取对话框上传的附件，支持 char_range / page_range 分段切片
+  if (name === 'read_attachment') {
+    const attachmentId = String(args.id ?? '').trim()
+    if (!attachmentId) return { content: '', error: '缺少 id 参数（形如 att_xxx）' }
+    const row = getDb().getAttachmentById(attachmentId)
+    if (!row) return { content: '', error: `附件不存在或已删除: ${attachmentId}` }
+    if (row.conversation_id !== conversationId) {
+      // 防越权：附件按会话隔离，禁止跨会话读取
+      return { content: '', error: '附件不属于当前会话，无权限读取' }
+    }
+
+    let parsed = attachmentParseCache.get(attachmentId)
+    if (!parsed) {
+      try {
+        const abs = attachmentStore.getAttachmentAbsPath(row.conversation_id, row.hash, row.ext)
+        if (!fs.existsSync(abs)) return { content: '', error: `附件文件已丢失: ${row.name}` }
+        const result = await documentParser.parseFile(abs)
+        parsed = {
+          fileType: result.fileType,
+          text: result.text,
+          perPageChars: result.perPageChars,
+          sheetNames: result.sheetNames,
+        }
+        rememberParsedAttachment(attachmentId, parsed)
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr)
+        return { content: '', error: `附件解析失败: ${msg}` }
+      }
+    }
+
+    const fullText = parsed.text || ''
+    const totalChars = fullText.length
+    const DEFAULT_RETURN_CHARS = 16_000
+
+    // page_range（仅 PDF 且 perPageChars 可用时）
+    const pageRange = Array.isArray(args.page_range) ? args.page_range as unknown[] : null
+    if (pageRange && pageRange.length === 2) {
+      if (!parsed.perPageChars || parsed.perPageChars.length === 0) {
+        return { content: '', error: 'page_range 仅对 PDF 等带分页信息的附件有效，本附件无分页元数据，请改用 char_range' }
+      }
+      const from = Math.max(1, Math.floor(Number(pageRange[0])))
+      const to = Math.max(from, Math.floor(Number(pageRange[1])))
+      let cursor = 0
+      let startChar = -1
+      let endChar = -1
+      for (const p of parsed.perPageChars) {
+        if (p.num === from) startChar = cursor
+        cursor += p.chars
+        if (p.num === to) { endChar = cursor; break }
+      }
+      if (startChar < 0) return { content: '', error: `page_range 起始页 ${from} 超出文档总页数（共 ${parsed.perPageChars.length} 页）` }
+      if (endChar < 0) endChar = totalChars
+      const sliced = fullText.slice(startChar, endChar)
+      return {
+        content: JSON.stringify({
+          attachmentId,
+          name: row.name,
+          fileType: parsed.fileType,
+          totalPages: parsed.perPageChars.length,
+          totalChars,
+          pageRange: [from, to],
+          charRange: [startChar, endChar],
+          text: sliced.length > DEFAULT_RETURN_CHARS ? sliced.slice(0, DEFAULT_RETURN_CHARS) : sliced,
+          truncated: sliced.length > DEFAULT_RETURN_CHARS,
+          hint: sliced.length > DEFAULT_RETURN_CHARS ? `本次返回前 ${DEFAULT_RETURN_CHARS} 字，剩余 ${sliced.length - DEFAULT_RETURN_CHARS} 字可用 char_range 续读` : undefined,
+        }, null, 2),
+      }
+    }
+
+    // char_range（默认前 16000 字）
+    let start = 0
+    let end = Math.min(totalChars, DEFAULT_RETURN_CHARS)
+    const charRange = Array.isArray(args.char_range) ? args.char_range as unknown[] : null
+    if (charRange && charRange.length === 2) {
+      const s = Math.max(0, Math.floor(Number(charRange[0])))
+      const e = Math.max(s, Math.floor(Number(charRange[1])))
+      start = s
+      end = Math.min(totalChars, e)
+      // 单次切片硬上限 32k 字，避免 LLM 上下文炸
+      const HARD_SLICE_LIMIT = 32_000
+      if (end - start > HARD_SLICE_LIMIT) end = start + HARD_SLICE_LIMIT
+    }
+    const sliced = fullText.slice(start, end)
+    return {
+      content: JSON.stringify({
+        attachmentId,
+        name: row.name,
+        fileType: parsed.fileType,
+        totalChars,
+        totalPages: parsed.perPageChars?.length,
+        sheetNames: parsed.sheetNames,
+        charRange: [start, end],
+        text: sliced,
+        truncated: end < totalChars,
+        hint: end < totalChars ? `本次返回 ${start}-${end} 字，全文共 ${totalChars} 字，可用 char_range:[${end}, ${Math.min(totalChars, end + DEFAULT_RETURN_CHARS)}] 续读` : undefined,
+      }, null, 2),
+    }
+  }
+
+  // search_attachment：在已上传附件中按关键词全文检索，返回命中行号 + 上下文
+  if (name === 'search_attachment') {
+    const attachmentId = String(args.id ?? '').trim()
+    const keyword = String(args.keyword ?? '')
+    if (!attachmentId) return { content: '', error: '缺少 id 参数' }
+    if (!keyword) return { content: '', error: '缺少 keyword 参数' }
+    const row = getDb().getAttachmentById(attachmentId)
+    if (!row) return { content: '', error: `附件不存在或已删除: ${attachmentId}` }
+    if (row.conversation_id !== conversationId) {
+      return { content: '', error: '附件不属于当前会话，无权限读取' }
+    }
+
+    let parsed = attachmentParseCache.get(attachmentId)
+    if (!parsed) {
+      try {
+        const abs = attachmentStore.getAttachmentAbsPath(row.conversation_id, row.hash, row.ext)
+        if (!fs.existsSync(abs)) return { content: '', error: `附件文件已丢失: ${row.name}` }
+        const result = await documentParser.parseFile(abs)
+        parsed = {
+          fileType: result.fileType,
+          text: result.text,
+          perPageChars: result.perPageChars,
+          sheetNames: result.sheetNames,
+        }
+        rememberParsedAttachment(attachmentId, parsed)
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr)
+        return { content: '', error: `附件解析失败: ${msg}` }
+      }
+    }
+
+    const maxHits = Math.min(100, Math.max(1, Number.isFinite(args.max_hits) ? Number(args.max_hits) : 20))
+    const lines = (parsed.text || '').split(/\r?\n/)
+    const hits: Array<{ line: number; text: string; context: string }> = []
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes(keyword)) {
+        const ctxStart = Math.max(0, i - 1)
+        const ctxEnd = Math.min(lines.length, i + 2)
+        hits.push({
+          line: i + 1,
+          text: lines[i].slice(0, 240),
+          context: lines.slice(ctxStart, ctxEnd).join('\n').slice(0, 600),
+        })
+        if (hits.length >= maxHits) break
+      }
+    }
+    return {
+      content: JSON.stringify({
+        attachmentId,
+        name: row.name,
+        keyword,
+        totalHits: hits.length,
+        truncated: hits.length >= maxHits,
+        hits,
+        hint: hits.length === 0 ? `关键词 "${keyword}" 未命中，可尝试拆分为更短的子词，或先用 read_attachment 看大纲` : undefined,
+      }, null, 2),
+    }
+  }
+
   // snip：把指定 [id:mNNNN] 范围内的消息从聊天上下文中移除（实际是写入 pending_snips 设置表）
   if (name === 'snip') {
     const fromId = String(args.from_id ?? '').trim()
@@ -1762,6 +2271,22 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
       void sendErr
     }
   }
+
+  // Skill 路由命中时单独推一条事件，让前端 ToolCallTimeline 能展示「★ 加载技能 X」这一步。
+  // 注意：'skill-loaded' 不在 RAGProgressPhase 枚举里，是渲染端约定的伪 phase；
+  // 这里直接绕过 retrieveAndBuildPrompt 的 onProgress 类型限制，单独 send。
+  if (routeResult.selectedSkill) {
+    try {
+      mainWindow?.webContents.send('rag-progress', {
+        avatarId,
+        phase: 'skill-loaded',
+        detail: `加载技能：${routeResult.selectedSkill}`,
+      })
+    } catch (sendErr) {
+      void sendErr
+    }
+  }
+
   let result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
 
   // 如果路由命中了 skill，把 SKILL.md 内容注入到 RAG 结果前面
@@ -2152,12 +2677,13 @@ async function batchImportFiles(
       // 写入文件（与单文件导入一致：大文件标 rag_only，小文件直接进 system prompt）
       const RAG_ONLY_THRESHOLD = 50_000  // 50KB 以上标 rag_only
       const isLargeFile = finalBody.length > RAG_ONLY_THRESHOLD
-      const frontmatterLines = ['---']
-      if (isLargeFile) frontmatterLines.push('rag_only: true')
-      frontmatterLines.push(`source: ${sourceTag}`)
-      if (rawRelPath) frontmatterLines.push(`raw_file: ${rawRelPath}`)
-      frontmatterLines.push('---', '')
-      const finalContent = frontmatterLines.join('\n') + '\n' + finalBody
+      const systemMeta: Record<string, unknown> = {}
+      if (isLargeFile) systemMeta.rag_only = true
+      systemMeta.source = sourceTag
+      if (rawRelPath) systemMeta.raw_file = rawRelPath
+      const enhanced = extractFrontmatterFields(fileName, finalBody)
+      const fmBlock = buildFrontmatterBlock(mergeFrontmatter(systemMeta, enhanced))
+      const finalContent = fmBlock + '\n\n' + finalBody
       kmgr.writeFile(relativePath, finalContent)
 
       // Excel 结构化 JSON 落盘（与单文件导入路径 KnowledgePanel.tsx:271 等价）
@@ -2455,17 +2981,18 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
     logger.activity('format-file-fabrication', `${relativePath}: ${fabricated.length} 个疑似编造数值: ${fabricated.slice(0, 5).join(', ')}`)
   }
 
-  // 写回（保留原 frontmatter 的关键字段）
-  const fmLines = ['---']
+  // 写回（合并旧 frontmatter 保留用户自定义字段，修复此前整段重建丢字段的缺陷）
+  const oldMeta = fmMatch ? parseFrontmatterCore(currentContent).meta : {}
   const isLarge = formatted.length > 50_000
-  if (isLarge) fmLines.push('rag_only: true')
-  fmLines.push('source: enhanced')
-  if (fmMatch) {
-    const rawFileMatch = fmMatch[1].match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
-    if (rawFileMatch) fmLines.push(`raw_file: ${rawFileMatch[1].trim()}`)
-  }
-  fmLines.push('---', '')
-  fs.writeFileSync(filePath, fmLines.join('\n') + '\n' + formatted, 'utf-8')
+  const newSystemMeta: Record<string, unknown> = { source: 'enhanced' }
+  if (isLarge) newSystemMeta.rag_only = true
+  const enhanced = extractFrontmatterFields(
+    path.basename(filePath, path.extname(filePath)),
+    formatted,
+  )
+  const mergedMeta = mergeFrontmatter(oldMeta, mergeFrontmatter(newSystemMeta, enhanced))
+  const fmBlock = buildFrontmatterBlock(mergedMeta)
+  fs.writeFileSync(filePath, fmBlock + '\n\n' + formatted, 'utf-8')
 
   return { success: true }
 })
@@ -2748,7 +3275,12 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
         }
       }
 
-      const newContent = `---\nrag_only: true\nsource: enhanced\n---\n\n${formatted}`
+      // 合并旧 frontmatter 保留用户字段，增强字段
+      const oldContent = fs.readFileSync(filePath, 'utf-8')
+      const oldMeta = parseFrontmatterCore(oldContent).meta
+      const enhancedFields = extractFrontmatterFields(fileName, formatted)
+      const mergedMeta = mergeFrontmatter(oldMeta, mergeFrontmatter({ rag_only: true, source: 'enhanced' }, enhancedFields))
+      const newContent = buildFrontmatterBlock(mergedMeta) + '\n\n' + formatted
       fs.writeFileSync(filePath, newContent, 'utf-8')
       enhanced++
 
@@ -3440,8 +3972,17 @@ wrapHandler('regression-ensure-conversation', (_, avatarId: string, conversation
  * 4. 落盘 run 结果。
  *
  * 渲染进程已经渲染完成 markdown/html，主进程只透传写盘 + 写一份 metadata.json 用于列表查询。
- * 文件结构：avatars/{id}/tests/runs/{runId}/{result.json, report.md, report.html, metadata.json}
+ * 文件结构：avatars/{id}/tests/runs/{runId}/{result.json, report.md, report.html, metadata.json, question-bank.json}
  */
+interface RegressionQuestionBankSource {
+  sourcePath: string
+  cached: boolean
+  loadedAt: number
+  generatedAt?: string
+  totalQuestionCount: number
+  selectedQuestionCount: number
+}
+
 interface RegressionSavePayload {
   runId: string
   startedAt: number
@@ -3452,6 +3993,10 @@ interface RegressionSavePayload {
   errorCount: number
   /** 完整 BatchRunResult 的 JSON 序列化（含每个 case 的 assertions） */
   resultJson: string
+  /** 本次运行使用的完整题库快照 JSON */
+  questionBankJson?: string
+  /** 本次运行使用的题库来源信息 */
+  questionBankSource?: RegressionQuestionBankSource
   /** 渲染好的 markdown */
   reportMd: string
   /** 渲染好的 html */
@@ -3461,7 +4006,20 @@ interface RegressionSavePayload {
 wrapHandler('regression-save-run-result', (_, avatarId: string, payload: RegressionSavePayload) => {
   assertSafeSegment(avatarId, '分身ID')
   if (!payload || typeof payload !== 'object') throw new Error('payload 缺失')
-  const { runId, startedAt, finishedAt, totalCases, passCount, failCount, errorCount, resultJson, reportMd, reportHtml } = payload
+  const {
+    runId,
+    startedAt,
+    finishedAt,
+    totalCases,
+    passCount,
+    failCount,
+    errorCount,
+    resultJson,
+    questionBankJson,
+    questionBankSource,
+    reportMd,
+    reportHtml,
+  } = payload
   if (typeof runId !== 'string' || runId.length === 0) throw new Error('runId 非法')
   assertSafeSegment(runId, 'runId')
 
@@ -3472,13 +4030,20 @@ wrapHandler('regression-save-run-result', (_, avatarId: string, payload: Regress
   const reportMdPath = path.join(runDir, 'report.md')
   const reportHtmlPath = path.join(runDir, 'report.html')
   const metadataPath = path.join(runDir, 'metadata.json')
+  const questionBankPath = path.join(runDir, 'question-bank.json')
 
   fs.writeFileSync(resultJsonPath, resultJson, 'utf-8')
+  if (typeof questionBankJson === 'string' && questionBankJson.length > 0) {
+    JSON.parse(questionBankJson)
+    fs.writeFileSync(questionBankPath, questionBankJson, 'utf-8')
+  }
   fs.writeFileSync(reportMdPath, reportMd, 'utf-8')
   fs.writeFileSync(reportHtmlPath, reportHtml, 'utf-8')
   fs.writeFileSync(metadataPath, JSON.stringify({
     runId, avatarId, startedAt, finishedAt,
     totalCases, passCount, failCount, errorCount,
+    questionBankSource,
+    questionBankSnapshotPath: fs.existsSync(questionBankPath) ? questionBankPath : undefined,
     savedAt: Date.now(),
   }, null, 2), 'utf-8')
 

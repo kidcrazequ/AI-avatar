@@ -187,15 +187,17 @@ test('splitMarkdownByHeading 正确切分 H2/H3，丢弃空内容章节', () => 
 ## 第三章
 内容 3`
   const chapters = splitMarkdownByHeading(text)
-  // 「第二章」紧跟「### 第二章 子节」之间无直属内容，被过滤
-  // 设计意图：避免生成"有标题但无内容"的题目
-  assert.strictEqual(chapters.length, 3)
+  // 父章节会包含子章节内容，避免 H3/H4 下的数值被切丢。
+  assert.strictEqual(chapters.length, 4)
   assert.strictEqual(chapters[0].title, '第一章')
-  assert.strictEqual(chapters[1].title, '第二章 子节')
-  assert.strictEqual(chapters[2].title, '第三章')
+  assert.strictEqual(chapters[1].title, '第二章')
+  assert.match(chapters[1].content, /第二章 子节/)
+  assert.match(chapters[1].content, /内容 2-1/)
+  assert.strictEqual(chapters[2].title, '第二章 子节')
+  assert.strictEqual(chapters[3].title, '第三章')
 })
 
-test('splitMarkdownByHeading 完整保留多级标题', () => {
+test('splitMarkdownByHeading 完整保留多级标题并读到下一个同级标题', () => {
   const text = `## A
 内容 A
 ### A1
@@ -207,6 +209,20 @@ test('splitMarkdownByHeading 完整保留多级标题', () => {
   const chapters = splitMarkdownByHeading(text)
   assert.strictEqual(chapters.length, 4)
   assert.deepStrictEqual(chapters.map(c => c.title), ['A', 'A1', 'A1a', 'B'])
+  assert.match(chapters[0].content, /内容 A1a/)
+  assert.match(chapters[1].content, /内容 A1a/)
+  assert.doesNotMatch(chapters[2].content, /内容 B/)
+})
+
+test('splitMarkdownByHeading 对重复章节生成稳定唯一锚点', () => {
+  const text = `## 数据表格
+容量 315 Ah
+## 数据表格
+电压 3.2 V
+## 数据表格
+温度 25 ℃`
+  const chapters = splitMarkdownByHeading(text)
+  assert.deepStrictEqual(chapters.map(c => c.title), ['数据表格', '数据表格 (2)', '数据表格 (3)'])
 })
 
 test('知识库目录不存在抛错', async () => {
@@ -378,6 +394,28 @@ test('L4 图表题应触发 chart 类技能', async () => {
   }
 })
 
+test('L4 图表题必须同时期望 load_skill 与 chart 技能', async () => {
+  const fx = makeFixture()
+  try {
+    const bank = await generateQuestionBank({
+      avatarId: 'test-avatar',
+      knowledgePath: fx.knowledgePath,
+      seed: 42,
+      perSheetLimit: 100,
+    })
+    const l4 = bank.questions.filter(q => q.category === 'L4_chart')
+    assert.ok(l4.length > 0)
+    for (const q of l4) {
+      assert.ok(q.expectedTools?.includes('query_excel'), `L4 题 ${q.id} 应查询行级数据`)
+      assert.ok(q.expectedTools?.includes('load_skill'), `L4 题 ${q.id} 应前置 load_skill`)
+      assert.ok(q.expectedSkills?.includes('chart-from-knowledge'), `L4 题 ${q.id} 应期望 chart-from-knowledge`)
+      assert.ok(q.mustContain?.includes('```chart'), `L4 题 ${q.id} 应要求 chart 代码块`)
+    }
+  } finally {
+    cleanup(fx)
+  }
+})
+
 test('L4 图表题应跳过真实数据行无数值的列', async () => {
   const fx = makeFixture()
   try {
@@ -418,6 +456,51 @@ test('L4 图表题应跳过真实数据行无数值的列', async () => {
       l4Prompts.every(p => !p.includes('故障次数_15')),
       `真实数据行全为空的列不应生成 L4 题，实际：${l4Prompts.join(' / ')}`,
     )
+  } finally {
+    cleanup(fx)
+  }
+})
+
+test('L5 BOM 题跳过流程备注等脏值，只保留可答供应商', async () => {
+  const fx = makeFixture()
+  try {
+    const excelJson = {
+      fileName: 'clean-bom.xlsx',
+      sheets: [{
+        name: 'BOM',
+        rowCount: 3,
+        columns: [
+          { name: '物料名称', dtype: 'string' as const, uniqueCount: 3, samples: ['电池模组', 'BMS', 'PCS'] },
+          { name: 'VendorName', dtype: 'string' as const, uniqueCount: 3, samples: ['AESC', '1. 交付完成——调试完成', '待定'] },
+          { name: '数量', dtype: 'number' as const, uniqueCount: 2, samples: [52, 1] },
+        ],
+        rows: [
+          { '物料名称': '电池模组', VendorName: 'AESC', '数量': 52 },
+          { '物料名称': 'BMS', VendorName: '1. 交付完成——调试完成', '数量': 1 },
+          { '物料名称': 'PCS', VendorName: '待定', '数量': 1 },
+        ],
+        rowMetaRoles: ['data', 'data', 'data'],
+      }],
+    }
+    fs.writeFileSync(
+      path.join(fx.knowledgePath, '_excel', 'clean-bom.json'),
+      JSON.stringify(excelJson, null, 2),
+      'utf-8',
+    )
+
+    const bank = await generateQuestionBank({
+      avatarId: 'test-avatar',
+      knowledgePath: fx.knowledgePath,
+      seed: 7,
+      perSheetLimit: 100,
+    })
+    const l5 = bank.questions.filter(q => q.category === 'L5_bom' && q.sourceFile === '_excel/clean-bom.json')
+    assert.ok(l5.some(q => q.mustContain?.includes('AESC')), '干净供应商应生成 L5 题')
+    assert.ok(
+      l5.every(q => !(q.mustContain ?? []).some(v => /交付完成|待定/.test(v))),
+      `脏值不应进入 L5 mustContain，实际：${JSON.stringify(l5.map(q => q.mustContain))}`,
+    )
+    assert.ok(l5.every(q => !q.prompt.includes('BMS') && !q.prompt.includes('PCS')), '脏值行不应生成 L5 题')
   } finally {
     cleanup(fx)
   }

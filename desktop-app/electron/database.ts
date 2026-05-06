@@ -3,7 +3,7 @@ import path from 'path'
 import { app } from 'electron'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 7
+const CURRENT_SCHEMA_VERSION = 8
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -83,6 +83,37 @@ export interface MessageSearchResult {
   snippet: string
   role: string
   createdAt: number
+}
+
+/**
+ * 对话附件元信息（持久化形态，对应 attachments 表的一行）。
+ *
+ * 文件本体不存这里，由 AttachmentStore 落到 userData/attachments/<convId>/<hash>.<ext>。
+ * 本表只存索引/元信息，便于按会话列举、按消息关联、按 ID 查找。
+ *
+ * @author zhi.qu
+ * @date 2026-05-01
+ */
+export interface AttachmentRow {
+  id: string
+  conversation_id: string
+  /** 关联的消息 ID（先上传后发消息时为 null，发送后用 linkAttachmentToMessage 回填） */
+  message_id: string | null
+  /** 用户上传时的原始文件名 */
+  name: string
+  mime: string
+  size: number
+  /** sha256 hex（小写，64 字符） */
+  hash: string
+  /** 后缀名（含点，小写；无后缀时为空字符串） */
+  ext: string
+  /** 上传后由解析器抽取的摘要（前 N 字 / 总结），可能为 null */
+  summary: string | null
+  /** 上传后由解析器抽取的文档大纲（多行 markdown 标题），可能为 null */
+  outline: string | null
+  /** 解析器附加的 JSON 元数据（页数、sheet 名等），存储为 JSON 字符串 */
+  parsed_meta: string | null
+  created_at: number
 }
 
 export class DatabaseManager {
@@ -286,6 +317,44 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_prompt_templates_avatar
       ON prompt_templates(avatar_id, created_at)
     `)
+
+    // Agent 任务持久化表（v7 引入；2026-05-01 对话框附件扩展时补齐：
+    // 之前 createBaseSchema 漏建该表，全新安装会在 deleteConversation 时报 "no such table"，
+    // 老用户因走过 v6→v7 迁移而未暴露。这里补回，让全新安装的用户也得到完整 schema）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_tasks (
+        conversation_id TEXT PRIMARY KEY,
+        tasks TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+
+    // 附件表（v8 引入，2026-05-01 对话框附件扩展）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        message_id TEXT,
+        name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        hash TEXT NOT NULL,
+        ext TEXT NOT NULL,
+        summary TEXT,
+        outline TEXT,
+        parsed_meta TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_attachments_conv
+      ON attachments(conversation_id, created_at)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_attachments_msg
+      ON attachments(message_id)
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -413,6 +482,39 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 8) {
+      // v7 → v8：新增 attachments 表（对话框附件扩展，2026-05-01）
+      // 文件本体落 userData/attachments/<convId>/<hash>.<ext>，本表只存元信息
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS attachments (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            message_id TEXT,
+            name TEXT NOT NULL,
+            mime TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            hash TEXT NOT NULL,
+            ext TEXT NOT NULL,
+            summary TEXT,
+            outline TEXT,
+            parsed_meta TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_attachments_conv
+          ON attachments(conversation_id, created_at)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_attachments_msg
+          ON attachments(message_id)
+        `)
+        version = 8
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -525,16 +627,17 @@ export class DatabaseManager {
     `).run(title, Date.now(), id)
   }
 
-  /** 先显式删除消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks */
+  /** 先显式删除消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks 与附件元信息 */
   deleteConversation(id: string) {
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM agent_tasks WHERE conversation_id = ?').run(id)
+      this.db.prepare('DELETE FROM attachments WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
     })()
   }
 
-  /** 先显式删除所有关联消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks */
+  /** 先显式删除所有关联消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks 与附件元信息 */
   deleteConversationsByAvatar(avatarId: string) {
     this.db.transaction(() => {
       this.db.prepare(`
@@ -544,6 +647,11 @@ export class DatabaseManager {
       `).run(avatarId)
       this.db.prepare(`
         DELETE FROM agent_tasks WHERE conversation_id IN (
+          SELECT id FROM conversations WHERE avatar_id = ?
+        )
+      `).run(avatarId)
+      this.db.prepare(`
+        DELETE FROM attachments WHERE conversation_id IN (
           SELECT id FROM conversations WHERE avatar_id = ?
         )
       `).run(avatarId)
@@ -776,5 +884,112 @@ export class DatabaseManager {
     if (result.changes === 0) {
       throw new Error(`模板不存在或无权限删除: ${id}`)
     }
+  }
+
+  // ─── 附件元信息 CRUD（v8 引入，对话框附件扩展）─────────────────────────────
+  // 文件本体由 AttachmentStore 落到 userData/attachments/<convId>/<hash>.<ext>，
+  // 本表只存索引/元信息（id / name / mime / hash / ext / summary / outline）。
+
+  /**
+   * 写入一条附件元信息。
+   * id 由调用方提供（一般来自 AttachmentStore.saveAttachment 的返回值）。
+   *
+   * @author zhi.qu
+   * @date 2026-05-01
+   */
+  insertAttachment(row: Omit<AttachmentRow, 'message_id' | 'summary' | 'outline' | 'parsed_meta'> & {
+    message_id?: string | null
+    summary?: string | null
+    outline?: string | null
+    parsed_meta?: string | null
+  }): void {
+    this.db.prepare(`
+      INSERT INTO attachments (id, conversation_id, message_id, name, mime, size, hash, ext, summary, outline, parsed_meta, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      row.id,
+      row.conversation_id,
+      row.message_id ?? null,
+      row.name,
+      row.mime,
+      row.size,
+      row.hash,
+      row.ext,
+      row.summary ?? null,
+      row.outline ?? null,
+      row.parsed_meta ?? null,
+      row.created_at,
+    )
+  }
+
+  /** 按 ID 取单条附件，不存在返回 undefined */
+  getAttachmentById(id: string): AttachmentRow | undefined {
+    return this.db.prepare(
+      `SELECT id, conversation_id, message_id, name, mime, size, hash, ext, summary, outline, parsed_meta, created_at
+       FROM attachments WHERE id = ?`,
+    ).get(id) as AttachmentRow | undefined
+  }
+
+  /** 列出某会话的所有附件（按 created_at 升序） */
+  listAttachmentsByConversation(conversationId: string): AttachmentRow[] {
+    return this.db.prepare(
+      `SELECT id, conversation_id, message_id, name, mime, size, hash, ext, summary, outline, parsed_meta, created_at
+       FROM attachments WHERE conversation_id = ? ORDER BY created_at ASC`,
+    ).all(conversationId) as AttachmentRow[]
+  }
+
+  /**
+   * 把一组附件回填关联到某条消息上（user 消息保存后调用）。
+   * 仅更新 message_id 仍为 null 且属于同一会话的附件，避免误改其他消息的附件。
+   *
+   * @returns 实际更新的行数
+   */
+  linkAttachmentToMessage(messageId: string, attachmentIds: string[], conversationId: string): number {
+    if (attachmentIds.length === 0) return 0
+    let updated = 0
+    const stmt = this.db.prepare(`
+      UPDATE attachments
+      SET message_id = ?
+      WHERE id = ? AND conversation_id = ? AND (message_id IS NULL OR message_id = '')
+    `)
+    this.db.transaction(() => {
+      for (const attId of attachmentIds) {
+        const result = stmt.run(messageId, attId, conversationId)
+        updated += result.changes
+      }
+    })()
+    return updated
+  }
+
+  /**
+   * 异步抽取摘要 / 大纲完成后，回填附件行的解析结果。
+   * 仅当目标行存在时更新，避免被并发删除后又复活脏数据。
+   *
+   * @author zhi.qu
+   * @date 2026-05-05
+   */
+  updateAttachmentParseResult(
+    id: string,
+    fields: { summary?: string | null; outline?: string | null; parsed_meta?: string | null },
+  ): number {
+    const result = this.db.prepare(`
+      UPDATE attachments
+      SET summary = ?, outline = ?, parsed_meta = ?
+      WHERE id = ?
+    `).run(
+      fields.summary ?? null,
+      fields.outline ?? null,
+      fields.parsed_meta ?? null,
+      id,
+    )
+    return result.changes
+  }
+
+  /** 按会话 ID 删除所有附件元信息（文件本体清理由调用方走 AttachmentStore） */
+  deleteAttachmentsByConversation(conversationId: string): number {
+    const result = this.db.prepare(
+      'DELETE FROM attachments WHERE conversation_id = ?',
+    ).run(conversationId)
+    return result.changes
   }
 }

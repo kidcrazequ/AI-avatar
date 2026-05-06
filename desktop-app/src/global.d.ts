@@ -32,6 +32,38 @@ interface DbMessage {
   created_at: number
 }
 
+/**
+ * 对话框附件元信息（与 electron/database.ts 的 AttachmentRow 保持一致）。
+ *
+ * 本类型仅描述附件在 UI / IPC 层的持久化形态。文件本体由主进程
+ * AttachmentStore 落到 userData/attachments/<convId>/<hash>.<ext>，渲染进程
+ * 不直接访问。
+ *
+ * @author zhi.qu
+ * @date 2026-05-01
+ */
+interface Attachment {
+  id: string
+  conversation_id: string
+  /** 关联的消息 ID，未关联时为 null */
+  message_id: string | null
+  /** 用户上传时的原始文件名 */
+  name: string
+  mime: string
+  size: number
+  /** sha256 hex（小写，64 字符） */
+  hash: string
+  /** 后缀名（含点，小写；无后缀时为空字符串） */
+  ext: string
+  /** 解析器抽取的摘要（前 N 字 / 总结），可能为 null */
+  summary: string | null
+  /** 解析器抽取的文档大纲（多行 markdown 标题），可能为 null */
+  outline: string | null
+  /** 解析器附加的 JSON 元数据（页数、sheet 名等），存储为 JSON 字符串 */
+  parsed_meta: string | null
+  created_at: number
+}
+
 interface FileNode {
   name: string
   path: string
@@ -205,6 +237,21 @@ interface ElectronAPI {
   getAgentTasks: (conversationId: string) => Promise<string | null>
   clearAgentTasks: (conversationId: string) => Promise<void>
 
+  // 对话框附件（2026-05-01 对话框附件扩展）
+  /**
+   * 上传文件附件到指定会话。base64Data 不含 data: 前缀。
+   * 主进程会落盘 + 抽取 outline/summary + 写 attachments 表，返回完整元信息。
+   */
+  saveAttachment: (conversationId: string, name: string, base64Data: string, mime?: string) => Promise<Attachment>
+  /** 按 ID 取附件元信息（不返回文件本体） */
+  getAttachmentMeta: (id: string) => Promise<Attachment | undefined>
+  /** 列出某会话所有附件元信息（按上传时间升序） */
+  listAttachments: (conversationId: string) => Promise<Attachment[]>
+  /** 把刚上传的附件挂到刚保存的 user 消息上。返回实际更新行数。 */
+  linkAttachmentToMessage: (messageId: string, attachmentIds: string[], conversationId: string) => Promise<number>
+  /** 用系统默认应用打开附件本体（chip 点击时调用） */
+  openAttachmentFile: (id: string) => Promise<{ ok: true; path: string }>
+
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) => Promise<Array<{ file: string; size: number; mtime: number }>>
   openToolResultsFolder: (conversationId: string) => Promise<{ success: boolean; error?: string; path?: string }>
@@ -265,6 +312,10 @@ interface ElectronAPI {
   // 知识库管理
   getKnowledgeTree: (avatarId: string) => Promise<FileNode[]>
   readKnowledgeFile: (avatarId: string, relativePath: string) => Promise<string>
+  /** 解析 knowledge/<file>.md → 原始源文件元信息（PDF/Excel/PPT），找不到时返回 null。详见 src/types/raw-file-anchor.ts */
+  resolveRawFile: (avatarId: string, mdRelativePath: string) => Promise<{ rawRelPath: string; displayName: string; ext: string; exists: boolean } | null>
+  /** 用系统默认应用打开 knowledge/_raw/ 下的原始文件。详见 src/types/raw-file-anchor.ts */
+  openRawFile: (avatarId: string, rawRelPath: string) => Promise<{ ok: boolean; error?: string }>
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => Promise<void>
   searchKnowledge: (avatarId: string, query: string) => Promise<SearchResult[]>
   // GAP7: 知识文件 CRUD
@@ -469,6 +520,8 @@ interface ElectronAPI {
     failCount: number
     errorCount: number
     resultJson: string
+    questionBankJson?: string
+    questionBankSource?: RegressionQuestionBankSource
     reportMd: string
     reportHtml: string
   }) => Promise<{
@@ -502,7 +555,8 @@ interface RegressionQuestionBank {
     id: string
     category: string
     prompt: string
-    expectedTools?: string[]
+    /** 嵌套数组语义为 OR：任一命中即视为该子句通过；string 项为强制 AND */
+    expectedTools?: (string | string[])[]
     expectedSkills?: string[]
     expectedValue?: { value: number; unit?: string; tolerancePct: number }
     mustContain?: string[]
@@ -511,6 +565,16 @@ interface RegressionQuestionBank {
     sourceSection?: string
     sourceCell?: { sheet: string; rowIndex: number; column: string }
   }>
+}
+
+/** 本次回归运行使用的题库来源信息 */
+interface RegressionQuestionBankSource {
+  sourcePath: string
+  cached: boolean
+  loadedAt: number
+  generatedAt?: string
+  totalQuestionCount: number
+  selectedQuestionCount: number
 }
 
 /** 历史 run 元数据（regression-list-runs 返回） */

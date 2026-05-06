@@ -1,5 +1,46 @@
 # 更新日志
 
+## v0.9.0 (2026-05-06)
+
+### 新功能
+
+- **对话框附件扩展** — 桌面端消息输入支持图片 / 文件附件全链路：
+  - 主进程：新增 `electron/attachment-store.ts`（存储与生命周期管理）+ `database-attachments.test.ts` 持久化绑定
+  - 渲染层：`MessageInput` / `MessageBubble` / `ChatWindow` 改造，新增 `LightboxModal` 图片大图查看
+  - 类型沉淀：`@soul/core` 抽取 `utils/attachment-types.ts` 复用类型，浏览器与主进程共用
+- **数据溯源（源文件引用）** — 答案可一键追溯到原始 Excel / Word / PPT：
+  - 服务：`src/services/raw-file-resolver.ts`（含测试），按 frontmatter `raw_file` 锚点定位
+  - 组件：`SourceCitation` + `source-citation-utils` + `src/types/raw-file-anchor.ts`
+- **工具调用时间线** — 新增 `ToolCallTimeline` 组件，可视化 LLM 多轮工具调用链路与耗时
+- **渲染器工具栏与导出** — 新增统一 `RendererToolbar` 与 `utils/export-image.ts`，Chart / Mermaid / Infographic 三类渲染器接入复制 / 下载 / 全屏
+- **知识库治理脚本套件** — `desktop-app/scripts/`：
+  - `batch-enhance-frontmatter.ts` — 批量补全 frontmatter（标题、来源、raw_file 等）
+  - `batch-reparse-excel.ts` — 全量重解析 Excel，统一 JSON 结构
+  - `cleanup-br-tags.ts` — 清理历史 `<br>` 标签
+  - `cleanup-pdf-toc-pages.ts` — 删除 PDF 目录占位页
+  - `normalize-knowledge-filenames.ts` — 文件名规范化（拼音 + 编号）
+  - `regression-prepare-table.ts` — 回归题库表格化预处理
+
+### 优化
+
+- **`@soul/core/utils/knowledge-frontmatter.ts`** — frontmatter 解析工具从 desktop 抽到 core，浏览器入口统一导出，避免重复实现
+- **`document-parser` 与测试** — 文档解析路径与边界修正，新增 `document-parser.test.ts` 覆盖 PDF / Excel / Word 主分支
+- **`kb-question-generator`** — 知识库问答生成器与测试同步增强，覆盖更全面的回归题型
+- **`batch-regression-runner` / `batch-report-generator`** — 回归运行器与报告生成器配套测试补齐，回归面板（`BatchRegressionPanel`）展示更细颗粒度
+- **`chatStore`** — 与附件 / 工具时间线 / 源引用三大新链路对齐，重构发送与渲染流程
+- **`llm-service`** — 透传字段对齐附件与工具调用上下文
+
+### 模板与项目治理
+
+- **`templates/agent-template.md` / `templates/soul-template.md`** — 与新版分身工作流（任务拆分触发判定 / 知识库纪律 / 第一性原理）同步
+- **根目录 `AGENTS.md`** — 新增，与 `CLAUDE.md` 形成 Codex / Claude 双 agent 入口，规则一致
+- **`.cursor/rules/efficient-workflow.mdc`** — 沉淀「主窗口指挥 + Subagent 执行 + Plan 文件落地」高效工作流约定
+- **`.cursor/plans/`** — 沉淀 13 个迭代计划文件（回归 5 类根因修复 / 分身对话九层重构 / 对话框附件扩展 / 知识库可读性 phase2 等），便于跨窗口接力
+
+### 测试与基准
+
+- **`testdocs/`** — 纳入导入性能验证、知识质量评分、桌面格式仿真等回归基准与产物（`import-perf-sim.ts` / `knowledge-quality-rescore.js` / `simulate-desktop-format.ts` 等）
+
 ## v0.8.0 (2026-05-01)
 
 ### 新功能

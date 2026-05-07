@@ -1416,9 +1416,56 @@ export class ToolRouter {
     return { content: `已移除 ${existing.length - filtered.length} 个资产` }
   }
 
+  /**
+   * 检查指定分身的知识库是否为空（即 knowledge/ 下无任何 .md 文件）。
+   *
+   * 用于 search_knowledge / read_knowledge_file / list_knowledge_files
+   * 三个工具入口的前置短路：当知识库为空时直接返回明确"空库"信号，
+   * 避免 LLM 反复换关键词检索导致工具调用循环 + 流式响应静默超时。
+   *
+   * 边界：仅 README.md 占位文件也会被 listFiles() 计入；只有当 listFiles 返回
+   * 空数组时才视为"完全空库"。检测异常时降级为 false（保留原行为，不误伤）。
+   *
+   * @author zhi.qu
+   * @date 2026-05-07
+   */
+  private isKnowledgeBaseEmpty(avatarId: string): boolean {
+    try {
+      return this.getRetriever(avatarId).listFiles().length === 0
+    } catch (err) {
+      console.warn(`[tool-router] isKnowledgeBaseEmpty 检测失败 avatarId=${avatarId}: ${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
+  }
+
+  /**
+   * 构造"知识库为空"的统一工具结果。
+   *
+   * 文案以 [KNOWLEDGE_BASE_EMPTY] 信号词开头 + 明确的"停止再次调用"指令，
+   * 引导 LLM 立即终止知识库工具调用、直接向用户解释知识库未导入文件，
+   * 而不是凭通用知识硬答。
+   *
+   * @author zhi.qu
+   * @date 2026-05-07
+   */
+  private buildEmptyKnowledgeBaseHint(): ToolCallResult {
+    return {
+      content: [
+        '[KNOWLEDGE_BASE_EMPTY]',
+        '当前分身知识库为空（0 个文件）。',
+        '⛔ 请立即停止调用 search_knowledge / read_knowledge_file。',
+        '请直接告诉用户：「当前知识库尚未导入任何文件，无法基于知识库回答；请先在知识库中导入相关资料。」',
+      ].join('\n'),
+    }
+  }
+
   private readKnowledgeFile(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const filePath = args.file_path as string
     if (!filePath) return { content: '', error: '缺少 file_path 参数' }
+    if (this.isKnowledgeBaseEmpty(avatarId)) {
+      console.log(`[tool-router] read_knowledge_file 短路：知识库为空 avatarId=${avatarId} file=${filePath}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
     const content = this.getRetriever(avatarId).readFile(filePath)
     const anchor = formatSourceAnchor(buildWholeFileKnowledgeAnchor(filePath, content))
     return { content: `${anchor}
@@ -1429,6 +1476,10 @@ ${content}` }
     const mode = typeof args.mode === 'string' ? args.mode : 'search'
     if (mode === 'list') return this.listKnowledgeFiles(avatarId)
     if (mode !== 'search') return { content: '', error: `未知 search_knowledge mode: ${mode}` }
+    if (this.isKnowledgeBaseEmpty(avatarId)) {
+      console.log(`[tool-router] search_knowledge 短路：知识库为空 avatarId=${avatarId}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
     const query = args.query as string
     if (!query) return { content: '', error: '缺少 query 参数' }
     const rawTopN = typeof args.top_n === 'number' && Number.isFinite(args.top_n) ? args.top_n : 5
@@ -1454,6 +1505,10 @@ ${content}` }
 
   private listKnowledgeFiles(avatarId: string): ToolCallResult {
     const files = this.getRetriever(avatarId).listFiles()
+    if (files.length === 0) {
+      console.log(`[tool-router] list_knowledge_files 短路：知识库为空 avatarId=${avatarId}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
     return { content: files.join('\n') }
   }
 

@@ -311,17 +311,32 @@ function resolveIconPath(): string | undefined {
 
 function createWindow() {
   const iconPath = resolveIconPath()
+  // show: false + ready-to-show 是 Electron 官方推荐的"优雅显示"模式。
+  // 修复 Windows 安装版的 bug：BrowserWindow 默认 show: true 时窗口立即可见，
+  // 但此时 WebContents 尚未完成首屏渲染和合成器初始化，OS 输入派发链未建立。
+  // 用户看到 UI 立即点击会被合成层吞掉（hover 正常但 click 静默失败）；
+  // 打开 DevTools 会强制 attach 输入 handler + 触发 reflow，事件链才被踹活。
+  // backgroundColor 防止 show 之前出现系统默认白底闪烁。
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 1024,
     minHeight: 680,
     icon: iconPath ? nativeImage.createFromPath(iconPath) : undefined,
+    show: false,
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  // 等首屏渲染完成、合成器就绪后再显示，并在 Windows 上主动 focus 拿到 OS 输入焦点
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
+    mainWindow?.focus()
+    if (logger) logger.activity('app-window-ready-to-show')
   })
 
   if (process.env.NODE_ENV === 'development') {
@@ -1814,7 +1829,19 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const rel = (args.project_relative_file_path as string) || (args.path as string) || ''
     if (!rel) return { content: '', error: '缺少 project_relative_file_path 参数' }
     const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rel)
-    const printWin = new BrowserWindow({ width: 1200, height: 900, webPreferences: { partition: 'persist:soul-print' } })
+    // 同 createWindow 的优雅显示模式：show: false + ready-to-show 避免 Windows 启动竞态
+    // 导致打印窗口显示但合成器未就绪、window.print() 拿不到焦点
+    const printWin = new BrowserWindow({
+      width: 1200,
+      height: 900,
+      show: false,
+      backgroundColor: '#ffffff',
+      webPreferences: { partition: 'persist:soul-print' },
+    })
+    printWin.once('ready-to-show', () => {
+      printWin.show()
+      printWin.focus()
+    })
     await printWin.loadFile(abs)
     // 在已加载页面里调用 window.print()，让用户走系统打印对话框
     try { await printWin.webContents.executeJavaScript('setTimeout(()=>window.print(),200)', true) } catch {}

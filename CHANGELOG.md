@@ -1,5 +1,13 @@
 # 更新日志
 
+## Unreleased
+
+### 修复
+
+- **`desktop-app/electron/main.ts`** — Windows 安装版启动后按钮点击无响应：
+  - `createWindow()` 主窗口和 `open_for_print` 打印窗口默认 `show: true` 时窗口立即可见，但 WebContents 尚未完成首屏渲染和合成器初始化，OS 输入派发链未建立；用户立即点击会被合成层吞掉（hover 正常但 click 静默失败），打开 DevTools 才能恢复（DevTools attach 强制 reflow + 重建 input handler）
+  - 按 Electron 官方推荐的优雅显示模式修复：`show: false` + `backgroundColor` + `ready-to-show` 钩子里再 `show()` + `focus()`，等首屏渲染完成、合成器就绪后再显示窗口；同时避免 Windows 启动时白底闪烁
+
 ## v0.9.1 (2026-05-06)
 
 ### 打包与分发

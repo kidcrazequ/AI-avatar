@@ -2,11 +2,22 @@
 
 ## Unreleased
 
+## v0.9.2 (2026-05-07)
+
 ### 修复
+
+- **`packages/core/src/tool-router.ts`** — 空知识库时 LLM 反复检索导致流式响应中断：
+  - 现象：分身 `knowledge/` 目录无任何 `.md` 文件时，`search_knowledge` 仅返回 `"未找到相关知识内容。"`、`mode='list'` 返回空字符串、`read_knowledge_file` 抛 `ENOENT`；LLM 无法区分「关键词没命中」与「整库为空」，反复换 query 重试 5+ 次，最终触发 `ROUND_STREAM_IDLE_TIMEOUT_MS = 45_000` 流式静默超时报错
+  - 修复：新增私有方法 `isKnowledgeBaseEmpty(avatarId)` + `buildEmptyKnowledgeBaseHint()`，在 `search_knowledge`（mode=search）/ `read_knowledge_file` / `listKnowledgeFiles` 三个工具入口前置短路；空库时统一返回 `[KNOWLEDGE_BASE_EMPTY]` 信号词 + 显式停止指令 + 给用户的兜底话术
+  - 边界：仅在 `listFiles().length === 0` 触发；有任何 `.md` 文件（含 README）的分身完全保持原行为
 
 - **`desktop-app/electron/main.ts`** — Windows 安装版启动后按钮点击无响应：
   - `createWindow()` 主窗口和 `open_for_print` 打印窗口默认 `show: true` 时窗口立即可见，但 WebContents 尚未完成首屏渲染和合成器初始化，OS 输入派发链未建立；用户立即点击会被合成层吞掉（hover 正常但 click 静默失败），打开 DevTools 才能恢复（DevTools attach 强制 reflow + 重建 input handler）
   - 按 Electron 官方推荐的优雅显示模式修复：`show: false` + `backgroundColor` + `ready-to-show` 钩子里再 `show()` + `focus()`，等首屏渲染完成、合成器就绪后再显示窗口；同时避免 Windows 启动时白底闪烁
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.9.1 → 0.9.2
 
 ## v0.9.1 (2026-05-06)
 

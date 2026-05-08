@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAttachmentFile: (id: string) =>
     ipcRenderer.invoke('open-attachment-file', id),
 
+  // 文档生成（PDF / DOCX / Markdown）— 与 generate_document 工具配套
+  renderDocumentPdf: (html: string, outputPath: string) =>
+    ipcRenderer.invoke('document:render-pdf', html, outputPath),
+  renderDocumentDocx: (ir: unknown, outputPath: string) =>
+    ipcRenderer.invoke('document:render-docx', ir, outputPath),
+  openDocument: (absolutePath: string) =>
+    ipcRenderer.invoke('document:open', absolutePath),
+  showDocumentInFolder: (absolutePath: string) =>
+    ipcRenderer.invoke('document:show-in-folder', absolutePath),
+
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) =>
     ipcRenderer.invoke('tool-results:list', conversationId),
@@ -235,6 +245,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createSkill: (avatarId: string, skillId: string, content: string) => ipcRenderer.invoke('create-skill', avatarId, skillId, content),
   deleteSkill: (avatarId: string, skillId: string) => ipcRenderer.invoke('delete-skill', avatarId, skillId),
   generateSkillDraft: (description: string) => ipcRenderer.invoke('generate-skill-draft', description),
+
+  // ─── 社区技能管理 ─────────────────────────────────────────────
+  communityListSources: () => ipcRenderer.invoke('community:list-sources'),
+  communityAddSource: (source: { name: string; repo: string; ref: string; path?: string; file?: string; skills?: string[] }) =>
+    ipcRenderer.invoke('community:add-source', source),
+  communityRemoveSource: (name: string) => ipcRenderer.invoke('community:remove-source', name),
+  communitySync: () => ipcRenderer.invoke('community:sync'),
+  onCommunitySyncProgress: (callback: (progress: { sourceName: string; phase: string; detail?: string; total: number; current: number }) => void) => {
+    const handler = (_: unknown, progress: { sourceName: string; phase: string; detail?: string; total: number; current: number }) => callback(progress)
+    ipcRenderer.on('community:sync-progress', handler)
+    return () => { ipcRenderer.removeListener('community:sync-progress', handler) }
+  },
+  communityListInstalled: () => ipcRenderer.invoke('community:list-installed'),
+  communityEnableForAvatar: (avatarId: string, skillName: string, packName: string) =>
+    ipcRenderer.invoke('community:enable-for-avatar', avatarId, skillName, packName),
+  communityDisableForAvatar: (avatarId: string, skillName: string) =>
+    ipcRenderer.invoke('community:disable-for-avatar', avatarId, skillName),
 
   // RAG 检索阶段进度（用于 UI 显示 "正在检索…/正在分析关联组件…/正在拼装上下文…"），
   // 避免长 LLM 调用时用户看到彩虹伞以为应用挂死。返回 unsubscribe 函数。

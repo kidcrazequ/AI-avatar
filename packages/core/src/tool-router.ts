@@ -11,6 +11,7 @@ import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
 import { fetchWithTimeout, HttpError } from './utils/http'
 import TurndownService from 'turndown'
+import * as XLSX from 'xlsx'
 import type { McpClientManager } from './mcp-client-manager'
 
 /**
@@ -26,6 +27,41 @@ export interface ToolCallRequest {
 export interface ToolCallResult {
   content: string
   error?: string
+}
+
+/**
+ * 文档生成跨进程渲染钩子（决策 A1）。
+ *
+ * - md：packages/core 内部纯字符串渲染，无需此钩子
+ * - pdf：Electron 主进程 BrowserWindow + printToPDF
+ * - docx：Electron 主进程 docx@9.x（NodeJS 环境，packages/core 不依赖）
+ *
+ * 调用方在创建 ToolRouter 时注入；未注入则 generate_document(pdf|docx) 返回 error。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+/**
+ * 文档渲染器调用方可选透传的运行时上下文。
+ *
+ * - imageRoot：DOCX 渲染时图片相对路径的解析根（通常为分身根目录）。
+ *   传入后 docx-renderer 会在该目录下安全解析 image.src 并嵌入真实图片；
+ *   不传或图片解析失败时渲染器自动降级为占位段。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+export interface DocumentRenderContext {
+  imageRoot?: string
+}
+
+export interface DocumentRendererHook {
+  renderPdf: (html: string, outputPath: string) => Promise<{ size: number }>
+  renderDocx: (
+    ir: import('./document/ir-schema').DocumentIR,
+    outputPath: string,
+    context?: DocumentRenderContext,
+  ) => Promise<{ size: number }>
 }
 
 export interface KnowledgeSearchResult {
@@ -108,6 +144,40 @@ const QUERY_EXCEL_HARD_LIMIT = 200
  * 即使在 limit 范围内，如果列数太多导致 JSON 太大也会被按行二次截断。
  */
 const QUERY_EXCEL_MAX_CONTENT_CHARS = 8000
+
+// ─── export_excel 限流常量 ────────────────────────────────────────────────────
+// query_excel 是只读工具，对比/分析输出无法落盘；exportExcel() 弥补此能力缺口。
+// 但 LLM 可能传入巨大的 rows（几十万行），需多重防护避免：
+//   1. 单文件过大撑爆磁盘 / 后续 Excel 打开崩溃
+//   2. 单 sheet 行数过多，xlsx 库序列化耗时过长阻塞主线程
+//   3. sheet 过多导致 Excel 客户端打不开
+//
+// 数值参考 desktop-app/electron/document-parser.ts 的 EXCEL_MAX_ROWS_PER_SHEET
+// 与常见办公场景：50_000 行 × 50 sheet 已足以覆盖任何 BI 报表导出场景。
+
+/** export_excel 单文件落盘后字节数硬上限（10 MB；超出立即删除并报错） */
+const EXPORT_EXCEL_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+/** export_excel 单 sheet 最大行数（50_000；与 document-parser.ts 解析端一致） */
+const EXPORT_EXCEL_MAX_ROWS_PER_SHEET = 50_000
+/** export_excel 单文件最大 sheet 数 */
+const EXPORT_EXCEL_MAX_SHEETS = 50
+
+// ─── generate_document 限流常量 ───────────────────────────────────────────────
+//
+// 设计动机：
+//   - 单文件 20MB：PDF/DOCX 含图比 xlsx 重，但仍需防止 LLM/渲染异常撑爆磁盘
+//   - IR 长度 200_000：一次约 50-80 页正文，足以覆盖任何报告/方案场景，
+//     再多就该让 LLM 拆分多次调用而非塞进单个 IR
+//
+// @author zhi.qu
+// @date 2026-05-08
+/** generate_document 单文件落盘后字节数硬上限（20 MB） */
+const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024
+/** generate_document IR markdown 字符数硬上限（防 LLM 输出无限长） */
+const MAX_IR_LENGTH = 200_000
+/** 支持的文档输出格式（白名单） */
+const SUPPORTED_DOCUMENT_FORMATS = ['md', 'pdf', 'docx'] as const
+type DocumentFormat = typeof SUPPORTED_DOCUMENT_FORMATS[number]
 
 // ─── exec_shell 安全沙箱常量 ───────────────────────────────────────────────────
 // 设计参考 Cursor / Claude Code Bash 工具的桌面端安全模型：
@@ -346,12 +416,26 @@ export class ToolRouter {
   private mcpManager?: McpClientManager
 
   /**
+   * 可选注入：文档渲染器钩子。
+   *
+   * generate_document 工具的 PDF / DOCX 分支需要 Electron 主进程能力（BrowserWindow + docx 库），
+   * 但 packages/core 必须保持环境无关。决策 A1：构造时由调用方注入实际渲染函数。
+   *
+   * 不注入时：md 格式仍可工作（纯字符串渲染）；pdf/docx 调用会返回 error 提示注入缺失。
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private documentRenderers?: DocumentRendererHook
+
+  /**
    * @param avatarsPath 仓库 avatars/ 目录绝对路径
    * @param options 可选依赖注入：
    *   - loadAvatarSystemPrompt: 用于 delegate_task target_avatar 跨分身委派
    *   - listAvailableAvatars: 目标分身不存在时返回候选列表，提升错误可读性
    *   - getSetting: 读取应用设置（API Key 等），用于 web_search 等需要外部凭据的工具
    *   - mcpManager: MCP 客户端管理器，用于 list_mcp_tools / call_mcp_tool
+   *   - documentRenderers: 文档生成 PDF/DOCX 渲染器（决策 A1 依赖注入）
    */
   constructor(
     avatarsPath: string,
@@ -360,6 +444,7 @@ export class ToolRouter {
       listAvailableAvatars?: () => string[]
       getSetting?: (key: string) => string | undefined
       mcpManager?: McpClientManager
+      documentRenderers?: DocumentRendererHook
     },
   ) {
     this.avatarsPath = avatarsPath
@@ -368,6 +453,12 @@ export class ToolRouter {
     this.listAvailableAvatars = options?.listAvailableAvatars
     this.getSetting = options?.getSetting
     this.mcpManager = options?.mcpManager
+    this.documentRenderers = options?.documentRenderers
+  }
+
+  /** 允许在 ToolRouter 创建后再注入（如渲染进程在 ToolRouter 之后才完成 IPC 桥接） */
+  setDocumentRenderers(renderers: DocumentRendererHook): void {
+    this.documentRenderers = renderers
   }
 
   /** 见 loadAvatarSystemPrompt 注释 */
@@ -706,6 +797,10 @@ export class ToolRouter {
           result = this.searchDesignSystems(args); break
         case 'query_excel':
           result = this.queryExcel(avatarId, args); break
+        case 'export_excel':
+          result = this.exportExcel(avatarId, conversationId, args); break
+        case 'generate_document':
+          result = await this.generateDocument(avatarId, conversationId, args); break
         case 'calculate_roi':
           result = this.calculateRoi(args); break
         case 'load_skill':
@@ -1870,6 +1965,355 @@ ${content}` }
         : {}),
     }
 
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * export_excel: 把 LLM 整理的结构化数据落盘为 .xlsx 文件，供用户下载。
+   *
+   * 设计动机：query_excel 是只读工具，对比 / 差异 / 报表类任务的输出无法直接落盘，
+   * LLM 只能在主回答里贴 markdown 表格，用户没法二次复用。本工具与 query_excel
+   * 配对：LLM 先用 query_excel 拉取所需行，再把整理后的 rows 通过本工具写成 xlsx。
+   *
+   * 安全模型（多层防御）：
+   *   1. avatarId / conversationId 通过 assertSafeSegment 校验（getWorkspaceRoot 内部）
+   *   2. filename 先 assertSafeSegment 拦截路径分隔符 / ..，再正则 sanitize 特殊字符
+   *   3. 落盘路径强制限制在 <workspace>/exports/ 下（resolveUnderRoot）
+   *   4. 行数上限 EXPORT_EXCEL_MAX_ROWS_PER_SHEET、sheet 数上限 EXPORT_EXCEL_MAX_SHEETS
+   *   5. 写盘后立即 statSync 检查大小，超 EXPORT_EXCEL_MAX_FILE_SIZE_BYTES 删除并报错
+   *   6. overwrite 默认 false，避免误覆盖之前导出的报告
+   *
+   * @param avatarId       分身 ID（已被 handleToolCall 上层校验）
+   * @param conversationId 当前对话 ID（必填，决定落盘工作区）
+   * @param args           入参：filename / sheets / overwrite
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private exportExcel(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    const filenameRaw = args.filename
+    const sheetsRaw = args.sheets
+    const overwrite = args.overwrite === true
+
+    if (typeof filenameRaw !== 'string' || !filenameRaw.trim()) {
+      return { content: '', error: '缺少 filename 参数（不含 .xlsx 后缀）' }
+    }
+    if (!Array.isArray(sheetsRaw) || sheetsRaw.length === 0) {
+      return { content: '', error: 'sheets 必须为非空数组' }
+    }
+    if (sheetsRaw.length > EXPORT_EXCEL_MAX_SHEETS) {
+      return {
+        content: '',
+        error: `sheets 数量 ${sheetsRaw.length} 超过上限 ${EXPORT_EXCEL_MAX_SHEETS}，请拆分成多个文件`,
+      }
+    }
+
+    const filename = filenameRaw.trim()
+    try {
+      assertSafeSegment(filename, 'filename')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    const safeFilename = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    if (!safeFilename) {
+      return { content: '', error: 'filename sanitize 后为空，请使用中文/英文/数字/-/_ 组合' }
+    }
+
+    const seenSheetNames = new Set<string>()
+    const validatedSheets: Array<{
+      name: string
+      rows: Array<Record<string, string | number | null>>
+    }> = []
+    let totalRows = 0
+    for (let i = 0; i < sheetsRaw.length; i++) {
+      const entry = sheetsRaw[i]
+      if (!entry || typeof entry !== 'object') {
+        return { content: '', error: `sheets[${i}] 不是对象` }
+      }
+      const sheetObj = entry as Record<string, unknown>
+      const sheetName = sheetObj.name
+      const sheetRows = sheetObj.rows
+      if (typeof sheetName !== 'string' || !sheetName.trim()) {
+        return { content: '', error: `sheets[${i}].name 必须为非空字符串` }
+      }
+      const trimmedName = sheetName.trim()
+      if (trimmedName.length > 31) {
+        return {
+          content: '',
+          error: `sheets[${i}].name "${trimmedName}" 超过 Excel 31 字符上限`,
+        }
+      }
+      if (seenSheetNames.has(trimmedName)) {
+        return { content: '', error: `sheets[${i}].name 重复: "${trimmedName}"` }
+      }
+      seenSheetNames.add(trimmedName)
+      if (!Array.isArray(sheetRows)) {
+        return { content: '', error: `sheets[${i}].rows 必须为数组` }
+      }
+      if (sheetRows.length > EXPORT_EXCEL_MAX_ROWS_PER_SHEET) {
+        return {
+          content: '',
+          error: `sheets[${i}] "${trimmedName}" 行数 ${sheetRows.length} 超过上限 ${EXPORT_EXCEL_MAX_ROWS_PER_SHEET}`,
+        }
+      }
+      const safeRows: Array<Record<string, string | number | null>> = []
+      for (let r = 0; r < sheetRows.length; r++) {
+        const row = sheetRows[r]
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+          return { content: '', error: `sheets[${i}].rows[${r}] 必须为对象` }
+        }
+        safeRows.push(row as Record<string, string | number | null>)
+      }
+      validatedSheets.push({ name: trimmedName, rows: safeRows })
+      totalRows += safeRows.length
+    }
+
+    let workspaceRoot: string
+    try {
+      workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const exportsDir = resolveUnderRoot(workspaceRoot, 'exports')
+    fs.mkdirSync(exportsDir, { recursive: true })
+
+    const targetFilename = `${safeFilename}.xlsx`
+    const absolutePath = resolveUnderRoot(exportsDir, targetFilename)
+    const relativePath = path.posix.join('exports', targetFilename)
+
+    if (fs.existsSync(absolutePath) && !overwrite) {
+      return {
+        content: '',
+        error: `目标文件已存在: ${relativePath}（如需覆盖请传 overwrite: true）`,
+      }
+    }
+
+    try {
+      const workbook = XLSX.utils.book_new()
+      for (const sheet of validatedSheets) {
+        // json_to_sheet 在 rows 为空时会抛错，因此空 sheet 走 aoa_to_sheet 兜底
+        const worksheet = sheet.rows.length > 0
+          ? XLSX.utils.json_to_sheet(sheet.rows)
+          : XLSX.utils.aoa_to_sheet([[]])
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name)
+      }
+      XLSX.writeFile(workbook, absolutePath)
+    } catch (e) {
+      // 写盘失败时清理半成品，避免下次 overwrite=false 误判
+      try { if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath) } catch { /* ignore cleanup error */ }
+      return {
+        content: '',
+        error: `写入 Excel 失败: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+
+    let fileSizeBytes: number
+    try {
+      fileSizeBytes = fs.statSync(absolutePath).size
+    } catch (e) {
+      return {
+        content: '',
+        error: `落盘后无法读取文件大小: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+    if (fileSizeBytes > EXPORT_EXCEL_MAX_FILE_SIZE_BYTES) {
+      try { fs.unlinkSync(absolutePath) } catch { /* ignore cleanup error */ }
+      return {
+        content: '',
+        error: `导出文件 ${fileSizeBytes} 字节超过上限 ${EXPORT_EXCEL_MAX_FILE_SIZE_BYTES}（10 MB），已删除。请减少 rows / 拆分多文件`,
+      }
+    }
+
+    const payload = {
+      success: true,
+      format: 'xlsx' as const,
+      file_path: relativePath,
+      absolute_path: absolutePath,
+      sheet_count: validatedSheets.length,
+      total_rows: totalRows,
+      file_size_bytes: fileSizeBytes,
+      _usage: '文件已落盘到当前对话工作区，桌面端会自动以文件卡片展示。在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。',
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * generate_document: 生成 Markdown / PDF / Word 文档文件落盘到当前对话工作区。
+   *
+   * 设计动机：与 export_excel 并列的"内容落盘"工具，但目标是半结构化文档而非
+   * 表格数据。LLM 通过 IR（markdown + frontmatter + 自定义扩展）一次性表达
+   * 内容，由本函数分发到 3 种渲染器，避免"切换格式重新调 LLM"。
+   *
+   * 决策 A1（依赖注入）：md 用 packages/core 内部纯字符串渲染器；pdf/docx 走
+   * Electron 主进程，通过构造函数注入的 documentRenderers 钩子调用，保持
+   * packages/core 环境无关。
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private async generateDocument(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const formatRaw = args.format
+    const irRaw = args.ir
+    const filenameRaw = args.filename
+    const templateNameRaw = args.templateName
+    const overwrite = args.overwrite === true
+
+    if (typeof formatRaw !== 'string' || !SUPPORTED_DOCUMENT_FORMATS.includes(formatRaw as DocumentFormat)) {
+      return {
+        content: '',
+        error: `format 必须为 ${SUPPORTED_DOCUMENT_FORMATS.join('|')} 之一，收到 ${JSON.stringify(formatRaw)}`,
+      }
+    }
+    const format = formatRaw as DocumentFormat
+
+    if (typeof irRaw !== 'string' || irRaw.trim().length === 0) {
+      return { content: '', error: 'ir 必须为非空字符串（markdown + frontmatter）' }
+    }
+    if (irRaw.length > MAX_IR_LENGTH) {
+      return {
+        content: '',
+        error: `ir 长度 ${irRaw.length} 超过上限 ${MAX_IR_LENGTH}，请拆分多次调用或精简内容`,
+      }
+    }
+
+    if (typeof filenameRaw !== 'string' || !filenameRaw.trim()) {
+      return { content: '', error: '缺少 filename 参数（不含扩展名）' }
+    }
+    const filename = filenameRaw.trim()
+    try {
+      assertSafeSegment(filename, 'filename')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    const safeFilename = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    if (!safeFilename) {
+      return { content: '', error: 'filename sanitize 后为空，请使用中文/英文/数字/-/_ 组合' }
+    }
+
+    let templateName = 'default'
+    if (templateNameRaw !== undefined && templateNameRaw !== null) {
+      if (typeof templateNameRaw !== 'string' || !templateNameRaw.trim()) {
+        return { content: '', error: 'templateName 必须为字符串' }
+      }
+      try {
+        assertSafeSegment(templateNameRaw.trim(), '文档模板名')
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+      templateName = templateNameRaw.trim()
+    }
+
+    let workspaceRoot: string
+    try {
+      workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const exportsDir = resolveUnderRoot(workspaceRoot, 'exports')
+    fs.mkdirSync(exportsDir, { recursive: true })
+
+    const targetFilename = `${safeFilename}.${format}`
+    const absolutePath = resolveUnderRoot(exportsDir, targetFilename)
+    const relativePath = path.posix.join('exports', targetFilename)
+
+    if (fs.existsSync(absolutePath) && !overwrite) {
+      return {
+        content: '',
+        error: `目标文件已存在: ${relativePath}（如需覆盖请传 overwrite: true）`,
+      }
+    }
+
+    if ((format === 'pdf' || format === 'docx') && !this.documentRenderers) {
+      return {
+        content: '',
+        error: `format=${format} 需要主进程渲染器，但 documentRenderers 未注入；当前仅支持 md 格式。`,
+      }
+    }
+
+    // 解析 IR：宽进严出。先尽可能拿到结构化 blocks，再按 validateIR 决定接受/拒绝。
+    const { parseIR } = await import('./document/ir-parser')
+    const { validateIR } = await import('./document/ir-schema')
+    const parsed = parseIR(irRaw)
+    const validation = validateIR(parsed.ir)
+    if (!validation.valid || !validation.ir) {
+      const detail = validation.errors
+        .slice(0, 5)
+        .map(e => `[block ${e.blockIndex}] ${e.message}`)
+        .join('; ')
+      return {
+        content: '',
+        error: `IR 校验失败：${detail}${validation.errors.length > 5 ? `（另有 ${validation.errors.length - 5} 条错误）` : ''}`,
+      }
+    }
+    const ir = validation.ir
+
+    // 渲染分发
+    // avatarRoot 同时充当 PDF 模板加载根 + DOCX 图片相对路径解析根
+    // （IR 中 image.src 形如 `knowledge/foo.png`，按分身根解析最自然）
+    const avatarRoot = path.join(this.avatarsPath, avatarId)
+    let writtenSize: number
+    try {
+      if (format === 'md') {
+        const { renderMarkdown } = await import('./document/renderers/markdown-renderer')
+        const md = renderMarkdown(ir)
+        fs.writeFileSync(absolutePath, md, 'utf-8')
+        writtenSize = fs.statSync(absolutePath).size
+      } else if (format === 'pdf') {
+        const { renderHtml } = await import('./document/renderers/html-renderer')
+        const html = renderHtml(ir, { avatarRoot, templateName })
+        const result = await this.documentRenderers!.renderPdf(html, absolutePath)
+        writtenSize = result.size
+      } else {
+        // docx：注入 imageRoot 让渲染器在分身根目录下安全解析相对图片路径
+        const result = await this.documentRenderers!.renderDocx(ir, absolutePath, { imageRoot: avatarRoot })
+        writtenSize = result.size
+      }
+    } catch (e) {
+      try { if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath) } catch { /* ignore */ }
+      return {
+        content: '',
+        error: `${format} 渲染失败: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+
+    if (writtenSize > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+      try { fs.unlinkSync(absolutePath) } catch { /* ignore */ }
+      return {
+        content: '',
+        error: `输出文件 ${writtenSize} 字节超过上限 ${MAX_DOCUMENT_FILE_SIZE_BYTES}（20 MB），已删除。请精简内容或拆分多文件`,
+      }
+    }
+
+    // 收集 cite 块的引用来源（FileCard 可以折叠展示）
+    const sources = ir.blocks
+      .filter(b => b.type === 'cite')
+      .map(b => {
+        const c = b as { source: string; page?: number }
+        return c.page !== undefined ? { source: c.source, page: c.page } : { source: c.source }
+      })
+
+    const payload = {
+      success: true,
+      format,
+      file_path: relativePath,
+      absolute_path: absolutePath,
+      file_size_bytes: writtenSize,
+      block_count: ir.blocks.length,
+      template_name: templateName,
+      sources: sources.length > 0 ? sources : undefined,
+      parser_warnings: parsed.warnings.length > 0 ? parsed.warnings.slice(0, 5) : undefined,
+      _usage: '文件已落盘到当前对话工作区，桌面端会自动以文件卡片展示。在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。',
+    }
     return { content: JSON.stringify(payload, null, 2) }
   }
 

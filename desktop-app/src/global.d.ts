@@ -252,6 +252,25 @@ interface ElectronAPI {
   /** 用系统默认应用打开附件本体（chip 点击时调用） */
   openAttachmentFile: (id: string) => Promise<{ ok: true; path: string }>
 
+  // 文档生成（PDF / DOCX / Markdown）— 与 generate_document 工具配套（2026-05-08）
+  /**
+   * 把 generateDocument 渲染好的完整 HTML 字符串落成 PDF 文件。
+   * outputPath 必须为绝对路径（已经 generateDocument 安全校验）。
+   */
+  renderDocumentPdf: (html: string, outputPath: string) => Promise<{ size: number }>
+  /**
+   * 把 DocumentIR（@soul/core 的统一中间表示）渲染为 .docx 文件。
+   * 主进程使用 docx@9.x；中文字体按平台自动选择。
+   */
+  renderDocumentDocx: (ir: unknown, outputPath: string) => Promise<{ size: number }>
+  /**
+   * 用系统默认应用打开生成的文档（FileCard 主按钮）。
+   * 返回 shell.openPath 的错误描述：成功为 ''，失败为非空字符串。
+   */
+  openDocument: (absolutePath: string) => Promise<string>
+  /** 在系统资源管理器/Finder 中显示生成的文档（FileCard 次按钮） */
+  showDocumentInFolder: (absolutePath: string) => Promise<{ ok: boolean; error?: string }>
+
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) => Promise<Array<{ file: string; size: number; mtime: number }>>
   openToolResultsFolder: (conversationId: string) => Promise<{ success: boolean; error?: string; path?: string }>
@@ -373,6 +392,24 @@ interface ElectronAPI {
   createSkill: (avatarId: string, skillId: string, content: string) => Promise<Skill>
   deleteSkill: (avatarId: string, skillId: string) => Promise<void>
   generateSkillDraft: (description: string) => Promise<{ draft: string; suggestedId: string }>
+
+  // ─── 社区技能管理 ─────────────────────────────────────────────
+  /** 读取 sources.yaml 返回源列表 */
+  communityListSources: () => Promise<CommunitySkillSource[]>
+  /** 添加新的技能源到 sources.yaml */
+  communityAddSource: (source: CommunitySkillSource) => Promise<void>
+  /** 从 sources.yaml 移除技能源 */
+  communityRemoveSource: (name: string) => Promise<void>
+  /** 执行同步（等同于 soul-sync.sh） */
+  communitySync: () => Promise<InstalledCommunityPack[]>
+  /** 同步进度推送回调 */
+  onCommunitySyncProgress: (callback: (progress: CommunitySkillSyncProgress) => void) => (() => void)
+  /** 列出已安装的社区技能包 */
+  communityListInstalled: () => Promise<InstalledCommunityPack[]>
+  /** 为某分身启用指定社区技能 */
+  communityEnableForAvatar: (avatarId: string, skillName: string, packName: string) => Promise<void>
+  /** 为某分身禁用指定社区技能 */
+  communityDisableForAvatar: (avatarId: string, skillName: string) => Promise<void>
 
   // RAG 检索阶段进度
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
@@ -692,6 +729,48 @@ interface Skill {
   content: string
   /** 系统内置技能（来自 templates/skills/），不允许 UI 删除 */
   isBuiltin: boolean
+  /** 技能来源：local=分身专属，shared=公共，community=社区 */
+  source?: 'local' | 'shared' | 'community'
+  /** 社区技能来源 URL（source='community' 时有值） */
+  origin?: string
+}
+
+/** 社区技能源（对应 sources.yaml 中的一项） */
+interface CommunitySkillSource {
+  name: string
+  repo: string
+  ref: string
+  path?: string
+  file?: string
+  skills?: string[]
+}
+
+/** 已安装的社区技能包 */
+interface InstalledCommunityPack {
+  name: string
+  repo: string
+  ref: string
+  commit: string
+  syncedAt: string
+  skillCount: number
+  skills: CommunitySkillInfo[]
+}
+
+/** 社区技能信息 */
+interface CommunitySkillInfo {
+  name: string
+  file: string
+  description: string
+  domain: string
+}
+
+/** 社区技能同步进度 */
+interface CommunitySkillSyncProgress {
+  sourceName: string
+  phase: 'cloning' | 'checking-out' | 'copying' | 'done' | 'error'
+  detail?: string
+  total: number
+  current: number
 }
 
 /** Wiki 编译元数据 */

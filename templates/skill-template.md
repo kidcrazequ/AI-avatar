@@ -139,7 +139,20 @@ avatars/<avatar-id>/skills/
 ```
 
 **分身专属技能**（随分身创建）：`avatars/<avatar-id>/skills/<skill-name>.md`
-**共享技能**（多个分身可引用）：可在 `shared/skills/` 下放置通用技能文件
+**公共共享技能**（已建立）：`shared/skills/<skill-name>.md` — 跨分身通用技能的唯一正本
+
+### 技能路径约定
+
+| 类型 | 路径 | skill-index.yaml 中的 source 字段 | 优先级 |
+|------|------|------|------|
+| 分身专属 | `avatars/<id>/skills/<name>.md` | `source: local` | 最高 |
+| 公共技能 | `shared/skills/<name>.md` | `source: shared` | 中 |
+| 社区开源 | `shared/skills/community/<pkg>/skills/<name>.md` | `source: community` | 最低 |
+| 本地覆写 | `avatars/<id>/skills/<name>.md` | `source: local` + `overrides: shared/skills/<name>.md` | 最高 |
+
+**覆写机制**：当分身需要在公共技能基础上增加领域特定内容（如工商储专用示例、空数据兜底模板等），在本地 `skills/` 创建同名文件作为覆写版本，并在 `skill-index.yaml` 中标注 `overrides` 字段。
+
+**社区技能**：来自 GitHub 的开源技能，通过 `shared/skills/sources.yaml` 声明来源，运行 `scripts/soul-sync.sh` 安装到 `community/` 目录。发布者需在仓库根目录放置 `skill-manifest.yaml`（参考 `templates/skill-manifest-template.yaml`）。
 
 ---
 

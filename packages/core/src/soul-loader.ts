@@ -263,8 +263,34 @@ export class SoulLoader {
           stableParts.push(this.formatExcelSchemaBrief(schema))
           stableParts.push('\n')
         })
+
+        stableParts.push('\n## Excel 输出工作流\n\n')
+        stableParts.push('当任务包含「对比 / 差异 / diff / 输出 Excel / 导出 Excel / 生成 Excel 报告」时，按此流程执行：\n')
+        stableParts.push('1. 先用 `query_excel({mode:"schema", file, sheet})` 拿到所有相关 sheet 的列结构（schema 不计入 24 次精确查询预算的"试探"，但仍占预算 1 次）\n')
+        stableParts.push('2. 用 `query_excel`（不带 mode）做精确查询，把要对比的行拉下来（注意预算 24 次/轮）\n')
+        stableParts.push('3. 在主回答中先用 markdown 表格展示对比结论，让用户先看到答案\n')
+        stableParts.push('4. 调 `export_excel({filename, sheets:[{name, rows}, ...]})` 把结构化结果落盘\n')
+        stableParts.push('5. 在回答末尾告知用户："已输出到 workspaces/<conversationId>/exports/<filename>.xlsx，可在桌面端「设置 → 打开工作区目录」查看"\n\n')
+        stableParts.push('严禁：跳过 export_excel 直接说"我已生成 Excel 文件"——没调工具就是没生成，属于幻觉。\n')
       }
     }
+
+    // 文档输出工作流（PDF / Word / Markdown）— 不依赖 Excel/知识库，所有分身通用
+    // @date 2026-05-08
+    stableParts.push('\n\n---\n\n## 文档输出工作流（PDF / Word / Markdown）\n\n')
+    stableParts.push('当用户明确要求生成文档文件（"出一份方案 PDF"、"做成 Word 报告"、"生成 markdown 纪要"等）时：\n\n')
+    stableParts.push('1. **先在主回答中给出文档摘要**（让用户看到内容，再产出文件）\n')
+    stableParts.push('2. **构造 IR**：用 markdown + frontmatter 表达内容，扩展语法包括：\n')
+    stableParts.push('   - frontmatter 必须 `title`，可选 `author/date/template`\n')
+    stableParts.push('   - `:::callout warning ... :::` 提示框（level: info/warning/success/danger）\n')
+    stableParts.push('   - `:::cite source="knowledge/xxx.md" page=N ... :::` 带溯源的引用\n')
+    stableParts.push('3. **调用 `generate_document({format, ir, filename, templateName?})`** 落盘\n')
+    stableParts.push('   - format 选 md/pdf/docx 之一\n')
+    stableParts.push('   - filename 自起，不含扩展名\n')
+    stableParts.push('   - templateName 不传走 default；如分身有专属模板（如小堵的 `solution-report`、`income-calculation`）按需指定\n')
+    stableParts.push('4. **回答末尾告知**：「已生成 <filename>.<ext>，可在下方文件卡片点击打开」\n\n')
+    stableParts.push('严禁：跳过 generate_document 工具直接说"我已生成文档"——没调工具就是没生成，属于幻觉。\n')
+    stableParts.push('严禁：把整段 markdown 答案抄进 IR 而不构造结构化块（要让 IR 用 frontmatter 和扩展语法表达层次）。\n')
 
     // GAP2: 长期记忆 / 用户画像改为 dynamic 段，放在 system prompt 尾部，利好前缀缓存。
     if (memoryContent.trim()) {

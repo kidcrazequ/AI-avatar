@@ -29,7 +29,7 @@ esbuild.build({
   // jsdom 在 XMLHttpRequest 内通过 require.resolve('./xhr-sync-worker.js') 在运行时按 cwd 寻址；
   // 一旦被 esbuild 内联进 bundle，路径基准会丢失，运行时报 ENOENT。统一标 external，让主进程从
   // node_modules 里直接 require。同理把会做动态 require 的二进制/原生模块全部 external。
-  external: ['electron', 'better-sqlite3', 'jsdom', '@octokit/rest', 'pptxgenjs'],
+  external: ['electron', 'better-sqlite3', 'jsdom', '@octokit/rest', 'pptxgenjs', 'pdf-parse'],
   format: 'cjs',
   sourcemap: true,
   plugins: [soulCoreSrcPlugin],

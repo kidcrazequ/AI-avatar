@@ -29,6 +29,10 @@ export interface SkillIndexEntry {
   keywords: string[]
   when: string
   priority: number
+  /** 技能来源：local=分身专属，shared=公共，community=社区（默认 local） */
+  source?: 'local' | 'shared' | 'community'
+  /** 社区技能来源 URL（source='community' 时有值） */
+  origin?: string
 }
 
 export interface SkillIndex {
@@ -343,6 +347,8 @@ export class SkillRouter {
       else if (kv.startsWith('domain:')) currentSkill.domain = kv.replace('domain:', '').trim()
       else if (kv.startsWith('when:')) currentSkill.when = kv.replace('when:', '').trim()
       else if (kv.startsWith('priority:')) currentSkill.priority = parseInt(kv.replace('priority:', '').trim(), 10) || 1
+      else if (kv.startsWith('source:')) currentSkill.source = kv.replace('source:', '').trim() as SkillIndexEntry['source']
+      else if (kv.startsWith('origin:')) currentSkill.origin = kv.replace('origin:', '').trim()
     }
 
     // 最后一个 skill
@@ -361,6 +367,8 @@ export class SkillRouter {
       keywords: partial.keywords || [],
       when: partial.when || '',
       priority: partial.priority ?? 1,
+      source: partial.source,
+      origin: partial.origin,
     }
   }
 }

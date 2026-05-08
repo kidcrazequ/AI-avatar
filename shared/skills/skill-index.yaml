@@ -1,0 +1,278 @@
+# 公共技能索引 v1.0
+#
+# 本文件登记所有跨分身共享的技能。
+# 各分身的 skills/skill-index.yaml 通过 path 字段引用本目录下的 .md 文件。
+#
+# ┌─────────────────────────────────────────────────────────┐
+# │ 三级技能体系                                             │
+# ├──────────┬──────────────────────────────────────────────┤
+# │ source   │ 路径约定（相对项目根目录）                     │
+# ├──────────┼──────────────────────────────────────────────┤
+# │ local    │ avatars/<id>/skills/<name>.md                │
+# │ shared   │ shared/skills/<name>.md                      │
+# │ community│ shared/skills/community/<pkg>/skills/<name>.md│
+# └──────────┴──────────────────────────────────────────────┘
+#
+# 优先级（同名冲突时）：local > shared > community
+#
+# 分身索引引用示例：
+#   - name: draw-chart
+#     path: shared/skills/draw-chart.md           # ← 自有公共技能
+#     source: shared
+#
+#   - name: query-product-quality
+#     path: skills/query-product-quality.md        # ← 分身专属技能
+#     source: local
+#
+#   - name: prompt-engineering
+#     path: shared/skills/community/awesome-prompt/skills/prompt-engineering.md
+#     source: community                            # ← GitHub 开源技能
+#     origin: https://github.com/example/awesome-prompt-skills.git@v1.0.0
+
+version: "1.0"
+
+skills:
+  # ═══════════════════════════════════════
+  # 数据可视化
+  # ═══════════════════════════════════════
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    domain: 数据可视化
+    keywords:
+      - 柱状图
+      - 折线图
+      - 饼图
+      - 散点图
+      - 雷达图
+      - 热力图
+      - 桑基图
+      - 趋势图
+      - 数据图
+      - 图表
+      - 可视化
+      - 对比图
+      - 占比
+      - 分布
+      - 统计
+      - 效率
+      - 折线
+      - 柱状
+      - 环形图
+      - K线
+      - chart
+      - echarts
+      - 画图
+      - 画个图
+      - 生成图
+      - 数据展示
+      - 走势
+      - 变化趋势
+      - 同比
+      - 环比
+    when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 基于数据画
+      - 从表格画
+      - 用数据生成
+      - Excel画图
+      - 表格可视化
+    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
+    priority: 2
+
+  # ═══════════════════════════════════════
+  # 结构可视化
+  # ═══════════════════════════════════════
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    domain: 结构可视化
+    keywords:
+      - 甘特图
+      - 流程图
+      - 时序图
+      - 思维导图
+      - 看板
+      - 状态机
+      - ER图
+      - 类图
+      - Git图
+      - 架构图
+      - 工作流
+      - 调用链
+      - 交互图
+      - 关系图
+      - 全景图
+      - 项目计划
+      - 时间表
+      - 排期
+      - 里程碑
+      - gantt
+      - flowchart
+      - mermaid
+      - 脑图
+      - 序列图
+      - 泳道图
+      - 状态流转
+      - 数据模型
+    when: 用户需要结构化可视化（甘特图/流程图/时序图/思维导图/看板/状态机/ER图等），输出 mermaid 语法
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 信息图叙事
+  # ═══════════════════════════════════════
+  - name: draw-infographic
+    path: shared/skills/draw-infographic.md
+    domain: 信息图叙事
+    keywords:
+      - 信息图
+      - 演示图
+      - 卡片
+      - SWOT
+      - 对比卡
+      - 金字塔
+      - 词云
+      - 阶梯图
+      - 列表展示
+      - 汇报材料
+      - 演示用
+      - 给领导看
+      - 漂亮的图
+      - 产品对比
+      - 时间线
+      - 特性展示
+      - 信息展示
+      - infographic
+      - 组织架构图
+      - 层级图
+      - 市场结构
+      - 产品特性
+      - 对比展示
+      - 服务列表
+    when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 设计系统 & 视觉
+  # ═══════════════════════════════════════
+  - name: claude-design-system
+    path: shared/skills/claude-design-system.md
+    domain: 设计系统
+    keywords:
+      - 设计系统
+      - 品牌规范
+      - 视觉规范
+      - 复刻风格
+      - 界面复刻
+      - design system
+      - design md
+      - DESIGN.md
+      - 组件规范
+      - 视觉语言
+      - token
+      - 颜色体系
+      - 字体规范
+      - 间距规范
+      - 样式指南
+      - 页面规范
+      - 品牌风格
+      - 原型规范
+      - claude 设计
+      - 品牌视觉
+    when: 用户需要基于品牌 DESIGN.md 构建设计系统、复刻视觉风格或输出可执行 UI 规范
+    priority: 2
+    recommended_avatar: design-master
+
+  - name: claude-frontend-design
+    path: shared/skills/claude-frontend-design.md
+    domain: 视觉方向
+    keywords: [前端设计, 美术风格, 视觉方向, aesthetic]
+    when: 用户需要在无品牌基础上确定视觉方向
+    priority: 3
+
+  # ═══════════════════════════════════════
+  # 设计制品
+  # ═══════════════════════════════════════
+  - name: claude-animated-video
+    path: shared/skills/claude-animated-video.md
+    domain: 设计制品
+    keywords: [动画视频, motion, timeline, keyframes, 动效]
+    when: 用户需要时间轴动画设计制品
+    priority: 3
+
+  - name: claude-interactive-prototype
+    path: shared/skills/claude-interactive-prototype.md
+    domain: 设计制品
+    keywords: [交互原型, prototype, 可点击, 交互演示]
+    when: 用户需要可交互原型
+    priority: 2
+
+  - name: claude-make-deck
+    path: shared/skills/claude-make-deck.md
+    domain: 演示文稿
+    keywords: [做个 deck, 幻灯片, 演示文稿, slides]
+    when: 用户需要生成演示文稿
+    priority: 2
+
+  - name: claude-make-tweakable
+    path: shared/skills/claude-make-tweakable.md
+    domain: 设计制品
+    keywords: [可调参数, tweak, 调颜色, 调间距]
+    when: 用户希望在制品中加入可调控件
+    priority: 3
+
+  - name: claude-wireframe
+    path: shared/skills/claude-wireframe.md
+    domain: 结构设计
+    keywords: [线框图, wireframe, 草图, storyboard]
+    when: 用户处于早期结构探索阶段
+    priority: 3
+
+  # ═══════════════════════════════════════
+  # 导出 & 交付
+  # ═══════════════════════════════════════
+  - name: claude-export-pptx-editable
+    path: shared/skills/claude-export-pptx-editable.md
+    domain: 导出
+    keywords: [导出pptx, editable pptx, 可编辑PPT]
+    when: 用户要求可编辑 PPTX
+    priority: 2
+
+  - name: claude-export-pptx-screenshots
+    path: shared/skills/claude-export-pptx-screenshots.md
+    domain: 导出
+    keywords: [截图pptx, screenshotted pptx, 像素保真]
+    when: 用户要求截图型 PPTX
+    priority: 3
+
+  - name: claude-save-pdf
+    path: shared/skills/claude-save-pdf.md
+    domain: 导出
+    keywords: [导出pdf, 保存pdf, print-ready]
+    when: 用户要求 PDF 导出
+    priority: 2
+
+  - name: claude-save-standalone-html
+    path: shared/skills/claude-save-standalone-html.md
+    domain: 导出
+    keywords: [保存html, 单文件html, 离线html]
+    when: 用户要求可离线 HTML
+    priority: 2
+
+  - name: claude-send-to-canva
+    path: shared/skills/claude-send-to-canva.md
+    domain: 导出
+    keywords: [send to canva, 导入canva, canva]
+    when: 用户要求发送到 Canva
+    priority: 3
+
+  - name: claude-handoff-to-code
+    path: shared/skills/claude-handoff-to-code.md
+    domain: 交付
+    keywords: [开发交付, handoff, 交给开发, claude code 交接]
+    when: 用户要求把设计交付给开发
+    priority: 2

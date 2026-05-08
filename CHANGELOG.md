@@ -2,6 +2,64 @@
 
 ## Unreleased
 
+## v0.10.0 (2026-05-08)
+
+### 新功能
+
+- **文档生成（PDF / Word / Markdown）+ FileCard UI** — LLM 可一次输出统一中间表示（IR），落盘为三种格式之一，桌面端用文件卡片直接展示并支持「打开 / 显示在文件夹」操作。
+  - **`packages/core/src/document/`** — 全新 IR 体系（约 800 行新代码）：
+    - `ir-schema.ts` — `DocumentIR` / `DocumentBlock`（9 种块类型：heading/paragraph/list/table/code/callout/cite/image/divider）/ `validateIR()`（宽进严出，错误聚合）
+    - `ir-parser.ts` — 行驱动状态机，支持 frontmatter + ATX 标题 + GFM 表格 + 围栏代码块 + `:::callout/cite` 自定义容器，永不抛错
+    - `renderers/markdown-renderer.ts` — IR → markdown，与 parser 严格对应满足 roundtrip
+    - `renderers/html-renderer.ts` — IR → 完整 HTML 文档（XSS 安全），内置基础样式 + 模板 CSS 注入
+    - `renderers/template-loader.ts` — 加载 `<avatarRoot>/document-templates/<name>.css`，路径安全双重防护
+  - **`desktop-app/electron/exporters/`** — Electron 主进程渲染器：
+    - `document-pdf-renderer.ts` — 隐藏 BrowserWindow 加载 HTML → `webContents.printToPDF`，30s 超时与失败回滚
+    - `document-docx-renderer.ts` — 基于 `docx@^9.5.0`（实测 9.6.1）的 IR → DOCX 转换，Heading / Paragraph / Table / TextRun / 平台中文字体
+  - **`packages/core/src/tool-router.ts`** — 新增 `generate_document` 工具：
+    - 全 6 步参数校验（format / ir 长度 ≤ 200K / filename + assertSafeSegment / templateName / 同名覆盖 / 注入器存在）
+    - IR 解析 + 校验 + 渲染分发（md 走 core / pdf 走 html-renderer + 主进程 printToPDF / docx 走主进程 docx 库）
+    - 输出文件 > 20MB 自动 unlink + error；渲染失败半成品自动清理
+    - **决策 A1**：跨进程渲染用依赖注入 `DocumentRendererHook`，desktop-app 启动时注入主进程渲染器，避免 IPC 桥往返
+  - **`desktop-app/src/components/FileCard.tsx`** — 新建文件卡片组件（约 165 行），4 种格式（md/pdf/docx/xlsx）图标 + 大小 + 「打开 / 显示在文件夹」+ 引用来源折叠区，像素游戏风格
+  - **`desktop-app/src/stores/chatStore.ts`** — `tryExtractDocumentAttachment()` 从 ToolResult 中识别 `success && file_path 含 exports/`，统一附件链路
+  - **决策 B3**：`export_excel` 同步改造，返回值补 `format: 'xlsx'` + `_usage` 文案对齐，让 Excel 输出也走 FileCard 通路（无新增分支）
+  - **`avatars/小堵-工商储专家/document-templates/`** — 3 套专属 CSS 模板：`default` / `solution-report`（远景品牌深蓝 + 居中页眉 + 自动页码）/ `income-calculation`（数字表格右对齐 + 等宽字体 + 关键指标高亮）
+  - **`packages/core/src/soul-loader.ts`** — 注入「文档输出工作流」教学段（所有分身通用，4 步流程 + 2 条严禁），告知 LLM 何时调 `generate_document` 与如何构造 IR
+
+- **社区技能市场（三级技能体系 + 桌面端 UI）** — 支持从 GitHub 安装社区开源技能，分身可覆写任何公共或社区技能。
+  - **`packages/core/src/community-skill-types.ts`** — 社区技能类型定义（SkillSource / SkillManifest / CommunitySkillMeta）
+  - **`packages/core/src/skill-router.ts`** — SkillIndexEntry 新增 `source`（local/shared/community）和 `origin` 字段，解析器适配
+  - **`desktop-app/electron/community-skill-manager.ts`** — 社区技能管理器（约 530 行）：sources.yaml 读写、Git clone/pull 同步、技能安装/卸载/升级、manifest 解析
+  - **`desktop-app/src/components/SkillsPanel.tsx`** — 新增三 Tab 切换栏（本地技能 / 公共技能 / 社区技能）
+  - **`desktop-app/src/components/SharedSkillTab.tsx`** — 公共技能展示 Tab（只读浏览 `shared/skills/`）
+  - **`desktop-app/src/components/CommunitySkillTab.tsx`** — 社区技能 Tab（约 330 行）：源管理 + 技能列表 + 安装/卸载/更新操作
+  - **`desktop-app/electron/main.ts`** — 注册 `community:*` IPC 通道（list-sources / add-source / remove-source / sync / install-skill / uninstall-skill / list-installed / list-shared）
+  - **`scripts/soul-sync.sh`** — CLI 同步脚本（约 315 行）：从 sources.yaml 批量 clone/pull 社区技能仓库到 `shared/skills/community/`
+  - **`shared/skills/`** — 首批 14 个公共技能（chart-from-knowledge / draw-chart / draw-infographic / draw-mermaid / claude-animated-video / claude-design-system / claude-frontend-design 等）
+  - **`templates/skill-manifest-template.yaml`** — 社区技能发布清单模板
+
+### 调优
+
+- **`packages/core/src/tool-budget.ts`** — 工具循环硬上限 25 → 30（query_excel 上限提高后避免挤掉收尾工具）；单次 query_excel 调用上限 8 → 24（覆盖双 Excel 多 sheet 对比任务）
+
+### 测试
+
+- **`packages/core/src/tests/document-ir.test.ts`** — IR 与渲染器单元测试（约 380 行 / 42 个 test 子项）：validateIR / parseIR / renderMarkdown roundtrip / escapeHtml / renderHtml（含 XSS 防护 / 块覆盖 / 模板加载）/ template-loader 路径安全
+- **`packages/core/src/tests/tool-router.generate-document.test.ts`** — `generate_document` 集成测试（约 410 行 / 16 个 case）：md/pdf/docx 三格式正常路径、format 非法、ir 超限、路径穿越、覆盖策略、IR 校验失败、渲染失败回滚、超大文件回滚、cite sources 回收、与 export_excel 文案对齐
+- **测试结果**：cd packages/core && npm run test → **99 tests pass / 0 fail**（含原 41 + 新增 58）
+
+### 模板
+
+- **`templates/agent-template.md`** — 新增 G4 文档输出反幻觉规则 + 工作流自检清单扩展为 6 项
+- **`templates/skill-template.md`** — 补充 source / origin 字段说明与社区发布指引
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.9.2 → 0.10.0，docx 依赖加入 dependencies
+- **`packages/core/package.json`** — 测试脚本加入两个新测试文件
+- **`packages/core/src/index.ts`** — 公开导出文档生成模块的所有类型与函数（DocumentBlock / DocumentIR / parseIR / validateIR / renderMarkdown / renderHtml / escapeHtml / loadTemplateCss / DocumentRendererHook 等）+ 社区技能类型
+
 ## v0.9.2 (2026-05-07)
 
 ### 修复

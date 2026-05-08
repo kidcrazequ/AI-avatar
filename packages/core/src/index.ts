@@ -24,7 +24,16 @@ export type { Skill } from './skill-manager'
 
 export { ToolRouter } from './tool-router'
 export { SkillRouter } from './skill-router'
-export type { ToolCallRequest, ToolCallResult } from './tool-router'
+export type { SkillIndexEntry, SkillIndex, RouteResult, RouteLog } from './skill-router'
+
+export type {
+  CommunitySkillSource,
+  InstalledCommunityPack,
+  CommunitySkillInfo,
+  SkillSource,
+  CommunitySkillSyncProgress,
+} from './community-skill-types'
+export type { ToolCallRequest, ToolCallResult, DocumentRendererHook, DocumentRenderContext } from './tool-router'
 
 export { TemplateLoader } from './template-loader'
 
@@ -118,3 +127,23 @@ export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from '.
 
 export { buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, buildExcelSourceAnchor, formatKnowledgeSourceAnchor, formatExcelSourceAnchor, formatSourceAnchor, buildSourceAnchorPromptHint, buildSourceAnchorReferenceBlock, extractSourceAnchors, extractSourceAnchorsFromContent, extractSourceAnchorsFromMessages, extractParsedSourceAnchors, parseSourceAnchor, splitTextBySourceAnchors, normalizeSourceAnchorsInText, normalizeAvailableSourceAnchors, rewriteSourceAnchorsInText, filterSourceAnchorsInText, isSourceAnchorCoveredByAvailable, isSourceAnchorCoveredByAnyAvailable, filterSourceAnchorsByAvailableContext, ensureAnswerSourceCoverage, SOURCE_ANCHOR_REGEX } from './source-anchor'
 export type { KnowledgeSourceAnchor, ExcelSourceAnchor, SourceAnchor, ParsedSourceAnchor, SourceAnchorSegment, NormalizeSourceAnchorsResult, RewriteSourceAnchorsResult, SourceCoverageResult, FilterAvailableSourceAnchorsResult, SourceAnchorReferenceBlockOptions, EnsureSourceCoverageOptions } from './source-anchor'
+
+// 文档生成模块（PDF / DOCX / Markdown 三格式渲染）
+export { validateIR, CALLOUT_LEVELS } from './document/ir-schema'
+export type {
+  DocumentBlock,
+  DocumentBlockType,
+  DocumentIR,
+  DocumentMetadata,
+  HeadingLevel as DocumentHeadingLevel,
+  CalloutLevel,
+  TableCellValue,
+  IRValidationError,
+  IRValidationResult,
+} from './document/ir-schema'
+export { parseIR } from './document/ir-parser'
+export type { IRParseResult } from './document/ir-parser'
+export { renderMarkdown } from './document/renderers/markdown-renderer'
+export { renderHtml, escapeHtml, sanitizeUrl } from './document/renderers/html-renderer'
+export type { RenderHtmlOptions } from './document/renderers/html-renderer'
+export { loadTemplateCss, resolveTemplatePath } from './document/renderers/template-loader'

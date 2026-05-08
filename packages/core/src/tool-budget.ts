@@ -14,16 +14,21 @@ export interface ToolPolicy {
 }
 
 export const DEFAULT_TOOL_POLICY: ToolPolicy = {
-  maxRounds: 25,
+  // 工具循环硬上限。25 → 30 同步扩容（v0.9.3 调整理由：query_excel 上限提高到 24 后，
+  // 若 maxRounds 仍是 25，会被 query_excel 占满后挤掉 export_excel / load_skill 等收尾工具）。
+  maxRounds: 30,
   // 单次回答允许 query_excel 调用次数。
   //   - 之前设为 1：L1 单点查询够，但 L2/L3 跨列对比、Excel 合并单元格 label 写错重试、
   //     先 schema 再 filter 等场景一次根本不够，反而促使 LLM 编"配额已用尽"作为放弃借口
   //   - 之前设为 5：仍不足 — 2026-05-01 回归报告显示 L1/L2 大量"先 schema → 多 sheet 试 →
   //     变体重试"的真实需求被打断（参见 task-router rule A3 约束）；典型 L2 跨表对比要查 4-6
   //     次（schema, sheet1 filter, sheet2 filter, 命名变体重试 1-2 次）
-  //   - 现设为 8：覆盖典型穷举（schema + 3-4 sheet × 1-2 变体），同时 8×8KB ≈ 64KB 仍远低于
+  //   - 之前设为 8：覆盖典型穷举（schema + 3-4 sheet × 1-2 变体），同时 8×8KB ≈ 64KB 仍远低于
   //     DeepSeek 131K 窗口；compress() 在第 2 轮后会进一步压缩历史结果，安全余量足够
-  maxQueryExcelCallsPerRequest: 8,
+  //   - v0.9.3 调整理由：用户反馈双 Excel 多 sheet 对比任务（2 schema + 8 共有 sheet × 2 +
+  //     3 独有 sheet ≈ 21 次精确查询）触底，第 9 次起被守卫短路；现设为 24 覆盖此类双源
+  //     对比/diff 报告场景，配合 export_excel 工具一次性产出落盘 .xlsx
+  maxQueryExcelCallsPerRequest: 24,
   maxLoadSkillCallsPerRequest: 1,
   enableQueryExcelGuard: true,
   enableLoadSkillGuard: true,

@@ -18,7 +18,7 @@ app.disableHardwareAcceleration()
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, type WikiAnswer, type LLMCallFn, type ChartCacheEntry } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -41,8 +41,11 @@ import { VerifierAgent } from './verifier/VerifierAgent'
 import { htmlToPptx } from './exporters/html-to-pptx'
 import { superInlineHtml } from './exporters/inline-html'
 import { PublicFileServer } from './exporters/public-file-server'
+import { renderDocumentPdf } from './exporters/document-pdf-renderer'
+import { renderDocumentDocx } from './exporters/document-docx-renderer'
 import { applyTweaks } from './preview/tweaks-writer'
 import { GitHubConnector } from './connectors/github-connector'
+import { CommunitySkillManager } from './community-skill-manager'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -97,6 +100,7 @@ let previewManager: PreviewManager | null = null
 let verifierAgent: VerifierAgent
 let publicFileServer: PublicFileServer
 let githubConnector: GitHubConnector
+let communitySkillManager: CommunitySkillManager
 const documentParser = new DocumentParser()
 const scheduledTester = new ScheduledTester()
 const cronScheduler = new CronScheduler()
@@ -384,6 +388,7 @@ function initManagers() {
   avatarManager = new AvatarManager(avatarsPath, templatesPath)
   testManager = new TestManager(avatarsPath)
   skillManager = new SkillManager(avatarsPath)
+  communitySkillManager = new CommunitySkillManager(avatarsPath, logger)
   skillRouter = new SkillRouter(avatarsPath)
   // 创建 MCP 客户端管理器，并从 DB 加载所有 enabled=true 的 server 配置。
   // 连接是异步且非阻塞的，单个 server 失败不影响 app 启动。
@@ -417,6 +422,12 @@ function initManagers() {
     },
     getSetting: (key: string) => getDb().getSetting(key),
     mcpManager,
+    // 决策 A1：注入文档渲染器，让 generate_document 工具能在主进程渲染 PDF/DOCX。
+    // ToolRouter 与渲染器都在主进程，直接同进程函数调用，无 IPC 开销。
+    documentRenderers: {
+      renderPdf: (html, outputPath) => renderDocumentPdf(html, outputPath, { logger: logger ?? undefined }),
+      renderDocx: (ir, outputPath) => renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined }),
+    },
   })
   workspaceManager = new WorkspaceManager(avatarsPath)
   templateLoader = new TemplateLoader(templatesPath)
@@ -1504,7 +1515,11 @@ wrapHandler('run-tests', async (_, avatarId: string, caseIds: string[]) => {
 
 wrapHandler('get-skills', (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  return skillManager.getSkills(avatarId)
+  const skills = skillManager.getSkills(avatarId)
+  return skills.map((s: any) => ({
+    ...s,
+    source: s.source || 'local',
+  }))
 })
 
 wrapHandler('get-skill', (_, avatarId: string, skillId: string) => {
@@ -1570,6 +1585,40 @@ wrapHandler('generate-skill-draft', async (_, description: string) => {
 
   if (logger) logger.activity('generate-skill-draft', `description.len=${description.length}, draft.len=${draft.length}, suggestedId=${suggestedId}`)
   return { draft, suggestedId }
+})
+
+// ─── 社区技能管理 ─────────────────────────────────────────────────────────────
+wrapHandler('community:list-sources', () => {
+  return communitySkillManager.listSources()
+})
+
+wrapHandler('community:add-source', (_, source: { name: string; repo: string; ref: string; path?: string; file?: string; skills?: string[] }) => {
+  communitySkillManager.addSource(source)
+})
+
+wrapHandler('community:remove-source', (_, name: string) => {
+  communitySkillManager.removeSource(name)
+})
+
+wrapHandler('community:sync', async () => {
+  const results = await communitySkillManager.sync((progress) => {
+    if (mainWindow) mainWindow.webContents.send('community:sync-progress', progress)
+  })
+  return results
+})
+
+wrapHandler('community:list-installed', () => {
+  return communitySkillManager.listInstalled()
+})
+
+wrapHandler('community:enable-for-avatar', (_, avatarId: string, skillName: string, packName: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  communitySkillManager.enableForAvatar(avatarId, skillName, packName)
+})
+
+wrapHandler('community:disable-for-avatar', (_, avatarId: string, skillName: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  communitySkillManager.disableForAvatar(avatarId, skillName)
 })
 
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────
@@ -3667,6 +3716,67 @@ wrapHandler('open-logs-folder', async () => {
   }
   await shell.openPath(logsDir)
   return logsDir
+})
+
+/**
+ * 文档生成 IPC：把渲染进程构造好的 HTML（PDF）/ IR（DOCX）落盘。
+ *
+ * 决策 A1（依赖注入）：tool-router 在渲染进程实例化时通过 documentRenderers
+ * 注入这两个 IPC 客户端，最终走到主进程的 renderDocumentPdf/Docx。
+ *
+ * 路径安全：传入的 outputPath 必须是已经过 workspaceManager.resolveSafe
+ * 校验的绝对路径（generateDocument 已做双重防护：assertSafeSegment + resolveUnderRoot）。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+wrapHandler('document:render-pdf', async (_, html: string, outputPath: string) => {
+  if (typeof html !== 'string' || html.length === 0) {
+    throw new Error('document:render-pdf 缺少 html')
+  }
+  if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
+    throw new Error('document:render-pdf 缺少绝对 outputPath')
+  }
+  return renderDocumentPdf(html, outputPath, { logger: logger ?? undefined })
+})
+
+wrapHandler('document:render-docx', async (_, ir: DocumentIR, outputPath: string) => {
+  if (!ir || typeof ir !== 'object') {
+    throw new Error('document:render-docx 缺少 ir')
+  }
+  if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
+    throw new Error('document:render-docx 缺少绝对 outputPath')
+  }
+  return renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined })
+})
+
+/**
+ * 用系统默认应用打开生成的文档（FileCard 主按钮）。
+ * 返回错误信息字符串（成功为空串），与 shell.openPath 的语义一致。
+ */
+wrapHandler('document:open', async (_, absolutePath: string) => {
+  if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
+    return '缺少绝对路径'
+  }
+  if (!fs.existsSync(absolutePath)) {
+    return `文件不存在: ${absolutePath}`
+  }
+  return shell.openPath(absolutePath)
+})
+
+/**
+ * 在文件夹中显示生成的文档（FileCard 次按钮）。
+ * 与 document:open 互补：不打开文件，只在系统资源管理器/Finder 中高亮。
+ */
+wrapHandler('document:show-in-folder', async (_, absolutePath: string) => {
+  if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
+    return { ok: false, error: '缺少绝对路径' }
+  }
+  if (!fs.existsSync(absolutePath)) {
+    return { ok: false, error: `文件不存在: ${absolutePath}` }
+  }
+  shell.showItemInFolder(absolutePath)
+  return { ok: true }
 })
 
 wrapHandler('export-error-log', async (_, days = 3) => {

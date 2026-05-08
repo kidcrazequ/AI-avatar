@@ -6,9 +6,15 @@
 
 ```
 soul/
-├── templates/          ← 模板（给工种专家创建新分身用）
-├── shared/knowledge/   ← 共享知识（所有分身可引用）
-└── avatars/            ← 分身目录（每个子目录 = 一个分身）
+├── templates/              ← 模板（给工种专家创建新分身用）
+├── shared/
+│   ├── knowledge/          ← 共享知识（所有分身可引用）
+│   ├── skills/             ← 公共技能（跨分身共享，唯一正本）
+│   │   └── community/      ← GitHub 开源技能（由 soul-sync.sh 管理）
+│   ├── design-systems/     ← 共享设计语料（品牌 design.md）
+│   └── starter-components/ ← 共享 UI 组件片段
+├── scripts/                ← 工具脚本（soul-sync.sh 等）
+└── avatars/                ← 分身目录（每个子目录 = 一个分身）
 ```
 
 ## 如何使用分身
@@ -38,7 +44,7 @@ CLAUDE.md ←── templates/agent-template.md   （操作规则：知识库约
 
 knowledge/README.md ←── templates/knowledge-readme-template.md （知识库索引）
 
-skills/*.md ←── templates/skill-template.md  （技能定义）
+skills/*.md ←── templates/skill-template.md  （技能定义，公共技能在 shared/skills/）
 
 tests/cases/*.md ←── templates/test-case-template.md （测试用例）
 
@@ -51,7 +57,7 @@ memory/MEMORY.md ←── 空文件                  （长期记忆）
 2. **读取** `templates/soul-guide.md` 了解撰写原则，然后**读取** `templates/soul-template.md` 创建 `soul.md`（建议由该工种资深工程师撰写）
 3. **读取** `templates/agent-template.md` 创建 `CLAUDE.md`（包含知识库约束、第一性原理、工作流程）
 4. **读取** `templates/knowledge-readme-template.md` 创建 `knowledge/README.md`，在 `knowledge/` 中放入专业知识文件
-5. **读取** `templates/skill-template.md` 在 `skills/` 中定义技能
+5. **读取** `templates/skill-template.md` 在 `skills/` 中定义技能。通用技能优先引用 `shared/skills/`，仅创建领域专属技能
 6. 创建 `memory/MEMORY.md` 空文件
 7. **读取** `templates/test-case-template.md` 创建至少 5 个测试用例（红线 2 + 知识库约束 1 + 数据溯源 1 + 人格 1）
 
@@ -60,6 +66,38 @@ memory/MEMORY.md ←── 空文件                  （长期记忆）
 - **知识库优先**：回答必须基于 `knowledge/` 目录，禁止用模型通用知识冒充专业知识
 - **数据可溯源**：关键数据标注来源文件，缺数据时诚实说明
 - **第一性原理**：从本质出发分析问题，拒绝"业界通常这样做"的表面类比
+
+## 使用开源技能
+
+Soul 支持从 GitHub 安装社区开源技能。
+
+### 三级技能体系
+
+| 级别 | 目录 | source 字段 | 优先级 |
+|------|------|-------------|--------|
+| 分身专属 | `avatars/<id>/skills/` | `local` | 最高 |
+| 自有公共 | `shared/skills/` | `shared` | 中 |
+| 社区开源 | `shared/skills/community/` | `community` | 最低 |
+
+同名技能按 `local > shared > community` 优先级加载，分身可覆写任何公共或社区技能。
+
+### 安装社区技能
+
+1. 编辑 `shared/skills/sources.yaml`，添加技能源：
+   ```yaml
+   sources:
+     - name: awesome-prompt
+       repo: https://github.com/example/awesome-prompt-skills.git
+       ref: v1.0.0
+   ```
+2. 运行同步脚本：`./scripts/soul-sync.sh`
+3. 在分身的 `skills/skill-index.yaml` 中引用安装的技能
+
+### 发布自己的技能
+
+1. 创建 GitHub 仓库，按 `templates/skill-template.md` 格式编写技能文件
+2. 在仓库根目录放置 `skill-manifest.yaml`（参考 `templates/skill-manifest-template.yaml`）
+3. 发布 tag 作为稳定版本
 
 ## 当前可用分身
 

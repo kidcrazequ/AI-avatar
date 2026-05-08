@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
+import SharedSkillTab from './SharedSkillTab'
+import CommunitySkillTab from './CommunitySkillTab'
 
 interface Props {
   avatarId: string
@@ -59,6 +61,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const [isGenerating, setIsGenerating] = useState(false)
   // 删除确认 state
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'local' | 'shared' | 'community'>('local')
 
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; clearTimeout(saveMsgTimerRef.current) } }, [])
@@ -282,6 +285,25 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
         onClose={onClose}
       />
 
+      {/* Tab 切换栏 */}
+      <div className="flex border-b-2 border-px-border bg-px-elevated">
+        {(['local', 'shared', 'community'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`font-game text-[12px] tracking-wider px-5 py-2.5 transition-none border-b-2 -mb-[2px]
+              ${activeTab === tab
+                ? 'border-px-primary text-px-primary bg-px-surface'
+                : 'border-transparent text-px-text-dim hover:text-px-text'
+              }`}
+          >
+            {tab === 'local' ? '本地技能' : tab === 'shared' ? '公共技能' : '社区技能'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'local' && (
       <div className="flex-1 overflow-hidden flex">
         {/* 左侧列表 */}
         <div className="w-1/3 border-r-2 border-px-border flex flex-col">
@@ -538,6 +560,9 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
           )}
         </div>
       </div>
+      )}
+      {activeTab === 'shared' && <SharedSkillTab avatarId={avatarId} />}
+      {activeTab === 'community' && <CommunitySkillTab avatarId={avatarId} />}
     </Modal>
   )
 }

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, detectReasoning } from '../services/llm-service'
 import { MEMORY_CHAR_LIMIT, localDateString, hashQueryContent } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
+import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
@@ -90,6 +91,17 @@ export interface ChatMessage {
   imageUrls?: string[]
   /** 用户消息附带的文档/文本附件元信息（仅 user 消息会有） */
   attachments?: AttachmentRef[]
+  /**
+   * assistant 消息附带的工具落盘文件（generate_document / export_excel）。
+   *
+   * 决策 B3：identical UX 体验——对话气泡内嵌文件卡片。
+   * chatStore 在工具循环里识别工具结果中的 `success && file_path 含 exports/`
+   * 时，统一构造 DocumentAttachment 推到当前 assistant 消息的此字段。
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  documentAttachments?: DocumentAttachment[]
 }
 
 /**
@@ -911,6 +923,104 @@ const AVATAR_TOOLS: LLMTool[] = [
           },
         },
         required: ['file', 'sheet'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'export_excel',
+      description: `把 query_excel 查到的数据 / 对比结果 / 分析结论落盘为 .xlsx 文件，供用户下载。
+
+何时用：用户明确要求"输出 Excel / 导出 Excel / 生成 Excel 报告 / 把对比结果存成文件"时。
+何时不用：单纯展示对比结论用 markdown 表格就够，不要为了用而用。
+
+与 query_excel 的关系：本工具不读数据，只写。rows 必须由你从 query_excel 结果里整理出来。
+
+落盘位置：当前对话的工作区 exports/ 目录，文件名你自己起（中文/英文/数字/-/_合法）。
+调用后请在主回答末尾用一句话告知用户文件路径。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: {
+            type: 'string',
+            description: '文件名（不含 .xlsx 后缀），中文/英文/数字/-/_ 合法',
+          },
+          sheets: {
+            type: 'array',
+            description: '要写入的 sheet 列表，每项含 name 和 rows',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'sheet 名（≤ 31 字符，跨 sheet 不可重名）' },
+                rows: {
+                  type: 'array',
+                  items: { type: 'object' },
+                  description: '行数据数组，与 query_excel 返回的 rows 同结构（每行一个对象）',
+                },
+              },
+              required: ['name', 'rows'],
+            },
+          },
+          overwrite: {
+            type: 'boolean',
+            description: '同名文件存在时是否覆盖，默认 false',
+            default: false,
+          },
+        },
+        required: ['filename', 'sheets'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_document',
+      description: `生成 Markdown / PDF / Word 文档文件，供用户下载。
+
+何时用：用户明确要求"生成 / 导出 / 出一份 / 做成"以下任一格式时——
+  - PDF 报告 / 方案 / 合规声明
+  - Word 文档 / 协议 / 合同
+  - Markdown 笔记 / 纪要 / 文档
+
+何时不用：单纯回答问题、做对比、给建议时不要为了用而用。是否生成文件由用户主动诉求决定。
+
+IR 语法（markdown + 扩展）：
+  - frontmatter 必须包含 title；可选 author/date/template
+  - 标题 # ~ ######，段落、有序/无序列表、GFM 表格、围栏代码块、--- 分割线、![alt](src "caption") 图片
+  - :::callout warning|info|success|danger\\n文本\\n:::（提示框）
+  - :::cite source="knowledge/foo.md" page=12\\n文本\\n:::（带溯源的引用块）
+
+落盘位置：当前对话工作区 exports/ 目录，桌面端会自动以文件卡片展示。
+调用后请在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。`,
+      parameters: {
+        type: 'object',
+        properties: {
+          format: {
+            type: 'string',
+            enum: ['md', 'pdf', 'docx'],
+            description: '输出格式：md=Markdown / pdf=PDF / docx=Word',
+          },
+          ir: {
+            type: 'string',
+            description: '完整文档内容：markdown + frontmatter + 扩展语法（callout/cite）',
+          },
+          filename: {
+            type: 'string',
+            description: '不含扩展名的文件名，中文/英文/数字/-/_ 合法',
+          },
+          templateName: {
+            type: 'string',
+            description: 'CSS 模板名（不含 .css），仅 pdf 格式生效。缺省走 default；分身可有专属模板（如 solution-report、income-calculation）',
+            default: 'default',
+          },
+          overwrite: {
+            type: 'boolean',
+            description: '同名文件存在时是否覆盖，默认 false',
+            default: false,
+          },
+        },
+        required: ['format', 'ir', 'filename'],
       },
     },
   },
@@ -1813,17 +1923,94 @@ function upsertLastAssistant(
   id: string,
   content: string,
   reasoning?: string,
+  documentAttachments?: DocumentAttachment[],
 ): ChatMessage[] {
   const withoutLast = messages.at(-1)?.role === 'assistant'
     ? messages.slice(0, -1)
     : messages
   const trimmedReasoning = reasoning?.trim()
+  const attachments = documentAttachments && documentAttachments.length > 0 ? documentAttachments : undefined
   return [...withoutLast, {
     id,
     role: 'assistant',
     content,
     reasoning: trimmedReasoning ? trimmedReasoning : undefined,
+    documentAttachments: attachments,
   }]
+}
+
+/**
+ * 工具落盘文件检测：把 export_excel / generate_document 返回的 JSON 解析为
+ * DocumentAttachment 推入当前 assistant 消息（决策 B3 统一通路）。
+ *
+ * 识别条件：
+ *   - 返回是合法 JSON
+ *   - 含 `success: true`
+ *   - 含 `file_path` 且以 `exports/` 开头（双重确认避免误识别）
+ *   - 含 `format` 字段（generate_document 必有；export_excel 在 v0.10.0 后也补了）
+ *
+ * 失败时静默返回 null（不影响主链路）。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+function tryExtractDocumentAttachment(toolName: string, resultText: string): DocumentAttachment | null {
+  try {
+    const parsed: unknown = JSON.parse(resultText)
+    if (!parsed || typeof parsed !== 'object') return null
+    const obj = parsed as Record<string, unknown>
+    if (obj.success !== true) return null
+    const filePath = typeof obj.file_path === 'string' ? obj.file_path : null
+    const absolutePath = typeof obj.absolute_path === 'string' ? obj.absolute_path : null
+    const sizeBytes = typeof obj.file_size_bytes === 'number' ? obj.file_size_bytes : 0
+    if (!filePath || !absolutePath) return null
+    if (!filePath.startsWith('exports/')) return null
+
+    // 推断 format：优先取返回字段，其次按工具名/扩展名兜底
+    let format: DocumentAttachmentFormat | null = null
+    const formatRaw = obj.format
+    if (typeof formatRaw === 'string' && ['md', 'pdf', 'docx', 'xlsx'].includes(formatRaw)) {
+      format = formatRaw as DocumentAttachmentFormat
+    } else if (toolName === 'export_excel') {
+      format = 'xlsx'
+    } else {
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+      if (['md', 'pdf', 'docx', 'xlsx'].includes(ext)) format = ext as DocumentAttachmentFormat
+    }
+    if (!format) return null
+
+    const filename = filePath.split('/').pop() || filePath
+    let sources: DocumentAttachmentSource[] | undefined
+    if (Array.isArray(obj.sources)) {
+      const collected: DocumentAttachmentSource[] = []
+      for (const item of obj.sources) {
+        if (item && typeof item === 'object') {
+          const src = (item as { source?: unknown }).source
+          const page = (item as { page?: unknown }).page
+          if (typeof src === 'string' && src.trim()) {
+            const entry: DocumentAttachmentSource = { source: src }
+            if (typeof page === 'number' && Number.isInteger(page) && page > 0) {
+              entry.page = page
+            }
+            collected.push(entry)
+          }
+        }
+      }
+      if (collected.length > 0) sources = collected
+    }
+
+    return {
+      kind: 'document',
+      format,
+      filePath,
+      absolutePath,
+      sizeBytes,
+      filename,
+      sources,
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -2473,6 +2660,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const queryExcelResultCache = new Map<string, string>()
     /** 本次对话中所有 query_excel 引用过的 basename 集合，供 chart-cache 写入时做快照 */
     const excelBasenamesUsed = new Set<string>()
+    /**
+     * 本轮对话产出的工具落盘文件（决策 B3）。
+     * generate_document / export_excel 返回的 file_path 在 exports/ 下时被识别后追加，
+     * 最终随 upsertLastAssistant 一起写到 message.documentAttachments。
+     */
+    const collectedDocumentAttachments: DocumentAttachment[] = []
     let loadSkillCallCount = 0
     let forceConvergeNoTools = false
     let convergeHintInjected = false
@@ -2966,6 +3159,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             window.electronAPI.logEvent('warn', 'append-tool-timeline-failed', `${tc.function.name}: ${msg}`)
           }
 
+          // 决策 B3：检测落盘文件，统一以 FileCard 展示在对话气泡内
+          if (toolOk && (tc.function.name === 'generate_document' || tc.function.name === 'export_excel')) {
+            const attachment = tryExtractDocumentAttachment(tc.function.name, resultText)
+            if (attachment) {
+              collectedDocumentAttachments.push(attachment)
+            }
+          }
+
           // 将工具结果追加到消息历史
           apiMessages.push({
             role: 'tool',
@@ -3162,7 +3363,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (isStale()) return
       set((state) => ({
-        messages: upsertLastAssistant(state.messages, assistantMsgId, displayText, reasoningText),
+        messages: upsertLastAssistant(
+          state.messages,
+          assistantMsgId,
+          displayText,
+          reasoningText,
+          collectedDocumentAttachments,
+        ),
         isLoading: false,
         toolCallStatus: '',
         skillProposals,

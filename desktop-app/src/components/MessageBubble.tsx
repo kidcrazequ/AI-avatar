@@ -8,6 +8,7 @@ import MermaidRenderer from './MermaidRenderer'
 import InfographicRenderer from './InfographicRenderer'
 import LightboxModal from './LightboxModal'
 import { renderChildrenWithCitations } from './source-citation-utils'
+import FileCard from './FileCard'
 
 const REMARK_PLUGINS = [remarkGfm]
 
@@ -435,6 +436,14 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   >
                     {collapsed ? '[▶] 展开' : '[▼] 收起'}
                   </button>
+                </div>
+              )}
+              {/* 决策 B3：generate_document / export_excel 落盘文件卡片 */}
+              {message.documentAttachments && message.documentAttachments.length > 0 && (
+                <div className="not-prose flex flex-col">
+                  {message.documentAttachments.map((att, i) => (
+                    <FileCard key={`doc-${message.id}-${i}`} attachment={att} />
+                  ))}
                 </div>
               )}
             </div>

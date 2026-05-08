@@ -988,8 +988,10 @@ const AVATAR_TOOLS: LLMTool[] = [
 IR 语法（markdown + 扩展）：
   - frontmatter 必须包含 title；可选 author/date/template
   - 标题 # ~ ######，段落、有序/无序列表、GFM 表格、围栏代码块、--- 分割线、![alt](src "caption") 图片
+  - 行内样式支持 **加粗** 和 \`行内代码\`；不要输出 HTML 标签
   - :::callout warning|info|success|danger\\n文本\\n:::（提示框）
   - :::cite source="knowledge/foo.md" page=12\\n文本\\n:::（带溯源的引用块）
+  - callout/cite 容器必须顶格书写，禁止写成 > :::callout 或 > :::cite，否则 PDF 会按普通引用文本显示
 
 落盘位置：当前对话工作区 exports/ 目录，桌面端会自动以文件卡片展示。
 调用后请在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。`,
@@ -1672,12 +1674,12 @@ const SOFT_WARN_ROUNDS = 8
 const HARD_MAX_ROUNDS = 25
 /** 上下文窗口最大消息条数，超出时截取最近的消息 */
 const MAX_CONTEXT_MESSAGES = 40
-/** 单轮 LLM 调用总超时（3 分钟），防止长回答永久阻塞 */
-const ROUND_TIMEOUT_MS = 180_000
-/** 首 token 超时：RAG 已完成后如果模型仍长时间无响应，尽早暴露慢模型/网关问题 */
-const ROUND_FIRST_TOKEN_TIMEOUT_MS = 60_000
-/** 流中断静默超时：已开始输出后若长时间无新 token，主动终止本轮 */
-const ROUND_STREAM_IDLE_TIMEOUT_MS = 45_000
+/** 单轮 LLM 调用总超时（5 分钟），防止长回答永久阻塞；重任务（PDF 生成/收益测算）单轮可能需要 3-4 分钟 */
+const ROUND_TIMEOUT_MS = 300_000
+/** 首 token 超时：RAG 已完成后如果模型仍长时间无响应，尽早暴露慢模型/网关问题；重任务模型思考期长，120s 较合理 */
+const ROUND_FIRST_TOKEN_TIMEOUT_MS = 120_000
+/** 流中断静默超时：已开始输出后若长时间无新 token，主动终止本轮（重上下文任务模型思考时间较长，45s 不够） */
+const ROUND_STREAM_IDLE_TIMEOUT_MS = 90_000
 /**
  * query_excel 优化开关（可快速回滚）。
  * 回滚方式：将该常量改为 false，恢复旧行为（不限制调用次数，不做同参缓存）。
@@ -1954,7 +1956,7 @@ function upsertLastAssistant(
  * @author zhi.qu
  * @date 2026-05-08
  */
-function tryExtractDocumentAttachment(toolName: string, resultText: string): DocumentAttachment | null {
+export function tryExtractDocumentAttachment(toolName: string, resultText: string): DocumentAttachment | null {
   try {
     const parsed: unknown = JSON.parse(resultText)
     if (!parsed || typeof parsed !== 'object') return null
@@ -2791,7 +2793,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         roundStartedAt = Date.now()
         roundFirstTokenAt = null
         roundLastActivityAt = roundStartedAt
-        logPerf('llm-round:start', `round=${round}`)
+        const _diagBodySize = JSON.stringify(apiMessages).length
+        const _diagSystemSize = (apiMessages[0]?.content as string | undefined)?.length ?? 0
+        const _diagToolCount = tools.length
+        logPerf('llm-round:start', `round=${round} model=${activeModel.model} bodyChars=${_diagBodySize} systemChars=${_diagSystemSize} msgCount=${apiMessages.length} toolCount=${_diagToolCount}`)
+        window.electronAPI.logEvent('info', 'llm-request-debug', `model=${activeModel.model} bodyChars=${_diagBodySize} systemChars=${_diagSystemSize} msgCount=${apiMessages.length} toolCount=${_diagToolCount} baseUrl=${activeModel.baseUrl}`)
 
         const shouldConvergeFast = ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP && forceConvergeNoTools
         // temperature 优先级：收敛模式 > 确定性模式 > 图表一致性模式（fallback）
@@ -3164,6 +3170,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const attachment = tryExtractDocumentAttachment(tc.function.name, resultText)
             if (attachment) {
               collectedDocumentAttachments.push(attachment)
+            set((state) => ({
+              messages: upsertLastAssistant(
+                state.messages,
+                assistantMsgId,
+                assistantText,
+                reasoningText,
+                collectedDocumentAttachments,
+              ),
+            }))
             }
           }
 

@@ -134,9 +134,9 @@ export default function FileCard({ attachment }: Props): ReactElement {
               text-px-text-dim bg-px-surface hover:text-px-primary hover:border-px-primary
               transition-none"
             aria-label={`在文件夹中显示 ${attachment.filename}`}
-            title="在文件夹中显示"
+            title="打开所在目录"
           >
-            ▣
+            目录
           </button>
         </div>
       </div>

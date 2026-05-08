@@ -229,6 +229,17 @@ describe('parseIR', () => {
     }
   })
 
+  it('兼容模型误输出的 blockquote 包裹 callout 容器', () => {
+    const md = '---\ntitle: t\n---\n> :::callout warning\n> **注意**：缺少电价参数\n> :::\n'
+    const { ir } = parseIR(md)
+    const callout = ir.blocks.find(b => b.type === 'callout')
+    assert.ok(callout && callout.type === 'callout')
+    if (callout.type === 'callout') {
+      assert.equal(callout.level, 'warning')
+      assert.equal(callout.text, '**注意**：缺少电价参数')
+    }
+  })
+
   it('解析 cite 容器（含 source + page）', () => {
     const md = '---\ntitle: t\n---\n:::cite source="knowledge/a.md" page=12\n引文内容\n:::\n'
     const { ir } = parseIR(md)
@@ -380,6 +391,27 @@ describe('renderHtml', () => {
     assert.ok(html.includes('&lt;script&gt;alert(1)'), 'title 转义后应出现实体')
     assert.ok(!html.includes('<img onerror'), '段落里的 img 必被转义')
     assert.ok(html.includes('&lt;img onerror='))
+  })
+
+  it('行内 Markdown：段落、列表、表格和 callout 中的加粗与代码被渲染，HTML 仍转义', () => {
+    const html = renderHtml({
+      metadata: { title: 't' },
+      blocks: [
+        { type: 'paragraph', text: '**电价政策风险**：使用 `IRR` 指标，禁止 <script>' },
+        { type: 'list', ordered: true, items: ['**平台电价不准确**：需客户确认'] },
+        { type: 'table', headers: ['**参数**'], rows: [['`262kWh`']] },
+        { type: 'callout', level: 'warning', text: '**注意**：缺少峰谷价差' },
+      ],
+    })
+
+    assert.match(html, /<strong>电价政策风险<\/strong>/)
+    assert.match(html, /<code>IRR<\/code>/)
+    assert.match(html, /<li><strong>平台电价不准确<\/strong>：需客户确认<\/li>/)
+    assert.match(html, /<th><strong>参数<\/strong><\/th>/)
+    assert.match(html, /<td><code>262kWh<\/code><\/td>/)
+    assert.match(html, /<aside class="callout callout-warning"><strong>注意<\/strong>：缺少峰谷价差<\/aside>/)
+    assert.ok(!html.includes('<script>'), '行内 Markdown 渲染不能放开原始 HTML')
+    assert.ok(html.includes('&lt;script&gt;'))
   })
 
   it('XSS 防护：image src 含双引号被转义为属性安全', () => {

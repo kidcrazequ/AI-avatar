@@ -441,6 +441,24 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     }
   }
 
+  /** 打开当前分身的工作区目录（包含各会话 exports/ 产物）。 */
+  const handleOpenWorkspacesFolder = async () => {
+    if (!activeAvatarId) {
+      setLogMsg('打开失败：当前未选择分身')
+      return
+    }
+    try {
+      const result = await window.electronAPI.openAvatarWorkspacesFolder(activeAvatarId)
+      if (result.success) {
+        setLogMsg('已打开工作区目录')
+      } else {
+        setLogMsg(`打开失败：${result.error ?? '未知错误'}`)
+      }
+    } catch (err) {
+      setLogMsg(`打开失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   /**
    * 加载并展示某日的工具调用审计日志（Stage 三 P2 范围外 3）。
    *
@@ -1242,6 +1260,19 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
 
                 {/* 操作按钮 */}
                 <div className="space-y-3">
+                  <button
+                    onClick={handleOpenWorkspacesFolder}
+                    className="w-full flex items-center gap-3 px-5 py-3 border-2 border-px-border
+                      bg-px-elevated text-px-text font-game text-[14px] tracking-wider
+                      hover:border-px-primary hover:text-px-primary transition-none"
+                  >
+                    <span className="w-8 h-8 border-2 border-px-border flex items-center justify-center text-px-text-sec font-game text-[12px] flex-shrink-0">▣</span>
+                    <div className="text-left">
+                      <div>打开工作区目录</div>
+                      <div className="text-[12px] text-px-text-dim mt-0.5">查看当前分身各会话 exports/ 下的 PDF / Excel / Word</div>
+                    </div>
+                  </button>
+
                   <button
                     onClick={handleOpenLogsFolder}
                     className="w-full flex items-center gap-3 px-5 py-3 border-2 border-px-border

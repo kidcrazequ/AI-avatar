@@ -133,8 +133,8 @@ const RE_FENCE = /^\s{0,3}```([^\s`]*)\s*$/
 const RE_UL_ITEM = /^(\s*)[-*+]\s+(.+)$/
 const RE_OL_ITEM = /^(\s*)\d+\.\s+(.+)$/
 const RE_IMAGE_ONLY = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/
-const RE_DIRECTIVE_OPEN = /^:::([a-zA-Z][a-zA-Z0-9_-]*)\s*(.*)$/
-const RE_DIRECTIVE_CLOSE = /^:::\s*$/
+const RE_DIRECTIVE_OPEN = /^\s{0,3}(?:>\s*)?:::([a-zA-Z][a-zA-Z0-9_-]*)\s*(.*)$/
+const RE_DIRECTIVE_CLOSE = /^\s{0,3}(?:>\s*)?:::\s*$/
 
 function parseHeading(ctx: ParseContext): DocumentBlock {
   const line = ctx.lines[ctx.cursor]
@@ -270,7 +270,7 @@ function parseDirective(ctx: ParseContext): DocumentBlock | null {
       closed = true
       break
     }
-    contentLines.push(cur)
+    contentLines.push(stripDirectiveQuoteMarker(cur))
     ctx.cursor++
   }
   const text = contentLines.join('\n').trim()
@@ -310,6 +310,10 @@ function parseDirective(ctx: ParseContext): DocumentBlock | null {
 
   ctx.warnings.push({ blockIndex: -1, message: `未知容器指令 ":::${directive}"，回退为 paragraph` })
   return text ? { type: 'paragraph', text } : null
+}
+
+function stripDirectiveQuoteMarker(line: string): string {
+  return line.replace(/^\s{0,3}>\s?/, '')
 }
 
 function parseCalloutLevel(input: string): CalloutLevel | null {

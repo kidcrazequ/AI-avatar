@@ -116,16 +116,16 @@ function renderBlockToHtml(block: DocumentBlock): string {
   switch (block.type) {
     case 'heading': {
       const tag = `h${block.level}`
-      return `<${tag}>${escapeHtml(block.text)}</${tag}>`
+      return `<${tag}>${renderInlineMarkdown(block.text)}</${tag}>`
     }
     case 'paragraph': {
       // 段落内的换行渲染为 <br>，更符合人类直觉（IR 段落允许多行）
-      const html = escapeHtml(block.text).replace(/\n/g, '<br />')
+      const html = renderInlineMarkdown(block.text).replace(/\n/g, '<br />')
       return `<p>${html}</p>`
     }
     case 'list': {
       const tag = block.ordered ? 'ol' : 'ul'
-      const items = block.items.map(it => `  <li>${escapeHtml(it)}</li>`).join('\n')
+      const items = block.items.map(it => `  <li>${renderInlineMarkdown(it)}</li>`).join('\n')
       return `<${tag}>\n${items}\n</${tag}>`
     }
     case 'table':
@@ -135,10 +135,10 @@ function renderBlockToHtml(block: DocumentBlock): string {
       return `<pre><code${langClass}>${escapeHtml(block.code)}</code></pre>`
     }
     case 'callout':
-      return `<aside class="callout callout-${block.level}">${escapeHtml(block.text).replace(/\n/g, '<br />')}</aside>`
+      return `<aside class="callout callout-${block.level}">${renderInlineMarkdown(block.text).replace(/\n/g, '<br />')}</aside>`
     case 'cite': {
       const pageAttr = block.page !== undefined ? ` data-page="${block.page}"` : ''
-      return `<blockquote class="cite" data-source="${escapeHtmlAttr(block.source)}"${pageAttr}>${escapeHtml(block.text).replace(/\n/g, '<br />')}<footer class="cite-source">来源：${escapeHtml(block.source)}${block.page !== undefined ? `，第 ${block.page} 页` : ''}</footer></blockquote>`
+      return `<blockquote class="cite" data-source="${escapeHtmlAttr(block.source)}"${pageAttr}>${renderInlineMarkdown(block.text).replace(/\n/g, '<br />')}<footer class="cite-source">来源：${escapeHtml(block.source)}${block.page !== undefined ? `，第 ${block.page} 页` : ''}</footer></blockquote>`
     }
     case 'image': {
       const safeSrc = sanitizeUrl(block.src)
@@ -156,9 +156,9 @@ function renderBlockToHtml(block: DocumentBlock): string {
 }
 
 function renderTableHtml(headers: string[], rows: TableCellValue[][]): string {
-  const headLine = `    <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`
+  const headLine = `    <tr>${headers.map(h => `<th>${renderInlineMarkdown(h)}</th>`).join('')}</tr>`
   const bodyLines = rows
-    .map(row => `    <tr>${row.map(c => `<td>${escapeHtml(formatCell(c))}</td>`).join('')}</tr>`)
+    .map(row => `    <tr>${row.map(c => `<td>${renderInlineMarkdown(formatCell(c))}</td>`).join('')}</tr>`)
     .join('\n')
   return [
     '<table>',
@@ -176,6 +176,38 @@ function formatCell(cell: TableCellValue): string {
   if (cell === null) return ''
   if (typeof cell === 'number') return String(cell)
   return cell
+}
+
+/**
+ * 渲染安全的行内 Markdown 子集。
+ *
+ * 只支持文档报告里高频且低风险的语法：
+ * - `**加粗**` → `<strong>加粗</strong>`
+ * - `` `代码` `` → `<code>代码</code>`
+ *
+ * 安全策略：先对文本片段做 HTML 转义，再替换 Markdown 标记；不支持原始 HTML。
+ */
+function renderInlineMarkdown(input: string): string {
+  let output = ''
+  let lastIndex = 0
+  const codeRegex = /`([^`\n]+)`/g
+  let match: RegExpExecArray | null
+
+  while ((match = codeRegex.exec(input)) !== null) {
+    output += renderStrongMarkdown(escapeHtml(input.slice(lastIndex, match.index)))
+    output += `<code>${escapeHtml(match[1])}</code>`
+    lastIndex = codeRegex.lastIndex
+  }
+
+  output += renderStrongMarkdown(escapeHtml(input.slice(lastIndex)))
+  return output
+}
+
+function renderStrongMarkdown(escapedText: string): string {
+  return escapedText.replace(/\*\*([^\n]+?)\*\*/g, (_full, content: string) => {
+    if (content.trim().length === 0) return `**${content}**`
+    return `<strong>${content}</strong>`
+  })
 }
 
 function titleBlockHtml(title: string, author: string, date: string): string {

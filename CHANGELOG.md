@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+## v0.10.1 (2026-05-08)
+
+### 新功能
+
+- **桌面端「打开工作区目录」按钮** — 设置面板新增按钮，一键定位到当前分身的 `workspaces/` 根目录，方便用户按会话查看 `exports/` 下生成的 PDF / Excel / Word 文件，目录不存在时自动创建。
+  - `desktop-app/electron/main.ts` — 新增 `open-avatar-workspaces-folder` IPC（`assertSafeSegment` 校验 + 自动建目录）
+  - `desktop-app/electron/preload.ts` / `desktop-app/src/global.d.ts` — 暴露 `openAvatarWorkspacesFolder(avatarId)` API
+  - `desktop-app/src/components/SettingsPanel.tsx` — 在「打开日志目录」上方新增按钮 + handler
+
+- **历史会话文件卡片回显** — 重启应用或切换会话后，历史回答下方的 Excel / Word / PDF 文件卡片不再丢失。
+  - `desktop-app/src/components/ChatWindow.tsx` — 新增 `collectDocumentAttachmentsByAssistantId()`，扫描 DB 历史 messages 中的 tool 消息，提取 `export_excel` / `generate_document` 落盘附件并挂回到下一条 assistant 消息
+  - `desktop-app/src/stores/chatStore.ts` — `tryExtractDocumentAttachment()` 改为 named export 供 ChatWindow 直接复用，避免双份解析逻辑
+
+### 修复
+
+- **`packages/core/src/document/ir-parser.ts`** — 兼容模型把 callout / cite 容器误写成 markdown blockquote 的情况：
+  - 现象：LLM 偶尔输出 `> :::callout warning\n> 文本\n> :::`，旧解析器把整个块识别为普通 blockquote 段落，PDF 渲染时 callout 样式完全失效
+  - 修复：`RE_DIRECTIVE_OPEN` / `RE_DIRECTIVE_CLOSE` 允许行首可选 `>` 引用前缀，并新增 `stripDirectiveQuoteMarker()` 在采集容器内容时统一剥离 `> ` 前缀，最终与顶格写法行为一致
+
+- **`packages/core/src/document/renderers/html-renderer.ts`** — 段落 / 列表 / 表格单元 / callout / cite 中的 `**加粗**` 与 `` `行内代码` `` 之前会被原样转义显示，不出现 `<strong>` / `<code>`：
+  - 新增 `renderInlineMarkdown()` 仅支持加粗 + 行内代码两种安全语法，先 `escapeHtml` 再注入 `<strong>` / `<code>`，原始 HTML 标签依然严格转义，XSS 防护不变
+
+- **`desktop-app/src/stores/chatStore.ts`** — 工具调用循环里检测到落盘附件时，立即把 `documentAttachments` 写回当前 assistant 气泡（之前只 push 到本地数组，依赖下一次 upsert 才能渲染，导致用户感知到的「文件卡片出现延迟」）
+
+### 调优
+
+- **`desktop-app/src/stores/chatStore.ts`** — LLM 单轮超时阈值上调，缓解重任务（PDF 报告生成 / 收益测算等长上下文）误触超时：
+  - `ROUND_TIMEOUT_MS`：180s → 300s（5 分钟）
+  - `ROUND_FIRST_TOKEN_TIMEOUT_MS`：60s → 120s（重任务模型思考期较长）
+  - `ROUND_STREAM_IDLE_TIMEOUT_MS`：45s → 90s（已开始输出后流空闲容忍度提升）
+- **`desktop-app/src/stores/chatStore.ts`** — 每轮 LLM 调用增加诊断日志，`logPerf` + `logEvent` 同步输出 `model / bodyChars / systemChars / msgCount / toolCount / baseUrl`，便于定位「请求超大 / system prompt 过长 / 工具数量异常」等慢链路问题
+- **`desktop-app/src/stores/chatStore.ts`** — `generate_document` 工具描述补强 IR 语法说明：
+  - 明确支持的行内 Markdown 子集（`**加粗**` / `` `行内代码` `` / 禁止 HTML）
+  - 强调 callout / cite 容器必须顶格书写，禁止用 `> :::callout` 形式
+
+### UI 微调
+
+- **`desktop-app/src/components/FileCard.tsx`** — 「在文件夹中显示」按钮文案：图标 `▣` → 文字「目录」，title 同步改为「打开所在目录」，可读性更好
+
+### 测试
+
+- **`packages/core/src/tests/document-ir.test.ts`** — 新增 2 个用例：
+  - 兼容模型误输出的 `> :::callout` blockquote 包裹容器
+  - 行内 Markdown：段落 / 列表 / 表格 / callout 中加粗与行内代码被渲染，原始 HTML 仍被转义
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.10.0 → 0.10.1
+
 ## v0.10.0 (2026-05-08)
 
 ### 新功能

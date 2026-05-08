@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useChatStore, nextMessageId, type AttachmentRef } from '../stores/chatStore'
+import { useChatStore, nextMessageId, tryExtractDocumentAttachment, type AttachmentRef } from '../stores/chatStore'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import SkillProposalCard from './SkillProposalCard'
@@ -8,6 +8,7 @@ import TaskListPanel from './TaskListPanel'
 import L3EventsPanel from './L3EventsPanel'
 import AskQuestionCard from './AskQuestionCard'
 import { ModelConfig } from '../services/llm-service'
+import type { DocumentAttachment } from '../services/chat-types'
 import { localDateString } from '@soul/core/browser'
 import ToolCallTimeline from './ToolCallTimeline'
 
@@ -26,6 +27,26 @@ const MODE_BADGE_STYLE: Record<'agent' | 'plan' | 'ask', { label: string; cls: s
 }
 
 const QUICK_QUESTIONS: string[] = []
+
+function collectDocumentAttachmentsByAssistantId(dbMessages: DbMessage[]): Map<string, DocumentAttachment[]> {
+  const byAssistantId = new Map<string, DocumentAttachment[]>()
+  let pending: DocumentAttachment[] = []
+
+  for (const message of dbMessages) {
+    if (message.role === 'tool') {
+      const attachment = tryExtractDocumentAttachment('export_excel', message.content)
+      if (attachment) pending = [...pending, attachment]
+      continue
+    }
+
+    if (message.role === 'assistant' && pending.length > 0) {
+      byAssistantId.set(message.id, pending)
+      pending = []
+    }
+  }
+
+  return byAssistantId
+}
 
 interface Props {
   conversationId: string
@@ -192,6 +213,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           list.push(ref)
           attachmentsByMsgId.set(att.message_id, list)
         }
+        const documentAttachmentsByAssistantId = collectDocumentAttachmentsByAssistantId(dbMessages)
 
         setMessages(
           dbMessages
@@ -212,6 +234,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 }
               }
               const attachments = role === 'user' ? attachmentsByMsgId.get(m.id) : undefined
+              const documentAttachments = role === 'assistant'
+                ? documentAttachmentsByAssistantId.get(m.id)
+                : undefined
               return {
                 // 用 DB 的真实 messageId，便于后续 attachments 用 message_id 精确关联
                 id: `db-${conversationId}-${m.id || i}`,
@@ -219,6 +244,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 content: m.content,
                 imageUrls,
                 attachments,
+                documentAttachments,
               }
             })
         )

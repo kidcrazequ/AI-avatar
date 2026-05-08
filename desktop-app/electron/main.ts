@@ -3719,6 +3719,21 @@ wrapHandler('open-logs-folder', async () => {
 })
 
 /**
+ * 打开当前分身的工作区根目录（workspaces/）。
+ * 用户可在这里按会话目录查找 exports/ 下的 PDF / Excel / Word 等产物。
+ */
+wrapHandler('open-avatar-workspaces-folder', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const workspacesDir = path.join(avatarsPath, avatarId, 'workspaces')
+  if (!fs.existsSync(workspacesDir)) {
+    fs.mkdirSync(workspacesDir, { recursive: true })
+  }
+  const errMsg = await shell.openPath(workspacesDir)
+  if (errMsg) return { success: false, error: errMsg, path: workspacesDir }
+  return { success: true, path: workspacesDir }
+})
+
+/**
  * 文档生成 IPC：把渲染进程构造好的 HTML（PDF）/ IR（DOCX）落盘。
  *
  * 决策 A1（依赖注入）：tool-router 在渲染进程实例化时通过 documentRenderers

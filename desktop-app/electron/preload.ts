@@ -395,6 +395,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getErrorLogs: (date?: string) => ipcRenderer.invoke('get-error-logs', date),
   getGeneratedIndex: () => ipcRenderer.invoke('get-generated-index'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  openAvatarWorkspacesFolder: (avatarId: string) =>
+    ipcRenderer.invoke('open-avatar-workspaces-folder', avatarId),
   exportErrorLog: (days?: number) => ipcRenderer.invoke('export-error-log', days),
   // 工具调用审计日志（Stage 三 P2 #16 / 范围外 3）
   readToolCallLog: (date?: string) => ipcRenderer.invoke('read-tool-call-log', date),

@@ -515,6 +515,8 @@ interface ElectronAPI {
   checkUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion?: string; downloadUrl?: string; releaseNotes?: string }>
   /** 用系统文件管理器打开日志目录，返回目录路径 */
   openLogsFolder: () => Promise<string>
+  /** 用系统文件管理器打开当前分身的 workspaces 根目录 */
+  openAvatarWorkspacesFolder: (avatarId: string) => Promise<{ success: boolean; error?: string; path?: string }>
   /** 将最近 N 天错误日志导出到桌面，返回导出结果 */
   exportErrorLog: (days?: number) => Promise<{ success: boolean; message?: string; filePath?: string }>
   /** 读取指定日期的工具调用审计日志（jsonl 字符串），默认今天，不存在返回 '' */

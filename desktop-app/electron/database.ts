@@ -355,6 +355,26 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_attachments_msg
       ON attachments(message_id)
     `)
+
+    // MCP server 配置表（v6 引入；2026-05-09 #5.5 修复：之前 createBaseSchema 漏建该表，
+    // 全新安装会跳过 v5→v6 migration 导致 mcp_servers 缺失，下次列表查询时报 "no such table"。
+    // 老用户因走过 v5→v6 migration 而未暴露。这里补回，让全新安装的用户也得到完整 schema）
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS mcp_servers (
+        name TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        transport TEXT NOT NULL,
+        command TEXT,
+        args TEXT,
+        env TEXT,
+        cwd TEXT,
+        url TEXT,
+        timeout_ms INTEGER,
+        description TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */

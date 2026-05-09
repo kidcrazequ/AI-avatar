@@ -7,10 +7,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   ping: () => ipcRenderer.invoke('ping'),
-  loadAvatar: (avatarId: string) => ipcRenderer.invoke('load-avatar', avatarId),
+  loadAvatar: (avatarId: string, projectId?: string) => ipcRenderer.invoke('load-avatar', avatarId, projectId),
 
   // 会话管理
-  createConversation: (title: string, avatarId: string) => ipcRenderer.invoke('create-conversation', title, avatarId),
+  createConversation: (title: string, avatarId: string, projectId?: string) =>
+    ipcRenderer.invoke('create-conversation', title, avatarId, projectId),
+  listProjectIds: (avatarId: string) => ipcRenderer.invoke('list-project-ids', avatarId),
   getConversations: (avatarId?: string) => ipcRenderer.invoke('get-conversations', avatarId),
   getConversation: (id: string) => ipcRenderer.invoke('get-conversation', id),
   updateConversationTitle: (id: string, title: string) => ipcRenderer.invoke('update-conversation-title', id, title),
@@ -68,6 +70,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   claudeBridgeGetLimits: () => ipcRenderer.invoke('claudebridge:get-limits'),
   claudeBridgeSetLimits: (limits: Record<string, number>) => ipcRenderer.invoke('claudebridge:set-limits', limits),
   claudeBridgeReadLog: (date?: string) => ipcRenderer.invoke('claudebridge:read-log', date),
+
+  soulProxyApiSseWrite: (jobId: string, raw: string) =>
+    ipcRenderer.invoke('soul-proxy-api:sse-write', jobId, raw),
+  soulProxyApiFinish: (jobId: string, payload: { error?: string; json?: unknown }) =>
+    ipcRenderer.invoke('soul-proxy-api:finish', jobId, payload),
+  onSoulProxyApiRunRequest: (callback: (payload: unknown) => void) => {
+    const handler = (_: unknown, payload: unknown) => callback(payload)
+    ipcRenderer.on('soul-proxy-api:run-request', handler)
+    return () => { ipcRenderer.removeListener('soul-proxy-api:run-request', handler) }
+  },
+  proxyApiGenerateToken: () => ipcRenderer.invoke('proxy-api:generate-token'),
 
   // Preview pane (L3 Phase C/D/G)
   previewSetBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
@@ -204,6 +217,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>
     ipcRenderer.invoke('consolidate-memory', avatarId, content, apiKey, baseUrl),
+  readMemoryStore: (avatarId: string) => ipcRenderer.invoke('read-memory-store', avatarId),
+  writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) =>
+    ipcRenderer.invoke('write-memory-store', avatarId, doc),
 
   // 用户画像管理（Feature 3）
   readUserProfile: (avatarId: string) => ipcRenderer.invoke('read-user-profile', avatarId),
@@ -313,9 +329,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('rag-progress', handler) }
   },
 
-  // 工具调用（GAP4）
-  executeToolCall: (avatarId: string, conversationId: string, name: string, args: Record<string, unknown>) =>
-    ipcRenderer.invoke('execute-tool-call', avatarId, conversationId, name, args),
+  // 工具调用（GAP4）+ #7 trustTier（Proxy 走 proxy，灰名单主进程拒绝）
+  executeToolCall: (
+    avatarId: string,
+    conversationId: string,
+    name: string,
+    args: Record<string, unknown>,
+    meta?: { trustTier?: 'ui' | 'proxy' },
+  ) => ipcRenderer.invoke('execute-tool-call', avatarId, conversationId, name, args, meta),
+
+  /** #7：将会话 Ask/Plan/Agent 同步到主进程门禁 */
+  syncConversationToolMode: (conversationId: string, mode: string) =>
+    ipcRenderer.invoke('conversation:sync-tool-mode', conversationId, mode),
 
   // 知识检索（GAP1）
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) =>

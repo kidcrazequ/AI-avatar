@@ -23,6 +23,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { SoulLoader } from '../soul-loader'
+import { STRUCTURED_MEMORY_FILENAME } from '../structured-memory'
 import { captureFileSnapshot } from '../utils/chart-cache'
 
 // ─── 测试夹具（共享 tmp avatars/ 根） ──────────────────────────────────────────
@@ -224,5 +225,80 @@ describe('SoulLoader Phase 5 — 缓存快照', () => {
     const snap = captureFileSnapshot(ghostPath)
     assert.equal(snap.mtimeMs, 0, '文件不存在 mtime 应为 0')
     assert.equal(snap.size, 0, '文件不存在 size 应为 0')
+  })
+})
+
+// ─── case 5: 结构化白盒 Memory（#8） ──────────────────────────────────────────
+
+describe('SoulLoader — MEMORY.entries.json（渐进升级）', () => {
+  const structuredPath = () => path.join(avatarPath, 'memory', STRUCTURED_MEMORY_FILENAME)
+
+  it('仅有结构化条目时注入「结构化记忆」段落', () => {
+    fs.writeFileSync(path.join(avatarPath, 'memory', 'MEMORY.md'), '', 'utf-8')
+    fs.writeFileSync(
+      structuredPath(),
+      JSON.stringify({
+        schemaVersion: 1,
+        entries: [{
+          id: 't_struct_1',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:00.000Z',
+          category: 'preference',
+          content: '只使用公制单位',
+        }],
+      }),
+      'utf-8',
+    )
+
+    const loader = new SoulLoader(avatarsRoot)
+    const config = loader.loadAvatar(AVATAR_ID)
+
+    assert.ok(config.systemPrompt.includes('# 长期记忆'), '应有长期记忆章节')
+    assert.ok(config.systemPrompt.includes('结构化记忆'), '应含结构化小节')
+    assert.ok(config.systemPrompt.includes('只使用公制单位'), '应含条目正文')
+    assert.ok(!config.systemPrompt.includes('MEMORY.md（兼容）'), '无 legacy 时不应有兼容分隔')
+  })
+
+  it('结构化 + MEMORY.md 同时存在时合并注入', () => {
+    fs.writeFileSync(path.join(avatarPath, 'memory', 'MEMORY.md'), '# Legacy\n\nhello-md\n', 'utf-8')
+    fs.writeFileSync(
+      structuredPath(),
+      JSON.stringify({
+        schemaVersion: 1,
+        entries: [{
+          id: 't_struct_2',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:00.000Z',
+          category: 'decision',
+          content: '条目 A',
+        }],
+      }),
+      'utf-8',
+    )
+
+    const loader = new SoulLoader(avatarsRoot)
+    const config = loader.loadAvatar(AVATAR_ID)
+
+    assert.ok(config.systemPrompt.includes('条目 A'))
+    assert.ok(config.systemPrompt.includes('MEMORY.md（兼容）'))
+    assert.ok(config.systemPrompt.includes('hello-md'))
+
+    if (fs.existsSync(structuredPath())) {
+      fs.unlinkSync(structuredPath())
+    }
+  })
+
+  it('无 MEMORY.entries.json 时仅 MEMORY.md 仍是长期记忆来源（兼容旧分身）', () => {
+    if (fs.existsSync(structuredPath())) {
+      fs.unlinkSync(structuredPath())
+    }
+    fs.writeFileSync(path.join(avatarPath, 'memory', 'MEMORY.md'), '# 仅有 MD\n\nlegacy-only\n', 'utf-8')
+
+    const loader = new SoulLoader(avatarsRoot)
+    const config = loader.loadAvatar(AVATAR_ID)
+
+    assert.ok(config.systemPrompt.includes('# 长期记忆'))
+    assert.ok(config.systemPrompt.includes('legacy-only'))
+    assert.ok(!config.systemPrompt.includes('结构化记忆（白盒）'), '无 JSON 时不应凭空出现结构化小节标题')
   })
 })

@@ -11,6 +11,9 @@
 export { SoulLoader } from './soul-loader'
 export type { AvatarConfig } from './soul-loader'
 
+export { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+export { CompositeKnowledgeRetriever, reciprocalRankFusion } from './composite-knowledge-retriever'
+
 export { AvatarManager } from './avatar-manager'
 export type { Avatar } from './avatar-manager'
 
@@ -49,6 +52,21 @@ export type { EmbeddingCallFn, IndexerConfig, IndexBuildProgress } from './knowl
 
 export { ISS_DEFAULT_TOP_N, ISS_DEFAULT_PINNED_TOOL_NAMES, SkillReranker } from './skill-reranker'
 export type { SkillRerankerOptions } from './skill-reranker'
+
+export {
+  PLAN_MODE_BLOCKED_TOOL_NAMES,
+  GREY_ZONE_TOOL_NAMES,
+  evaluateConversationModeToolPolicy,
+  evaluateProxyTrustGreyDenial,
+  shouldConfirmGreyZoneOnDesktop,
+} from './tool-permission-policy'
+export type {
+  ConversationModeForTools,
+  ToolCallTrustTier,
+  ToolPermissionEval,
+  ToolPermissionDenied,
+  ToolPermissionAllowed,
+} from './tool-permission-policy'
 export type { ToolForRerank } from './skill-reranker-types'
 export {
   stableToolDocHash,
@@ -72,6 +90,23 @@ export { tokenize } from './knowledge-retriever'
 
 export { consolidateMemory, getMemoryStats, shouldConsolidate, shouldWarnMemory, MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from './memory-manager'
 export type { MemoryStats } from './memory-manager'
+
+export {
+  STRUCTURED_MEMORY_FILENAME,
+  STRUCTURED_MEMORY_MAX_ENTRIES,
+  STRUCTURED_MEMORY_MAX_CONTENT_CHARS,
+  parseStructuredMemoryDocumentJson,
+  parseStructuredMemoryDocumentUnknown,
+  assertStructuredMemoryDocumentPayload,
+  normalizeStructuredMemoryDocumentUnknown,
+  formatStructuredMemoryEntriesForPrompt,
+  buildLongTermMemoryInjectionBody,
+  getCombinedMemoryInjectionStats,
+  serializeStructuredMemoryDocument,
+  formatStructuredMemoryDateLabel,
+  EMPTY_STRUCTURED_MEMORY_DOCUMENT,
+} from './structured-memory'
+export type { StructuredMemoryEntry, StructuredMemoryDocument } from './structured-memory'
 
 export { SubAgentManager } from './sub-agent-manager'
 export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'

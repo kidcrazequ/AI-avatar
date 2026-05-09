@@ -18,6 +18,8 @@ interface Conversation {
   id: string
   title: string
   avatar_id: string
+  /** Avatar 内项目分区，缺省为 `default` */
+  project_id?: string
   created_at: number
   updated_at: number
 }
@@ -216,12 +218,28 @@ interface LLMTool {
   }
 }
 
+/** 结构化长期记忆条目（memory/MEMORY.entries.json，与 @soul/core 对齐） */
+interface StructuredMemoryEntryDTO {
+  id: string
+  createdAt: string
+  updatedAt: string
+  category: string
+  content: string
+  source?: string
+}
+
+interface StructuredMemoryDocumentDTO {
+  schemaVersion: 1
+  entries: StructuredMemoryEntryDTO[]
+}
+
 interface ElectronAPI {
   ping: () => Promise<string>
-  loadAvatar: (avatarId: string) => Promise<AvatarConfig>
+  loadAvatar: (avatarId: string, projectId?: string) => Promise<AvatarConfig>
 
   // 会话管理
-  createConversation: (title: string, avatarId: string) => Promise<string>
+  createConversation: (title: string, avatarId: string, projectId?: string) => Promise<string>
+  listProjectIds: (avatarId: string) => Promise<string[]>
   getConversations: (avatarId?: string) => Promise<Conversation[]>
   getConversation: (id: string) => Promise<Conversation | undefined>
   updateConversationTitle: (id: string, title: string) => Promise<void>
@@ -283,6 +301,13 @@ interface ElectronAPI {
   claudeBridgeGetLimits: () => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
   claudeBridgeSetLimits: (limits: Record<string, number>) => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
   claudeBridgeReadLog: (date?: string) => Promise<string>
+
+  /** P0+ Anthropic 兼容 Proxy（主进程 HTTP → renderer sendMessage） */
+  soulProxyApiSseWrite: (jobId: string, raw: string) => Promise<{ ok: boolean; error?: string }>
+  soulProxyApiFinish: (jobId: string, payload: { error?: string; json?: unknown }) => Promise<{ ok: boolean; error?: string }>
+  onSoulProxyApiRunRequest: (callback: (payload: unknown) => void) => (() => void)
+  /** 生成随机 Proxy Bearer Token（写入设置前调用） */
+  proxyApiGenerateToken: () => Promise<string>
 
   // Preview pane (L3 Phase C/D/G)
   previewSetBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>
@@ -346,6 +371,8 @@ interface ElectronAPI {
   writeMemory: (avatarId: string, content: string) => Promise<void>
   getMemoryStats: (avatarId: string) => Promise<{ chars: number; ratio: number; entries: number }>
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>
+  readMemoryStore: (avatarId: string) => Promise<StructuredMemoryDocumentDTO>
+  writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) => Promise<void>
 
   // 用户画像管理（Feature 3）
   readUserProfile: (avatarId: string) => Promise<string>
@@ -465,8 +492,15 @@ interface ElectronAPI {
   // RAG 检索阶段进度
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
 
-  // 工具调用（GAP4）
-  executeToolCall: (avatarId: string, conversationId: string, name: string, args: Record<string, unknown>) => Promise<{ content: string; error?: string }>
+  // 工具调用（GAP4）+ #7 Permission
+  executeToolCall: (
+    avatarId: string,
+    conversationId: string,
+    name: string,
+    args: Record<string, unknown>,
+    meta?: { trustTier?: 'ui' | 'proxy' },
+  ) => Promise<{ content: string; error?: string }>
+  syncConversationToolMode: (conversationId: string, mode: string) => Promise<void>
 
   // 知识检索（GAP1）
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) => Promise<Array<{ file: string; heading: string; content: string; score: number }>>

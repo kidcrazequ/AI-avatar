@@ -5,6 +5,13 @@ import { DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints } from './tool-budget'
 import { combineSystemPromptSections } from './prompt-sections'
 import { assertSafeSegment } from './utils/path-security'
 import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+import {
+  STRUCTURED_MEMORY_FILENAME,
+  parseStructuredMemoryDocumentJson,
+  formatStructuredMemoryEntriesForPrompt,
+  buildLongTermMemoryInjectionBody,
+} from './structured-memory'
 
 export interface AvatarConfig {
   id: string
@@ -104,8 +111,13 @@ export class SoulLoader {
     }
   }
 
-  loadAvatar(avatarId: string): AvatarConfig {
+  loadAvatar(avatarId: string, projectId?: string): AvatarConfig {
     assertSafeSegment(avatarId, '分身ID')
+    const resolvedProject =
+      projectId && projectId.trim().length > 0 ? projectId.trim() : DEFAULT_AVATAR_PROJECT_ID
+    if (resolvedProject !== DEFAULT_AVATAR_PROJECT_ID) {
+      assertSafeSegment(resolvedProject, 'projectId')
+    }
     const avatarPath = path.join(this.avatarsPath, avatarId)
 
     // 读取 CLAUDE.md（入口文件）
@@ -114,8 +126,15 @@ export class SoulLoader {
     // 读取 soul.md（人格定义）
     const soulMd = this.readFileSafe(path.join(avatarPath, 'soul.md'))
 
-    // GAP2: 读取 memory/MEMORY.md（长期记忆）
+    // GAP2: 读取 memory/MEMORY.md（长期记忆）+ 可选结构化条目（MEMORY.entries.json）
     const memoryContent = this.readFileSafe(path.join(avatarPath, 'memory', 'MEMORY.md'))
+    const structuredRaw = this.readFileSafe(path.join(avatarPath, 'memory', STRUCTURED_MEMORY_FILENAME))
+    const structuredDoc = structuredRaw.trim() ? parseStructuredMemoryDocumentJson(structuredRaw) : null
+    const structuredMarkdown =
+      structuredDoc && structuredDoc.entries.length > 0
+        ? formatStructuredMemoryEntriesForPrompt(structuredDoc.entries)
+        : ''
+    const longTermMemoryBody = buildLongTermMemoryInjectionBody(structuredMarkdown, memoryContent)
 
     // Feature 3: 读取 memory/USER.md（用户画像）
     const userProfileContent = this.readFileSafe(path.join(avatarPath, 'memory', 'USER.md'))
@@ -281,6 +300,11 @@ export class SoulLoader {
       }
     }
 
+    // 可选：projects/<projectId>/knowledge（与分身全局知识合并注入，不写 Excel schema）
+    if (resolvedProject !== DEFAULT_AVATAR_PROJECT_ID) {
+      this.mergeProjectKnowledgeMarkdown(stableParts, avatarPath, resolvedProject)
+    }
+
     // Phase 5: 注入「我的人生（出厂记忆）」+ 人生使用守则
     // 位置：知识库之后、工具说明之前。consolidated.md 由 forgetter.ts 负责
     // 8K 字硬上限（CONSOLIDATED_MAX_CHARS），此处直接整段塞入即可。
@@ -314,9 +338,9 @@ export class SoulLoader {
     stableParts.push('严禁：把整段 markdown 答案抄进 IR 而不构造结构化块（要让 IR 用 frontmatter 和扩展语法表达层次）。\n')
 
     // GAP2: 长期记忆 / 用户画像改为 dynamic 段，放在 system prompt 尾部，利好前缀缓存。
-    if (memoryContent.trim()) {
+    if (longTermMemoryBody.trim()) {
       dynamicParts.push('\n\n---\n\n# 长期记忆\n\n')
-      dynamicParts.push(memoryContent)
+      dynamicParts.push(longTermMemoryBody)
     }
 
     if (userProfileContent.trim()) {
@@ -355,6 +379,45 @@ export class SoulLoader {
       systemPrompt,
       stableSystemPrompt,
       dynamicSystemPrompt,
+    }
+  }
+
+  /**
+   * 叠加 `avatars/<id>/projects/<projectId>/knowledge` 下的 .md（与分身 knowledge 同策略）。
+   * 不包含 _excel schema 清单（仍以分身根 knowledge 为准）。
+   */
+  private mergeProjectKnowledgeMarkdown(stableParts: string[], avatarPath: string, projectId: string): void {
+    const knowledgeBase = path.join(avatarPath, 'projects', projectId, 'knowledge')
+    if (!fs.existsSync(knowledgeBase)) return
+
+    const knowledgeRootFiles = this.readDirectory(knowledgeBase)
+    if (knowledgeRootFiles.length === 0) return
+
+    const stuffEntries: Array<{ relPath: string; body: string }> = []
+    const ragOnlyEntries: Array<{ relPath: string; meta: Record<string, unknown> }> = []
+
+    for (const f of knowledgeRootFiles) {
+      const relPath = path.relative(knowledgeBase, f.path)
+      const { data: fm, body } = parseFrontmatter(f.content)
+      if (fm.rag_only === true || fm.source) {
+        ragOnlyEntries.push({ relPath, meta: fm })
+      } else {
+        stuffEntries.push({ relPath, body })
+      }
+    }
+
+    if (stuffEntries.length > 0) {
+      stableParts.push(`\n\n---\n\n# 项目知识（${projectId}）\n\n`)
+      stuffEntries.forEach(e => {
+        stableParts.push(`<!-- 文件: projects/${projectId}/knowledge/${e.relPath} -->\n${e.body}\n\n`)
+      })
+    }
+    if (ragOnlyEntries.length > 0) {
+      stableParts.push(`\n\n---\n\n# 项目可检索文档（${projectId}）\n\n`)
+      ragOnlyEntries.forEach(e => {
+        const source = typeof e.meta.source === 'string' ? e.meta.source : 'document'
+        stableParts.push(`- \`projects/${projectId}/knowledge/${e.relPath}\`（${source}）\n`)
+      })
     }
   }
 

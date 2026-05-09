@@ -30,6 +30,17 @@ export {
 } from './memory-manager'
 export type { MemoryStats } from './memory-manager'
 
+export {
+  STRUCTURED_MEMORY_FILENAME,
+  STRUCTURED_MEMORY_MAX_ENTRIES,
+  STRUCTURED_MEMORY_MAX_CONTENT_CHARS,
+  formatStructuredMemoryDateLabel,
+  getCombinedMemoryInjectionStats,
+  buildLongTermMemoryInjectionBody,
+  formatStructuredMemoryEntriesForPrompt,
+} from './structured-memory'
+export type { StructuredMemoryEntry, StructuredMemoryDocument } from './structured-memory'
+
 // ─── OCR / Markdown 清洗（纯字符串处理） ────────────────────────────────────
 export {
   cleanOcrHtml,
@@ -97,6 +108,21 @@ export {
 } from './skill-reranker'
 export type { EmbeddingCallFn as IssEmbeddingCallFn, SkillRerankerOptions } from './skill-reranker'
 export type { ToolForRerank } from './skill-reranker-types'
+
+// ─── #7 工具权限策略（纯函数，渲染进程与 execute-tool-call 对齐） ───────────
+export {
+  PLAN_MODE_BLOCKED_TOOL_NAMES,
+  GREY_ZONE_TOOL_NAMES,
+  evaluateConversationModeToolPolicy,
+  evaluateProxyTrustGreyDenial,
+  shouldConfirmGreyZoneOnDesktop,
+} from './tool-permission-policy'
+export type {
+  ConversationModeForTools,
+  ToolCallTrustTier,
+  ToolPermissionEval,
+} from './tool-permission-policy'
+
 export {
   stableToolDocHash,
   buildToolDocForEmbedding,

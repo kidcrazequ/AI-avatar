@@ -18,7 +18,8 @@ app.disableHardwareAcceleration()
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR } from '@soul/core'
+import crypto from 'crypto'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
@@ -47,6 +48,8 @@ import { renderDocumentDocx } from './exporters/document-docx-renderer'
 import { applyTweaks } from './preview/tweaks-writer'
 import { GitHubConnector } from './connectors/github-connector'
 import { CommunitySkillManager } from './community-skill-manager'
+import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
+import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -169,20 +172,26 @@ function getDb(): DatabaseManager {
 }
 
 /**
- * 根据会话 ID 解析工作区上下文（avatarId + workspace 根目录）。
+ * 根据会话 ID 解析工作区上下文（avatarId + projectId + workspace 根目录）。
  */
-function resolveWorkspaceContext(conversationId: string): { avatarId: string; workspaceRoot: string } {
+function resolveWorkspaceContext(
+  conversationId: string,
+): { avatarId: string; projectId: string; workspaceRoot: string } {
   const conv = getDb().getConversation(conversationId)
   if (!conv) {
     throw new Error(`会话不存在: ${conversationId}`)
   }
   const avatarId = conv.avatar_id
   assertSafeSegment(avatarId, '分身ID')
-  const workspaceRoot = workspaceManager.ensure(avatarId, conversationId)
+  const rawPid = typeof conv.project_id === 'string' && conv.project_id.trim().length > 0
+    ? conv.project_id.trim()
+    : DEFAULT_AVATAR_PROJECT_ID
+  assertSafeSegment(rawPid, 'projectId')
+  const workspaceRoot = workspaceManager.ensure(avatarId, rawPid, conversationId)
   if (conv.workspace_initialized !== 1) {
     getDb().markWorkspaceInitialized(conversationId)
   }
-  return { avatarId, workspaceRoot }
+  return { avatarId, projectId: rawPid, workspaceRoot }
 }
 
 /**
@@ -436,7 +445,16 @@ function initManagers() {
       renderDocx: (ir, outputPath) => renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined }),
     },
   })
-  workspaceManager = new WorkspaceManager(avatarsPath)
+  workspaceManager = new WorkspaceManager(avatarsPath, (cid: string) => {
+    assertSafeSegment(cid, 'conversationId')
+    const row = getDb().getConversation(cid)
+    const p =
+      typeof row?.project_id === 'string' && row.project_id.trim().length > 0
+        ? row.project_id.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    assertSafeSegment(p, 'projectId')
+    return p
+  })
   templateLoader = new TemplateLoader(templatesPath)
   verifierAgent = new VerifierAgent(logger)
   publicFileServer = new PublicFileServer(logger)
@@ -472,6 +490,10 @@ app.whenReady().then(() => {
     scheduledTester.setWindow(mainWindow)
     cronScheduler.setWindow(mainWindow)
   }
+
+  registerSoulProxyIpcHandlers(ipcMain)
+  ipcMain.handle('proxy-api:generate-token', () => crypto.randomBytes(32).toString('hex'))
+  startSoulProxyServer({ getDb, getMainWindow: () => mainWindow, logger })
 
   // 从 DB 恢复已配置的 cron 定时任务（重启后自动续期）
   try {
@@ -533,6 +555,7 @@ app.on('before-quit', () => {
       console.warn('[Main] publicFileServer.stop() failed:', err instanceof Error ? err.message : String(err))
     })
   }
+  stopSoulProxyServer(logger)
   // 关闭所有 MCP server 连接（stdio 子进程会被 SIGTERM）
   if (mcpManager) {
     mcpManager.closeAll().catch((err) => {
@@ -623,9 +646,16 @@ const getWikiCompiler = (avatarId: string): WikiCompiler => {
 ipcMain.handle('ping', () => 'pong')
 
 // 加载分身配置（GAP3/GAP6: 重新调用后 systemPrompt 会根据最新技能/知识/记忆重建）
-wrapHandler('load-avatar', (_, avatarId: string) => {
+wrapHandler('load-avatar', (_, avatarId: string, projectId?: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  const config = soulLoader.loadAvatar(avatarId)
+  const pid =
+    typeof projectId === 'string' && projectId.trim().length > 0
+      ? projectId.trim()
+      : DEFAULT_AVATAR_PROJECT_ID
+  if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
+    assertSafeSegment(pid, 'projectId')
+  }
+  const config = soulLoader.loadAvatar(avatarId, pid === DEFAULT_AVATAR_PROJECT_ID ? undefined : pid)
   // Feature 7: 缓存 system prompt 供子代理委派使用
   toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
 
@@ -642,9 +672,19 @@ wrapHandler('load-avatar', (_, avatarId: string) => {
 
 // ─── 会话管理 ────────────────────────────────────────────────────────────────
 
-wrapHandler('create-conversation', (_, title: string, avatarId: string) => {
+wrapHandler('create-conversation', (_, title: string, avatarId: string, projectId?: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  return getDb().createConversation(title, avatarId)
+  const pid =
+    typeof projectId === 'string' && projectId.trim().length > 0
+      ? projectId.trim()
+      : DEFAULT_AVATAR_PROJECT_ID
+  if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
+  return getDb().createConversation(title, avatarId, pid)
+})
+
+wrapHandler('list-project-ids', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDb().listProjectIdsForAvatar(avatarId)
 })
 
 wrapHandler('get-conversations', (_, avatarId?: string) => {
@@ -682,43 +722,43 @@ wrapHandler('delete-conversation', (_, id: string) => {
 // ─── Workspace（L3 Phase A）──────────────────────────────────────────────────
 
 wrapHandler('workspace:stat', (_, conversationId: string, relPath: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  return workspaceManager.stat(avatarId, conversationId, relPath)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  return workspaceManager.stat(avatarId, projectId, conversationId, relPath)
 })
 
 wrapHandler('workspace:read', (_, conversationId: string, relPath: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  return workspaceManager.readFile(avatarId, conversationId, relPath)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  return workspaceManager.readFile(avatarId, projectId, conversationId, relPath)
 })
 
 wrapHandler('workspace:write', (_, conversationId: string, relPath: string, content: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  return workspaceManager.writeFile(avatarId, conversationId, relPath, content)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  return workspaceManager.writeFile(avatarId, projectId, conversationId, relPath, content)
 })
 
 wrapHandler('workspace:list', (_, conversationId: string, relPath = '.', depth = 1) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  return workspaceManager.list(avatarId, conversationId, relPath, depth)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  return workspaceManager.list(avatarId, projectId, conversationId, relPath, depth)
 })
 
 wrapHandler('workspace:copy', (_, conversationId: string, src: string, dest: string, move = false) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  workspaceManager.copy(avatarId, conversationId, src, dest, move)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  workspaceManager.copy(avatarId, projectId, conversationId, src, dest, move)
 })
 
 wrapHandler('workspace:move', (_, conversationId: string, src: string, dest: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  workspaceManager.copy(avatarId, conversationId, src, dest, true)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  workspaceManager.copy(avatarId, projectId, conversationId, src, dest, true)
 })
 
 wrapHandler('workspace:delete', (_, conversationId: string, relPath: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  workspaceManager.delete(avatarId, conversationId, relPath)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  workspaceManager.delete(avatarId, projectId, conversationId, relPath)
 })
 
 wrapHandler('workspace:grep', (_, conversationId: string, relPath: string, pattern: string) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  return workspaceManager.grep(avatarId, conversationId, relPath, pattern)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  return workspaceManager.grep(avatarId, projectId, conversationId, relPath, pattern)
 })
 
 // ─── 消息管理 ────────────────────────────────────────────────────────────────
@@ -1119,8 +1159,8 @@ wrapHandler('preview:set-user-visible', (_event, visible: boolean) => {
 
 /** 渲染进程主动调用：把 Tweaks 表单收集的值写回 EDITMODE 块 */
 wrapHandler('preview:apply-tweaks', (_event, conversationId: string, params: { path: string; blockId: string; values: Record<string, unknown> }) => {
-  const { avatarId } = resolveWorkspaceContext(conversationId)
-  const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, params.path)
+  const { avatarId, projectId } = resolveWorkspaceContext(conversationId)
+  const abs = workspaceManager.resolveCrossProjectPath(avatarId, projectId, conversationId, params.path)
   return applyTweaks({ htmlAbsPath: abs, blockId: params.blockId, newValues: params.values })
 })
 
@@ -1333,19 +1373,61 @@ wrapHandler('write-memory', async (_, avatarId: string, content: string) => {
   if (logger) logger.recordGenerated('memory', avatarId, memoryPath)
 })
 
+wrapHandler('read-memory-store', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const structuredPath = path.join(avatarsPath, avatarId, 'memory', STRUCTURED_MEMORY_FILENAME)
+  try {
+    const raw = await fs.promises.readFile(structuredPath, 'utf-8')
+    const doc = parseStructuredMemoryDocumentJson(raw)
+    return doc ?? { schemaVersion: 1 as const, entries: [] }
+  } catch {
+    return { schemaVersion: 1 as const, entries: [] }
+  }
+})
+
+wrapHandler('write-memory-store', async (_, avatarId: string, payload: unknown) => {
+  assertSafeSegment(avatarId, '分身ID')
+  try {
+    const doc = assertStructuredMemoryDocumentPayload(payload)
+    const memoryDir = path.join(avatarsPath, avatarId, 'memory')
+    await fs.promises.mkdir(memoryDir, { recursive: true })
+    const structuredPath = path.join(memoryDir, STRUCTURED_MEMORY_FILENAME)
+    await atomicWriteFile(structuredPath, serializeStructuredMemoryDocument(doc))
+    if (logger) logger.recordGenerated('memory', avatarId, structuredPath)
+  } catch (err) {
+    const msg = err instanceof Error ? err : new Error(String(err))
+    if (logger) logger.error('write-memory-store', msg)
+    throw err
+  }
+})
+
 /**
- * get-memory-stats: 返回 MEMORY.md 的容量统计信息。
+ * get-memory-stats: 返回注入用「结构化 + MEMORY.md」组合的容量统计（与 SoulLoader 长期记忆体积对齐）。
  */
 wrapHandler('get-memory-stats', async (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  const memoryPath = path.join(avatarsPath, avatarId, 'memory', 'MEMORY.md')
-  let content = ''
+  const memoryDir = path.join(avatarsPath, avatarId, 'memory')
+  const memoryPath = path.join(memoryDir, 'MEMORY.md')
+  const structuredPath = path.join(memoryDir, STRUCTURED_MEMORY_FILENAME)
+  let legacy = ''
   try {
-    content = await fs.promises.readFile(memoryPath, 'utf-8')
+    legacy = await fs.promises.readFile(memoryPath, 'utf-8')
   } catch {
-    content = ''
+    legacy = ''
   }
-  return getMemoryStats(content)
+  let structuredMd = ''
+  let structuredCount = 0
+  try {
+    const raw = await fs.promises.readFile(structuredPath, 'utf-8')
+    const doc = parseStructuredMemoryDocumentJson(raw)
+    if (doc && doc.entries.length > 0) {
+      structuredMd = formatStructuredMemoryEntriesForPrompt(doc.entries)
+      structuredCount = doc.entries.length
+    }
+  } catch {
+    // 结构化文件可选，读失败视同无条目
+  }
+  return getCombinedMemoryInjectionStats(structuredMd, legacy, structuredCount)
 })
 
 /**
@@ -1962,21 +2044,90 @@ wrapHandler('community:disable-for-avatar', (_, avatarId: string, skillName: str
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────
 
 /**
+ * #7：渲染进程同步当前会话的工具模式（Ask/Plan/Agent），供主进程 execute-tool-call 门禁读取。
+ */
+wrapHandler('conversation:sync-tool-mode', (_, conversationId: string, mode: string) => {
+  assertSafeSegment(conversationId, '会话ID')
+  if (mode !== 'agent' && mode !== 'plan' && mode !== 'ask') {
+    logger.logEvent('warn', 'conversation:sync-tool-mode', `非法 mode 已忽略: ${mode}`)
+    return
+  }
+  setConversationToolMode(conversationId, mode as ConversationModeForTools)
+})
+
+/**
+ * #7：灰名单工具在桌面端弹出系统确认框；无可用主窗口则拒绝执行。
+ */
+async function approveGreyZoneToolInMainProcess(toolName: string): Promise<boolean> {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return false
+  try {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['取消', `允许执行「${toolName}」`],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Soul · 高风险工具',
+      message: `模型请求执行高风险工具：${toolName}`,
+      detail:
+        '若并非您本意，请点击「取消」。来自远程 API（Proxy）的同类请求不会弹出此框，且已被默认拒绝。',
+    })
+    const ok = response === 1
+    if (ok) logger.activity('tool-permission-grey-approved', toolName)
+    return ok
+  } catch (e) {
+    logger.error('tool-permission-grey-dialog', e instanceof Error ? e : new Error(String(e)))
+    return false
+  }
+}
+
+/**
  * execute-tool-call: 执行 LLM 发起的工具调用，返回结果字符串给渲染进程。
  * avatarId 用于定位该分身的知识库路径。
+ * meta.trustTier：`proxy` = 远程入口（与 chatStore.sendMessage 的 Proxy 选项对齐），灰名单工具一律拒绝。
  */
-wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: string, name: string, args: Record<string, unknown>) => {
+wrapHandler(
+  'execute-tool-call',
+  async (
+    _,
+    avatarId: string,
+    conversationId: string,
+    name: string,
+    args: Record<string, unknown>,
+    meta?: { trustTier?: ToolCallTrustTier },
+  ) => {
   return withToolCallAudit(avatarId, conversationId, name, args, async () => {
   assertSafeSegment(avatarId, '分身ID')
   assertSafeSegment(conversationId, '会话ID')
-  const { workspaceRoot } = resolveWorkspaceContext(conversationId)
+  const wsCtx = resolveWorkspaceContext(conversationId)
+  const { workspaceRoot, projectId: convProjectId, avatarId: convAvatarId } = wsCtx
+  if (convAvatarId !== avatarId) {
+    return { content: '', error: '当前会话不属于所选分身，请切换会话后再试' }
+  }
+
+  const trustTier: ToolCallTrustTier = meta?.trustTier === 'proxy' ? 'proxy' : 'ui'
+  const modeForTools = getConversationToolMode(conversationId)
+  const modeDecision = evaluateConversationModeToolPolicy(modeForTools, name)
+  if (modeDecision.denied) {
+    return { content: '', error: modeDecision.message }
+  }
+  const proxyDecision = evaluateProxyTrustGreyDenial(trustTier, name)
+  if (proxyDecision.denied) {
+    return { content: '', error: proxyDecision.message }
+  }
+  if (trustTier === 'ui' && shouldConfirmGreyZoneOnDesktop(name)) {
+    const confirmed = await approveGreyZoneToolInMainProcess(name)
+    if (!confirmed) {
+      return { content: '', error: `用户已取消高风险工具「${name}」的执行。` }
+    }
+  }
 
   // ─── L3 桌面能力工具：完整版实现 ───────────────────────────────────────
   // 预览：加载 HTML / 评估 JS / 抓日志 / 截图
   if (name === 'show_to_user' || name === 'show_html') {
     const rawPath = (args.path as string) ?? ''
     if (!rawPath) return { content: '', error: '缺少 path 参数' }
-    const absPath = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rawPath)
+    const absPath = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, rawPath)
     await previewManager?.load(name === 'show_to_user' ? 'user' : 'hidden', absPath, conversationId)
     if (name === 'show_to_user') {
       // 通知聊天面板：用户预览已切换，可弹出 inspector 入口
@@ -2022,7 +2173,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
           out.push({ index: i, action: 'wait' })
         } else if (step.action === 'screenshot') {
           const sp = step.save_path || `screenshots/multi-${Date.now()}-${i}.png`
-          const abs = workspaceManager.resolveSafe(avatarId, conversationId, sp)
+          const abs = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, sp)
           const shot = await previewManager.screenshot('hidden', abs)
           out.push({ index: i, action: 'screenshot', path: sp, width: shot.width, height: shot.height })
         } else {
@@ -2037,7 +2188,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'done') {
     const rawPath = (args.path as string) ?? ''
     if (!rawPath) return { content: '', error: '缺少 path 参数' }
-    const absPath = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rawPath)
+    const absPath = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, rawPath)
     await previewManager?.load('user', absPath, conversationId)
     mainWindow?.webContents.send('preview:loaded', { conversationId, path: rawPath, done: true })
     return { content: `done: ${rawPath}\n${(previewManager?.getLogs() ?? []).slice(-20).join('\n')}` }
@@ -2049,7 +2200,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     if (!targetPath) {
       return { content: '', error: '缺少 path 参数' }
     }
-    const absIn = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, targetPath)
+    const absIn = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, targetPath)
     const verifyOutDir = path.join(workspaceRoot, '.verifier', String(Date.now()))
     const result = await verifierAgent.verify({
       url: `file://${absIn}`,
@@ -2076,10 +2227,10 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const outputPath = (args.output_path as string) || (args.path as string) || `export/${Date.now()}.html`
     const html = typeof args.html === 'string' ? args.html : ''
     const sourcePath = typeof args.input_path === 'string' ? args.input_path : undefined
-    const absOut = workspaceManager.resolveSafe(avatarId, conversationId, outputPath)
+    const absOut = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, outputPath)
     fs.mkdirSync(path.dirname(absOut), { recursive: true })
     if (sourcePath) {
-      const absIn = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, sourcePath)
+      const absIn = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, sourcePath)
       fs.copyFileSync(absIn, absOut)
     } else {
       fs.writeFileSync(absOut, html, 'utf-8')
@@ -2092,8 +2243,8 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const inputPath = (args.input_path as string) || (args.path as string) || ''
     if (!inputPath) return { content: '', error: '缺少 input_path 参数' }
     const outputPath = (args.output_path as string) || `export/inlined-${Date.now()}.html`
-    const absIn = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, inputPath)
-    const absOut = workspaceManager.resolveSafe(avatarId, conversationId, outputPath)
+    const absIn = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, inputPath)
+    const absOut = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, outputPath)
     const result = await superInlineHtml({
       inputPath: absIn,
       outputPath: absOut,
@@ -2115,7 +2266,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'save_as_pdf') {
     const sourcePath = (args.source_path as string) ?? (args.input_path as string) ?? ''
     if (!sourcePath) return { content: '', error: '缺少 source_path 参数' }
-    const absIn = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, sourcePath)
+    const absIn = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, sourcePath)
     const pdfWin = new BrowserWindow({ show: false, webPreferences: { partition: 'persist:soul-print' } })
     try {
       await pdfWin.loadFile(absIn)
@@ -2123,7 +2274,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
       await new Promise<void>((resolve) => setTimeout(resolve, 300))
       const pdfBuffer = await pdfWin.webContents.printToPDF({ printBackground: true, preferCSSPageSize: true })
       const outputPath = (args.output_path as string) || `export/${path.basename(sourcePath, path.extname(sourcePath))}.pdf`
-      const absOut = workspaceManager.resolveSafe(avatarId, conversationId, outputPath)
+      const absOut = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, outputPath)
       fs.mkdirSync(path.dirname(absOut), { recursive: true })
       fs.writeFileSync(absOut, pdfBuffer)
       return { content: `已导出 PDF: ${outputPath}` }
@@ -2135,13 +2286,13 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   // 导出：PPTX 真实可编辑（pptxgenjs + jsdom）+ 截图模式（hidden BrowserWindow per-slide）
   if (name === 'gen_pptx' || name === 'export_pptx') {
     const outputPath = (args.save_to_project_path as string) || (args.output_path as string) || `export/${Date.now()}.pptx`
-    const absOut = workspaceManager.resolveSafe(avatarId, conversationId, outputPath)
+    const absOut = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, outputPath)
     const inputPath = (args.input_path as string) || ''
     const mode = (args.mode as string) === 'screenshots' ? 'screenshots' : 'editable'
     if (!inputPath) {
       return { content: '', error: '缺少 input_path 参数（HTML 文件相对路径）' }
     }
-    const absIn = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, inputPath)
+    const absIn = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, inputPath)
     if (!fs.existsSync(absIn)) return { content: '', error: `输入 HTML 不存在: ${inputPath}` }
     const htmlContent = fs.readFileSync(absIn, 'utf-8')
 
@@ -2198,7 +2349,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'present_fs_item_for_download') {
     const rel = (args.path as string) ?? ''
     if (!rel) return { content: '', error: '缺少 path 参数' }
-    const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rel)
+    const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, rel)
     if (!fs.existsSync(abs)) return { content: '', error: `文件不存在: ${rel}` }
     const stat = fs.statSync(abs)
     mainWindow?.webContents.send('chat:download-card', {
@@ -2215,7 +2366,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'open_for_print') {
     const rel = (args.project_relative_file_path as string) || (args.path as string) || ''
     if (!rel) return { content: '', error: '缺少 project_relative_file_path 参数' }
-    const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rel)
+    const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, rel)
     // 同 createWindow 的优雅显示模式：show: false + ready-to-show 避免 Windows 启动竞态
     // 导致打印窗口显示但合成器未就绪、window.print() 拿不到焦点
     const printWin = new BrowserWindow({
@@ -2239,7 +2390,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'get_public_file_url') {
     const rel = (args.project_relative_file_path as string) || (args.path as string) || ''
     if (!rel) return { content: '', error: '缺少 project_relative_file_path 参数' }
-    const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, rel)
+    const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, rel)
     const ttlMs = Number.isFinite(args.ttl_ms) ? Math.max(60_000, Math.min(24 * 60 * 60_000, Number(args.ttl_ms))) : undefined
     const url = await publicFileServer.register(abs, ttlMs)
     return { content: url }
@@ -2256,7 +2407,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
    * 让 ChatWindow 渲染 AskQuestionCard。LLM 收到的 content 仍由 tool-router 返回。
    */
   if (name === 'ask_question') {
-    const result = await toolRouter.execute(avatarId, { name, arguments: args }, undefined, conversationId)
+    const result = await toolRouter.execute(avatarId, { name, arguments: args }, undefined, conversationId, convProjectId)
     if (result.error) return result
     try {
       const parsed = JSON.parse(result.content) as { type?: string; question?: string; options?: string[]; allow_custom?: boolean }
@@ -2279,11 +2430,12 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
    * 前端 chatStore 监听后更新 mode 字段，并刷新 UI 徽章。
    */
   if (name === 'switch_mode') {
-    const result = await toolRouter.execute(avatarId, { name, arguments: args }, undefined, conversationId)
+    const result = await toolRouter.execute(avatarId, { name, arguments: args }, undefined, conversationId, convProjectId)
     if (result.error) return result
     try {
       const parsed = JSON.parse(result.content) as { mode?: string; reason?: string }
       if (parsed.mode === 'agent' || parsed.mode === 'plan' || parsed.mode === 'ask') {
+        setConversationToolMode(conversationId, parsed.mode as ConversationModeForTools)
         mainWindow?.webContents.send('chat:mode-changed', {
           conversationId,
           mode: parsed.mode,
@@ -2304,7 +2456,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const srcPath = path.join(avatarsPath, '..', 'shared', 'starter-components', kind)
     if (!fs.existsSync(srcPath)) return { content: '', error: `starter 不存在: ${kind}` }
     const directory = typeof args.directory === 'string' ? args.directory : ''
-    const destPath = workspaceManager.resolveSafe(avatarId, conversationId, path.join(directory, kind))
+    const destPath = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, path.join(directory, kind))
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
     if (fs.statSync(srcPath).isDirectory()) {
       fs.cpSync(srcPath, destPath, { recursive: true, force: true })
@@ -2320,7 +2472,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const blockId = (args.block_id as string) || ''
     const newValues = (args.values as Record<string, unknown>) || {}
     if (!targetPath || !blockId) return { content: '', error: '缺少 path / block_id 参数' }
-    const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, targetPath)
+    const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, targetPath)
     const r = applyTweaks({ htmlAbsPath: abs, blockId, newValues })
     return { content: JSON.stringify({ changed: r.changed, bytes: r.bytes, backupPath: r.backupPath ? path.relative(workspaceRoot, r.backupPath).replace(/\\/g, '/') : undefined }, null, 2) }
   }
@@ -2368,7 +2520,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
     const files = Array.isArray(args.files) ? (args.files as Array<{ path: string; saveAs?: string }>) : []
     if (!owner || !repo || files.length === 0) return { content: '', error: '缺少 owner / repo / files 参数' }
     const ref = typeof args.ref === 'string' ? args.ref : undefined
-    const r = await githubConnector.importFiles(avatarId, conversationId, owner, repo, files, ref)
+    const r = await githubConnector.importFiles(convAvatarId, convProjectId, conversationId, owner, repo, files, ref)
     return { content: JSON.stringify(r, null, 2) }
   }
 
@@ -2376,7 +2528,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'send_to_canva' || name === 'canva_open_upload') {
     const exportPath = typeof args.export_path === 'string' ? args.export_path : undefined
     if (exportPath) {
-      const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, exportPath)
+      const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, exportPath)
       if (fs.existsSync(abs)) {
         await shell.showItemInFolder(abs)
       }
@@ -2390,7 +2542,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   if (name === 'read_pdf' || name === 'read_docx' || name === 'read_pptx') {
     const filePathArg = (args.path as string) || (args.file as string) || ''
     if (!filePathArg) return { content: '', error: '缺少 path 参数' }
-    const abs = workspaceManager.resolveCrossProjectPath(avatarId, conversationId, filePathArg)
+    const abs = workspaceManager.resolveCrossProjectPath(convAvatarId, convProjectId, conversationId, filePathArg)
     if (!fs.existsSync(abs)) return { content: '', error: `文件不存在: ${filePathArg}` }
     const parsed = await documentParser.parseFile(abs)
     return {
@@ -2597,7 +2749,7 @@ wrapHandler('execute-tool-call', async (_, avatarId: string, conversationId: str
   const baseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
   const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
   const callLLM = apiKey ? createLLMFn(apiKey, baseUrl, chatModel) : undefined
-  return toolRouter.execute(avatarId, { name, arguments: args }, callLLM, conversationId)
+  return toolRouter.execute(avatarId, { name, arguments: args }, callLLM, conversationId, convProjectId)
   })
 })
 

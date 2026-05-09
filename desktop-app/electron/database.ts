@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 10
+const CURRENT_SCHEMA_VERSION = 11
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -454,6 +454,31 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_schedule_runs_status
       ON schedule_runs(status)
     `)
+
+    // Web Embed widget 嵌入配置表（v11 引入，2026-05-09 #15 Web Embed widget）
+    // 每条记录代表一个站点嵌入配置：绑定哪个分身、允许哪些 origin、限流阈值等。
+    // origin_whitelist 存 JSON 数组字符串；DAO 层硬阻断 wildcard `*`，避免设置面板误存。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS embeds (
+        id TEXT PRIMARY KEY,
+        avatar_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        origin_whitelist TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        rate_limit_per_min INTEGER NOT NULL DEFAULT 30,
+        greeting TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_embeds_avatar_id
+      ON embeds(avatar_id)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_embeds_enabled
+      ON embeds(enabled)
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -673,6 +698,36 @@ export class DatabaseManager {
           ON schedule_runs(status)
         `)
         version = 10
+      })()
+    }
+
+    if (version < 11) {
+      // v10 → v11：新增 embeds 表（Web Embed widget 站点嵌入配置，#15 Web Embed widget）
+      // 每行 = 一个站点嵌入：绑定分身、origin 白名单、限流、欢迎语等。
+      // 详见主计划 §4.13。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS embeds (
+            id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            origin_whitelist TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            rate_limit_per_min INTEGER NOT NULL DEFAULT 30,
+            greeting TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_embeds_avatar_id
+          ON embeds(avatar_id)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_embeds_enabled
+          ON embeds(enabled)
+        `)
+        version = 11
       })()
     }
 

@@ -192,6 +192,130 @@ const MCP_STATUS_STYLE: Record<McpServerListItem['status'], { label: string; cls
   disconnected: { label: 'DISCONNECTED', cls: 'text-px-text-dim border-px-border' },
 }
 
+/**
+ * Web Embed 编辑表单的内部状态（#15 Web Embed widget，2026-05-09）。
+ *
+ * Origin 白名单在表单中用 textarea 编辑（每行一条），提交时再 split + trim
+ * 转成 string[]。这样表单状态扁平、易渲染。
+ *
+ * isNew 标识用于：
+ *   - 新建模式调 embedCreate；编辑模式调 embedUpdate(id, ...)
+ *   - 标题显示「新建 / 编辑」差异
+ *
+ * @author zhi.qu
+ * @date 2026-05-09
+ */
+interface EmbedFormState {
+  isNew: boolean
+  /** 编辑模式下用于回写 embedUpdate */
+  id: string
+  avatarId: string
+  name: string
+  /** 一行一条 origin（textarea） */
+  originsText: string
+  /** Rate Limit 数值文本（提交时 parseInt 校验范围） */
+  rateLimitText: string
+  greeting: string
+  enabled: boolean
+}
+
+/** 创建一个空 embed 表单（点「+ 新建 Embed」时用） */
+function createEmptyEmbedForm(defaultAvatarId: string): EmbedFormState {
+  return {
+    isNew: true,
+    id: '',
+    avatarId: defaultAvatarId,
+    name: '',
+    originsText: '',
+    rateLimitText: '30',
+    greeting: '',
+    enabled: true,
+  }
+}
+
+/** 从 DB 行回灌表单（点「编辑」时用），origin_whitelist JSON 解析失败回退为空 */
+function embedRowToForm(row: EmbedRow): EmbedFormState {
+  let origins: string[] = []
+  try {
+    const parsed: unknown = JSON.parse(row.origin_whitelist)
+    if (Array.isArray(parsed)) {
+      origins = parsed.filter((s): s is string => typeof s === 'string')
+    }
+  } catch (err) {
+    // 损坏的 JSON 不阻塞编辑；用户可在 textarea 中手动重填
+    console.warn('[Embed] origin_whitelist JSON 解析失败:', err instanceof Error ? err.message : String(err))
+  }
+  return {
+    isNew: false,
+    id: row.id,
+    avatarId: row.avatar_id,
+    name: row.name,
+    originsText: origins.join('\n'),
+    rateLimitText: String(row.rate_limit_per_min),
+    greeting: row.greeting ?? '',
+    enabled: row.enabled === 1,
+  }
+}
+
+/**
+ * 从表单状态生成 embedCreate / embedUpdate 共享的核心字段，并执行客户端校验。
+ * 校验失败时抛 Error，由提交流程捕获后显示在表单错误区。
+ *
+ * 校验规则（与 db-embeds.ts 的 DAO 约束对齐）：
+ *   - 必填：avatarId / name / 至少 1 条 origin
+ *   - origin 不允许包含 `*`，且必须以 http:// 或 https:// 开头
+ *   - rateLimitPerMin 取值 [5, 300]
+ *   - greeting 长度 ≤ 500
+ */
+function embedFormToCommon(form: EmbedFormState): {
+  avatarId: string
+  name: string
+  originWhitelist: string[]
+  rateLimitPerMin: number
+  greeting: string
+  enabled: boolean
+} {
+  const avatarId = form.avatarId.trim()
+  if (!avatarId) throw new Error('请选择或输入 avatar id')
+  const name = form.name.trim()
+  if (!name) throw new Error('请填写名称')
+
+  const origins = form.originsText
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+  if (origins.length === 0) {
+    throw new Error('请至少配置 1 条 Origin 白名单')
+  }
+  for (const o of origins) {
+    if (o.includes('*')) {
+      throw new Error(`Origin 不允许包含 \`*\` 通配：${o}`)
+    }
+    if (!/^https?:\/\//i.test(o)) {
+      throw new Error(`Origin 必须以 http:// 或 https:// 开头：${o}`)
+    }
+  }
+
+  const rate = parseInt(form.rateLimitText, 10)
+  if (!Number.isFinite(rate) || rate < 5 || rate > 300) {
+    throw new Error('Rate Limit 取值范围 5~300（每分钟请求数）')
+  }
+
+  const greeting = form.greeting.trim()
+  if (greeting.length > 500) {
+    throw new Error('Greeting 最长 500 字符')
+  }
+
+  return {
+    avatarId,
+    name,
+    originWhitelist: origins,
+    rateLimitPerMin: rate,
+    greeting,
+    enabled: form.enabled,
+  }
+}
+
 export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [activeTab, setActiveTab] = useState(0)
   const [slots, setSlots] = useState<ModelValues[]>(
@@ -246,6 +370,12 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [issRerankEnabled, setIssRerankEnabled] = useState(true)
   const [issTopNInput, setIssTopNInput] = useState(String(ISS_DEFAULT_TOP_N))
   const [issStatusMsg, setIssStatusMsg] = useState('')
+  /** P0+ Proxy：Anthropic /v1/messages 兼容 HTTP（仅 127.0.0.1） */
+  const [proxyEnabled, setProxyEnabled] = useState(false)
+  const [proxyPort, setProxyPort] = useState('18888')
+  const [proxyToken, setProxyToken] = useState('')
+  const [showProxyToken, setShowProxyToken] = useState(false)
+  const [proxyStatusMsg, setProxyStatusMsg] = useState('')
   // MCP servers 状态
   const [mcpServers, setMcpServers] = useState<McpServerListItem[]>([])
   const [mcpStatusMsg, setMcpStatusMsg] = useState('')
@@ -253,6 +383,16 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   /** 当前在编辑的 MCP server 表单（null = 未打开模态框）。新增时是空模板。 */
   const [editingMcp, setEditingMcp] = useState<McpFormState | null>(null)
   const [mcpFormError, setMcpFormError] = useState('')
+  // Web Embed widget 状态（#15 Web Embed widget，2026-05-09）
+  const [embeds, setEmbeds] = useState<EmbedRow[]>([])
+  const [embedPort, setEmbedPort] = useState<number | null>(null)
+  const [embedStatusMsg, setEmbedStatusMsg] = useState('')
+  const [embedBusy, setEmbedBusy] = useState(false)
+  /** 当前在编辑的 embed 表单（null = 未展开） */
+  const [editingEmbed, setEditingEmbed] = useState<EmbedFormState | null>(null)
+  const [embedFormError, setEmbedFormError] = useState('')
+  /** 分身列表，用于表单中的 avatar 下拉选择（拉不到时退化为文本输入） */
+  const [embedAvatarList, setEmbedAvatarList] = useState<Avatar[]>([])
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const cronStatusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const logMsgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -260,6 +400,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const memoryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const integrationsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const issTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const proxyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const embedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => {
     clearTimeout(statusTimerRef.current)
@@ -269,12 +411,41 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     clearTimeout(memoryTimerRef.current)
     clearTimeout(integrationsTimerRef.current)
     clearTimeout(issTimerRef.current)
+    clearTimeout(proxyTimerRef.current)
+    clearTimeout(embedTimerRef.current)
   }, [])
 
   const loadSeqRef = useRef(0)
 
   useEffect(() => {
     loadSettings()
+  }, [])
+
+  /**
+   * Web Embed widget 初次加载（#15 Web Embed widget）：
+   * 并行拉 embeds 列表 + 当前监听端口 + 分身列表。
+   * 任一失败仅 console.warn，不阻塞其他设置加载。
+   */
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [list, port, avatars] = await Promise.all([
+          window.electronAPI.embedList(),
+          window.electronAPI.embedGetPort(),
+          window.electronAPI.listAvatars(),
+        ])
+        if (cancelled) return
+        setEmbeds(list)
+        setEmbedPort(port)
+        setEmbedAvatarList(avatars)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        console.warn('[Settings] 加载 Web Embed 状态失败:', msg)
+        window.electronAPI.logEvent('error', 'embed-initial-load', msg)
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   const loadSettings = async () => {
@@ -290,7 +461,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setSlots(prev => loadedSlots.map((s, i) => ({ ...s, showApiKey: prev[i]?.showApiKey ?? false })))
 
       // 并行加载 Wiki / 记忆 / 定时任务 / 工具集成设置
-      const [wikiInject, wikiSediment, nudge, cronConfigs, tavilyKey, imageKey, issEn, issTop] = await Promise.all([
+      const [wikiInject, wikiSediment, nudge, cronConfigs, tavilyKey, imageKey, issEn, issTop, proxEn, proxPort, proxTok] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
         window.electronAPI.getSetting('memory_nudge_interval'),
@@ -299,6 +470,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         window.electronAPI.getSetting('image_api_key'),
         window.electronAPI.getSetting('iss_skill_rerank_enabled'),
         window.electronAPI.getSetting('iss_skill_rerank_top_n'),
+        window.electronAPI.getSetting('proxy_server_enabled'),
+        window.electronAPI.getSetting('proxy_server_port'),
+        window.electronAPI.getSetting('proxy_api_token'),
       ])
       if (loadSeqRef.current !== seq) return
       setWikiInjectRag(wikiInject === 'true')
@@ -312,6 +486,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setImageApiKey(imageKey ?? '')
       setIssRerankEnabled(issEn !== 'false')
       setIssTopNInput(issTop && issTop.trim() !== '' ? issTop : String(ISS_DEFAULT_TOP_N))
+      setProxyEnabled(proxEn === 'true')
+      setProxyPort(proxPort && proxPort.trim() !== '' ? proxPort.trim() : '18888')
+      setProxyToken(proxTok ?? '')
 
       // MCP servers（独立 try，避免一个面板失败影响其他设置加载）
       try {
@@ -598,6 +775,47 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     }
   }
 
+  const handleSaveProxySettings = async () => {
+    const portNum = Math.floor(Number(proxyPort))
+    if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65534) {
+      setProxyStatusMsg('INVALID — 端口 1~65534')
+      return
+    }
+    if (proxyEnabled && !proxyToken.trim()) {
+      setProxyStatusMsg('启用时必须填写 Token 或点「生成 Token」')
+      return
+    }
+    try {
+      await Promise.all([
+        window.electronAPI.setSetting('proxy_server_enabled', proxyEnabled ? 'true' : 'false'),
+        window.electronAPI.setSetting('proxy_server_port', String(portNum)),
+        window.electronAPI.setSetting('proxy_api_token', proxyToken.trim()),
+      ])
+      setProxyStatusMsg('SAVED — 重启应用后端口与监听生效')
+      window.dispatchEvent(new CustomEvent('settings-updated'))
+      clearTimeout(proxyTimerRef.current)
+      proxyTimerRef.current = setTimeout(() => setProxyStatusMsg(''), 4000)
+    } catch (error) {
+      setProxyStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const handleGenerateProxyToken = async () => {
+    try {
+      if (!window.electronAPI.proxyApiGenerateToken) {
+        setProxyStatusMsg('当前环境不支持生成 Token')
+        return
+      }
+      const t = await window.electronAPI.proxyApiGenerateToken()
+      setProxyToken(t)
+      setProxyStatusMsg('已生成 — 请保存设置')
+      clearTimeout(proxyTimerRef.current)
+      proxyTimerRef.current = setTimeout(() => setProxyStatusMsg(''), 3000)
+    } catch (error) {
+      setProxyStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const handleSaveIntegrations = async () => {
     try {
       await Promise.all([
@@ -713,6 +931,184 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setMcpStatusMsg(`FAILED - ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setMcpBusy(false)
+    }
+  }
+
+  // ─── Web Embed widget 管理（#15 Web Embed widget，2026-05-09） ─────────
+
+  /**
+   * 重新拉取 embeds 列表 + 当前监听端口。
+   * 任一失败仅写 statusMsg 不抛错，避免阻塞编辑流程。
+   */
+  const reloadEmbeds = async () => {
+    try {
+      const [list, port] = await Promise.all([
+        window.electronAPI.embedList(),
+        window.electronAPI.embedGetPort(),
+      ])
+      setEmbeds(list)
+      setEmbedPort(port)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[Embed] 加载列表失败:', msg)
+      setEmbedStatusMsg(`FAILED - ${msg}`)
+      window.electronAPI.logEvent('error', 'embed-reload', msg)
+    }
+  }
+
+  /**
+   * 在新建 / 编辑表单点「保存」时触发：
+   *   - 客户端校验（embedFormToCommon）失败 → 错误显示在表单内
+   *   - DAO 层（origin 含 *）失败 → 错误显示在表单内
+   *   - 成功 → 收起表单 + 重新拉列表 + 状态消息
+   */
+  const submitEmbedForm = async () => {
+    if (!editingEmbed) return
+    setEmbedFormError('')
+    setEmbedBusy(true)
+    try {
+      const data = embedFormToCommon(editingEmbed)
+      if (editingEmbed.isNew) {
+        await window.electronAPI.embedCreate({
+          avatarId: data.avatarId,
+          name: data.name,
+          originWhitelist: data.originWhitelist,
+          rateLimitPerMin: data.rateLimitPerMin,
+          greeting: data.greeting || undefined,
+          enabled: data.enabled,
+        })
+        setEmbedStatusMsg(`SAVED - 已添加 ${data.name}`)
+      } else {
+        await window.electronAPI.embedUpdate(editingEmbed.id, {
+          avatarId: data.avatarId,
+          name: data.name,
+          originWhitelist: data.originWhitelist,
+          rateLimitPerMin: data.rateLimitPerMin,
+          // 空字符串 → null（DAO 接受 null 表示清空 greeting）
+          greeting: data.greeting ? data.greeting : null,
+          enabled: data.enabled,
+        })
+        setEmbedStatusMsg(`SAVED - 已更新 ${data.name}`)
+      }
+      setEditingEmbed(null)
+      await reloadEmbeds()
+      window.electronAPI.logEvent('info', editingEmbed.isNew ? 'embed-create' : 'embed-update', data.name)
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedFormError(msg)
+      window.electronAPI.logEvent('error', 'embed-upsert', msg)
+    } finally {
+      setEmbedBusy(false)
+    }
+  }
+
+  /** 删除 embed（带 confirm 防误操作） */
+  const removeEmbed = async (row: EmbedRow) => {
+    if (!window.confirm(`确认删除 Web Embed '${row.name}'？该接入面将立即失效。`)) return
+    setEmbedBusy(true)
+    try {
+      await window.electronAPI.embedDelete(row.id)
+      await reloadEmbeds()
+      setEmbedStatusMsg(`SAVED - 已删除 ${row.name}`)
+      window.electronAPI.logEvent('info', 'embed-delete', row.name)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedStatusMsg(`FAILED - ${msg}`)
+      window.electronAPI.logEvent('error', 'embed-delete', msg)
+    } finally {
+      setEmbedBusy(false)
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+    }
+  }
+
+  /** 启用/禁用 toggle */
+  const toggleEmbedEnabled = async (row: EmbedRow, nextEnabled: boolean) => {
+    setEmbedBusy(true)
+    try {
+      await window.electronAPI.embedSetEnabled(row.id, nextEnabled)
+      await reloadEmbeds()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedStatusMsg(`FAILED - ${msg}`)
+      window.electronAPI.logEvent('error', 'embed-set-enabled', msg)
+    } finally {
+      setEmbedBusy(false)
+    }
+  }
+
+  /** 启动 widget-server（点列表上方「启动」按钮） */
+  const handleEmbedServerStart = async () => {
+    setEmbedBusy(true)
+    try {
+      const r = await window.electronAPI.embedServerStart()
+      setEmbedPort(r.port)
+      setEmbedStatusMsg(`SAVED - 服务已启动 :${r.port}`)
+      window.electronAPI.logEvent('info', 'embed-server-start', String(r.port))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedStatusMsg(`FAILED - ${msg}`)
+      window.electronAPI.logEvent('error', 'embed-server-start', msg)
+    } finally {
+      setEmbedBusy(false)
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+    }
+  }
+
+  /** 停止 widget-server（带 confirm，防误关导致接入面集体失效） */
+  const handleEmbedServerStop = async () => {
+    if (!window.confirm('确认关闭 Web Embed widget 服务？所有外站接入面将无法对话。')) return
+    setEmbedBusy(true)
+    try {
+      await window.electronAPI.embedServerStop()
+      setEmbedPort(null)
+      setEmbedStatusMsg('SAVED - 服务已停止')
+      window.electronAPI.logEvent('info', 'embed-server-stop', 'manual')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedStatusMsg(`FAILED - ${msg}`)
+      window.electronAPI.logEvent('error', 'embed-server-stop', msg)
+    } finally {
+      setEmbedBusy(false)
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+    }
+  }
+
+  /**
+   * 复制嵌入代码到剪贴板。模板与第 4.13 节技术方案一致：
+   *   <script src="http://localhost:<port>/embed.js"
+   *           data-embed-id="emb_..."
+   *           data-server="http://localhost:<port>" defer></script>
+   *   <soul-embed></soul-embed>
+   * 服务未启动时拒绝复制（避免用户拿到无法工作的片段）。
+   */
+  const handleCopyEmbedSnippet = async (row: EmbedRow) => {
+    if (embedPort === null) {
+      setEmbedStatusMsg('FAILED - 请先启动 Web Embed 服务')
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+      return
+    }
+    const snippet =
+      `<script src="http://localhost:${embedPort}/embed.js"\n` +
+      `        data-embed-id="${row.id}"\n` +
+      `        data-server="http://localhost:${embedPort}"\n` +
+      `        defer></script>\n` +
+      `<soul-embed></soul-embed>`
+    try {
+      await navigator.clipboard.writeText(snippet)
+      setEmbedStatusMsg(`SAVED - 嵌入码已复制（${row.name}）`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setEmbedStatusMsg(`FAILED - 剪贴板写入失败：${msg}`)
+      window.electronAPI.logEvent('error', 'embed-copy-snippet', msg)
+    } finally {
+      clearTimeout(embedTimerRef.current)
+      embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
     }
   }
 
@@ -1159,6 +1555,72 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                     </div>
                   </div>
 
+                  {/* P0+ Proxy API（Anthropic /v1/messages） */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-game text-[14px] text-px-text">Proxy API（Cursor / Claude Code）</span>
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider">ANTHROPIC_COMPAT</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      仅监听 <span className="font-mono text-px-primary">127.0.0.1</span>。外部客户端使用 Soul 内同一条会话链（tools/MCP 与界面一致）。
+                      请求必须带 <span className="font-mono">Authorization: Bearer &lt;下方 Token&gt;</span> 与{' '}
+                      <span className="font-mono">x-soul-conversation-id: &lt;侧边栏会话 ID&gt;</span>。
+                      POST <span className="font-mono">http://127.0.0.1:{proxyPort || '18888'}/v1/messages</span>，body 为 Anthropic Messages 格式；取最后一条 user 文本发起 Soul 对话。
+                    </p>
+                    <label className="flex items-center gap-2 font-game text-[13px] text-px-text cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={proxyEnabled}
+                        onChange={(e) => setProxyEnabled(e.target.checked)}
+                        className="h-4 w-4 accent-px-primary"
+                      />
+                      启用 Proxy 服务
+                    </label>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">端口（默认 18888）</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={65534}
+                        value={proxyPort}
+                        onChange={(e) => setProxyPort(e.target.value)}
+                        className="pixel-input w-28 font-mono text-[13px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">Bearer Token</label>
+                      <div className="flex gap-2 flex-wrap">
+                        <input
+                          type={showProxyToken ? 'text' : 'password'}
+                          value={proxyToken}
+                          onChange={(e) => setProxyToken(e.target.value)}
+                          placeholder="保存前点击生成或自行粘贴"
+                          className="pixel-input flex-1 min-w-[200px] font-mono text-[13px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowProxyToken(!showProxyToken)}
+                          className="pixel-btn-ghost px-3"
+                          title={showProxyToken ? '隐藏' : '显示'}
+                        >
+                          {showProxyToken ? '◉' : '○'}
+                        </button>
+                        <button type="button" onClick={handleGenerateProxyToken} className="pixel-btn-ghost text-[12px] px-3 py-1">
+                          生成 Token
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={handleSaveProxySettings} className="pixel-btn-primary text-[12px] px-3 py-1">
+                        保存 Proxy 设置
+                      </button>
+                      <span className={`font-game text-[12px] ${
+                        proxyStatusMsg.includes('SAVED') ? 'text-px-success' :
+                        proxyStatusMsg.includes('FAIL') || proxyStatusMsg.includes('INVALID') ? 'text-px-danger' : 'text-px-text-dim'
+                      }`}>{proxyStatusMsg}</span>
+                    </div>
+                  </div>
+
                   {/* P0 ISS：智能工具筛选（embedding rerank） */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -1200,6 +1662,296 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         issStatusMsg.includes('FAIL') || issStatusMsg.includes('INVALID') ? 'text-px-danger' : 'text-px-text-dim'
                       }`}>{issStatusMsg}</span>
                     </div>
+                  </div>
+
+                  {/*
+                   * Web Embed widget 区块（#15 Web Embed widget，2026-05-09，author: zhi.qu）
+                   *
+                   * 与 desktop-app/electron/widget-server.ts + db-embeds.ts 配套：
+                   *   - 顶部：服务监听状态（embedGetPort 异步加载）+ 启动 / 停止
+                   *   - 列表：每条 embed 显示 id / avatar / origin 数 / rate limit / 更新日期
+                   *           + 复制嵌入码 / 编辑 / 启停 / 删除
+                   *   - 底部：editingEmbed != null 时浮现 inline 表单（与 MCP 模态框风格一致，
+                   *           但简化为 inline 不弹独立 Modal）
+                   * 状态消息（embedStatusMsg）3s 自动清空，由 embedTimerRef 管理。
+                   */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-game text-[14px] text-px-text">Web Embed widget</span>
+                        <span className="font-game text-[10px] text-px-text-dim tracking-wider ml-2">EMBED_BOT</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEmbedFormError('')
+                          const fallbackAvatar = activeAvatarId ?? embedAvatarList[0]?.id ?? ''
+                          setEditingEmbed(createEmptyEmbedForm(fallbackAvatar))
+                        }}
+                        disabled={embedBusy}
+                        className="pixel-btn-primary text-[12px] px-3 py-1 disabled:opacity-50"
+                      >
+                        + 新建 Embed
+                      </button>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      把分身嵌入到自己的网站作为聊天 widget。仅监听
+                      <span className="font-mono text-px-primary mx-1">127.0.0.1</span>
+                      ，origin 白名单严格匹配（禁止 <span className="font-mono">*</span>），每个 embed 独立 rate limit。
+                    </p>
+
+                    {/* 服务监听状态 + 启停按钮 */}
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="font-game text-[12px] text-px-text-sec tracking-wider">SERVER:</span>
+                      {embedPort !== null ? (
+                        <>
+                          <span className="font-game text-[11px] text-px-success border border-px-success px-1.5 py-0.5 tracking-wider">
+                            RUNNING :{embedPort}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleEmbedServerStop}
+                            disabled={embedBusy}
+                            className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                          >
+                            停止服务
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-game text-[11px] text-px-text-dim border border-px-border px-1.5 py-0.5 tracking-wider">
+                            STOPPED
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleEmbedServerStart}
+                            disabled={embedBusy}
+                            className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                          >
+                            启动服务
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* embed 列表 / 空态 */}
+                    {embeds.length === 0 ? (
+                      <div className="font-game text-[12px] text-px-text-dim text-center py-4 border border-dashed border-px-border">
+                        还没有 Web Embed，点击「+ 新建 Embed」开始
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {embeds.map((row) => {
+                          let originCount = 0
+                          try {
+                            const parsed: unknown = JSON.parse(row.origin_whitelist)
+                            if (Array.isArray(parsed)) originCount = parsed.length
+                          } catch (e) {
+                            // 损坏的 JSON 不阻塞渲染（已在 embedRowToForm 容错），仅 warn 一次
+                            void e
+                          }
+                          const updatedDate = localDateString(new Date(row.updated_at))
+                          const isEnabled = row.enabled === 1
+                          return (
+                            <div key={row.id} className="border border-px-border bg-px-surface p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                                  <span className="font-mono text-[13px] text-px-text truncate">{row.name}</span>
+                                  <span className="font-game text-[10px] text-px-text-dim tracking-wider">{row.id}</span>
+                                  <span className={`font-game text-[10px] tracking-wider px-1.5 py-0.5 border ${
+                                    isEnabled
+                                      ? 'text-px-success border-px-success'
+                                      : 'text-px-text-dim border-px-border'
+                                  }`}>
+                                    {isEnabled ? 'ENABLED' : 'DISABLED'}
+                                  </span>
+                                </div>
+                                <label className="flex items-center gap-1 cursor-pointer flex-shrink-0">
+                                  <span className="font-game text-[10px] text-px-text-dim">{isEnabled ? 'ON' : 'OFF'}</span>
+                                  <span
+                                    className="pixel-checkbox"
+                                    role="checkbox"
+                                    aria-checked={isEnabled}
+                                    data-checked={isEnabled || undefined}
+                                    onClick={() => !embedBusy && toggleEmbedEnabled(row, !isEnabled)}
+                                    onKeyDown={(e) => {
+                                      if ((e.key === ' ' || e.key === 'Enter') && !embedBusy) {
+                                        e.preventDefault()
+                                        toggleEmbedEnabled(row, !isEnabled)
+                                      }
+                                    }}
+                                    tabIndex={0}
+                                  />
+                                </label>
+                              </div>
+                              <div className="font-game text-[11px] text-px-text-dim space-y-0.5">
+                                <div>
+                                  avatar: <span className="font-mono text-px-text-sec">{row.avatar_id}</span>
+                                </div>
+                                <div>
+                                  origins: {originCount} 条 / {row.rate_limit_per_min} req/min · 更新于 {updatedDate}
+                                </div>
+                                {row.greeting && (
+                                  <div className="text-px-text-sec break-all">greeting: {row.greeting}</div>
+                                )}
+                              </div>
+                              <div className="flex gap-1 flex-wrap">
+                                <button
+                                  onClick={() => handleCopyEmbedSnippet(row)}
+                                  disabled={embedBusy}
+                                  className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                >
+                                  复制嵌入码
+                                </button>
+                                <button
+                                  onClick={() => { setEmbedFormError(''); setEditingEmbed(embedRowToForm(row)) }}
+                                  disabled={embedBusy}
+                                  className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                                >
+                                  编辑
+                                </button>
+                                <button
+                                  onClick={() => removeEmbed(row)}
+                                  disabled={embedBusy}
+                                  className="pixel-btn-ghost text-[11px] px-2 py-0.5 text-px-danger disabled:opacity-50"
+                                >
+                                  删除
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* 编辑表单（inline 浮现，editingEmbed != null 时显示） */}
+                    {editingEmbed && (
+                      <div className="border-2 border-px-primary bg-px-surface p-3 space-y-3">
+                        <div className="font-game text-[13px] text-px-primary tracking-wider">
+                          {editingEmbed.isNew ? '新建 Web Embed' : `编辑 ${editingEmbed.id}`}
+                        </div>
+
+                        {/* 分身（avatar）选择：有 listAvatars 数据则下拉，否则退化为文本输入 */}
+                        <div>
+                          <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                            分身 (Avatar)
+                          </label>
+                          {embedAvatarList.length > 0 ? (
+                            <select
+                              value={editingEmbed.avatarId}
+                              onChange={(e) => setEditingEmbed({ ...editingEmbed, avatarId: e.target.value })}
+                              className="pixel-input w-full font-mono text-[13px]"
+                            >
+                              <option value="">— 请选择 —</option>
+                              {embedAvatarList.map((a) => (
+                                <option key={a.id} value={a.id}>{a.name}（{a.id}）</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={editingEmbed.avatarId}
+                              onChange={(e) => setEditingEmbed({ ...editingEmbed, avatarId: e.target.value })}
+                              placeholder="请输入 avatar id（在分身切换面板中可见）"
+                              className="pixel-input w-full font-mono text-[13px]"
+                            />
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">名称</label>
+                          <input
+                            type="text"
+                            value={editingEmbed.name}
+                            onChange={(e) => setEditingEmbed({ ...editingEmbed, name: e.target.value })}
+                            placeholder="例如：博客客服 / 官网售前"
+                            className="pixel-input w-full font-mono text-[13px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                            ORIGIN 白名单（一行一条，以 http:// 或 https:// 开头，禁止 *）
+                          </label>
+                          <textarea
+                            value={editingEmbed.originsText}
+                            onChange={(e) => setEditingEmbed({ ...editingEmbed, originsText: e.target.value })}
+                            placeholder={'https://blog.example.com\nhttp://localhost:3000'}
+                            rows={4}
+                            className="pixel-input w-full font-mono text-[12px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                            RATE LIMIT（每分钟请求数，5~300，默认 30）
+                          </label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={300}
+                            value={editingEmbed.rateLimitText}
+                            onChange={(e) => setEditingEmbed({ ...editingEmbed, rateLimitText: e.target.value })}
+                            className="pixel-input w-28 font-mono text-[13px]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                            GREETING（开场白，≤ 500 字符，可选）
+                          </label>
+                          <textarea
+                            value={editingEmbed.greeting}
+                            onChange={(e) => setEditingEmbed({ ...editingEmbed, greeting: e.target.value })}
+                            placeholder="访客打开聊天 widget 时的首条提示"
+                            rows={2}
+                            maxLength={500}
+                            className="pixel-input w-full font-mono text-[12px]"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-2 font-game text-[13px] text-px-text cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editingEmbed.enabled}
+                            onChange={(e) => setEditingEmbed({ ...editingEmbed, enabled: e.target.checked })}
+                            className="h-4 w-4 accent-px-primary"
+                          />
+                          启用此 Embed
+                        </label>
+
+                        {embedFormError && (
+                          <div className="font-game text-[11px] text-px-danger break-all">{embedFormError}</div>
+                        )}
+
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={submitEmbedForm}
+                            disabled={embedBusy}
+                            className="pixel-btn-primary text-[12px] px-3 py-1 disabled:opacity-50"
+                          >
+                            保存
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setEditingEmbed(null); setEmbedFormError('') }}
+                            disabled={embedBusy}
+                            className="pixel-btn-ghost text-[12px] px-3 py-1 disabled:opacity-50"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {embedStatusMsg && (
+                      <div className={`font-game text-[11px] tracking-wider ${
+                        embedStatusMsg.includes('SAVED') ? 'text-px-success' :
+                        embedStatusMsg.includes('FAIL') ? 'text-px-danger' : 'text-px-text-dim'
+                      }`}>
+                        {embedStatusMsg}
+                      </div>
+                    )}
                   </div>
 
                   {/* MCP Servers 区块 ─────────────────────────────────────── */}

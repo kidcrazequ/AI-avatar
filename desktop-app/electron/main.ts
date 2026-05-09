@@ -23,6 +23,8 @@ import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter,
 import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
+import { EmbedStore, type NewEmbedInput, type UpdateEmbedInput } from './db-embeds'
+import { WidgetServer } from './widget-server'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
 import {
@@ -120,6 +122,22 @@ function getScheduleStore(): ScheduleStore {
   }
   return scheduleStore
 }
+/**
+ * Web Embed widget 配置存储（#15 Web Embed widget · 子任务 2）。
+ * 在 initManagers 之后通过 getEmbedStore() lazy 创建（依赖 db）。
+ */
+let embedStore: EmbedStore | null = null
+function getEmbedStore(): EmbedStore {
+  if (!embedStore) {
+    embedStore = new EmbedStore(getDb().getRawDb())
+  }
+  return embedStore
+}
+/**
+ * Web Embed widget HTTP 服务器单例（#15 Web Embed widget · 子任务 2）。
+ * 默认关闭；用户在设置中开启或调用 IPC `embed:server-start` 时启动。
+ */
+let widgetServer: WidgetServer | null = null
 let templateLoader: TemplateLoader
 let backupIntervalId: ReturnType<typeof setInterval> | null = null
 const bridgeMinuteWindow = new Map<string, number[]>()
@@ -510,6 +528,23 @@ app.whenReady().then(() => {
   registerSoulProxyIpcHandlers(ipcMain)
   ipcMain.handle('proxy-api:generate-token', () => crypto.randomBytes(32).toString('hex'))
   startSoulProxyServer({ getDb, getMainWindow: () => mainWindow, logger })
+
+  // 启动 widget-server（默认关闭，需用户在设置中显式开启）。
+  // 与 proxy-server 同款「显式启用」语义；启动失败仅记日志，不阻断主进程。
+  const widgetEnabled = getDb().getSetting('widget_server_enabled') === 'true'
+  if (widgetEnabled) {
+    try {
+      widgetServer = new WidgetServer({
+        getDb,
+        getEmbedStore,
+        logger,
+      })
+      const { port } = await widgetServer.start()
+      logger.activity('widget-server', `started on port ${port}`)
+    } catch (err) {
+      logger.error('widget-server.start', err instanceof Error ? err : new Error(String(err)))
+    }
+  }
 
   // 从 DB 恢复已配置的 cron 定时任务（重启后自动续期）
   try {
@@ -4306,6 +4341,94 @@ wrapHandler('schedule:record-run-finish', (
   if (!Number.isInteger(runId) || runId <= 0) throw new Error('runId 非法')
   if (!['success', 'failed', 'missed'].includes(status)) throw new Error(`status 非法: ${status}`)
   return getScheduleStore().recordRunFinish(runId, status, opts)
+})
+
+// ─── Web Embed widget（#15 · 子任务 2） ───────────────────────────────────────
+//
+// 命名空间 embed:*：
+//   embed:list / get / create / update / delete / set-enabled
+//   embed:get-port / server-start / server-stop
+//
+// 与 schedule:* 同款风格：DAO 操作走 EmbedStore，server 启停走 WidgetServer 单例。
+// 所有 id 入参用 assertEmbedId 校验（前缀 emb_ + 字母数字下划线），防止路径穿越。
+
+/** 校验来自渲染进程的 embed_id：必须是 emb_ 前缀 + 字母数字下划线 */
+function assertEmbedId(id: string): void {
+  if (!id || typeof id !== 'string' || !/^emb_[a-zA-Z0-9_]+$/.test(id)) {
+    throw new Error('非法 embed_id')
+  }
+}
+
+/** embed:list - 列出 embeds，可按 avatarId / enabled 过滤 */
+wrapHandler('embed:list', (_, opts?: { avatarId?: string; enabled?: boolean }) => {
+  return getEmbedStore().list(opts)
+})
+
+/** embed:get - 单个 embed */
+wrapHandler('embed:get', (_, id: string) => {
+  assertEmbedId(id)
+  return getEmbedStore().get(id)
+})
+
+/** embed:create - 创建 embed（id 由 store 自动生成；origin 含 * DAO 层抛错） */
+wrapHandler('embed:create', (_, input: NewEmbedInput) => {
+  if (!input?.avatarId || !input?.name) {
+    throw new Error('avatarId 与 name 必填')
+  }
+  return getEmbedStore().create(input)
+})
+
+/** embed:update - 部分更新 embed */
+wrapHandler('embed:update', (_, id: string, input: UpdateEmbedInput) => {
+  assertEmbedId(id)
+  const row = getEmbedStore().update(id, input)
+  if (!row) throw new Error('embed 不存在')
+  return row
+})
+
+/** embed:delete - 删除 embed */
+wrapHandler('embed:delete', (_, id: string) => {
+  assertEmbedId(id)
+  return getEmbedStore().delete(id)
+})
+
+/** embed:set-enabled - 单独切换启停 */
+wrapHandler('embed:set-enabled', (_, id: string, enabled: boolean) => {
+  assertEmbedId(id)
+  const row = getEmbedStore().setEnabled(id, enabled)
+  if (!row) throw new Error('embed 不存在')
+  return row
+})
+
+/** embed:get-port - 当前 widget-server 监听端口（未启动返回 null） */
+wrapHandler('embed:get-port', () => {
+  return widgetServer?.getPort() ?? null
+})
+
+/** embed:server-start - 显式启动 widget-server，并把 settings 标 enabled */
+wrapHandler('embed:server-start', async () => {
+  if (widgetServer?.isRunning()) {
+    return { port: widgetServer.getPort() }
+  }
+  if (!widgetServer) {
+    widgetServer = new WidgetServer({
+      getDb,
+      getEmbedStore,
+      logger,
+    })
+  }
+  const { port } = await widgetServer.start()
+  getDb().setSetting('widget_server_enabled', 'true')
+  return { port }
+})
+
+/** embed:server-stop - 显式关闭 widget-server，并把 settings 标 disabled */
+wrapHandler('embed:server-stop', async () => {
+  if (widgetServer?.isRunning()) {
+    await widgetServer.stop()
+  }
+  getDb().setSetting('widget_server_enabled', 'false')
+  return { ok: true }
 })
 
 // ─── 数据库备份 ────────────────────────────────────────────────────────────────

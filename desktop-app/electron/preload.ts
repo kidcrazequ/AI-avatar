@@ -484,6 +484,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('schedule:trigger', handler) }
   },
 
+  // ─── Web Embed widget（#15 Web Embed widget，2026-05-09） ───────────────
+  // 与 main.ts 的 embed:* handlers 对应。args 透传，类型由 src/global.d.ts 的
+  // ElectronAPI 接口约束（同 schedule* 系列保持一致，避免在 preload 重复声明）。
+  embedList: (opts?: { avatarId?: string; enabled?: boolean }) =>
+    ipcRenderer.invoke('embed:list', opts),
+  embedGet: (id: string) =>
+    ipcRenderer.invoke('embed:get', id),
+  embedCreate: (input: unknown) =>
+    ipcRenderer.invoke('embed:create', input),
+  embedUpdate: (id: string, input: unknown) =>
+    ipcRenderer.invoke('embed:update', id, input),
+  embedDelete: (id: string) =>
+    ipcRenderer.invoke('embed:delete', id),
+  embedSetEnabled: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke('embed:set-enabled', id, enabled),
+  embedGetPort: () =>
+    ipcRenderer.invoke('embed:get-port'),
+  embedServerStart: () =>
+    ipcRenderer.invoke('embed:server-start'),
+  embedServerStop: () =>
+    ipcRenderer.invoke('embed:server-stop'),
+
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) =>
     ipcRenderer.invoke('log-event', level, action, detail),

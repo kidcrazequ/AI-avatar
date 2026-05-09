@@ -127,6 +127,51 @@ interface UpdateScheduleInput {
   enabled?: boolean
 }
 
+/**
+ * Web Embed 单条记录（#15 Web Embed widget，2026-05-09）。
+ * 与 electron/db-embeds.ts 的 EmbedRow 保持字段一致；origin_whitelist 仍是 JSON
+ * 字符串（数组），由 UI 层自己 JSON.parse / stringify。
+ *
+ * @author zhi.qu
+ * @date 2026-05-09
+ */
+interface EmbedRow {
+  id: string
+  avatar_id: string
+  name: string
+  /** JSON 数组字符串，例如 '["http://localhost:3000"]'；DAO 层禁止包含 wildcard `*` */
+  origin_whitelist: string
+  enabled: 0 | 1
+  rate_limit_per_min: number
+  greeting: string | null
+  created_at: number
+  updated_at: number
+}
+
+/** 创建 embed 入参（id / 时间戳由主进程生成） */
+interface NewEmbedInput {
+  avatarId: string
+  name: string
+  /** Origin 列表（不允许包含 `*`，DAO 层会抛 Error） */
+  originWhitelist: string[]
+  /** 默认 30，clamp 到 [5, 300] */
+  rateLimitPerMin?: number
+  /** 超 500 字符截断；空字符串保存为 null */
+  greeting?: string
+  /** 默认 true */
+  enabled?: boolean
+}
+
+/** 更新 embed 入参（仅传需要改的字段） */
+interface UpdateEmbedInput {
+  avatarId?: string
+  name?: string
+  originWhitelist?: string[]
+  rateLimitPerMin?: number
+  greeting?: string | null
+  enabled?: boolean
+}
+
 interface SearchResult {
   path: string
   matches: string[]
@@ -637,6 +682,26 @@ interface ElectronAPI {
   ) => Promise<boolean>
   /** schedule 触发事件订阅（payload 字段见 schedule-trigger-handler.ScheduleTriggerPayload） */
   onScheduleTrigger: (callback: (payload: unknown) => void) => (() => void)
+
+  // ─── Web Embed widget（#15 Web Embed widget，2026-05-09） ───────────────
+  /** 列出 embeds，可按 avatarId / enabled 过滤 */
+  embedList: (opts?: { avatarId?: string; enabled?: boolean }) => Promise<EmbedRow[]>
+  /** 单个 embed，未找到返回 null */
+  embedGet: (id: string) => Promise<EmbedRow | null>
+  /** 创建 embed；origin 含 `*` 主进程 DAO 层抛错 */
+  embedCreate: (input: NewEmbedInput) => Promise<EmbedRow>
+  /** 部分更新 embed */
+  embedUpdate: (id: string, input: UpdateEmbedInput) => Promise<EmbedRow>
+  /** 删除 embed，返回是否真的删除（未找到返回 false） */
+  embedDelete: (id: string) => Promise<boolean>
+  /** 单独切换启停 */
+  embedSetEnabled: (id: string, enabled: boolean) => Promise<EmbedRow>
+  /** 当前 widget-server 监听端口（未启动返回 null） */
+  embedGetPort: () => Promise<number | null>
+  /** 显式启动 widget-server，并把 settings 标 enabled */
+  embedServerStart: () => Promise<{ port: number }>
+  /** 显式关闭 widget-server，并把 settings 标 disabled */
+  embedServerStop: () => Promise<{ ok: true }>
 
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) => Promise<void>

@@ -305,3 +305,5 @@ export { renderMarkdown } from './document/renderers/markdown-renderer'
 export { renderHtml, escapeHtml, sanitizeUrl } from './document/renderers/html-renderer'
 export type { RenderHtmlOptions } from './document/renderers/html-renderer'
 export { loadTemplateCss, resolveTemplatePath } from './document/renderers/template-loader'
+
+export * from './sync/snapshot-manifest'

@@ -393,6 +393,36 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [embedFormError, setEmbedFormError] = useState('')
   /** 分身列表，用于表单中的 avatar 下拉选择（拉不到时退化为文本输入） */
   const [embedAvatarList, setEmbedAvatarList] = useState<Avatar[]>([])
+  // ─── 跨设备同步 / WebDAV Sync 状态（#16 WebDAV cross-device sync，2026-05-09） ───
+  /** 当前持久化的 WebDAV 同步配置（不含密码明文，仅 hasPassword 标志） */
+  const [syncConfig, setSyncConfig] = useState<WebDavSyncConfig | null>(null)
+  /** 当前同步运行时状态（lastSyncAt / inProgress / safeStorage backend 等） */
+  const [syncStatus, setSyncStatus] = useState<WebDavSyncStatus | null>(null)
+  /** 表单 draft：用户编辑中的字段（password 仅在用户主动输入时传给主进程） */
+  const [syncDraft, setSyncDraft] = useState({
+    endpoint: '',
+    username: '',
+    password: '',
+    basePath: '/soul-backup/',
+    ignoreTlsErrors: false,
+    retentionCount: '7',
+    autoInterval: 'off' as WebDavSyncInterval,
+    enabled: false,
+  })
+  /** 「测试连接」最近一次结果，用于在状态消息上方留痕 */
+  const [syncTestResult, setSyncTestResult] = useState<{ ok: boolean; reason?: string } | null>(null)
+  /** 子区底部统一状态消息（4s 自动清空，由 syncTimerRef 管理） */
+  const [syncMessage, setSyncMessage] = useState<{ type: 'info' | 'success' | 'error'; text: string } | null>(null)
+  /** 远端可用备份列表（折叠面板展开后从 IPC 拉取） */
+  const [remoteBackups, setRemoteBackups] = useState<RemoteBackupItem[]>([])
+  /** 同步历史最近 30 条 */
+  const [syncHistory, setSyncHistory] = useState<SyncHistoryRow[]>([])
+  /** 是否展开「从备份恢复」面板 */
+  const [showRestorePanel, setShowRestorePanel] = useState(false)
+  /** 是否展开「同步历史」面板 */
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false)
+  /** 同步操作进行中（保存 / 测试 / 备份 / 恢复 / 历史等共用，避免并发误触） */
+  const [isSyncOperating, setIsSyncOperating] = useState(false)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const cronStatusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const logMsgTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -402,6 +432,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const issTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const proxyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const embedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  /** #16 WebDAV 跨设备同步状态消息倒计时 ref */
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => {
     clearTimeout(statusTimerRef.current)
@@ -413,6 +445,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     clearTimeout(issTimerRef.current)
     clearTimeout(proxyTimerRef.current)
     clearTimeout(embedTimerRef.current)
+    clearTimeout(syncTimerRef.current)
   }, [])
 
   const loadSeqRef = useRef(0)
@@ -443,6 +476,42 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         const msg = e instanceof Error ? e.message : String(e)
         console.warn('[Settings] 加载 Web Embed 状态失败:', msg)
         window.electronAPI.logEvent('error', 'embed-initial-load', msg)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  /**
+   * #16 WebDAV 跨设备同步初次加载：
+   *   - 并行拉 syncGetConfig + syncGetStatus
+   *   - 用 cfg 初始化 syncDraft（密码 placeholder 由 hasPassword 控制；不回填明文）
+   *   - 任一失败仅 logEvent + setSyncMessage，不阻塞其他设置加载
+   */
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [cfg, status] = await Promise.all([
+          window.electronAPI.syncGetConfig(),
+          window.electronAPI.syncGetStatus(),
+        ])
+        if (cancelled) return
+        setSyncConfig(cfg)
+        setSyncStatus(status)
+        setSyncDraft({
+          endpoint: cfg.endpoint,
+          username: cfg.username,
+          password: '',
+          basePath: cfg.basePath || '/soul-backup/',
+          ignoreTlsErrors: cfg.ignoreTlsErrors,
+          retentionCount: String(cfg.retentionCount),
+          autoInterval: cfg.autoInterval,
+          enabled: cfg.enabled,
+        })
+      } catch (e) {
+        if (cancelled) return
+        const msg = e instanceof Error ? e.message : String(e)
+        window.electronAPI.logEvent('error', 'sync-initial-load', msg)
       }
     })()
     return () => { cancelled = true }
@@ -1109,6 +1178,258 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     } finally {
       clearTimeout(embedTimerRef.current)
       embedTimerRef.current = setTimeout(() => setEmbedStatusMsg(''), 3000)
+    }
+  }
+
+  // ─── 跨设备同步 / WebDAV Sync 管理（#16 WebDAV cross-device sync，2026-05-09） ───
+
+  /**
+   * 自动间隔的中文标签映射，用于状态卡片展示。放在 render 闭包内，
+   * 避免在文件顶层增加额外导出（与 #15 同款 inline 风格）。
+   */
+  const SYNC_INTERVAL_LABEL: Record<WebDavSyncInterval, string> = {
+    'off': '关闭',
+    'hourly': '每小时',
+    'every-6-hours': '每 6 小时',
+    'daily': '每天 09:00',
+  }
+
+  /** 将字节数格式化为友好字符串：B / KB / MB */
+  const formatSyncBytes = (n: number): string => {
+    if (n < 1024) return `${n} B`
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+    return `${(n / 1024 / 1024).toFixed(2)} MB`
+  }
+
+  /** 将 unix 毫秒时间戳格式化为「YYYY-MM-DD HH:mm」 */
+  const formatSyncTs = (ts: number | null): string => {
+    if (!ts) return '从未'
+    const d = new Date(ts)
+    const date = localDateString(d)
+    const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return `${date} ${time}`
+  }
+
+  /**
+   * 子区底部状态消息助手：4s 后自动清空。
+   * type=success/info/error 决定颜色（与 #15 SAVED/FAILED 文案不同款，本子区直接用 type）。
+   */
+  const setSyncMsg = (type: 'info' | 'success' | 'error', text: string) => {
+    setSyncMessage({ type, text })
+    clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = setTimeout(() => setSyncMessage(null), 4000)
+  }
+
+  /**
+   * 重新拉 syncStatus（备份后 / 恢复后 / 配置保存后调用）。
+   * 失败时仅 logEvent，不阻塞其他流程。
+   */
+  const reloadSyncStatus = async () => {
+    try {
+      const status = await window.electronAPI.syncGetStatus()
+      setSyncStatus(status)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      window.electronAPI.logEvent('error', 'sync-reload-status', msg)
+    }
+  }
+
+  /**
+   * 「测试连接」：用当前表单字段调 IPC 验证 WebDAV 可达性，不写盘。
+   * 密码为空时主进程会回退到持久化密码。
+   */
+  const handleSyncTestConnection = async () => {
+    if (!syncDraft.endpoint || !syncDraft.username) {
+      setSyncMsg('error', '请先填写服务器地址和用户名')
+      return
+    }
+    setIsSyncOperating(true)
+    setSyncTestResult(null)
+    try {
+      const r = await window.electronAPI.syncTestConnection({
+        endpoint: syncDraft.endpoint,
+        username: syncDraft.username,
+        password: syncDraft.password || undefined,
+        basePath: syncDraft.basePath,
+        ignoreTlsErrors: syncDraft.ignoreTlsErrors,
+      })
+      setSyncTestResult(r)
+      if (r.ok) {
+        setSyncMsg('success', '连接测试成功')
+      } else {
+        setSyncMsg('error', `连接测试失败：${r.reason || '未知错误'}`)
+      }
+      window.electronAPI.logEvent('info', 'sync-test-connection', r.ok ? 'ok' : (r.reason || 'failed'))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncTestResult({ ok: false, reason: msg })
+      setSyncMsg('error', `连接测试失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-test-connection', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /**
+   * 「保存配置」：写入 IPC；password 仅在用户输入时传，空字符串不传以保持原值。
+   * retentionCount 在前端先做 1-30 范围校验，主进程会再 clamp 一次。
+   */
+  const handleSyncSaveConfig = async () => {
+    const retentionNum = parseInt(syncDraft.retentionCount, 10)
+    if (!Number.isFinite(retentionNum) || retentionNum < 1 || retentionNum > 30) {
+      setSyncMsg('error', '保留份数应为 1-30 的整数')
+      return
+    }
+    setIsSyncOperating(true)
+    try {
+      const input: WebDavSetConfigInput = {
+        enabled: syncDraft.enabled,
+        endpoint: syncDraft.endpoint,
+        username: syncDraft.username,
+        basePath: syncDraft.basePath,
+        ignoreTlsErrors: syncDraft.ignoreTlsErrors,
+        retentionCount: retentionNum,
+        autoInterval: syncDraft.autoInterval,
+      }
+      if (syncDraft.password) input.password = syncDraft.password
+      const updated = await window.electronAPI.syncSetConfig(input)
+      setSyncConfig(updated)
+      setSyncDraft((prev) => ({ ...prev, password: '' }))
+      setSyncMsg('success', '配置已保存')
+      window.electronAPI.logEvent('info', 'sync-set-config', updated.endpoint)
+      await reloadSyncStatus()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `保存失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-set-config', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /** 「清除凭据」：弹 confirm，确认后清空密码；其他配置保留。 */
+  const handleSyncClearCredentials = async () => {
+    if (!window.confirm('确认清除已保存的 WebDAV 密码？后续同步前需重新填写。')) return
+    setIsSyncOperating(true)
+    try {
+      await window.electronAPI.syncClearCredentials()
+      const cfg = await window.electronAPI.syncGetConfig()
+      setSyncConfig(cfg)
+      setSyncDraft((prev) => ({ ...prev, password: '' }))
+      setSyncMsg('success', '密码已清除')
+      window.electronAPI.logEvent('info', 'sync-clear-credentials', 'manual')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `清除失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-clear-credentials', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /** 「立即备份」：触发一次同步；并发由主进程拒绝并返回错误。 */
+  const handleSyncBackupNow = async () => {
+    setIsSyncOperating(true)
+    setSyncMsg('info', '正在备份…')
+    try {
+      const r = await window.electronAPI.syncBackupNow()
+      if (r.ok) {
+        const sizeText = r.totalBytes !== undefined ? formatSyncBytes(r.totalBytes) : '?'
+        setSyncMsg('success', `备份成功：${r.filename ?? '(unknown)'} (${sizeText})`)
+        window.electronAPI.logEvent('info', 'sync-backup-now', r.filename ?? '')
+      } else {
+        setSyncMsg('error', `备份失败：${r.error || '未知错误'}`)
+        window.electronAPI.logEvent('error', 'sync-backup-now', r.error || 'unknown')
+      }
+      await reloadSyncStatus()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `备份失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-backup-now', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /** 「刷新备份列表」：从 WebDAV 拉远端备份索引（按 lastModified 倒序） */
+  const handleSyncListRemoteBackups = async () => {
+    setIsSyncOperating(true)
+    try {
+      const list = await window.electronAPI.syncListRemoteBackups()
+      setRemoteBackups(list)
+      if (list.length === 0) {
+        setSyncMsg('info', '远端暂无可用备份')
+      } else {
+        setSyncMsg('success', `已加载 ${list.length} 份远端备份`)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `拉取列表失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-list-remote', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /**
+   * 「恢复」：弹 confirm（含覆盖 + 重启警告），确认后调 IPC。
+   * 主进程在 ok=true 后会自动 relaunch + exit，前端 UI 不一定能看到下文。
+   */
+  const handleSyncRestoreFrom = async (filename: string) => {
+    if (!window.confirm(
+      `确认从 ${filename} 恢复？\n\n` +
+      '本地数据库与设置将被覆盖，应用会自动重启。\n' +
+      '当前数据将被备份至 .soul/backup/pre-restore/。',
+    )) return
+    setIsSyncOperating(true)
+    setSyncMsg('info', '正在恢复…应用即将重启')
+    try {
+      const r = await window.electronAPI.syncRestoreFrom(filename)
+      if (!r.ok) {
+        setSyncMsg('error', `恢复失败：${r.error || '未知错误'}`)
+        window.electronAPI.logEvent('error', 'sync-restore', r.error || 'unknown')
+      } else {
+        window.electronAPI.logEvent('info', 'sync-restore', filename)
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `恢复失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-restore', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /** 「查看同步历史」展开时拉历史，最多 30 条 */
+  const handleSyncLoadHistory = async () => {
+    setIsSyncOperating(true)
+    try {
+      const rows = await window.electronAPI.syncListHistory({ limit: 30 })
+      setSyncHistory(rows)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `加载历史失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-list-history', msg)
+    } finally {
+      setIsSyncOperating(false)
+    }
+  }
+
+  /** 「清空历史」：弹 confirm，确认后调 IPC */
+  const handleSyncClearHistory = async () => {
+    if (!window.confirm('确认清空全部同步历史？此操作不可撤销。')) return
+    setIsSyncOperating(true)
+    try {
+      const n = await window.electronAPI.syncClearHistory()
+      setSyncHistory([])
+      setSyncMsg('success', `已清空 ${n} 条历史记录`)
+      window.electronAPI.logEvent('info', 'sync-clear-history', String(n))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setSyncMsg('error', `清空失败：${msg}`)
+      window.electronAPI.logEvent('error', 'sync-clear-history', msg)
+    } finally {
+      setIsSyncOperating(false)
     }
   }
 
@@ -1953,6 +2274,414 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       </div>
                     )}
                   </div>
+
+                  {/* === 跨设备同步 / WebDAV Sync (#16) === */}
+                  {/*
+                   * #16 WebDAV 跨设备同步子区（2026-05-09，author: zhi.qu）
+                   *
+                   * 与 desktop-app/electron/sync/sync-manager.ts + db-sync-history.ts 配套：
+                   *   - 顶部：状态卡片（lastSyncAt / direction / inProgress / deviceId / safeStorage backend）
+                   *   - 表单：endpoint / username / password / basePath / ignoreTlsErrors /
+                   *           retentionCount / autoInterval / enabled
+                   *   - 操作：测试连接 / 保存配置 / 清除凭据 / 立即备份 / 从备份恢复
+                   *   - 折叠：远端备份列表 + 同步历史
+                   *
+                   * 风格与 #15 Web Embed widget 子区 1:1 对齐（border-2 border-px-border bg-px-elevated p-4）。
+                   * 子区内所有副作用错误均通过 setSyncMsg + logEvent 上报，不使用 console.*。
+                   */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-game text-[14px] text-px-text">跨设备同步</span>
+                        <span className="font-game text-[10px] text-px-text-dim tracking-wider ml-2">WEBDAV_SYNC</span>
+                      </div>
+                      <span className={`font-game text-[10px] tracking-wider px-1.5 py-0.5 border ${
+                        syncStatus?.inProgress
+                          ? 'text-px-warning border-px-warning'
+                          : syncConfig?.enabled
+                          ? 'text-px-success border-px-success'
+                          : 'text-px-text-dim border-px-border'
+                      }`}>
+                        {syncStatus?.inProgress
+                          ? 'SYNCING'
+                          : syncConfig?.enabled
+                          ? 'ENABLED'
+                          : 'DISABLED'}
+                      </span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      通过 WebDAV（坚果云 / Nextcloud / 自建）在多台设备间备份与恢复全部数据。
+                      密码经 OS 密钥环加密（macOS Keychain / Windows DPAPI / Linux libsecret）。
+                    </p>
+
+                    {/* A. 状态卡片 */}
+                    <div className="border border-px-border bg-px-surface p-3 space-y-1">
+                      <div className="font-game text-[11px] text-px-text-dim tracking-wider">SYNC STATUS</div>
+                      {syncStatus ? (
+                        <>
+                          <div className="font-game text-[12px] text-px-text-sec">
+                            上次同步：{formatSyncTs(syncStatus.lastSyncAt)}
+                            {syncStatus.lastSyncDirection && (
+                              <span className="ml-2">
+                                {syncStatus.lastSyncDirection === 'backup' ? '备份' : '恢复'}
+                              </span>
+                            )}
+                            {syncStatus.lastSyncStatus && (
+                              <span className={`ml-2 ${
+                                syncStatus.lastSyncStatus === 'success' ? 'text-px-success' : 'text-px-danger'
+                              }`}>
+                                {syncStatus.lastSyncStatus === 'success' ? '成功' : '失败'}
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-game text-[11px] text-px-text-dim">
+                            DEVICE_ID: <span className="font-mono">{syncStatus.deviceId.slice(0, 8)}…</span>
+                            <span className="ml-3">AUTO: {SYNC_INTERVAL_LABEL[syncConfig?.autoInterval ?? 'off']}</span>
+                          </div>
+                          {syncStatus.lastSyncError && (
+                            <div className="font-game text-[11px] text-px-danger break-all">
+                              ERROR: {syncStatus.lastSyncError}
+                            </div>
+                          )}
+                          {!syncStatus.storageBackendSecure && (
+                            <div className="font-game text-[11px] text-px-warning break-all">
+                              ⚠ 当前 OS 密钥环不可用（{syncStatus.storageBackend}），密码以明文保存
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="font-game text-[12px] text-px-text-dim">加载中…</div>
+                      )}
+                    </div>
+
+                    {/* B. 服务器配置表单 */}
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        服务器地址 (ENDPOINT)
+                      </label>
+                      <input
+                        type="url"
+                        value={syncDraft.endpoint}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, endpoint: e.target.value })}
+                        placeholder="https://dav.jianguoyun.com/dav/"
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        用户名
+                      </label>
+                      <input
+                        type="text"
+                        value={syncDraft.username}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, username: e.target.value })}
+                        placeholder="坚果云邮箱 / Nextcloud 用户名"
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        密码 / 应用密码
+                      </label>
+                      <input
+                        type="password"
+                        value={syncDraft.password}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, password: e.target.value })}
+                        placeholder={syncConfig?.hasPassword ? '已保存（留空保持不变）' : '请输入密码'}
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                      <div className="font-game text-[11px] text-px-text-dim mt-1.5">
+                        密码将经 OS 密钥环加密（macOS Keychain / Windows DPAPI / Linux libsecret）。
+                        Linux 无 keyring 时将以明文存储（不安全），请谨慎使用。
+                        坚果云请使用「应用密码」，而非登录密码。
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        远端目录 (BASE_PATH)
+                      </label>
+                      <input
+                        type="text"
+                        value={syncDraft.basePath}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, basePath: e.target.value })}
+                        placeholder="/soul-backup/"
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                      <div className="font-game text-[11px] text-px-text-dim mt-1.5">
+                        不存在时将自动创建；建议以 / 结尾。
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        保留份数 (RETENTION，1-30，默认 7)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={syncDraft.retentionCount}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, retentionCount: e.target.value })}
+                        className="pixel-input w-28 font-mono text-[13px]"
+                      />
+                      <span className="ml-2 font-game text-[11px] text-px-text-dim">
+                        超出后自动清理最旧备份
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">
+                        自动间隔 (AUTO_INTERVAL)
+                      </label>
+                      <select
+                        value={syncDraft.autoInterval}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, autoInterval: e.target.value as WebDavSyncInterval })}
+                        className="pixel-input font-mono text-[13px]"
+                      >
+                        <option value="off">关闭</option>
+                        <option value="hourly">每小时</option>
+                        <option value="every-6-hours">每 6 小时</option>
+                        <option value="daily">每天 09:00</option>
+                      </select>
+                    </div>
+
+                    <label className="flex items-center gap-2 font-game text-[12px] text-px-text cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={syncDraft.ignoreTlsErrors}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, ignoreTlsErrors: e.target.checked })}
+                        className="h-4 w-4 accent-px-primary"
+                      />
+                      忽略 HTTPS 证书校验（仅用于自签证书；坚果云勿勾选）
+                    </label>
+
+                    <label className="flex items-center gap-2 font-game text-[12px] text-px-text cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={syncDraft.enabled}
+                        onChange={(e) => setSyncDraft({ ...syncDraft, enabled: e.target.checked })}
+                        className="h-4 w-4 accent-px-primary"
+                      />
+                      启用自动同步
+                    </label>
+
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleSyncTestConnection}
+                        disabled={isSyncOperating}
+                        className="pixel-btn-ghost text-[12px] px-3 py-1 disabled:opacity-50"
+                      >
+                        测试连接
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSyncSaveConfig}
+                        disabled={isSyncOperating}
+                        className="pixel-btn-primary text-[12px] px-3 py-1 disabled:opacity-50"
+                      >
+                        保存配置
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSyncClearCredentials}
+                        disabled={isSyncOperating || !syncConfig?.hasPassword}
+                        className="pixel-btn-ghost text-[12px] px-3 py-1 text-px-danger disabled:opacity-50"
+                      >
+                        清除凭据
+                      </button>
+                    </div>
+
+                    {/* C. 操作面板 */}
+                    <div className="border-t border-px-border pt-3 space-y-2">
+                      <div className="font-game text-[12px] text-px-text-sec tracking-wider">操作</div>
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleSyncBackupNow}
+                          disabled={isSyncOperating || !syncConfig?.hasPassword}
+                          className="pixel-btn-primary text-[12px] px-3 py-1 disabled:opacity-50"
+                        >
+                          {syncStatus?.inProgress ? '同步中…' : '立即备份'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !showRestorePanel
+                            setShowRestorePanel(next)
+                            if (next && remoteBackups.length === 0) {
+                              void handleSyncListRemoteBackups()
+                            }
+                          }}
+                          disabled={isSyncOperating}
+                          className="pixel-btn-ghost text-[12px] px-3 py-1 disabled:opacity-50"
+                        >
+                          {showRestorePanel ? '收起恢复' : '从备份恢复'}
+                        </button>
+                      </div>
+
+                      {showRestorePanel && (
+                        <div className="border border-px-border bg-px-surface p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-game text-[11px] text-px-text-dim tracking-wider">REMOTE BACKUPS</span>
+                            <button
+                              type="button"
+                              onClick={handleSyncListRemoteBackups}
+                              disabled={isSyncOperating}
+                              className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                            >
+                              刷新列表
+                            </button>
+                          </div>
+                          {remoteBackups.length === 0 ? (
+                            <div className="font-game text-[12px] text-px-text-dim text-center py-3 border border-dashed border-px-border">
+                              远端暂无备份，先在另一台设备点「立即备份」
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              {remoteBackups.map((b) => (
+                                <div
+                                  key={b.filename}
+                                  className="flex items-center justify-between gap-2 border border-px-border bg-px-bg px-2 py-1.5"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-mono text-[12px] text-px-text truncate">{b.filename}</div>
+                                    <div className="font-game text-[10px] text-px-text-dim">
+                                      {formatSyncBytes(b.size)} · {b.lastModified}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSyncRestoreFrom(b.filename)}
+                                    disabled={isSyncOperating}
+                                    className="pixel-btn-ghost text-[11px] px-2 py-0.5 text-px-danger disabled:opacity-50"
+                                  >
+                                    恢复
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* D. 同步历史（默认折叠） */}
+                    <div className="border-t border-px-border pt-3 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !showHistoryPanel
+                          setShowHistoryPanel(next)
+                          if (next && syncHistory.length === 0) {
+                            void handleSyncLoadHistory()
+                          }
+                        }}
+                        disabled={isSyncOperating}
+                        className="font-game text-[12px] text-px-text-sec tracking-wider hover:text-px-text"
+                      >
+                        {showHistoryPanel ? '▼ 隐藏同步历史' : '▶ 查看同步历史'}
+                      </button>
+                      {showHistoryPanel && (
+                        <div className="border border-px-border bg-px-surface p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-game text-[11px] text-px-text-dim tracking-wider">
+                              SYNC HISTORY (最近 {syncHistory.length} 条)
+                            </span>
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={handleSyncLoadHistory}
+                                disabled={isSyncOperating}
+                                className="pixel-btn-ghost text-[11px] px-2 py-0.5 disabled:opacity-50"
+                              >
+                                刷新
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSyncClearHistory}
+                                disabled={isSyncOperating || syncHistory.length === 0}
+                                className="pixel-btn-ghost text-[11px] px-2 py-0.5 text-px-danger disabled:opacity-50"
+                              >
+                                清空
+                              </button>
+                            </div>
+                          </div>
+                          {syncHistory.length === 0 ? (
+                            <div className="font-game text-[12px] text-px-text-dim text-center py-3 border border-dashed border-px-border">
+                              暂无历史记录
+                            </div>
+                          ) : (
+                            <div className="space-y-1 max-h-64 overflow-y-auto">
+                              {syncHistory.map((h) => (
+                                <div
+                                  key={h.id}
+                                  className="border border-px-border bg-px-bg px-2 py-1.5 font-game text-[11px]"
+                                >
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`tracking-wider ${
+                                      h.status === 'success' ? 'text-px-success' :
+                                      h.status === 'failed' ? 'text-px-danger' :
+                                      'text-px-warning'
+                                    }`}>
+                                      {h.status === 'success' ? '✓' : h.status === 'failed' ? '✗' : '⋯'}
+                                      {' '}
+                                      {h.direction === 'backup' ? '备份' : '恢复'}
+                                    </span>
+                                    <span className="text-px-text-sec font-mono">
+                                      {formatSyncTs(h.created_at)}
+                                    </span>
+                                    {h.file_count > 0 && (
+                                      <span className="text-px-text-dim">
+                                        {h.file_count} 文件 · {formatSyncBytes(h.total_bytes)}
+                                      </span>
+                                    )}
+                                    {h.duration_ms > 0 && (
+                                      <span className="text-px-text-dim">
+                                        {(h.duration_ms / 1000).toFixed(1)}s
+                                      </span>
+                                    )}
+                                  </div>
+                                  {h.error_message && (
+                                    <div className="text-px-danger break-all mt-0.5">
+                                      {h.error_message}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* E. 帮助文档（静态字串，详见子任务 6 文档） */}
+                    <div className="font-game text-[11px] text-px-text-dim">
+                      详细文档：desktop-app/docs/webdav-sync.md
+                    </div>
+
+                    {/* 状态消息 */}
+                    {syncMessage && (
+                      <div className={`font-game text-[11px] tracking-wider break-all ${
+                        syncMessage.type === 'success' ? 'text-px-success' :
+                        syncMessage.type === 'error' ? 'text-px-danger' :
+                        'text-px-text-dim'
+                      }`}>
+                        {syncMessage.text}
+                      </div>
+                    )}
+                    {syncTestResult && !syncMessage && (
+                      <div className={`font-game text-[11px] tracking-wider break-all ${
+                        syncTestResult.ok ? 'text-px-success' : 'text-px-danger'
+                      }`}>
+                        {syncTestResult.ok ? '✓ 连接 OK' : `✗ ${syncTestResult.reason || '失败'}`}
+                      </div>
+                    )}
+                  </div>
+                  {/* === END 跨设备同步 / WebDAV Sync (#16) === */}
 
                   {/* MCP Servers 区块 ─────────────────────────────────────── */}
                   <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">

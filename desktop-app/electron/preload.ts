@@ -506,6 +506,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   embedServerStop: () =>
     ipcRenderer.invoke('embed:server-stop'),
 
+  // ─── WebDAV 跨设备同步（#16 WebDAV cross-device sync，2026-05-09） ──────
+  // 与 main.ts 的 sync:* handlers 对应。args 透传，类型由 src/global.d.ts 的
+  // ElectronAPI 接口约束（同 schedule* / embed* 系列保持一致）。
+  syncGetConfig: () =>
+    ipcRenderer.invoke('sync:get-config'),
+  syncSetConfig: (input: unknown) =>
+    ipcRenderer.invoke('sync:set-config', input),
+  syncClearCredentials: () =>
+    ipcRenderer.invoke('sync:clear-credentials'),
+  syncTestConnection: (input?: unknown) =>
+    ipcRenderer.invoke('sync:test-connection', input),
+  syncBackupNow: () =>
+    ipcRenderer.invoke('sync:backup-now'),
+  syncListRemoteBackups: () =>
+    ipcRenderer.invoke('sync:list-remote-backups'),
+  syncRestoreFrom: (filename: string) =>
+    ipcRenderer.invoke('sync:restore-from', filename),
+  syncGetStatus: () =>
+    ipcRenderer.invoke('sync:get-status'),
+  syncListHistory: (opts?: { limit?: number; direction?: 'backup' | 'restore'; status?: 'success' | 'failed' | 'in_progress' }) =>
+    ipcRenderer.invoke('sync:list-history', opts),
+  syncClearHistory: () =>
+    ipcRenderer.invoke('sync:clear-history'),
+
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) =>
     ipcRenderer.invoke('log-event', level, action, detail),

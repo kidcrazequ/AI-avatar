@@ -24,6 +24,8 @@ import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
 import { EmbedStore, type NewEmbedInput, type UpdateEmbedInput } from './db-embeds'
+import { SyncHistoryStore, type SyncDirection, type SyncStatus as SyncRunStatus } from './db-sync-history'
+import { SyncManager, isSafeBackupFilename, type SetConfigInput as SyncSetConfigInput, type TestConnectionInput as SyncTestConnectionInput } from './sync/sync-manager'
 import { WidgetServer } from './widget-server'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -138,6 +140,57 @@ function getEmbedStore(): EmbedStore {
  * 默认关闭；用户在设置中开启或调用 IPC `embed:server-start` 时启动。
  */
 let widgetServer: WidgetServer | null = null
+/**
+ * WebDAV 同步历史存储（#16 WebDAV cross-device sync · 子任务 3）。
+ * 在 initManagers 之后通过 getSyncHistoryStore() lazy 创建（依赖 db）。
+ */
+let syncHistoryStore: SyncHistoryStore | null = null
+function getSyncHistoryStore(): SyncHistoryStore {
+  if (!syncHistoryStore) {
+    syncHistoryStore = new SyncHistoryStore(getDb().getRawDb())
+  }
+  return syncHistoryStore
+}
+/**
+ * WebDAV 同步管理器（#16 WebDAV cross-device sync · 子任务 4）。
+ * 在 initManagers 之后通过 getSyncManager() lazy 创建（依赖 db / cron / logger）。
+ */
+let syncManager: SyncManager | null = null
+function getSyncManager(): SyncManager {
+  if (!syncManager) {
+    // 兼容 dev / prod：sharedRoot 与 avatarsPath 同级（dev 指向仓库 shared/，prod 指向 userData/shared/）
+    const sharedRoot = path.join(avatarsPath, '..', 'shared')
+    const conversationsRoot = path.join(app.getPath('userData'), 'conversations')
+    syncManager = new SyncManager({
+      db: getDb().getRawDb(),
+      syncHistoryStore: getSyncHistoryStore(),
+      cronScheduler,
+      logger: {
+        info: (msg, meta) => {
+          if (logger) logger.activity('webdav-sync', meta ? `${msg} ${JSON.stringify(meta)}` : msg)
+        },
+        warn: (msg, err) => {
+          if (logger) logger.logEvent('warn', 'webdav-sync', err ? `${msg}: ${err.message}` : msg)
+        },
+        error: (msg, err) => {
+          if (logger) logger.error(`webdav-sync:${msg}`, err ?? new Error(msg))
+        },
+      },
+      appVersion: app.getVersion(),
+      userDataPath: app.getPath('userData'),
+      avatarsRoot: avatarsPath,
+      sharedRoot,
+      conversationsRoot,
+      dbSchemaVersion: 12,
+      runDbBackup: (dest: string) => getDb().backup(dest),
+      relaunchApp: () => {
+        app.relaunch()
+        setImmediate(() => app.exit(0))
+      },
+    })
+  }
+  return syncManager
+}
 let templateLoader: TemplateLoader
 let backupIntervalId: ReturnType<typeof setInterval> | null = null
 const bridgeMinuteWindow = new Map<string, number[]>()
@@ -569,6 +622,16 @@ app.whenReady().then(() => {
   } catch (err) {
     console.error('[Main] 恢复用户 schedules 失败:', err)
     if (logger) logger.error('schedules-restore', err instanceof Error ? err : new Error(String(err)))
+  }
+
+  // 注册 WebDAV 自动同步 cron（#16 子任务 4）。
+  // 失败仅 warn，不阻塞主进程；实际触发逻辑由 SyncManager.registerAutoInterval 内部决定。
+  try {
+    getSyncManager().registerAutoInterval().catch((err: unknown) => {
+      if (logger) logger.error('webdav-sync-restore', err instanceof Error ? err : new Error(String(err)))
+    })
+  } catch (err) {
+    if (logger) logger.error('webdav-sync-restore', err instanceof Error ? err : new Error(String(err)))
   }
 
   // 「人生持续生长」每日 0:30 触发一次（Phase 2）。
@@ -4429,6 +4492,98 @@ wrapHandler('embed:server-stop', async () => {
   }
   getDb().setSetting('widget_server_enabled', 'false')
   return { ok: true }
+})
+
+// ─── WebDAV 跨设备同步（#16 · 子任务 4） ─────────────────────────────────────
+//
+// 命名空间 sync:*（实际 10 个 IPC）：
+//   sync:get-config / set-config / clear-credentials / test-connection
+//   sync:backup-now / list-remote-backups / restore-from / get-status
+//   sync:list-history / clear-history
+//
+// 与 schedule:* / embed:* 同款风格：
+//   - 业务编排走 SyncManager 单例（lazy 创建）
+//   - 路径校验：filename 必须匹配 isSafeBackupFilename 白名单（防 IPC 注入）
+//   - 错误统一通过 wrapHandler 走 logger.error；SyncManager 内部不抛栈给上层
+//
+// restore-from 在拿到 ok=true 后由本层主导 app.relaunch + app.exit，
+// 这样渲染端能先收到 ack 再退出，不丢响应。
+
+/** sync:get-config - 读取当前 WebDAV 同步配置（不含密码明文） */
+wrapHandler('sync:get-config', () => {
+  return getSyncManager().getConfig()
+})
+
+/** sync:set-config - 部分更新 WebDAV 同步配置；写入后立即重注册 cron */
+wrapHandler('sync:set-config', async (_, input: SyncSetConfigInput) => {
+  if (input === null || typeof input !== 'object') {
+    throw new Error('input 必须为对象')
+  }
+  const cfg = await getSyncManager().setConfig(input)
+  await getSyncManager().registerAutoInterval()
+  return cfg
+})
+
+/** sync:clear-credentials - 清空 WebDAV 密码（不影响其他配置项） */
+wrapHandler('sync:clear-credentials', async () => {
+  await getSyncManager().clearCredentials()
+  return { ok: true }
+})
+
+/** sync:test-connection - 测试 WebDAV 连接；input 为空时用持久化配置 */
+wrapHandler('sync:test-connection', (_, input?: SyncTestConnectionInput) => {
+  if (input !== undefined && (input === null || typeof input !== 'object')) {
+    throw new Error('input 必须为对象或 undefined')
+  }
+  return getSyncManager().testConnection(input)
+})
+
+/** sync:backup-now - 立即触发一次备份；并发时抛 sync_already_running */
+wrapHandler('sync:backup-now', () => {
+  return getSyncManager().backupNow()
+})
+
+/** sync:list-remote-backups - 列出远端可用备份（按 lastModified 倒序） */
+wrapHandler('sync:list-remote-backups', () => {
+  return getSyncManager().listRemoteBackups()
+})
+
+/** sync:restore-from - 从远端备份恢复；ok=true 后立即 relaunch */
+wrapHandler('sync:restore-from', async (_, filename: string) => {
+  if (typeof filename !== 'string' || !isSafeBackupFilename(filename)) {
+    throw new Error('非法备份文件名')
+  }
+  const result = await getSyncManager().restoreFrom(filename)
+  if (result.ok) {
+    // 推迟到 setImmediate 让 IPC 响应先到达渲染端
+    setImmediate(() => {
+      try {
+        app.relaunch()
+        app.exit(0)
+      } catch (err) {
+        if (logger) logger.error('sync:restore-from-relaunch', err instanceof Error ? err : new Error(String(err)))
+      }
+    })
+  }
+  return result
+})
+
+/** sync:get-status - 当前同步状态 + safeStorage 后端信息 */
+wrapHandler('sync:get-status', () => {
+  return getSyncManager().getStatus()
+})
+
+/** sync:list-history - 同步历史最近 30 条（设置面板"同步历史"列表用） */
+wrapHandler('sync:list-history', (_, opts?: { limit?: number; direction?: SyncDirection; status?: SyncRunStatus }) => {
+  const limit = (opts?.limit !== undefined && Number.isFinite(opts.limit) && opts.limit > 0)
+    ? Math.min(Math.floor(opts.limit), 100)
+    : 30
+  return getSyncHistoryStore().list({ limit, direction: opts?.direction, status: opts?.status })
+})
+
+/** sync:clear-history - 清空同步历史（运维 / 用户手动重置用） */
+wrapHandler('sync:clear-history', () => {
+  return getSyncHistoryStore().clear()
 })
 
 // ─── 数据库备份 ────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 11
+const CURRENT_SCHEMA_VERSION = 12
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -479,6 +479,31 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_embeds_enabled
       ON embeds(enabled)
     `)
+
+    // WebDAV 同步历史表（v12 引入，2026-05-09 #16 WebDAV cross-device sync）。
+    // 每行 = 一次同步运行（备份或恢复），用于设置面板展示最近运行情况、
+    // 失败诊断与下次增量参考。容量受 SyncHistoryStore.pruneToLimit 控制（默认 30 条）。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        direction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        file_count INTEGER NOT NULL DEFAULT 0,
+        total_bytes INTEGER NOT NULL DEFAULT 0,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        remote_filename TEXT,
+        error_message TEXT,
+        created_at INTEGER NOT NULL
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_sync_history_created_at
+      ON sync_history(created_at DESC)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_sync_history_direction_status
+      ON sync_history(direction, status)
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -728,6 +753,36 @@ export class DatabaseManager {
           ON embeds(enabled)
         `)
         version = 11
+      })()
+    }
+
+    if (version < 12) {
+      // v11 → v12：新增 sync_history 表（WebDAV 跨设备同步历史，#16 WebDAV cross-device sync）
+      // 每行 = 一次备份/恢复运行的执行结果记录，由 SyncHistoryStore DAO 写入。
+      // 表结构与 createBaseSchema 同步，详见 db-sync-history.ts 与主计划 §4.14。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS sync_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            direction TEXT NOT NULL,
+            status TEXT NOT NULL,
+            file_count INTEGER NOT NULL DEFAULT 0,
+            total_bytes INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
+            remote_filename TEXT,
+            error_message TEXT,
+            created_at INTEGER NOT NULL
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_sync_history_created_at
+          ON sync_history(created_at DESC)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_sync_history_direction_status
+          ON sync_history(direction, status)
+        `)
+        version = 12
       })()
     }
 

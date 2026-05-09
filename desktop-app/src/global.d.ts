@@ -172,6 +172,101 @@ interface UpdateEmbedInput {
   enabled?: boolean
 }
 
+/**
+ * WebDAV 跨设备同步类型（#16 WebDAV cross-device sync，2026-05-09）。
+ * 与 electron/sync/sync-manager.ts 的导出类型保持字段一致；密码字段绝不会
+ * 通过 IPC 返回，UI 仅看到 hasPassword 标志。
+ *
+ * @author zhi.qu
+ * @date 2026-05-09
+ */
+type WebDavSyncInterval = 'off' | 'hourly' | 'every-6-hours' | 'daily'
+
+interface WebDavSyncConfig {
+  enabled: boolean
+  endpoint: string
+  username: string
+  basePath: string
+  ignoreTlsErrors: boolean
+  autoInterval: WebDavSyncInterval
+  /** 远端保留份数，clamp 到 [1, 30]，默认 7 */
+  retentionCount: number
+  /** UI 用：是否已存有效密码（不返回明文） */
+  hasPassword: boolean
+}
+
+interface WebDavSyncStatus {
+  inProgress: boolean
+  lastSyncAt: number | null
+  lastSyncStatus: 'success' | 'failed' | null
+  lastSyncDirection: 'backup' | 'restore' | null
+  lastSyncError: string | null
+  /** 当前设备的稳定 UUID */
+  deviceId: string
+  storageBackend: string
+  storageBackendSecure: boolean
+  storageBackendHint: string
+}
+
+interface BackupNowResult {
+  ok: boolean
+  filename?: string
+  totalBytes?: number
+  durationMs?: number
+  error?: string
+}
+
+interface RestoreFromResult {
+  ok: boolean
+  filename: string
+  durationMs?: number
+  error?: string
+  /** 兜底备份位置；UI 可显示给用户 */
+  preRestoreLocalPath?: string
+}
+
+interface RemoteBackupItem {
+  filename: string
+  size: number
+  /** ISO 字符串；webdav 5.x lastmod 通常是 RFC1123，原样返回 */
+  lastModified: string
+}
+
+/** sync:set-config 入参；password 是可选明文密码 */
+interface WebDavSetConfigInput {
+  enabled?: boolean
+  endpoint?: string
+  username?: string
+  basePath?: string
+  ignoreTlsErrors?: boolean
+  autoInterval?: WebDavSyncInterval
+  retentionCount?: number
+  /** undefined=不修改，''/null=清空，非空=加密保存 */
+  password?: string | null
+}
+
+/** sync:test-connection 入参；不填则用持久化配置 */
+interface WebDavTestConnectionInput {
+  endpoint?: string
+  username?: string
+  password?: string
+  basePath?: string
+  ignoreTlsErrors?: boolean
+}
+
+/** 同步历史一行（与 electron/db-sync-history.ts 的 SyncHistoryRow 字段一致） */
+interface SyncHistoryRow {
+  id: number
+  direction: 'backup' | 'restore'
+  status: 'success' | 'failed' | 'in_progress'
+  file_count: number
+  total_bytes: number
+  duration_ms: number
+  remote_filename: string | null
+  error_message: string | null
+  created_at: number
+}
+
 interface SearchResult {
   path: string
   matches: string[]
@@ -702,6 +797,32 @@ interface ElectronAPI {
   embedServerStart: () => Promise<{ port: number }>
   /** 显式关闭 widget-server，并把 settings 标 disabled */
   embedServerStop: () => Promise<{ ok: true }>
+
+  // ─── WebDAV 跨设备同步（#16 WebDAV cross-device sync，2026-05-09） ──────
+  /** 读取当前 WebDAV 同步配置（不含密码明文） */
+  syncGetConfig: () => Promise<WebDavSyncConfig>
+  /** 部分更新 WebDAV 同步配置；写入后立即重注册 cron */
+  syncSetConfig: (input: WebDavSetConfigInput) => Promise<WebDavSyncConfig>
+  /** 清空 WebDAV 密码（不影响其他配置项） */
+  syncClearCredentials: () => Promise<{ ok: true }>
+  /** 测试 WebDAV 连接；input 为空时用持久化配置 */
+  syncTestConnection: (input?: WebDavTestConnectionInput) => Promise<{ ok: boolean; reason?: string }>
+  /** 立即触发一次备份；并发时主进程抛 sync_already_running */
+  syncBackupNow: () => Promise<BackupNowResult>
+  /** 列出远端可用备份（按 lastModified 倒序） */
+  syncListRemoteBackups: () => Promise<RemoteBackupItem[]>
+  /** 从远端备份恢复；ok=true 后主进程自动 relaunch + exit */
+  syncRestoreFrom: (filename: string) => Promise<RestoreFromResult>
+  /** 当前同步状态 + safeStorage 后端信息 */
+  syncGetStatus: () => Promise<WebDavSyncStatus>
+  /** 同步历史最近 limit 条（默认 30，最多 100） */
+  syncListHistory: (opts?: {
+    limit?: number
+    direction?: 'backup' | 'restore'
+    status?: 'success' | 'failed' | 'in_progress'
+  }) => Promise<SyncHistoryRow[]>
+  /** 清空同步历史；返回删除条数 */
+  syncClearHistory: () => Promise<number>
 
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) => Promise<void>

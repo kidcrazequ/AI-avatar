@@ -59,6 +59,7 @@
     "@tailwindcss/postcss": "^4.2.2",
     "7zip-bin": "^5.2.0",
     "adm-zip": "^0.5.16",
+    "archiver": "^7.0.1",
     "autoprefixer": "^10.4.27",
     "axios": "^1.14.0",
     "better-sqlite3": "^12.8.0",
@@ -86,6 +87,7 @@
     "tailwindcss": "^4.2.2",
     "tar": "^7.4.3",
     "turndown": "^7.2.0",
+    "webdav": "^5.10.0",
     "word-extractor": "^1.0.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.12"
@@ -96,6 +98,7 @@
     "@playwright/test": "^1.58.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/adm-zip": "^0.5.7",
+    "@types/archiver": "^6.0.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jsdom": "^28.0.1",
     "@types/node": "^25.5.0",

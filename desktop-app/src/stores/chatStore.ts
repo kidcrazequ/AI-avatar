@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, detectReasoning } from '../services/llm-service'
 import { MEMORY_CHAR_LIMIT, localDateString, hashQueryContent } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
+import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
@@ -2636,6 +2637,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } else {
       tools = AVATAR_TOOLS
     }
+
+    tools = await maybeRerankToolsWithIss(content, tools)
+
     logPerf('tools:selected', `mode=${currentMode} count=${tools.length} ragDirect=${ragDirectAnswerFastPath}`)
 
     /**

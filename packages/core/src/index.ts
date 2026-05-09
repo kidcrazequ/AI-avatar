@@ -47,6 +47,17 @@ export type { Chapter, FormatProgress, LLMCallFn } from './document-formatter'
 export { buildKnowledgeIndex, saveIndex, loadIndex, CONTEXT_PROMPT } from './knowledge-indexer'
 export type { EmbeddingCallFn, IndexerConfig, IndexBuildProgress } from './knowledge-indexer'
 
+export { ISS_DEFAULT_TOP_N, ISS_DEFAULT_PINNED_TOOL_NAMES, SkillReranker } from './skill-reranker'
+export type { SkillRerankerOptions } from './skill-reranker'
+export type { ToolForRerank } from './skill-reranker-types'
+export {
+  stableToolDocHash,
+  buildToolDocForEmbedding,
+  parseSkillEmbeddingCacheJson,
+  serializeSkillEmbeddingCacheJson,
+  trimSkillEmbeddingCache,
+} from './utils/skill-embedding-store'
+
 export { retrieveAndBuildPrompt, ENTITY_EXTRACT_PROMPT } from './rag-answerer'
 export type { RAGConfig } from './rag-answerer'
 

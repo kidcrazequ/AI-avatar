@@ -3,7 +3,7 @@ import { useThemeStore, THEMES } from '../stores/themeStore'
 import { DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL } from '../services/llm-service'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
-import { localDateString } from '@soul/core/browser'
+import { ISS_DEFAULT_TOP_N, localDateString } from '@soul/core/browser'
 import { TOOL_NAME_MAP } from '../lib/tool-name-map'
 
 /**
@@ -242,6 +242,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [showImageKey, setShowImageKey] = useState(false)
   const [showTavilyKey, setShowTavilyKey] = useState(false)
   const [integrationsStatusMsg, setIntegrationsStatusMsg] = useState('')
+  /** P0 ISS：工具 embedding 重排（依赖 OCR 槽位的 DashScope Key 作 embedding） */
+  const [issRerankEnabled, setIssRerankEnabled] = useState(true)
+  const [issTopNInput, setIssTopNInput] = useState(String(ISS_DEFAULT_TOP_N))
+  const [issStatusMsg, setIssStatusMsg] = useState('')
   // MCP servers 状态
   const [mcpServers, setMcpServers] = useState<McpServerListItem[]>([])
   const [mcpStatusMsg, setMcpStatusMsg] = useState('')
@@ -255,6 +259,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const wikiTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const memoryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const integrationsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const issTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => () => {
     clearTimeout(statusTimerRef.current)
@@ -263,6 +268,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     clearTimeout(wikiTimerRef.current)
     clearTimeout(memoryTimerRef.current)
     clearTimeout(integrationsTimerRef.current)
+    clearTimeout(issTimerRef.current)
   }, [])
 
   const loadSeqRef = useRef(0)
@@ -284,13 +290,15 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setSlots(prev => loadedSlots.map((s, i) => ({ ...s, showApiKey: prev[i]?.showApiKey ?? false })))
 
       // 并行加载 Wiki / 记忆 / 定时任务 / 工具集成设置
-      const [wikiInject, wikiSediment, nudge, cronConfigs, tavilyKey, imageKey] = await Promise.all([
+      const [wikiInject, wikiSediment, nudge, cronConfigs, tavilyKey, imageKey, issEn, issTop] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
         window.electronAPI.getSetting('memory_nudge_interval'),
         window.electronAPI.getCronConfig(),
         window.electronAPI.getSetting('tavily_api_key'),
         window.electronAPI.getSetting('image_api_key'),
+        window.electronAPI.getSetting('iss_skill_rerank_enabled'),
+        window.electronAPI.getSetting('iss_skill_rerank_top_n'),
       ])
       if (loadSeqRef.current !== seq) return
       setWikiInjectRag(wikiInject === 'true')
@@ -302,6 +310,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       }
       setTavilyApiKey(tavilyKey ?? '')
       setImageApiKey(imageKey ?? '')
+      setIssRerankEnabled(issEn !== 'false')
+      setIssTopNInput(issTop && issTop.trim() !== '' ? issTop : String(ISS_DEFAULT_TOP_N))
 
       // MCP servers（独立 try，避免一个面板失败影响其他设置加载）
       try {
@@ -567,6 +577,27 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
    * 保存「工具集成」设置（Tavily Search API Key 等外部工具凭据）。
    * Key 存入 settings 表，主进程 ToolRouter 通过注入的 getSetting 读取。
    */
+  /** ISS 配置写入 settings 表；关闭时不影响其他集成项 */
+  const handleSaveIssSettings = async () => {
+    const n = parseInt(issTopNInput.trim(), 10)
+    if (!Number.isFinite(n) || n < 5 || n > 64) {
+      setIssStatusMsg('INVALID — top N 取值 5~64')
+      return
+    }
+    try {
+      await Promise.all([
+        window.electronAPI.setSetting('iss_skill_rerank_enabled', issRerankEnabled ? 'true' : 'false'),
+        window.electronAPI.setSetting('iss_skill_rerank_top_n', String(n)),
+      ])
+      setIssStatusMsg('SAVED')
+      window.dispatchEvent(new CustomEvent('settings-updated'))
+      clearTimeout(issTimerRef.current)
+      issTimerRef.current = setTimeout(() => setIssStatusMsg(''), 2000)
+    } catch (error) {
+      setIssStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
   const handleSaveIntegrations = async () => {
     try {
       await Promise.all([
@@ -1125,6 +1156,49 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       <div className="font-game text-[11px] text-px-text-dim mt-1.5">
                         留空则禁用 generate_image 工具；本地 sqlite 加密存储，不会上传任何服务器
                       </div>
+                    </div>
+                  </div>
+
+                  {/* P0 ISS：智能工具筛选（embedding rerank） */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-game text-[14px] text-px-text">智能工具筛选 (ISS)</span>
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider">EMBED_RERANK</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      当可用工具多于 top N 时，用用户消息与工具描述的向量相似度截断列表，降低每次请求的 tools token。
+                      需要配置下方「OCR」槽位的 DashScope Key（与 text-embedding-v3 同源 endpoint）。
+                      网关工具 <span className="font-mono text-px-primary">list_mcp_tools</span> /{' '}
+                      <span className="font-mono text-px-primary">call_mcp_tool</span> 等始终保留。
+                    </p>
+                    <label className="flex items-center gap-2 font-game text-[13px] text-px-text cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={issRerankEnabled}
+                        onChange={(e) => setIssRerankEnabled(e.target.checked)}
+                        className="h-4 w-4 accent-px-primary"
+                      />
+                      启用 ISS
+                    </label>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">TOP N（默认 {ISS_DEFAULT_TOP_N}）</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={64}
+                        value={issTopNInput}
+                        onChange={(e) => setIssTopNInput(e.target.value)}
+                        className="pixel-input w-28 font-mono text-[13px]"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={handleSaveIssSettings} className="pixel-btn-primary text-[12px] px-3 py-1">
+                        保存 ISS 设置
+                      </button>
+                      <span className={`font-game text-[12px] ${
+                        issStatusMsg.includes('SAVED') ? 'text-px-success' :
+                        issStatusMsg.includes('FAIL') || issStatusMsg.includes('INVALID') ? 'text-px-danger' : 'text-px-text-dim'
+                      }`}>{issStatusMsg}</span>
                     </div>
                   </div>
 

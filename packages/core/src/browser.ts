@@ -88,3 +88,19 @@ export {
   classifyAttachmentRoute,
 } from './utils/attachment-types'
 export type { AttachmentRoute } from './utils/attachment-types'
+
+// ─── ISS（Intelligent Skill Selection）纯函数入口（无 fs/path） ───────────────
+export {
+  ISS_DEFAULT_TOP_N,
+  ISS_DEFAULT_PINNED_TOOL_NAMES,
+  SkillReranker,
+} from './skill-reranker'
+export type { EmbeddingCallFn as IssEmbeddingCallFn, SkillRerankerOptions } from './skill-reranker'
+export type { ToolForRerank } from './skill-reranker-types'
+export {
+  stableToolDocHash,
+  buildToolDocForEmbedding,
+  parseSkillEmbeddingCacheJson,
+  serializeSkillEmbeddingCacheJson,
+  trimSkillEmbeddingCache,
+} from './utils/skill-embedding-store'

@@ -31,6 +31,7 @@
     "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='",
     "retrofit:skills": "tsx ../scripts/retrofit-skills.ts",
     "backfill:life": "tsx ../scripts/backfill-life.ts",
+    "knowledge:inspect": "tsx scripts/knowledge-inspect.ts",
     "test:simulation": "NODE_PATH=./test-support/node_modules npx --yes tsx --test src/services/source-anchor-resolver.test.ts src/services/message-source-annotations.test.ts src/services/message-source-hydration.test.ts src/services/source-reference-actions.test.ts src/services/source-reference-preview.test.ts src/services/reference-simulation.test.ts",
     "test:source-smoke": "NODE_PATH=./test-support/node_modules npx --yes tsx scripts/source-reference-smoke.ts",
     "test:conversation-smoke": "NODE_PATH=./test-support/node_modules npx --yes tsx scripts/conversation-route-smoke.ts",

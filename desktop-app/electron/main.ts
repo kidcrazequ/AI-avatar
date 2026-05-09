@@ -20,6 +20,7 @@ import fs from 'fs'
 import os from 'os'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
+import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
 import {
@@ -384,7 +385,13 @@ function initManagers() {
     }
   })
   soulLoader = new SoulLoader(avatarsPath)
-  db = new DatabaseManager()
+  // 对话消息 JSONL 双写器（2026-05-09 #2 SQLite + JSONL 双写）：
+  // 在 SQLite 主存储成功提交后异步追加 JSONL 备份文件，写入失败仅 warn 不阻塞。
+  // logger 适配器：Logger 没有 warn() 方法，统一通过 logEvent('warn', ...) 走活动日志。
+  const jsonlAppender = ConversationJsonlAppender.getInstance(app.getPath('userData'), {
+    warn: (msg, err) => logger.logEvent('warn', msg, err instanceof Error ? err.message : err === undefined ? undefined : String(err)),
+  })
+  db = new DatabaseManager(undefined, jsonlAppender)
   avatarManager = new AvatarManager(avatarsPath, templatesPath)
   testManager = new TestManager(avatarsPath)
   skillManager = new SkillManager(avatarsPath)

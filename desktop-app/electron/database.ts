@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import { app } from 'electron'
+import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
 const CURRENT_SCHEMA_VERSION = 8
@@ -119,6 +120,15 @@ export interface AttachmentRow {
 export class DatabaseManager {
   private db: Database.Database
   private closed = false
+  /**
+   * 可选的 JSONL 双写器。
+   *
+   * 注入后 saveMessage 会在 SQLite 事务提交成功后 fire-and-forget 追加一条 JSONL 备份。
+   * 不注入（构造时省略参数）则保持纯 SQLite 单写行为，便于单测与向后兼容。
+   *
+   * 见 .cursor/plans/对手对比融合执行计划_2026-05.plan.md §4.2
+   */
+  private readonly jsonlAppender?: ConversationJsonlAppender
 
   /** 高频查询的预编译 Statement 缓存，避免每次调用都重新编译 SQL */
   private stmts!: {
@@ -134,13 +144,14 @@ export class DatabaseManager {
     searchAll: Database.Statement
   }
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, jsonlAppender?: ConversationJsonlAppender) {
     const defaultPath = path.join(app.getPath('userData'), 'xiaodu.db')
     this.db = new Database(dbPath || defaultPath)
     this.db.pragma('foreign_keys = ON')
     this.db.pragma('journal_mode = WAL')
     this.initialize()
     this.prepareStatements()
+    this.jsonlAppender = jsonlAppender
   }
 
   /**
@@ -690,6 +701,20 @@ export class DatabaseManager {
       this.stmts.updateConversationTime.run(now, conversationId)
     })
     saveTx()
+
+    // SQLite 主存储已成功提交后，再把同一条消息异步追加到 JSONL 双写文件。
+    // 必须放在事务外：appender 走 fs.promises 异步 IO，不能阻塞 SQLite 事务也不能让其失败回滚。
+    // 不 await：appender.append 内部已 try/catch + logger.warn 兜底（Promise 永不 reject），
+    // 直接 fire-and-forget 即可保持 saveMessage 同步签名与 IPC 响应延迟。
+    void this.jsonlAppender?.append(conversationId, {
+      id,
+      conversationId,
+      role,
+      content,
+      toolCallId: toolCallId ?? null,
+      imageUrls: imageUrls ?? null,
+      ts: now,
+    })
 
     return id
   }

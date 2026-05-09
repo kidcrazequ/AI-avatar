@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+## v0.11.0 (2026-05-09)
+
+### 新功能：AI 分身「人生经历」系统（Phase 1-6 完整落地）
+
+让每个分身在「灵魂 + 知识库 + 技能」之外，再拥有一段 **完整可生长的人生**。生成的人生由「出厂记忆」（≤ 8K 字 consolidated.md，注入 system prompt）+ **60-100 个 episode 全文**（按需通过 `read_life_episode` 工具读取）组成；支持真实时间映射（1×/12×/52× 或冻结），cron 自动推进，遵循「不主动展开往事 / 被问起再翻日记 / 风格沉淀不背诵 / 不剧透未来」四条人生使用守则。
+
+#### Core 模块（`packages/core/src/life/`）
+
+- **`types.ts`** — `LifeManifest` / `LifeTimelineEntry` / `LifeEpisode` / `LifeProgress` / `LifeFailedEpisode` 完整 schema，与 plan 1.1/1.2 节字段一一对应
+- **`store.ts`** — `life/` 目录读写纯函数：`getLifeDir` / `readLifeManifest` / `writeLifeTimeline` / `appendLifeTimelineEntry` / `readLifeEpisode` / `writeLifeEpisode` 等 20+ 个，所有写操作走 `atomicWrite`（临时文件 + rename）防进程崩溃损坏；`avatarId` / `episodeId` 经 `assertSafeSegment` + 拒 `.` 开头 + 拒扩展名三重校验
+- **`generator.ts`** — 4 Stage Pipeline：
+  - Stage 0 `generateManifest` — 角色名 / 出生地 / 家庭背景 / personalityArc / professionalSpine / majorRelationships
+  - Stage 1 `generateOutline` — 按年龄段（婴幼/童年/青少年/青年/壮年/中年/老年）分配事件配额（`DEFAULT_OUTLINE_TARGET_COUNTS`）
+  - Stage 2 `generateEpisode` — 逐事件生成 2-5K 字传记正文，断点续传 + `failedEpisodes` 跳过
+  - Stage 3 `applyAlgorithmicForgetting` + `generateConsolidated` — 双重遗忘：算法初筛（重要性 + 情感强度 + 类别 / `DEFAULT_FORGETTING_WEIGHTS`）→ LLM 写 ≤ 8K 字 consolidated.md（`CONSOLIDATED_MAX_CHARS`）
+- **`grower.ts`** — Phase 2 持续生长（cron Stage 4）：`advanceLife` / `advanceAllAvatars` / `computeAvatarDeltaMonths`（按 timeScale 算时间增量）/ `samplePendingMonths` / `shouldReconsolidate`（每 +5 个事件触发一次重整）；进程内锁 `__clearGrowthLocksForTesting` 防 cron 与初始化生成冲突
+- **`density.ts`** — 事件密度算法（按年龄分布 + `DEFAULT_DENSITY_WEIGHTS`），决定每月该新增几个事件
+- **`forgetter.ts`** — 算法遗忘 + consolidated 触发条件
+- **`prompts.ts`** — 4 套 system prompt：`MANIFEST_SYSTEM_PROMPT` / `OUTLINE_SYSTEM_PROMPT` / `EPISODE_SYSTEM_PROMPT` / `CONSOLIDATED_SYSTEM_PROMPT`，配套 `buildXxxPrompt()` 模板拼装函数
+
+#### 桌面端面板（`desktop-app/src/components/`）
+
+- **`LifePanel.tsx`** — 「人生」主面板，5 态状态机：`no-life` / `generating` / `failed` / `ready` / `growing`，订阅 `life:progress` 事件实时刷新进度条
+- **`life/LifeTimeline.tsx`** — 时间轴展示，按年龄分组，区分 `remembered` / `blurred` / `forgotten` 三种 consolidationStatus
+- **`life/LifeEpisodeViewer.tsx`** — 单事件正文阅读器（react-markdown + remark-gfm）
+- **`life/LifeTimeScaleModal.tsx`** — 时间速率切换弹窗（1×/12×/52×/冻结）
+- **`wizard/LifeScriptStep.tsx`** — 创建向导新增第 5 步「人生剧本」（默认勾选 + 30 岁 + 1× 真实同步）
+
+#### Electron 主进程（`desktop-app/electron/`）
+
+- **`main.ts`** — 注册全套 `life:*` IPC handler（+337 行）：`start-generation` / `read-bundle` / `read-episode` / `cancel` / `retry` / `update-time-scale` / `delete` 等，所有 handler 走 `wrapHandler` 统一错误处理
+- **`preload.ts`** — `window.electronAPI.life.*` API 暴露（+42 行）
+- **`cron-scheduler.ts`** — 注册「人生持续生长」cron 任务（+130 行），调用 `advanceAllAvatars` 推进所有启用 `growthEnabled` 的分身，与初始化生成共享进程内锁
+- **`global.d.ts`** — 渲染端 `LifeManifest` / `LifeTimelineEntry` / `LifeProgress` 平行类型声明 + life IPC API 类型（+244 行）
+
+#### Soul 注入（`packages/core/src/soul-loader.ts`）
+
+- 启动时读取 `avatars/<id>/life/consolidated.md`，注入到 system prompt 的「知识库之后、工具说明之前」位置，标题为「# 我的人生（出厂记忆）」
+- 同步注入「人生使用守则」4 条：
+  1. **不主动展开往事**：除非用户明确问起，否则不要在日常回答中讲人生故事
+  2. **被问起时再翻日记**：用 `read_life_episode(id)` 取完整正文
+  3. **风格沉淀，不直接背诵**：判断 / 隐喻 / 价值偏好可以从经历"长"出来
+  4. **不剧透未来**：视角停在当前年龄
+- 工具说明区新增 `read_life_episode(id)` 行
+
+#### 工具层（`packages/core/src/tool-router.ts`）
+
+- 新增 `read_life_episode(id)` 工具：让分身在用户问起具体往事时"翻日记"读取 episode 全文（2-5K 字 × 60-100 个，不进 prompt 仅按需读取，节省 token）
+- 路径安全：`avatarId` 在外层 execute 已经过 `assertSafeSegment`，`episodeId` 通过 `getLifeEpisodePath` → `assertSafeEpisodeId` 三重校验
+
+#### 共享 UI（`desktop-app/src/components/shared/`）
+
+- **`Toast.tsx`** — 新增可选 `onClick` 回调：传入时切换为 `<button>` 角色 + `cursor-pointer`，用于"点击 Toast 跳转面板"场景（如分身创建后提示去 LifePanel 看进度）
+
+#### 渲染端粘合（`desktop-app/src/`）
+
+- **`App.tsx`** — 注册「人生」面板 Tab（图标 ❀）+ `showClickableToast()`（5s 显示，点击关闭并触发回调）+ `handleAvatarCreated` 新增 `lifeStarted` 参数
+- **`CreateAvatarWizard.tsx`** — 5 步 → 6 步向导（插入「人生剧本」），创建成功后异步触发 `window.electronAPI.life.startGeneration()`（fire-and-forget，失败仅 logEvent 不阻塞向导）；fallback 黄色提示「→ 去设置配置」
+- **`services/life-service.ts`** — 渲染端 service 封装 + `LifeBundle` / `LifePanelMode` / `VALID_TIME_SCALES` 等纯函数
+
+### 测试（`packages/core/src/tests/`）
+
+- **`life-store.test.ts`** — 路径安全 + atomicWrite 原子性 + 读写双向一致性
+- **`life-forgetter.test.ts`** — 算法遗忘权重 + consolidated 触发阈值
+- **`life-generator.test.ts`** — 4 Stage Pipeline 各阶段独立性 + 断点续传 + failedEpisodes 跳过
+- **`life-density.test.ts`** — 年龄段事件密度分布
+- **`life-grower.test.ts`** — `computeAvatarDeltaMonths` / `samplePendingMonths` / `shouldReconsolidate` + 进程内锁防并发
+- **`soul-loader.test.ts`** — consolidated.md 注入位置 + 4 条使用守则注入 + 文件不存在时不阻塞
+
+### 工具脚本（`scripts/`）
+
+- **`backfill-life.ts`** — 历史分身回填扫描脚本：扫描 `avatars/` 下所有分身，分入 `ok` / `generating` / `failed` / `missing` 四类
+  - **不自动调 LLM**（每分身约 50 万 tokens，必须用户在桌面端手动触发）
+  - 支持 `--root` / `--json` 参数，存在 missing/failed 时退出码 2（CI 友好）
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.10.1 → 0.11.0
+- **`packages/core/package.json`** — `test` / `test:all` 脚本加入 6 个新测试文件
+- **`packages/core/src/index.ts`** — 公开导出整套 life 模块 API（types / store / generator / grower / density / prompts），共 100+ 个新导出
+
 ## v0.10.1 (2026-05-08)
 
 ### 新功能

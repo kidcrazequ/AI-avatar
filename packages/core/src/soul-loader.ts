@@ -123,6 +123,11 @@ export class SoulLoader {
     // GAP10: 读取 shared/knowledge/ 目录（共享知识库）
     const sharedKnowledgeFiles = this.readDirectory(path.join(this.sharedPath, 'knowledge'))
 
+    // Phase 5: 读取 life/consolidated.md（出厂人生记忆）
+    // 文件不存在返回空字符串，loadAvatar 拼装时按空跳过——
+    // 不论是分身没启用人生还是后台尚未生成完，都不应阻塞 system prompt 拼装。
+    const lifeConsolidated = this.readFileSafe(path.join(avatarPath, 'life', 'consolidated.md'))
+
     // 递归读取 knowledge/ 目录下所有知识文件（含子目录如 imports/）注入 system prompt
     const knowledgeRootFiles = this.readDirectory(path.join(avatarPath, 'knowledge'))
 
@@ -139,6 +144,7 @@ export class SoulLoader {
       '- **search_knowledge(query)**: 在知识库中检索相关内容片段，用于查找政策、电价、产品参数、项目案例、PDF/Word/Markdown/手写笔记等非结构化资料。结果会附 `[来源: knowledge/...#Lx-Ly]` 锚点，最终回答应尽量沿用。',
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
+      '- **read_life_episode(id)**: 读取自己人生时间轴中某个具体事件的完整正文（id 形如 `ep-0007-first-snow`）。仅在用户问起具体往事、需要还原细节时调用；日常对话不要主动调用。',
       '- **list_design_systems(category?)**: 列出共享设计系统语料（`shared/design-systems/design-md`）中的品牌与分类，便于先选品牌再读取。',
       '- **read_design_system(slug, category?)**: 读取指定品牌 DESIGN.md。若 slug 在多个分类重复，需补 category 精确定位。',
       '- **search_design_systems(query, top_n?)**: 在共享设计系统语料中做关键词检索，返回候选品牌、分类和片段。',
@@ -273,6 +279,21 @@ export class SoulLoader {
         stableParts.push('5. 在回答末尾告知用户："已输出到 workspaces/<conversationId>/exports/<filename>.xlsx，可在桌面端「设置 → 打开工作区目录」查看"\n\n')
         stableParts.push('严禁：跳过 export_excel 直接说"我已生成 Excel 文件"——没调工具就是没生成，属于幻觉。\n')
       }
+    }
+
+    // Phase 5: 注入「我的人生（出厂记忆）」+ 人生使用守则
+    // 位置：知识库之后、工具说明之前。consolidated.md 由 forgetter.ts 负责
+    // 8K 字硬上限（CONSOLIDATED_MAX_CHARS），此处直接整段塞入即可。
+    if (lifeConsolidated.trim()) {
+      stableParts.push('\n\n---\n\n# 我的人生（出厂记忆）\n\n')
+      stableParts.push(lifeConsolidated)
+      stableParts.push('\n\n## 人生使用守则\n\n')
+      stableParts.push([
+        '1. **不主动展开往事**：除非用户明确问起你的过去/经历/某段时间的事，否则不要在日常回答中主动讲人生故事，避免"卖惨"或"老干部回忆录"语气。',
+        '2. **被问起时再翻日记**：用户问到具体年龄/时间/事件时，可调用 `read_life_episode(id)` 取该事件的完整正文（id 见上文「我的人生」章节里出现过的事件标识，形如 `ep-0007-first-snow`），引用具体细节而不是泛泛而谈。',
+        '3. **风格沉淀，不直接背诵**：日常回答里的判断、隐喻、价值偏好可以从这些经历里"长"出来，但不必复述事件本身——读者关心的是观点。',
+        '4. **不剧透未来**：你的视角停在当前年龄；不要谈论"未来某年我会..."这种超出当前的展望。',
+      ].join('\n'))
     }
 
     // 文档输出工作流（PDF / Word / Markdown）— 不依赖 Excel/知识库，所有分身通用

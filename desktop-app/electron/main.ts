@@ -18,7 +18,7 @@ app.disableHardwareAcceleration()
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getMemoryStats, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
@@ -479,6 +479,19 @@ app.whenReady().then(() => {
     }
   } catch (err) {
     console.error('[Main] 恢复 cron 任务失败:', err)
+  }
+
+  // 「人生持续生长」每日 0:30 触发一次（Phase 2）。
+  // 不需要从 DB 恢复——只要主进程跑就一直注册（用户可通过 toggleGrowth 关闭单分身）。
+  try {
+    cronScheduler.scheduleDailyCallback('life-advance-all', 0, 30, async () => {
+      await runLifeAdvanceAllAvatars().catch((err) => {
+        if (logger) logger.error('life-advance-all', err instanceof Error ? err : new Error(String(err)))
+      })
+    })
+    if (logger) logger.activity('life-advance-all', '已注册 daily 0:30 cron')
+  } catch (err) {
+    console.error('[Main] 注册 life-advance-all cron 失败:', err)
   }
 
   // 每日自动备份（每 24 小时一次，启动时立即执行一次）
@@ -1340,6 +1353,324 @@ wrapHandler('consolidate-memory', async (_, avatarId: string, content: string, a
   if (logger) logger.activity('consolidate-memory', `chars: ${content.length} → ${consolidated.length}`)
   return consolidated
 })
+
+// ─── 人生经历（Avatar Life Experience，Phase 0）──────────────────────────────
+//
+// 仅暴露读取 / 删除骨架；生成、推进、reconsolidate 等写操作由 Phase 1/2 注册。
+// 所有 handler 强制 assertSafeSegment(avatarId)，episodeId 由 store 层
+// assertSafeEpisodeId 兜底校验，复用 read-memory 模式（不存在文件返回 null/空）。
+//
+// @author zhi.qu
+// @date 2026-05-09
+
+/** life:get-manifest: 读取 life/manifest.json，不存在返回 null */
+wrapHandler('life:get-manifest', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return readLifeManifest(avatarsPath, avatarId)
+})
+
+/** life:list-timeline: 读取 life/timeline.json，不存在返回 [] */
+wrapHandler('life:list-timeline', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return readLifeTimeline(avatarsPath, avatarId)
+})
+
+/** life:read-episode: 读取 life/episodes/<id>.md 正文，不存在返回 null */
+wrapHandler('life:read-episode', async (_, avatarId: string, episodeId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return readLifeEpisode(avatarsPath, avatarId, episodeId)
+})
+
+/** life:get-progress: 读取 life/progress.json，不存在返回 null */
+wrapHandler('life:get-progress', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return readLifeProgress(avatarsPath, avatarId)
+})
+
+/** life:read-consolidated: 读取 life/consolidated.md，不存在返回空字符串 */
+wrapHandler('life:read-consolidated', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return readLifeConsolidated(avatarsPath, avatarId)
+})
+
+/**
+ * life:delete-episode: 删除单个 episode 的 .md 文件，并从 timeline 中移除条目。
+ * 返回 boolean 表示是否实际移除了 timeline 条目（幂等：不存在不报错）。
+ *
+ * Phase 0 只做底层删除；Phase 2 grower 之后会接入 "删除后局部重生成" 链路。
+ */
+wrapHandler('life:delete-episode', async (_, avatarId: string, episodeId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const removed = await deleteLifeEpisode(avatarsPath, avatarId, episodeId)
+  if (logger) {
+    logger.activity('life:delete-episode', `avatar=${avatarId} episode=${episodeId} removed=${removed}`)
+  }
+  return removed
+})
+
+// ─── 人生经历（Avatar Life Experience，Phase 1）──────────────────────────────
+//
+// 生成器 IPC：start / cancel / retry。
+// - 生成本身在主进程后台跑（不阻塞 IPC 调用），通过 webContents.send('life:progress')
+//   实时推进度到渲染端
+// - 每个分身在 lifeAbortControllers 里维护一个 AbortController，cancel/retry 时复用
+// - retry = cancel + 重新调用 generateLife（generator 内部断点续传，已完成的不重生成）
+//
+// @author zhi.qu
+// @date 2026-05-09
+
+/**
+ * 用户在创建向导第 5 步选择的人生骨架参数。
+ * 通过 IPC 透传给主进程，再喂给 generator 的 LifeUserParams。
+ */
+interface LifeStartGenerationParams {
+  /** 18-80 岁 */
+  currentAge: number
+  /** 1.0 / 12.0 / 52.0 / 0 */
+  timeScale: number
+  /** 是否启用持续生长 */
+  growthEnabled: boolean
+  /** 用户额外要求（可空） */
+  extraHints?: string
+  /** 分身展示名（用于 prompt） */
+  avatarName: string
+}
+
+/** 每个 avatarId 对应一个 AbortController；start 时新建，cancel/retry 时取消 */
+const lifeAbortControllers = new Map<string, AbortController>()
+
+/**
+ * 构造 LifeLLMConfig：从 SQLite settings 读 creation_* / chat_*，creation 缺失则
+ * fallback 到 chat。creationConfigured 旗标决定 generator 内部走哪套并写
+ * progress.usedFallback。
+ */
+function buildLifeLLMConfig(): LifeLLMConfig {
+  const chatApiKey = getDb().getSetting('chat_api_key') ?? ''
+  const chatBaseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  if (!chatApiKey) {
+    throw new Error('未配置 chat_api_key，请先在设置里填入 LLM API Key（人生生成至少需要对话模型）')
+  }
+  const chatLLM: LLMCallFn = createLLMFn(chatApiKey, chatBaseUrl, chatModel)
+
+  const creationApiKey = getDb().getSetting('creation_api_key') ?? ''
+  const creationBaseUrl = getDb().getSetting('creation_base_url') ?? chatBaseUrl
+  const creationModel = getDb().getSetting('creation_model') ?? chatModel
+  const creationConfigured = creationApiKey.length > 0
+  const creationLLM: LLMCallFn = creationConfigured
+    ? createLLMFn(creationApiKey, creationBaseUrl, creationModel)
+    : chatLLM
+
+  return { creationLLM, chatLLM, creationConfigured }
+}
+
+/**
+ * 启动单个分身的人生生成（内部函数，被 start / retry 复用）。
+ * 启动 + 立即返回；后台异步跑 generateLife。
+ *
+ * @returns started=true 表示已启动；usedFallback 表示是否走的 chatModel
+ */
+function spawnLifeGeneration(avatarId: string, params: LifeStartGenerationParams): { started: true; usedFallback: boolean } {
+  if (typeof params.currentAge !== 'number' || params.currentAge < 1 || params.currentAge > 100) {
+    throw new Error(`非法 currentAge: ${params.currentAge}（应在 1-100）`)
+  }
+  if (![0, 1, 12, 52].includes(params.timeScale)) {
+    throw new Error(`非法 timeScale: ${params.timeScale}（应为 0/1/12/52）`)
+  }
+
+  const llms = buildLifeLLMConfig()
+  const userParams: LifeUserParams = {
+    currentAge: params.currentAge,
+    timeScale: params.timeScale,
+    growthEnabled: params.growthEnabled !== false,
+    extraHints: params.extraHints ?? '',
+  }
+
+  const ac = new AbortController()
+  lifeAbortControllers.set(avatarId, ac)
+
+  // 后台异步执行；不 await，直接返回让 IPC 响应
+  // 进度通过 onProgress → webContents.send 推送
+  void (async () => {
+    try {
+      await generateLife({
+        avatarsRoot: avatarsPath,
+        avatarId,
+        avatarName: params.avatarName,
+        userParams,
+        llms,
+        onProgress: (progress: LifeProgress) => {
+          mainWindow?.webContents.send('life:progress', { avatarId, progress })
+        },
+        abortSignal: ac.signal,
+      })
+      if (logger) logger.activity('life:start-generation', `avatar=${avatarId} 完成`)
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        if (logger) logger.activity('life:start-generation', `avatar=${avatarId} 已取消`)
+      } else if (logger) {
+        logger.error('life:start-generation', err instanceof Error ? err : new Error(String(err)))
+      }
+    } finally {
+      lifeAbortControllers.delete(avatarId)
+    }
+  })()
+
+  return { started: true, usedFallback: !llms.creationConfigured }
+}
+
+/**
+ * life:start-generation: 异步启动初始化生成 Pipeline。
+ * IPC 调用立即返回 { started: true, usedFallback }；进度通过 'life:progress' 事件推送。
+ */
+wrapHandler('life:start-generation', async (_, avatarId: string, params: LifeStartGenerationParams) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (lifeAbortControllers.has(avatarId)) {
+    throw new Error(`分身 ${avatarId} 的人生生成已在进行中，请先取消再重试`)
+  }
+  return spawnLifeGeneration(avatarId, params)
+})
+
+/**
+ * life:cancel-generation: 取消正在进行的生成。已落盘的 manifest/timeline/episodes
+ * 都保留，progress.json 会被 generator 写为最后一次状态（含 lastError）。
+ */
+wrapHandler('life:cancel-generation', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const ac = lifeAbortControllers.get(avatarId)
+  if (!ac) {
+    return { cancelled: false }
+  }
+  ac.abort()
+  lifeAbortControllers.delete(avatarId)
+  if (logger) logger.activity('life:cancel-generation', `avatar=${avatarId}`)
+  return { cancelled: true }
+})
+
+/**
+ * life:retry-generation: 取消（如果有）+ 重新启动 generateLife。
+ * generator 内部按 progress.json 断点续传，已完成的 episode 不会重新生成。
+ */
+wrapHandler('life:retry-generation', async (_, avatarId: string, params: LifeStartGenerationParams) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const existing = lifeAbortControllers.get(avatarId)
+  if (existing) {
+    existing.abort()
+    lifeAbortControllers.delete(avatarId)
+    // 让 spawn 的 finally 完成清理后再启动新的
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  return spawnLifeGeneration(avatarId, params)
+})
+
+// ─── 持续生长（Phase 2，cron Stage 4） ──────────────────────────────────────
+//
+// 三个 IPC：
+// - life:set-time-scale  改 manifest.timeScale（合法 0/1/12/52）
+// - life:toggle-growth    改 manifest.growthEnabled
+// - life:advance-now      调试：立即推进单分身一次
+//
+// 一个 cron 触发的内部函数 runLifeAdvanceAllAvatars，daily 0:30 跑一次。
+
+/**
+ * 修改单分身的 timeScale。
+ * 合法值 0 / 1 / 12 / 52。修改后立即落盘 manifest.json。
+ */
+wrapHandler('life:set-time-scale', async (_, avatarId: string, timeScale: number) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (![0, 1, 12, 52].includes(timeScale)) {
+    throw new Error(`非法 timeScale: ${timeScale}（应为 0/1/12/52）`)
+  }
+  const manifest = await readLifeManifest(avatarsPath, avatarId)
+  if (!manifest) {
+    throw new Error(`分身 ${avatarId} 尚未创建人生骨架（缺 manifest.json）`)
+  }
+  const updated: LifeManifest = { ...manifest, timeScale }
+  await writeLifeManifest(avatarsPath, avatarId, updated)
+  if (logger) logger.activity('life:set-time-scale', `avatar=${avatarId} → ${timeScale}×`)
+  return { ok: true, timeScale }
+})
+
+/**
+ * 修改单分身的 growthEnabled。关闭后 cron 推进时跳过该分身。
+ */
+wrapHandler('life:toggle-growth', async (_, avatarId: string, enabled: boolean) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const manifest = await readLifeManifest(avatarsPath, avatarId)
+  if (!manifest) {
+    throw new Error(`分身 ${avatarId} 尚未创建人生骨架（缺 manifest.json）`)
+  }
+  const updated: LifeManifest = { ...manifest, growthEnabled: !!enabled }
+  await writeLifeManifest(avatarsPath, avatarId, updated)
+  if (logger) logger.activity('life:toggle-growth', `avatar=${avatarId} → ${enabled ? 'on' : 'off'}`)
+  return { ok: true, growthEnabled: !!enabled }
+})
+
+/**
+ * 调试用：立即推进单个分身。
+ * 调用方（LifePanel "立即推进" 按钮）期望同步等待结果，便于显示新增 episode 数。
+ * 与 cron 的 advanceLife 共享同一个内存级生长锁，并发安全。
+ */
+wrapHandler('life:advance-now', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const llms = buildLifeLLMConfig()
+  const result = await advanceLife({
+    avatarsRoot: avatarsPath,
+    avatarId,
+    llms,
+    onProgress: (progress: LifeProgress) => {
+      mainWindow?.webContents.send('life:progress', { avatarId, progress })
+    },
+  })
+  if (logger) {
+    logger.activity(
+      'life:advance-now',
+      `avatar=${avatarId} advanced=${result.advanced} new=${result.newEpisodes} failed=${result.failedEpisodes} reason=${result.skipReason ?? ''}`,
+    )
+  }
+  return result
+})
+
+/**
+ * cron 内部：遍历所有分身，逐个推进。
+ * 每个分身独立 try/catch，单分身失败不影响其他分身。
+ */
+async function runLifeAdvanceAllAvatars(): Promise<AdvanceAllAvatarsResult> {
+  const avatars = avatarManager.listAvatars()
+  const avatarIds = avatars.map(a => a.id)
+  if (avatarIds.length === 0) {
+    return { total: 0, advanced: 0, skipped: 0, failed: 0, details: [] }
+  }
+  // 没配 chat_api_key 时不做任何尝试（buildLifeLLMConfig 会 throw），避免 cron 反复报错
+  let llms: LifeLLMConfig
+  try {
+    llms = buildLifeLLMConfig()
+  } catch (err) {
+    if (logger) logger.activity('life-advance-all', `跳过：${err instanceof Error ? err.message : String(err)}`)
+    return { total: avatarIds.length, advanced: 0, skipped: avatarIds.length, failed: 0, details: [] }
+  }
+
+  const summary = await advanceAllAvatars({
+    avatarsRoot: avatarsPath,
+    avatarIds,
+    llms,
+    onAvatarProgress: (avatarId, progress) => {
+      mainWindow?.webContents.send('life:progress', { avatarId, progress })
+    },
+    onAvatarSettled: (avatarId, settle) => {
+      if ('error' in settle) {
+        if (logger) logger.error('life-advance-all', new Error(`avatar=${avatarId} ${settle.error}`))
+      }
+    },
+  })
+  if (logger) {
+    logger.activity(
+      'life-advance-all',
+      `total=${summary.total} advanced=${summary.advanced} skipped=${summary.skipped} failed=${summary.failed}`,
+    )
+  }
+  return summary
+}
 
 // ─── 用户画像管理（Feature 3）────────────────────────────────────────────────
 
@@ -2390,6 +2721,10 @@ function buildChartCacheEntry(
 ): ChartCacheEntry {
   const fileSnapshots = [
     captureFileSnapshot(path.join(avatarRoot, 'soul.md')),
+    // Phase 5: 人生记忆是分身人格的一部分（注入 system prompt），manifest 变化
+    // 意味着人生事件被推进 / reconsolidate / timeScale 被改 → 缓存应失效。
+    // 文件不存在时 captureFileSnapshot 自动返回 (mtime=0,size=0)，无人生分身也安全。
+    captureFileSnapshot(path.join(avatarRoot, 'life', 'manifest.json')),
   ]
   for (const basename of payload.excelBasenames ?? []) {
     assertSafeSegment(basename, 'Excel basename')

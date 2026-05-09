@@ -351,6 +351,57 @@ interface ElectronAPI {
   readUserProfile: (avatarId: string) => Promise<string>
   writeUserProfile: (avatarId: string, content: string) => Promise<void>
 
+  /**
+   * 人生经历（Avatar Life Experience，Phase 0+1）。
+   * namespace 风格保留扩展空间：Phase 2 加 setTimeScale / toggleGrowth / advanceNow。
+   */
+  life: {
+    // ─── Phase 0：读 / 删 ─────────────────────────────────────────────────
+    /** 读取 life/manifest.json，不存在返回 null */
+    getManifest: (avatarId: string) => Promise<LifeManifest | null>
+    /** 读取 life/timeline.json，不存在返回 [] */
+    listTimeline: (avatarId: string) => Promise<LifeTimelineEntry[]>
+    /** 读取 life/episodes/<id>.md 正文，不存在返回 null */
+    readEpisode: (avatarId: string, episodeId: string) => Promise<string | null>
+    /** 读取 life/progress.json，不存在返回 null */
+    getProgress: (avatarId: string) => Promise<LifeProgress | null>
+    /** 读取 life/consolidated.md，不存在返回空字符串 */
+    readConsolidated: (avatarId: string) => Promise<string>
+    /** 删除单个 episode 的 .md 并从 timeline 移除条目，返回是否实际从 timeline 移除 */
+    deleteEpisode: (avatarId: string, episodeId: string) => Promise<boolean>
+
+    // ─── Phase 1：生成器控制 + 进度订阅 ────────────────────────────────────
+    /**
+     * 异步启动初始化生成 Pipeline。
+     * IPC 立即返回，后台跑生成；进度通过 onProgress 订阅。
+     * @throws 当分身已在生成中、currentAge / timeScale 非法、或 chat_api_key 未配置
+     */
+    startGeneration: (avatarId: string, params: LifeStartGenerationParams) => Promise<LifeStartGenerationResult>
+    /** 取消正在进行的生成；已落盘的 manifest/timeline/episodes 全部保留 */
+    cancelGeneration: (avatarId: string) => Promise<LifeCancelGenerationResult>
+    /** 取消（如有）+ 重新启动 generateLife（内部按 progress.json 断点续传） */
+    retryGeneration: (avatarId: string, params: LifeStartGenerationParams) => Promise<LifeStartGenerationResult>
+    /**
+     * 订阅 'life:progress' 事件。
+     * @returns unsubscribe 函数
+     */
+    onProgress: (callback: (payload: LifeProgressPayload) => void) => () => void
+
+    // ─── Phase 2：持续生长控制 ────────────────────────────────────────────
+    /**
+     * 修改单分身 timeScale（合法 0/1/12/52）。
+     * 修改后立即落盘 manifest.json，下次 cron 推进即按新速率算。
+     */
+    setTimeScale: (avatarId: string, timeScale: number) => Promise<LifeSetTimeScaleResult>
+    /** 开关单分身的持续生长。关闭后 cron 跳过该分身 */
+    toggleGrowth: (avatarId: string, enabled: boolean) => Promise<LifeToggleGrowthResult>
+    /**
+     * 调试用：立即推进单分身一次（同步等待）。
+     * 返回 AdvanceLifeResult，advanced=false 时 skipReason 说明跳过原因。
+     */
+    advanceNow: (avatarId: string) => Promise<LifeAdvanceNowResult>
+  }
+
   // 人格管理
   readSoul: (avatarId: string) => Promise<string>
   writeSoul: (avatarId: string, content: string) => Promise<void>
@@ -833,6 +884,199 @@ interface WikiEvolutionReport {
   timestamp: string
   newFile: string
   diffs: WikiEvolutionDiff[]
+}
+
+// ─── 人生经历（Avatar Life Experience，Phase 0） ─────────────────────────────
+//
+// 平行声明 packages/core/src/life/types.ts 中的类型，供渲染端组件使用。
+// 修改本节时必须同步更新 packages/core/src/life/types.ts，字段顺序保持一致
+// 便于人工 diff（与既有 Avatar / Skill / TestCase 同模式）。
+//
+// @author zhi.qu
+// @date 2026-05-09
+
+type LifeEventCategory =
+  | 'formative'
+  | 'daily'
+  | 'trauma'
+  | 'joy'
+  | 'professional'
+  | 'loss'
+
+type LifeEmotionType =
+  | 'joy'
+  | 'sorrow'
+  | 'anger'
+  | 'fear'
+  | 'wonder'
+  | 'shame'
+  | 'love'
+
+type LifeConsolidationStatus = 'remembered' | 'blurred' | 'forgotten'
+
+type LifeGenerationStatus =
+  | 'pending'
+  | 'generating'
+  | 'complete'
+  | 'failed'
+  | 'growing'
+
+type LifePipelineStage =
+  | 'idle'
+  | 'manifest'
+  | 'outline'
+  | 'episodes'
+  | 'forgetting'
+  | 'growing'
+  | 'complete'
+  | 'failed'
+
+interface LifeArcItem {
+  age: number
+  shift?: string
+  milestone?: string
+}
+
+interface LifeRelationship {
+  role: string
+  name: string
+  description: string
+}
+
+/** 人生骨架 manifest.json 的完整 schema（与 plan 1.1 节一致） */
+interface LifeManifest {
+  schemaVersion: number
+  personaName: string
+  birthYear: number
+  birthMonth: number
+  birthDay: number
+  initialAge: number
+  initialAgeBornAt: string
+  timeScale: number
+  lastAdvancedAt: string
+  currentAgeMonths: number
+  growthEnabled: boolean
+  gender: string
+  birthplace: string
+  familyBackground: string
+  personalityArc: LifeArcItem[]
+  professionalSpine: LifeArcItem[]
+  majorRelationships: LifeRelationship[]
+  createdAt: string
+  totalEpisodes: number
+  totalChars: number
+  generationStatus: LifeGenerationStatus
+  lastConsolidatedAt: string
+  consolidationCounter: number
+}
+
+/** 时间轴单项 timeline.json[i] 的 schema（与 plan 1.2 节一致） */
+interface LifeTimelineEntry {
+  id: string
+  age: number
+  year: number
+  month: number
+  title: string
+  summary: string
+  category: LifeEventCategory
+  themes: string[]
+  importance: number
+  emotion: number
+  emotionType: LifeEmotionType
+  wordCount: number
+  consolidationStatus: LifeConsolidationStatus
+  consolidationNote: string
+}
+
+interface LifeFailedEpisode {
+  id: string
+  error: string
+  failedAt: string
+}
+
+/** 生成进度 progress.json 的 schema */
+interface LifeProgress {
+  stage: LifePipelineStage
+  completedEpisodes: number
+  totalEpisodes: number
+  usedFallback: boolean
+  lastError: string
+  updatedAt: string
+  failedEpisodes: LifeFailedEpisode[]
+  consolidationLastTotalEpisodes: number
+}
+
+/**
+ * 创建向导第 5 步「人生剧本」用户输入参数（Phase 1 IPC 入参）。
+ * 与主进程 main.ts:LifeStartGenerationParams 保持一致。
+ */
+interface LifeStartGenerationParams {
+  /** 18-80 岁 */
+  currentAge: number
+  /** 1.0 / 12.0 / 52.0 / 0 */
+  timeScale: number
+  /** 是否启用持续生长 */
+  growthEnabled: boolean
+  /** 用户额外要求（可空） */
+  extraHints?: string
+  /** 分身展示名（用于 prompt） */
+  avatarName: string
+}
+
+/**
+ * 'life:progress' IPC 事件 payload。
+ * 主进程 webContents.send 时附带 avatarId 用于多分身并发场景区分。
+ */
+interface LifeProgressPayload {
+  avatarId: string
+  progress: LifeProgress
+}
+
+/** life:start-generation / retry-generation 的返回 */
+interface LifeStartGenerationResult {
+  started: true
+  /** creationModel 缺失走 chatModel 时为 true，UI 顶部黄色提示读这个 */
+  usedFallback: boolean
+}
+
+/** life:cancel-generation 的返回 */
+interface LifeCancelGenerationResult {
+  cancelled: boolean
+}
+
+/**
+ * life:set-time-scale 返回。
+ * timeScale 仅会是 0 / 1 / 12 / 52；前端可据此刷新 LifeTimeScaleModal 当前选项。
+ */
+interface LifeSetTimeScaleResult {
+  ok: true
+  timeScale: number
+}
+
+/** life:toggle-growth 返回 */
+interface LifeToggleGrowthResult {
+  ok: true
+  growthEnabled: boolean
+}
+
+/**
+ * life:advance-now 返回。
+ * 与主进程 advanceLife 的 AdvanceLifeResult 形态一致。
+ * advanced=false 时 skipReason 解释跳过原因，前端用来给用户友好提示。
+ */
+interface LifeAdvanceNowResult {
+  advanced: boolean
+  skipReason?:
+    | 'no-manifest'
+    | 'growth-disabled'
+    | 'time-frozen'
+    | 'generation-in-progress'
+    | 'sub-month-delta'
+    | 'locked'
+  avatarDeltaMonths: number
+  newEpisodes: number
+  failedEpisodes: number
+  reconsolidated: boolean
 }
 
 interface Window {

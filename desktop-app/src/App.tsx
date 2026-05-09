@@ -8,6 +8,7 @@ import CreateAvatarWizard from './components/CreateAvatarWizard'
 import TestPanel from './components/TestPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
+import LifePanel from './components/LifePanel'
 import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
 import PromptTemplatePanel from './components/PromptTemplatePanel'
@@ -25,7 +26,7 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'batchRegression' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
@@ -33,6 +34,7 @@ function App() {
   const showTestPanel = activePanel === 'test'
   const showSkillsPanel = activePanel === 'skills'
   const showMemoryPanel = activePanel === 'memory'
+  const showLifePanel = activePanel === 'life'
   const showUserProfilePanel = activePanel === 'userProfile'
   const showSoulEditor = activePanel === 'soulEditor'
   const showPromptTemplatePanel = activePanel === 'promptTemplate'
@@ -41,7 +43,7 @@ function App() {
   const [activeAvatarId, setActiveAvatarId] = useState<string>('')
   const [activeAvatarName, setActiveAvatarName] = useState<string>('')
   const [avatarList, setAvatarList] = useState<Avatar[]>([])
-  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error'; onClick?: () => void } | null>(null)
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string; releaseNotes?: string } | null>(null)
 
   const [visionModel, setVisionModel] = useState<ModelConfig>(DEFAULT_VISION_MODEL)
@@ -87,6 +89,22 @@ function App() {
     setToast({ message, type })
     clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  /**
+   * 显示可点击的 Toast（Phase 4 新增）。
+   * 点击后立即关闭 Toast 并触发 onClick 回调（如打开 LifePanel）。
+   * 显示时长 5s（比普通 Toast 长，给用户点击时间）。
+   */
+  const showClickableToast = useCallback((message: string, onClick: () => void, type: 'success' | 'error' = 'success') => {
+    const handleClick = () => {
+      clearTimeout(toastTimerRef.current)
+      setToast(null)
+      onClick()
+    }
+    setToast({ message, type, onClick: handleClick })
+    clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 5000)
   }, [])
 
   const loadConversations = useCallback(async () => {
@@ -267,9 +285,17 @@ function App() {
     }
   }
 
-  const handleAvatarCreated = async (avatarId: string) => {
+  const handleAvatarCreated = async (avatarId: string, lifeStarted: boolean) => {
     setActivePanel(null)
     await handleSelectAvatar(avatarId)
+    if (lifeStarted) {
+      // Phase 4：人生生成已异步启动，提示用户去 LifePanel 看进度
+      showClickableToast(
+        '分身正在经历人生，可在「人生」面板查看进度',
+        () => setActivePanel('life'),
+        'success',
+      )
+    }
   }
 
   // 并发锁：防止双击或同时点击两个"新建对话"按钮导致重复创建
@@ -331,6 +357,7 @@ function App() {
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
     { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
+    { label: '人生', icon: '❀', key: 'life', onClick: () => setActivePanel('life'), active: showLifePanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
@@ -510,6 +537,7 @@ function App() {
           creationModel={resolveCreationModel(creationModel, chatModel)}
           onClose={() => setActivePanel(null)}
           onCreated={handleAvatarCreated}
+          onOpenSettings={() => setActivePanel('settings')}
         />
       )}
 
@@ -541,6 +569,18 @@ function App() {
         <MemoryPanel
           avatarId={activeAvatarId}
           onClose={() => setActivePanel(null)}
+        />
+      )}
+
+      {showLifePanel && activeAvatarId && (
+        <LifePanel
+          avatarId={activeAvatarId}
+          avatarName={activeAvatarName || activeAvatarId}
+          hasChatApiKey={Boolean(chatModel.apiKey)}
+          hasCreationApiKey={Boolean(creationModel.apiKey)}
+          onClose={() => setActivePanel(null)}
+          onToast={showToast}
+          onOpenSettings={() => setActivePanel('settings')}
         />
       )}
 
@@ -580,7 +620,7 @@ function App() {
       )}
 
       {toast && (
-        <Toast message={toast.message} type={toast.type} />
+        <Toast message={toast.message} type={toast.type} onClick={toast.onClick} />
       )}
     </div>
   )

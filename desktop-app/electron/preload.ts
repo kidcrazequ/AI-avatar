@@ -209,6 +209,48 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readUserProfile: (avatarId: string) => ipcRenderer.invoke('read-user-profile', avatarId),
   writeUserProfile: (avatarId: string, content: string) => ipcRenderer.invoke('write-user-profile', avatarId, content),
 
+  // ─── 人生经历（Avatar Life Experience，Phase 0+1） ──────────────────────────
+  // namespace 风格便于 Phase 2/4 持续扩展（setTimeScale / advanceNow 等）
+  life: {
+    // Phase 0：读 / 删
+    getManifest: (avatarId: string) => ipcRenderer.invoke('life:get-manifest', avatarId),
+    listTimeline: (avatarId: string) => ipcRenderer.invoke('life:list-timeline', avatarId),
+    readEpisode: (avatarId: string, episodeId: string) =>
+      ipcRenderer.invoke('life:read-episode', avatarId, episodeId),
+    getProgress: (avatarId: string) => ipcRenderer.invoke('life:get-progress', avatarId),
+    readConsolidated: (avatarId: string) => ipcRenderer.invoke('life:read-consolidated', avatarId),
+    deleteEpisode: (avatarId: string, episodeId: string) =>
+      ipcRenderer.invoke('life:delete-episode', avatarId, episodeId),
+
+    // Phase 1：生成器控制 + 进度订阅
+    startGeneration: (avatarId: string, params: LifeStartGenerationParams) =>
+      ipcRenderer.invoke('life:start-generation', avatarId, params),
+    cancelGeneration: (avatarId: string) =>
+      ipcRenderer.invoke('life:cancel-generation', avatarId),
+    retryGeneration: (avatarId: string, params: LifeStartGenerationParams) =>
+      ipcRenderer.invoke('life:retry-generation', avatarId, params),
+    /**
+     * 订阅生成进度推送。
+     * @returns unsubscribe 函数；调用即移除监听器
+     */
+    onProgress: (callback: (payload: LifeProgressPayload) => void) => {
+      const listener = (_: unknown, payload: LifeProgressPayload) => callback(payload)
+      ipcRenderer.on('life:progress', listener)
+      return () => ipcRenderer.removeListener('life:progress', listener)
+    },
+
+    // Phase 2：持续生长控制
+    /** 修改单分身 timeScale（0/1/12/52） */
+    setTimeScale: (avatarId: string, timeScale: number) =>
+      ipcRenderer.invoke('life:set-time-scale', avatarId, timeScale),
+    /** 开关单分身的持续生长 */
+    toggleGrowth: (avatarId: string, enabled: boolean) =>
+      ipcRenderer.invoke('life:toggle-growth', avatarId, enabled),
+    /** 调试用：立即推进单分身一次（同步等待结果） */
+    advanceNow: (avatarId: string) =>
+      ipcRenderer.invoke('life:advance-now', avatarId),
+  },
+
   // 人格管理
   readSoul: (avatarId: string) => ipcRenderer.invoke('read-soul', avatarId),
   writeSoul: (avatarId: string, content: string) => ipcRenderer.invoke('write-soul', avatarId, content),

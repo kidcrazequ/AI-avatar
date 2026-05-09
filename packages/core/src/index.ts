@@ -126,6 +126,106 @@ export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider }
 export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from './provider-capabilities'
 
 export { buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, buildExcelSourceAnchor, formatKnowledgeSourceAnchor, formatExcelSourceAnchor, formatSourceAnchor, buildSourceAnchorPromptHint, buildSourceAnchorReferenceBlock, extractSourceAnchors, extractSourceAnchorsFromContent, extractSourceAnchorsFromMessages, extractParsedSourceAnchors, parseSourceAnchor, splitTextBySourceAnchors, normalizeSourceAnchorsInText, normalizeAvailableSourceAnchors, rewriteSourceAnchorsInText, filterSourceAnchorsInText, isSourceAnchorCoveredByAvailable, isSourceAnchorCoveredByAnyAvailable, filterSourceAnchorsByAvailableContext, ensureAnswerSourceCoverage, SOURCE_ANCHOR_REGEX } from './source-anchor'
+
+// ─── 人生经历（Avatar Life Experience） ──────────────────────────────────────
+export type {
+  LifeManifest,
+  LifeTimelineEntry,
+  LifeEpisode,
+  LifeProgress,
+  LifeFailedEpisode,
+  LifeArcItem,
+  LifeRelationship,
+  LifeEventCategory,
+  LifeEmotionType,
+  LifeConsolidationStatus,
+  LifeGenerationStatus,
+  LifePipelineStage,
+} from './life/types'
+export {
+  getLifeDir,
+  getLifeManifestPath,
+  getLifeTimelinePath,
+  getLifeConsolidatedPath,
+  getLifeProgressPath,
+  getLifeEpisodesDir,
+  getLifeEpisodePath,
+  ensureLifeDir,
+  readLifeManifest,
+  readLifeTimeline,
+  readLifeEpisode,
+  readLifeConsolidated,
+  readLifeProgress,
+  listLifeEpisodeIds,
+  writeLifeManifest,
+  writeLifeTimeline,
+  appendLifeTimelineEntry,
+  writeLifeEpisode,
+  deleteLifeEpisode,
+  writeLifeConsolidated,
+  writeLifeProgress,
+} from './life/store'
+// 人生生成器（Phase 1）：4 Stage Pipeline + 单事件 + 遗忘机制
+export {
+  generateLife,
+  generateEpisode,
+  appendNewEpisodeForGrowth,
+  partitionAgeStages,
+  DEFAULT_OUTLINE_TARGET_COUNTS,
+  // 透传 forgetter 导出（Phase 2 grower 复用）
+  applyAlgorithmicForgetting,
+  generateConsolidated,
+  DEFAULT_FORGETTING_WEIGHTS,
+  CONSOLIDATED_MAX_CHARS,
+} from './life/generator'
+export type {
+  GenerateLifeOptions,
+  GenerateEpisodeOptions,
+  AppendNewEpisodeForGrowthOptions,
+  LifeLLMConfig,
+  LifeUserParams,
+  ForgettingWeights,
+} from './life/generator'
+// Prompt 模板（main.ts 不直接用，但测试 / Phase 2 grower 自定义 prompt 时复用）
+export {
+  buildManifestPrompt,
+  buildOutlinePrompt,
+  buildEpisodePrompt,
+  buildConsolidatedPrompt,
+  MANIFEST_SYSTEM_PROMPT,
+  OUTLINE_SYSTEM_PROMPT,
+  EPISODE_SYSTEM_PROMPT,
+  CONSOLIDATED_SYSTEM_PROMPT,
+} from './life/prompts'
+export type {
+  BuildManifestPromptOptions,
+  BuildOutlinePromptOptions,
+  BuildEpisodePromptOptions,
+  BuildConsolidatedPromptOptions,
+} from './life/prompts'
+// 持续生长（Phase 2，cron Stage 4）
+export {
+  eventDensityPerMonth,
+  monthsToYears,
+  DEFAULT_DENSITY_WEIGHTS,
+} from './life/density'
+export type { DensityWeights } from './life/density'
+export {
+  advanceLife,
+  advanceAllAvatars,
+  computeAvatarDeltaMonths,
+  samplePendingMonths,
+  shouldReconsolidate,
+  DEFAULT_RECONSOLIDATE_THRESHOLDS,
+  __clearGrowthLocksForTesting,
+} from './life/grower'
+export type {
+  AdvanceLifeOptions,
+  AdvanceLifeResult,
+  AdvanceAllAvatarsOptions,
+  AdvanceAllAvatarsResult,
+  ReconsolidateThresholds,
+} from './life/grower'
 export type { KnowledgeSourceAnchor, ExcelSourceAnchor, SourceAnchor, ParsedSourceAnchor, SourceAnchorSegment, NormalizeSourceAnchorsResult, RewriteSourceAnchorsResult, SourceCoverageResult, FilterAvailableSourceAnchorsResult, SourceAnchorReferenceBlockOptions, EnsureSourceCoverageOptions } from './source-anchor'
 
 // 文档生成模块（PDF / DOCX / Markdown 三格式渲染）

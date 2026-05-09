@@ -6,6 +6,7 @@ import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
 import { SubAgentManager } from './sub-agent-manager'
 import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -789,6 +790,8 @@ export class ToolRouter {
           result = this.searchKnowledge(avatarId, args); break
         case 'list_knowledge_files':
           result = this.listKnowledgeFiles(avatarId); break
+        case 'read_life_episode':
+          result = await this.readLifeEpisode(avatarId, args); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -1565,6 +1568,36 @@ export class ToolRouter {
     const anchor = formatSourceAnchor(buildWholeFileKnowledgeAnchor(filePath, content))
     return { content: `${anchor}
 ${content}` }
+  }
+
+  /**
+   * read_life_episode：读取当前分身人生时间轴中某个具体事件的完整正文。
+   *
+   * 让分身在用户问起具体往事时能"翻日记"取细节，而不是凭 system prompt 里的
+   * consolidated.md 概览硬编往事。consolidated.md 已写入 system prompt，但
+   * 单条 episode 全文（2-5K 字 × 60-100 个）不进 prompt——成本和上下文双重考虑。
+   *
+   * 路径安全：
+   *   - avatarId：外层 execute 里已经过 assertSafeSegment（构造 ToolRouter 时上游守卫）
+   *   - episodeId：通过 store.ts 的 getLifeEpisodePath → assertSafeEpisodeId
+   *     校验（assertSafeSegment + 拒绝 `.` 开头 + 拒绝扩展名）
+   *
+   * @author zhi.qu
+   * @date 2026-05-09
+   */
+  private async readLifeEpisode(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const episodeId = typeof args.id === 'string' ? args.id.trim() : ''
+    if (!episodeId) return { content: '', error: '缺少 id 参数（形如 ep-0007-first-snow）' }
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const text = await readLifeEpisodeFromStore(this.avatarsPath, avatarId, episodeId)
+      if (text === null) {
+        return { content: '', error: `事件不存在: ${episodeId}（请先用 system prompt 中「我的人生」章节出现的 id）` }
+      }
+      return { content: `[来源: life/episodes/${episodeId}.md]\n${text}` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
   }
 
   private searchKnowledge(avatarId: string, args: Record<string, unknown>): ToolCallResult {

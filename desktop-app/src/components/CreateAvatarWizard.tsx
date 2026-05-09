@@ -3,12 +3,25 @@ import { LLMService, ModelConfig } from '../services/llm-service'
 import { generateSoulStepByStep, StepProgress } from '../services/soul-step-generator'
 import { validateSoulContent, ValidationResult } from '../services/soul-validator'
 import AvatarPicker from './AvatarPicker'
+import LifeScriptStep from './wizard/LifeScriptStep'
+import type { LifeTimeScale } from '../services/life-service'
 
 interface Props {
   chatModel: ModelConfig
   creationModel: ModelConfig
   onClose: () => void
-  onCreated: (avatarId: string) => void
+  /**
+   * 分身创建成功回调。
+   * @param avatarId 新分身 ID
+   * @param lifeStarted 是否已异步触发人生生成（用于父级显示对应 Toast）
+   */
+  onCreated: (avatarId: string, lifeStarted: boolean) => void
+  /**
+   * 第 5 步「人生剧本」的 fallback 黄色提示中「→ 去设置配置」按钮被点击时调用。
+   * 由父级（App.tsx）实现「关闭向导 + 切到设置面板」逻辑。
+   * 不传时按钮不显示（行为与 LifeScriptStep 内部 onOpenSettings 可选语义一致）。
+   */
+  onOpenSettings?: () => void
 }
 
 interface KnowledgeFile {
@@ -26,10 +39,11 @@ const STEPS = [
   { en: '02', zh: '人格定义' },
   { en: '03', zh: '知识库' },
   { en: '04', zh: '技能定义' },
-  { en: '05', zh: '确认创建' },
+  { en: '05', zh: '人生剧本' },
+  { en: '06', zh: '确认创建' },
 ]
 
-export default function CreateAvatarWizard({ chatModel, creationModel, onClose, onCreated }: Props) {
+export default function CreateAvatarWizard({ chatModel, creationModel, onClose, onCreated, onOpenSettings }: Props) {
   const [currentStep, setCurrentStep] = useState(0)
 
   const [avatarName, setAvatarName] = useState('')
@@ -48,6 +62,12 @@ export default function CreateAvatarWizard({ chatModel, creationModel, onClose, 
   const [isGeneratingSkill, setIsGeneratingSkill] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
+
+  /** 人生剧本（Phase 4 新增）：默认勾选启用，年龄 30 岁，1× 真实同步 */
+  const [lifeEnabled, setLifeEnabled] = useState(true)
+  const [lifeAge, setLifeAge] = useState(30)
+  const [lifeTimeScale, setLifeTimeScale] = useState<LifeTimeScale>(1)
+  const [lifeExtraHints, setLifeExtraHints] = useState('')
   const mountedRef = useRef(true)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -158,6 +178,26 @@ ${skillInput}`
     setNewFileContent('')
   }
 
+  /**
+   * 异步触发人生生成（fire-and-forget）。
+   * 失败仅 logEvent，不阻塞向导关闭、不打断分身使用。
+   * 与 plan 0 决策表"生成失败不阻塞分身使用"对齐。
+   */
+  const triggerLifeGeneration = (avatarId: string) => {
+    const params: LifeStartGenerationParams = {
+      avatarName,
+      currentAge: lifeAge,
+      timeScale: lifeTimeScale,
+      growthEnabled: lifeTimeScale > 0,
+      extraHints: lifeExtraHints.trim() || undefined,
+    }
+    window.electronAPI.life.startGeneration(avatarId, params).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[CreateAvatar] 启动人生生成失败:', err)
+      window.electronAPI.logEvent('error', 'wizard-life-start-error', msg)
+    })
+  }
+
   const handleCreate = async () => {
     setIsCreating(true)
     try {
@@ -187,7 +227,14 @@ ${skillInput}`
         }
       }
 
-      if (mountedRef.current) onCreated(avatarId)
+      // Phase 4：异步触发人生生成（不 await，不阻塞向导关闭）
+      const ageValid = Number.isFinite(lifeAge) && lifeAge >= 3 && lifeAge <= 65
+      const lifeStarted = lifeEnabled && ageValid
+      if (lifeStarted) {
+        triggerLifeGeneration(avatarId)
+      }
+
+      if (mountedRef.current) onCreated(avatarId, lifeStarted)
     } catch (error) {
       if (!mountedRef.current) return
       console.error('创建分身失败:', error)
@@ -201,6 +248,10 @@ ${skillInput}`
     switch (currentStep) {
       case 0: return avatarName.trim().length > 0
       case 1: return soulContent.trim().length > 0
+      case 4:
+        // 人生剧本：未启用直接放行；启用则校验年龄
+        if (!lifeEnabled) return true
+        return Number.isFinite(lifeAge) && lifeAge >= 3 && lifeAge <= 65
       default: return true
     }
   }
@@ -430,6 +481,26 @@ ${skillInput}`
           )}
 
           {currentStep === 4 && (
+            <LifeScriptStep
+              lifeEnabled={lifeEnabled}
+              setLifeEnabled={setLifeEnabled}
+              lifeAge={lifeAge}
+              setLifeAge={setLifeAge}
+              lifeTimeScale={lifeTimeScale}
+              setLifeTimeScale={setLifeTimeScale}
+              lifeExtraHints={lifeExtraHints}
+              setLifeExtraHints={setLifeExtraHints}
+              hasCreationApiKey={Boolean(creationModel.apiKey)}
+              onOpenSettings={onOpenSettings ? () => {
+                // 先关闭向导（避免设置面板被向导挡住），再切到设置；
+                // 用户配置完 apiKey 后需重新打开向导填写人生剧本（trade-off 已与 plan 4.1 ASCII 文案一致）
+                onClose()
+                onOpenSettings()
+              } : undefined}
+            />
+          )}
+
+          {currentStep === 5 && (
             <div className="space-y-5 max-w-lg">
               <div className="border-l-3 border-px-primary pl-4 py-1">
                 <h3 className="font-game text-[14px] text-px-text tracking-wider">确认创建</h3>
@@ -444,6 +515,9 @@ ${skillInput}`
                   ['人格定义', `${soulContent.length} 字`],
                   ['知识文件', `${knowledgeFiles.length} 个`],
                   ['自定义技能', `${customSkills.length} 个`],
+                  ['人生剧本', lifeEnabled
+                    ? `${lifeAge} 岁起 · ${lifeTimeScale === 0 ? '冻结' : `${lifeTimeScale}× ${lifeTimeScale === 1 ? '真实同步' : '加速'}`}`
+                    : '（未启用）'],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between py-1 border-b border-px-border last:border-b-0">
                     <span className="text-px-text-sec">{label}</span>
@@ -464,6 +538,7 @@ ${skillInput}`
               <div className="border-l-3 border-l-px-accent p-4 bg-px-elevated">
                 <p className="font-game text-[13px] text-px-text-sec">
                   自动生成: CLAUDE.md / soul.md / knowledge/README.md / memory/MEMORY.md
+                  {lifeEnabled && ' · life/（后台异步生成）'}
                 </p>
               </div>
             </div>

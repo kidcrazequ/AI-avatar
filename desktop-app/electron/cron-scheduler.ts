@@ -17,8 +17,9 @@
  */
 
 import { BrowserWindow } from 'electron'
+import { Cron } from 'croner'
 
-/** 定时任务类型 */
+/** 定时任务类型（内置三类，固定枚举） */
 export type CronTaskType = 'memory-consolidate' | 'knowledge-check' | 'scheduled-test'
 
 /** 定时任务配置 */
@@ -51,9 +52,22 @@ interface DailyCallbackState {
   intervalTimer: NodeJS.Timeout | null
 }
 
+/**
+ * 「cron 表达式」用户自定义任务的内部状态（#11 Scheduled Tasks）。
+ * taskId 为业务键（与 schedules.id 同），同名注册会先 cancel 再注册。
+ */
+interface CronJobState {
+  taskId: string
+  cronExpr: string
+  timezone: string
+  job: Cron
+}
+
 export class CronScheduler {
   private timers = new Map<CronTaskType, NodeJS.Timeout>()
   private dailyCallbacks = new Map<string, DailyCallbackState>()
+  /** #11：用户自定义 cron 任务（按 taskId 索引，与三类内置任务的 timers Map 完全分离） */
+  private cronJobs = new Map<string, CronJobState>()
   private mainWindow: BrowserWindow | null = null
 
   setWindow(win: BrowserWindow) {
@@ -96,13 +110,14 @@ export class CronScheduler {
     }
   }
 
-  /** 取消所有任务（包括 daily callback） */
+  /** 取消所有任务（包括 daily callback 与 cron 任务） */
   cancelAll(): void {
     for (const timer of this.timers.values()) {
       clearInterval(timer)
     }
     this.timers.clear()
     this.cancelAllDaily()
+    this.cancelAllCron()
   }
 
   /**
@@ -196,6 +211,112 @@ export class CronScheduler {
   getRunningDailyNames(): string[] {
     return Array.from(this.dailyCallbacks.keys())
   }
+
+  // ─── #11 Scheduled Tasks: 用户自定义 cron 任务 ────────────────────────────
+
+  /**
+   * 注册一条用户自定义 cron 任务（#11 Scheduled Tasks）。
+   *
+   * 与 schedule() 的区别：
+   * - 触发时间由 cron 表达式描述（标准 5 字段，精度到分钟），不是固定间隔
+   * - 不通过 webContents.send 通知渲染端，而是直接在主进程跑 callback；
+   *   触发链路上层（main.ts 的 schedule:trigger 监听）再决定是否 forward 给渲染端
+   * - 同名 taskId 会先 cancel 再注册（覆盖语义）
+   *
+   * cron_expr 校验：失败抛 Error（croner 解析时报错），调用方应在创建/更新 schedule 时
+   * 提前 catch，转化为用户可见的表单校验错误。
+   *
+   * @param taskId schedules.id（必须，作为 cancelCron / triggerCron 的键）
+   * @param cronExpr 标准 5 字段 cron（如 `0 9 * * *` 每天 09:00）
+   * @param timezone IANA timezone（如 'Asia/Shanghai'）
+   * @param callback 触发时执行的主进程回调（异步函数也可，scheduler 不等结果）
+   */
+  scheduleCron(
+    taskId: string,
+    cronExpr: string,
+    timezone: string,
+    callback: (firedAtUtc: number) => void | Promise<void>,
+  ): void {
+    if (!taskId) throw new Error('scheduleCron: taskId 不能为空')
+    if (!cronExpr) throw new Error('scheduleCron: cronExpr 不能为空')
+
+    this.cancelCron(taskId)
+
+    // croner 内部维护 setTimeout 链，自动按 cron 表达式触发；timezone 处理由 croner 完成。
+    // unref 留给 croner 默认（Electron 主进程不需要 unref，应用退出由 cancelAll 主动停止）。
+    const job = new Cron(
+      cronExpr,
+      { timezone, name: `soul-schedule-${taskId}`, paused: false },
+      () => {
+        // croner 提供的 fire 时刻 = 此次触发时刻；用 Date.now() 取整到秒避免毫秒级抖动
+        const firedAtUtc = Math.floor(Date.now() / 1000) * 1000
+        Promise.resolve()
+          .then(() => callback(firedAtUtc))
+          .catch((err) => {
+            console.error(`[CronScheduler] cron task '${taskId}' callback 抛错:`, err)
+          })
+      },
+    )
+
+    this.cronJobs.set(taskId, { taskId, cronExpr, timezone, job })
+  }
+
+  /** 取消一条 cron 任务 */
+  cancelCron(taskId: string): void {
+    const state = this.cronJobs.get(taskId)
+    if (!state) return
+    state.job.stop()
+    this.cronJobs.delete(taskId)
+  }
+
+  /** 取消全部 cron 任务（cancelAll 内部调用） */
+  cancelAllCron(): void {
+    for (const state of this.cronJobs.values()) {
+      state.job.stop()
+    }
+    this.cronJobs.clear()
+  }
+
+  /** 调试 / UI 用：列出已注册的 cron taskId */
+  getRunningCronTaskIds(): string[] {
+    return Array.from(this.cronJobs.keys())
+  }
+
+  /**
+   * 计算某 cron 表达式接下来 n 次触发时间（用于 UI 预览，不影响实际调度）。
+   * 失败（cron 表达式非法）抛 Error。
+   *
+   * @param cronExpr 标准 5 字段 cron
+   * @param timezone IANA timezone
+   * @param n 计算次数（建议 ≤ 5）
+   * @param fromTs 起始时刻（默认 Date.now()，测试可注入固定值）
+   * @returns 下 n 次触发的 Unix ms 时间戳数组
+   */
+  getNextRuns(cronExpr: string, timezone: string, n: number, fromTs?: number): number[] {
+    if (n <= 0) return []
+    const probe = new Cron(cronExpr, { timezone, paused: true })
+    try {
+      const result: number[] = []
+      let cursor = fromTs !== undefined ? new Date(fromTs) : new Date()
+      for (let i = 0; i < n; i++) {
+        const next = probe.nextRun(cursor)
+        if (!next) break
+        result.push(next.getTime())
+        // 下一次从这次触发时刻 + 1ms 开始算（避免重复返回同一时刻）
+        cursor = new Date(next.getTime() + 1)
+      }
+      return result
+    } finally {
+      probe.stop()
+    }
+  }
+
+  /** 是否已注册某 cron 任务（trigger-now IPC 用于校验） */
+  hasCronTask(taskId: string): boolean {
+    return this.cronJobs.has(taskId)
+  }
+
+  // ─── 内置三类任务 ────────────────────────────────────────────────────────
 
   /** 手动触发指定类型任务 */
   trigger(type: CronTaskType, avatarId?: string): void {

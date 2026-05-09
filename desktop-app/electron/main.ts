@@ -22,6 +22,7 @@ import crypto from 'crypto'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
+import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
 import { TestManager, type TestCase, type TestReport } from './test-manager'
 import { DocumentParser, isGarbledText } from './document-parser'
 import {
@@ -108,6 +109,17 @@ let communitySkillManager: CommunitySkillManager
 const documentParser = new DocumentParser()
 const scheduledTester = new ScheduledTester()
 const cronScheduler = new CronScheduler()
+/**
+ * 用户自定义定时任务存储（#11 Scheduled Tasks）。
+ * 在 initManagers 之后通过 getScheduleStore() lazy 创建（依赖 db）。
+ */
+let scheduleStore: ScheduleStore | null = null
+function getScheduleStore(): ScheduleStore {
+  if (!scheduleStore) {
+    scheduleStore = new ScheduleStore(getDb().getRawDb())
+  }
+  return scheduleStore
+}
 let templateLoader: TemplateLoader
 let backupIntervalId: ReturnType<typeof setInterval> | null = null
 const bridgeMinuteWindow = new Map<string, number[]>()
@@ -512,6 +524,16 @@ app.whenReady().then(() => {
     }
   } catch (err) {
     console.error('[Main] 恢复 cron 任务失败:', err)
+  }
+
+  // 从 DB 恢复用户自定义定时任务（#11 Scheduled Tasks 冷启动恢复）。
+  // 应用关闭期间错过的触发不补跑（policy）；已有 next_run_at 但已过期的标 missed 但不发送，
+  // 避免开机时一次性涌出大量历史消息。
+  try {
+    restoreSchedulesFromDb()
+  } catch (err) {
+    console.error('[Main] 恢复用户 schedules 失败:', err)
+    if (logger) logger.error('schedules-restore', err instanceof Error ? err : new Error(String(err)))
   }
 
   // 「人生持续生长」每日 0:30 触发一次（Phase 2）。
@@ -4026,6 +4048,264 @@ wrapHandler('get-cron-config', () => {
     avatarId: getDb().getSetting(`cron_${type}_avatar`),
     enabled: cronScheduler.getRunningTypes().includes(type),
   }))
+})
+
+// ─── Scheduled Tasks 用户自定义定时任务（#11，2026-05-09） ────────────────────
+//
+// 与上方内置三类 cron 完全隔离的命名空间 schedule:*：
+//   schedule:list / get / create / update / delete / set-enabled
+//   schedule:trigger-now / get-next-runs / list-runs / record-run-finish
+//
+// 触发链路：cronScheduler.scheduleCron 到点 → fireScheduleCallback → recordRunStart
+// → webContents.send('schedule:trigger', { runId, scheduleId, ... }) → 渲染端调 sendMessage
+// → 渲染端调 IPC 'schedule:record-run-finish' 更新 status / conversation_id / duration_ms。
+
+/**
+ * 将一条 schedule 注册到 cronScheduler，并 setNextRunAt 写回 DB。
+ * 失败抛错（cron 表达式非法等），由调用方决定如何对外暴露。
+ */
+function registerScheduleInScheduler(row: ScheduleRow): void {
+  cronScheduler.scheduleCron(row.id, row.cron_expr, row.timezone, (firedAtUtc) => {
+    fireScheduleCallback(row.id, firedAtUtc, /*manual*/ false).catch((err) => {
+      console.error(`[schedule:${row.id}] cron 触发失败:`, err)
+      if (logger) logger.error('schedule-fire', err instanceof Error ? err : new Error(String(err)))
+    })
+  })
+  // 回写下次触发时间（UI 展示用，运行时仍以 croner 为准）
+  try {
+    const next = cronScheduler.getNextRuns(row.cron_expr, row.timezone, 1)
+    getScheduleStore().setNextRunAt(row.id, next[0] ?? null)
+  } catch (err) {
+    // getNextRuns 在极少数边界情况下可能没有下一次触发，仅记日志不影响调度
+    console.warn(`[schedule:${row.id}] getNextRuns 失败:`, err instanceof Error ? err.message : String(err))
+  }
+}
+
+/**
+ * 触发一次 schedule（cron 到点 / 立即触发 共享路径）。
+ *
+ * 步骤：
+ *   1. recordRunStart 写 running 行（UNIQUE 冲突 = 同时刻被重复触发，直接 return 跳过）
+ *   2. webContents.send 通知渲染端跑 sendMessage；payload 含 runId 让渲染端 record-run-finish
+ *   3. 不在主进程里等待 sendMessage 完成（fire-and-forget）
+ *
+ * @param scheduleId schedules.id
+ * @param firedAtUtc 触发时刻 Unix ms
+ * @param manual true = trigger-now 路径；用于审计
+ */
+async function fireScheduleCallback(
+  scheduleId: string,
+  firedAtUtc: number,
+  manual: boolean,
+): Promise<void> {
+  const store = getScheduleStore()
+  const schedule = store.get(scheduleId)
+  if (!schedule) {
+    if (logger) logger.activity('schedule-fire-missing', `${scheduleId} not found`)
+    return
+  }
+  if (!schedule.enabled && !manual) {
+    // 禁用状态下 cron 触发：理论上 cancel 应已生效，这里多一层防御
+    return
+  }
+
+  const startResult = store.recordRunStart(scheduleId, firedAtUtc)
+  if (startResult.conflict || startResult.runId === null) {
+    if (logger) logger.activity('schedule-fire-dedup', `${scheduleId}@${firedAtUtc}`)
+    return
+  }
+
+  // 更新下次触发时间预览（不影响 croner 实际调度）
+  try {
+    const next = cronScheduler.getNextRuns(schedule.cron_expr, schedule.timezone, 1, firedAtUtc + 1)
+    store.setNextRunAt(scheduleId, next[0] ?? null)
+  } catch (err) {
+    console.warn(`[schedule:${scheduleId}] 计算 next_run_at 失败:`, err instanceof Error ? err.message : String(err))
+  }
+
+  // 通知渲染端：渲染端会调 sendMessage 然后 record-run-finish
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('schedule:trigger', {
+      runId: startResult.runId,
+      scheduleId,
+      firedAtUtc,
+      avatarId: schedule.avatar_id,
+      projectId: schedule.project_id,
+      conversationId: schedule.conversation_id,
+      promptText: schedule.prompt_text,
+      manual,
+      scheduleName: schedule.name,
+    })
+    if (logger) logger.activity('schedule-fire', `${scheduleId} runId=${startResult.runId} manual=${manual}`)
+  } else {
+    // 没有渲染端可用：直接标失败，避免 running 行永远悬空
+    store.recordRunFinish(startResult.runId, 'failed', {
+      errorMessage: '主窗口不可用，无法触发渲染端 sendMessage',
+    })
+  }
+}
+
+/**
+ * 启动时遍历所有 enabled schedules 注册到 cronScheduler。
+ * 失败的单条任务记录日志后继续（不影响其他任务）。
+ */
+function restoreSchedulesFromDb(): void {
+  const rows = getScheduleStore().listEnabled()
+  let ok = 0
+  let bad = 0
+  for (const row of rows) {
+    try {
+      registerScheduleInScheduler(row)
+      ok++
+    } catch (err) {
+      bad++
+      console.error(`[Main] 恢复 schedule ${row.id} 失败:`, err)
+      if (logger) logger.error('schedule-restore-one', err instanceof Error ? err : new Error(String(err)))
+    }
+  }
+  if (logger) logger.activity('schedules-restored', `ok=${ok} failed=${bad} total=${rows.length}`)
+}
+
+/** 字符串校验：cron 字段长度上限，避免 DoS */
+function assertScheduleField(value: unknown, name: string, maxLen: number, allowEmpty = false): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${name} 必须为字符串`)
+  }
+  if (!allowEmpty && value.trim().length === 0) {
+    throw new Error(`${name} 不能为空`)
+  }
+  if (value.length > maxLen) {
+    throw new Error(`${name} 长度超出上限 ${maxLen}`)
+  }
+  return value
+}
+
+/** schedule:list - 列出所有 schedules（可按 avatarId 过滤） */
+wrapHandler('schedule:list', (_, avatarId?: string): ScheduleRow[] => {
+  if (avatarId) assertSafeSegment(avatarId, '分身ID')
+  return getScheduleStore().list({ avatarId })
+})
+
+/** schedule:get - 单个 schedule */
+wrapHandler('schedule:get', (_, id: string): ScheduleRow | null => {
+  return getScheduleStore().get(id) ?? null
+})
+
+/** schedule:create - 创建 schedule + 立即注册调度（若 enabled） */
+wrapHandler('schedule:create', (_, input: NewScheduleInput): ScheduleRow => {
+  // 字段校验：避免渲染端非法输入污染 DB
+  assertScheduleField(input?.name, 'name', 200)
+  assertSafeSegment(input.avatarId, '分身ID')
+  if (input.projectId) assertSafeSegment(input.projectId, 'projectId')
+  assertScheduleField(input.cronExpr, 'cronExpr', 200)
+  assertScheduleField(input.promptText, 'promptText', 8000)
+  if (input.timezone) assertScheduleField(input.timezone, 'timezone', 64)
+
+  // 提前用 croner 校验 cron 表达式合法性，避免存了非法值后续无法注册
+  cronScheduler.getNextRuns(input.cronExpr, input.timezone ?? 'Asia/Shanghai', 1)
+
+  const row = getScheduleStore().create(input)
+  if (row.enabled === 1) {
+    try {
+      registerScheduleInScheduler(row)
+    } catch (err) {
+      // 注册失败：撤销 DB 写入，避免 DB 与运行时不一致
+      getScheduleStore().delete(row.id)
+      throw err
+    }
+  }
+  return row
+})
+
+/** schedule:update - 更新（取消旧调度 + 注册新调度 + DB write） */
+wrapHandler('schedule:update', (_, id: string, patch: UpdateScheduleInput): ScheduleRow => {
+  const existing = getScheduleStore().get(id)
+  if (!existing) throw new Error(`schedule 不存在: ${id}`)
+
+  if (patch.name !== undefined) assertScheduleField(patch.name, 'name', 200)
+  if (patch.avatarId !== undefined) assertSafeSegment(patch.avatarId, '分身ID')
+  if (patch.projectId !== undefined) assertSafeSegment(patch.projectId, 'projectId')
+  if (patch.cronExpr !== undefined) assertScheduleField(patch.cronExpr, 'cronExpr', 200)
+  if (patch.promptText !== undefined) assertScheduleField(patch.promptText, 'promptText', 8000)
+  if (patch.timezone !== undefined) assertScheduleField(patch.timezone, 'timezone', 64)
+
+  const nextCronExpr = patch.cronExpr ?? existing.cron_expr
+  const nextTimezone = patch.timezone ?? existing.timezone
+  // 校验新表达式合法
+  cronScheduler.getNextRuns(nextCronExpr, nextTimezone, 1)
+
+  getScheduleStore().update(id, patch)
+  cronScheduler.cancelCron(id)
+  const updated = getScheduleStore().get(id)!
+  if (updated.enabled === 1) {
+    registerScheduleInScheduler(updated)
+  } else {
+    // 禁用：清空 next_run_at，避免 UI 误以为还会触发
+    getScheduleStore().setNextRunAt(id, null)
+  }
+  return getScheduleStore().get(id)!
+})
+
+/** schedule:delete - 删除 schedule（FK CASCADE 自动清 runs） */
+wrapHandler('schedule:delete', (_, id: string): boolean => {
+  cronScheduler.cancelCron(id)
+  return getScheduleStore().delete(id)
+})
+
+/** schedule:set-enabled - 启停（不删除） */
+wrapHandler('schedule:set-enabled', (_, id: string, enabled: boolean): ScheduleRow => {
+  const existing = getScheduleStore().get(id)
+  if (!existing) throw new Error(`schedule 不存在: ${id}`)
+  getScheduleStore().update(id, { enabled })
+  cronScheduler.cancelCron(id)
+  const updated = getScheduleStore().get(id)!
+  if (updated.enabled === 1) {
+    registerScheduleInScheduler(updated)
+  } else {
+    getScheduleStore().setNextRunAt(id, null)
+  }
+  return getScheduleStore().get(id)!
+})
+
+/** schedule:trigger-now - 立即触发一次（人工调试用） */
+wrapHandler('schedule:trigger-now', async (_, id: string): Promise<{ runId: number | null; conflict: boolean }> => {
+  const existing = getScheduleStore().get(id)
+  if (!existing) throw new Error(`schedule 不存在: ${id}`)
+  const firedAtUtc = Date.now()
+  await fireScheduleCallback(id, firedAtUtc, /*manual*/ true)
+  // 取这次触发对应的 run（按 fired_at_utc 倒序第一个 status=running，可能已被渲染端 finish 掉）
+  const runs = getScheduleStore().listRuns(id, 1)
+  const top = runs[0]
+  if (top && Math.abs(top.fired_at_utc - firedAtUtc) < 1500) {
+    return { runId: top.id, conflict: false }
+  }
+  return { runId: null, conflict: true }
+})
+
+/** schedule:get-next-runs - 计算下 n 次触发时间（UI 预览用，不写 DB） */
+wrapHandler('schedule:get-next-runs', (_, cronExpr: string, timezone: string, n: number): number[] => {
+  assertScheduleField(cronExpr, 'cronExpr', 200)
+  assertScheduleField(timezone, 'timezone', 64)
+  const safeN = Math.max(0, Math.min(10, Math.floor(n)))
+  return cronScheduler.getNextRuns(cronExpr, timezone, safeN)
+})
+
+/** schedule:list-runs - 历史触发日志，最多 limit 条 */
+wrapHandler('schedule:list-runs', (_, scheduleId: string, limit?: number): ScheduleRunRow[] => {
+  const safeLimit = Math.max(1, Math.min(500, Math.floor(limit ?? 100)))
+  return getScheduleStore().listRuns(scheduleId, safeLimit)
+})
+
+/** schedule:record-run-finish - 渲染端 sendMessage 完成后回填 status/conversation/duration */
+wrapHandler('schedule:record-run-finish', (
+  _,
+  runId: number,
+  status: Exclude<RunStatus, 'running'>,
+  opts?: { conversationId?: string | null; durationMs?: number; errorMessage?: string },
+): boolean => {
+  if (!Number.isInteger(runId) || runId <= 0) throw new Error('runId 非法')
+  if (!['success', 'failed', 'missed'].includes(status)) throw new Error(`status 非法: ${status}`)
+  return getScheduleStore().recordRunFinish(runId, status, opts)
 })
 
 // ─── 数据库备份 ────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 8
+const CURRENT_SCHEMA_VERSION = 10
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -61,6 +61,8 @@ export interface Conversation {
   id: string
   title: string
   avatar_id: string
+  /** Avatar 内项目分区，`default` 为历史兼容默认值 */
+  project_id: string
   workspace_initialized?: number
   created_at: number
   updated_at: number
@@ -152,6 +154,17 @@ export class DatabaseManager {
     this.initialize()
     this.prepareStatements()
     this.jsonlAppender = jsonlAppender
+  }
+
+  /**
+   * 暴露原生 better-sqlite3 实例给独立 DAO 模块（如 ScheduleStore）。
+   *
+   * 设计取舍：DatabaseManager 已逼近 1000 行，不再继续往里塞新表的 CRUD。
+   * 独立 DAO 的好处：① 单测可注入 in-memory db；② 模块边界与功能边界对齐。
+   * 调用方仅限本仓库 desktop-app/electron/* 下的 DAO 模块，外部不应直接拿到。
+   */
+  getRawDb(): Database.Database {
+    return this.db
   }
 
   /**
@@ -258,6 +271,7 @@ export class DatabaseManager {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         avatar_id TEXT NOT NULL DEFAULT '',
+        project_id TEXT NOT NULL DEFAULT 'default',
         workspace_initialized INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -385,6 +399,60 @@ export class DatabaseManager {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
+    `)
+
+    // 用户自定义定时任务表（v10 引入，2026-05-09 #11 Scheduled Tasks）
+    // 与现有 CronScheduler（cron-scheduler.ts）配合：主进程用 croner 解析 cron_expr 调度，
+    // 触发时通过 webContents.send('schedule:trigger', ...) 让渲染端调 sendMessage。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        avatar_id TEXT NOT NULL,
+        project_id TEXT NOT NULL DEFAULT 'default',
+        conversation_id TEXT,
+        cron_expr TEXT NOT NULL,
+        timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+        prompt_text TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        next_run_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_schedules_avatar_id
+      ON schedules(avatar_id)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_schedules_enabled
+      ON schedules(enabled)
+    `)
+
+    // 调度触发历史表（v10 引入）。
+    // 幂等键：UNIQUE(schedule_id, fired_at_utc)，防止同一时刻双触发。
+    // 状态语义：running（已开始未完成）/ success / failed / missed（错过未补跑）。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schedule_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        schedule_id TEXT NOT NULL,
+        fired_at_utc INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        conversation_id TEXT,
+        duration_ms INTEGER,
+        error_message TEXT,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
+        UNIQUE(schedule_id, fired_at_utc)
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule_id
+      ON schedule_runs(schedule_id, fired_at_utc DESC)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_schedule_runs_status
+      ON schedule_runs(status)
     `)
   }
 
@@ -546,6 +614,68 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 9) {
+      // v8 → v9：conversations.project_id（Avatar 内二级项目分区）
+      this.db.transaction(() => {
+        this.safeAddColumn('conversations', 'project_id', `TEXT NOT NULL DEFAULT 'default'`)
+        version = 9
+      })()
+    }
+
+    if (version < 10) {
+      // v9 → v10：新增 schedules + schedule_runs 表（用户自定义定时任务，#11 Scheduled Tasks）
+      // FOREIGN KEY ON DELETE CASCADE 在 schedules 删除时自动清理 schedule_runs。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS schedules (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            avatar_id TEXT NOT NULL,
+            project_id TEXT NOT NULL DEFAULT 'default',
+            conversation_id TEXT,
+            cron_expr TEXT NOT NULL,
+            timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+            prompt_text TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            next_run_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_schedules_avatar_id
+          ON schedules(avatar_id)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_schedules_enabled
+          ON schedules(enabled)
+        `)
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS schedule_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_id TEXT NOT NULL,
+            fired_at_utc INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            conversation_id TEXT,
+            duration_ms INTEGER,
+            error_message TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE,
+            UNIQUE(schedule_id, fired_at_utc)
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_schedule_runs_schedule_id
+          ON schedule_runs(schedule_id, fired_at_utc DESC)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_schedule_runs_status
+          ON schedule_runs(status)
+        `)
+        version = 10
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -585,16 +715,24 @@ export class DatabaseManager {
     this.db.prepare(`DELETE FROM agent_tasks WHERE conversation_id = ?`).run(conversationId)
   }
 
-  createConversation(title: string, avatarId: string): string {
+  createConversation(title: string, avatarId: string, projectId = 'default'): string {
     const id = `conv_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const now = Date.now()
 
     this.db.prepare(`
-      INSERT INTO conversations (id, title, avatar_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, title, avatarId, now, now)
+      INSERT INTO conversations (id, title, avatar_id, project_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, title, avatarId, projectId, now, now)
 
     return id
+  }
+
+  /** 列出某分身下曾出现过的项目 ID（去重排序），用于侧边栏分组 */
+  listProjectIdsForAvatar(avatarId: string): string[] {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT project_id FROM conversations WHERE avatar_id = ? ORDER BY project_id
+    `).all(avatarId) as Array<{ project_id: string }>
+    return rows.map((r) => r.project_id)
   }
 
   /**
@@ -602,12 +740,12 @@ export class DatabaseManager {
    * 用于批量回归：调用方需要用稳定的 conversationId（如 `regression-{runId}-{idx}`）
    * 才能精确过滤遥测事件，普通 createConversation 会重新生成 ID 不满足要求。
    */
-  ensureConversation(id: string, title: string, avatarId: string): void {
+  ensureConversation(id: string, title: string, avatarId: string, projectId = 'default'): void {
     const now = Date.now()
     this.db.prepare(`
-      INSERT OR IGNORE INTO conversations (id, title, avatar_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, title, avatarId, now, now)
+      INSERT OR IGNORE INTO conversations (id, title, avatar_id, project_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, title, avatarId, projectId, now, now)
   }
 
   /**

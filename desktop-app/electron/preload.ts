@@ -455,6 +455,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('cron-knowledge-check', handler) }
   },
 
+  // 用户自定义定时任务（#11 Scheduled Tasks）
+  scheduleList: (avatarId?: string) => ipcRenderer.invoke('schedule:list', avatarId),
+  scheduleGet: (id: string) => ipcRenderer.invoke('schedule:get', id),
+  scheduleCreate: (input: unknown) => ipcRenderer.invoke('schedule:create', input),
+  scheduleUpdate: (id: string, patch: unknown) => ipcRenderer.invoke('schedule:update', id, patch),
+  scheduleDelete: (id: string) => ipcRenderer.invoke('schedule:delete', id),
+  scheduleSetEnabled: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke('schedule:set-enabled', id, enabled),
+  scheduleTriggerNow: (id: string) => ipcRenderer.invoke('schedule:trigger-now', id),
+  scheduleGetNextRuns: (cronExpr: string, timezone: string, n: number) =>
+    ipcRenderer.invoke('schedule:get-next-runs', cronExpr, timezone, n),
+  scheduleListRuns: (scheduleId: string, limit?: number) =>
+    ipcRenderer.invoke('schedule:list-runs', scheduleId, limit),
+  scheduleRecordRunFinish: (
+    runId: number,
+    status: 'success' | 'failed' | 'missed',
+    opts?: { conversationId?: string | null; durationMs?: number; errorMessage?: string },
+  ) => ipcRenderer.invoke('schedule:record-run-finish', runId, status, opts),
+  /**
+   * 监听主进程 schedule:trigger 事件。
+   * payload 含 { runId, scheduleId, firedAtUtc, avatarId, projectId, conversationId, promptText, manual, scheduleName }。
+   * 渲染端在 sendMessage 完成后必须调 scheduleRecordRunFinish 闭环 status。
+   */
+  onScheduleTrigger: (callback: (payload: unknown) => void) => {
+    const handler = (_: unknown, payload: unknown) => callback(payload)
+    ipcRenderer.on('schedule:trigger', handler)
+    return () => { ipcRenderer.removeListener('schedule:trigger', handler) }
+  },
+
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) =>
     ipcRenderer.invoke('log-event', level, action, detail),

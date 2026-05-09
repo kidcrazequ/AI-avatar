@@ -73,6 +73,60 @@ interface FileNode {
   children?: FileNode[]
 }
 
+/**
+ * 用户自定义定时任务（#11 Scheduled Tasks，2026-05-09）。
+ * 与 electron/db-schedules.ts 的 ScheduleRow 保持字段一致，仅枚举 enabled 用 0/1。
+ */
+interface ScheduleRow {
+  id: string
+  name: string
+  avatar_id: string
+  project_id: string
+  conversation_id: string | null
+  cron_expr: string
+  timezone: string
+  prompt_text: string
+  enabled: 0 | 1
+  next_run_at: number | null
+  created_at: number
+  updated_at: number
+}
+
+interface ScheduleRunRow {
+  id: number
+  schedule_id: string
+  fired_at_utc: number
+  status: 'running' | 'success' | 'failed' | 'missed'
+  conversation_id: string | null
+  duration_ms: number | null
+  error_message: string | null
+  created_at: number
+}
+
+/** 创建 schedule 入参（id / 时间戳由主进程生成） */
+interface NewScheduleInput {
+  name: string
+  avatarId: string
+  projectId?: string
+  conversationId?: string | null
+  cronExpr: string
+  timezone?: string
+  promptText: string
+  enabled?: boolean
+}
+
+/** 更新 schedule 入参（仅传需要改的字段） */
+interface UpdateScheduleInput {
+  name?: string
+  avatarId?: string
+  projectId?: string
+  conversationId?: string | null
+  cronExpr?: string
+  timezone?: string
+  promptText?: string
+  enabled?: boolean
+}
+
 interface SearchResult {
   path: string
   matches: string[]
@@ -565,6 +619,25 @@ interface ElectronAPI {
   onCronMemoryConsolidate: (callback: (avatarId: string) => void) => (() => void)
   onCronKnowledgeCheck: (callback: (avatarId: string) => void) => (() => void)
 
+  // 用户自定义定时任务（#11 Scheduled Tasks，2026-05-09）
+  scheduleList: (avatarId?: string) => Promise<ScheduleRow[]>
+  scheduleGet: (id: string) => Promise<ScheduleRow | null>
+  scheduleCreate: (input: NewScheduleInput) => Promise<ScheduleRow>
+  scheduleUpdate: (id: string, patch: UpdateScheduleInput) => Promise<ScheduleRow>
+  scheduleDelete: (id: string) => Promise<boolean>
+  scheduleSetEnabled: (id: string, enabled: boolean) => Promise<ScheduleRow>
+  scheduleTriggerNow: (id: string) => Promise<{ runId: number | null; conflict: boolean }>
+  /** 计算 cron 表达式的下 n 次触发 Unix ms（UI 预览，不写 DB；n 自动 clamp 到 0-10） */
+  scheduleGetNextRuns: (cronExpr: string, timezone: string, n: number) => Promise<number[]>
+  scheduleListRuns: (scheduleId: string, limit?: number) => Promise<ScheduleRunRow[]>
+  scheduleRecordRunFinish: (
+    runId: number,
+    status: 'success' | 'failed' | 'missed',
+    opts?: { conversationId?: string | null; durationMs?: number; errorMessage?: string },
+  ) => Promise<boolean>
+  /** schedule 触发事件订阅（payload 字段见 schedule-trigger-handler.ScheduleTriggerPayload） */
+  onScheduleTrigger: (callback: (payload: unknown) => void) => (() => void)
+
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) => Promise<void>
   getActivityLogs: (date?: string) => Promise<string>
@@ -783,9 +856,17 @@ interface TestCase {
   filePath: string
 }
 
+interface AvatarQualityScoresReport {
+  redline: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  knowledgeCompleteness: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  citationAccuracy: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  otherRanCount: number
+}
+
 interface TestResult {
   caseId: string
   caseName: string
+  category?: string
   passed: boolean
   score: number
   response: string
@@ -803,6 +884,7 @@ interface TestReport {
   results: TestResult[]
   timestamp: number
   duration: number
+  qualityScores?: AvatarQualityScoresReport
 }
 
 interface Skill {

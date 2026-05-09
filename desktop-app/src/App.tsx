@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 import KnowledgePanel from './components/KnowledgePanel'
@@ -12,6 +12,7 @@ import LifePanel from './components/LifePanel'
 import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
 import PromptTemplatePanel from './components/PromptTemplatePanel'
+import SchedulesPanel from './components/SchedulesPanel'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
 import PixelNavBar from './components/PixelNavBar'
 import AvatarImage from './components/AvatarImage'
@@ -21,12 +22,18 @@ import { useThemeStore } from './stores/themeStore'
 import { useChatStore } from './stores/chatStore'
 import { MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core/browser'
 import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
+import { registerSoulProxyApiBridge } from './services/proxy-api-bridge'
+import { registerScheduleTriggerListener } from './services/schedule-trigger-handler'
+
+function conversationProjectId(c: Conversation): string {
+  return c.project_id && c.project_id.length > 0 ? c.project_id : 'default'
+}
 
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
@@ -38,9 +45,13 @@ function App() {
   const showUserProfilePanel = activePanel === 'userProfile'
   const showSoulEditor = activePanel === 'soulEditor'
   const showPromptTemplatePanel = activePanel === 'promptTemplate'
+  const showSchedulesPanel = activePanel === 'schedules'
   const showBatchRegression = activePanel === 'batchRegression'
   const [templateFillText, setTemplateFillText] = useState<string | undefined>(undefined)
   const [activeAvatarId, setActiveAvatarId] = useState<string>('')
+  /** Avatar 内二级项目（工作区 / 项目知识分区） */
+  const [activeProjectId, setActiveProjectId] = useState<string>('default')
+  const [knownProjectIds, setKnownProjectIds] = useState<string[]>(['default'])
   const [activeAvatarName, setActiveAvatarName] = useState<string>('')
   const [avatarList, setAvatarList] = useState<Avatar[]>([])
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error'; onClick?: () => void } | null>(null)
@@ -56,6 +67,8 @@ function App() {
   const cronKnowledgeRunningRef = useRef(false)
   const avatarSwitchSeqRef = useRef(0)
   const skipEffectLoadRef = useRef(false)
+  /** TEST CENTER 落盘最新报告后递增，驱动顶栏质量勋章刷新 */
+  const [qualityReportNonce, setQualityReportNonce] = useState(0)
 
   const themeId = useThemeStore(s => s.themeId)
 
@@ -71,6 +84,11 @@ function App() {
   )
 
   useEffect(() => () => { clearTimeout(toastTimerRef.current) }, [])
+
+  useEffect(() => {
+    const off = registerSoulProxyApiBridge()
+    return off
+  }, [])
 
   // 启动时检查更新（静默，失败不影响使用）
   useEffect(() => {
@@ -112,16 +130,21 @@ function App() {
     try {
       const convs = await window.electronAPI.getConversations(activeAvatarId)
       setConversations(convs)
+      const ids = await window.electronAPI.listProjectIds(activeAvatarId)
+      const next = ids.length > 0 ? ids : ['default']
+      setKnownProjectIds(next)
+      setActiveProjectId((p) => (next.includes(p) ? p : 'default'))
     } catch (err) {
       console.error('[App] 加载会话列表失败:', err)
       window.electronAPI.logEvent('error', 'load-conversations-error', err instanceof Error ? err.message : String(err))
     }
   }, [activeAvatarId])
 
-  const loadAvatarConfig = useCallback(async (avatarId: string) => {
+  const loadAvatarConfig = useCallback(async (avatarId: string, projectId?: string) => {
     if (!avatarId) return
     try {
-      const config = await window.electronAPI.loadAvatar(avatarId)
+      const pidArg = projectId && projectId !== 'default' ? projectId : undefined
+      const config = await window.electronAPI.loadAvatar(avatarId, pidArg)
       setSystemPrompt(config.systemPrompt)
       return config
     } catch (err) {
@@ -239,12 +262,16 @@ function App() {
       }
     })
 
+    // 用户自定义定时任务触发监听器（#11 Scheduled Tasks）
+    const removeScheduleTrigger = registerScheduleTriggerListener()
+
     return () => {
       window.removeEventListener('settings-updated', handleSettingsUpdate)
       removeScheduledTest?.()
       removeTestBadge?.()
       removeCronMemory?.()
       removeCronKnowledge?.()
+      removeScheduleTrigger?.()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -255,27 +282,34 @@ function App() {
       skipEffectLoadRef.current = false
       return
     }
-    loadConversations()
-    loadAvatarConfig(activeAvatarId)
+    void loadConversations()
   }, [activeAvatarId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeAvatarId) return
+    void loadAvatarConfig(activeAvatarId, activeProjectId)
+  }, [activeAvatarId, activeProjectId, loadAvatarConfig])
 
   const handleSelectAvatar = async (avatarId: string) => {
     const seq = ++avatarSwitchSeqRef.current
     resetTransientState()
     skipEffectLoadRef.current = true
     setActiveAvatarId(avatarId)
+    setActiveProjectId('default')
     setActiveConversationId(null)
     clearMessages()
 
     try {
       const [, convs, avatars] = await Promise.all([
-        loadAvatarConfig(avatarId),
+        loadAvatarConfig(avatarId, 'default'),
         window.electronAPI.getConversations(avatarId),
         window.electronAPI.listAvatars(),
       ])
 
       if (avatarSwitchSeqRef.current !== seq) return
       setConversations(convs)
+      const ids = await window.electronAPI.listProjectIds(avatarId)
+      setKnownProjectIds(ids.length > 0 ? ids : ['default'])
       setAvatarList(avatars)
       const avatar = avatars.find(a => a.id === avatarId)
       if (avatar) setActiveAvatarName(avatar.name)
@@ -305,7 +339,7 @@ function App() {
     if (!activeAvatarId || isCreatingConversation) return
     setIsCreatingConversation(true)
     try {
-      const id = await window.electronAPI.createConversation('新对话', activeAvatarId)
+      const id = await window.electronAPI.createConversation('新对话', activeAvatarId, activeProjectId)
       await loadConversations()
       setActiveConversationId(id)
       clearMessages()
@@ -314,8 +348,30 @@ function App() {
     }
   }
 
+  const handleProjectChange = (projectId: string) => {
+    setActiveProjectId(projectId)
+  }
+
+  const handleCreateProjectId = () => {
+    if (!activeAvatarId) return
+    const raw = window.prompt('新项目 ID（字母、数字、下划线、连字符；将用于工作区与知识子目录）', '')
+    if (raw === null) return
+    const id = raw.trim()
+    if (!id) return
+    if (!/^[\w-]+$/.test(id)) {
+      showToast('项目 ID 仅允许字母数字下划线与连字符', 'error')
+      return
+    }
+    setKnownProjectIds((prev) => [...new Set([...prev, id])].sort())
+    setActiveProjectId(id)
+    showToast(`已切换到项目「${id}」，新建对话将归入该项目`)
+  }
+
   const handleSelectConversation = (id: string) => {
     resetTransientState()
+    const conv = conversations.find((c) => c.id === id)
+    const pid = conv?.project_id && conv.project_id.length > 0 ? conv.project_id : 'default'
+    setActiveProjectId(pid)
     setActiveConversationId(id)
   }
 
@@ -335,23 +391,28 @@ function App() {
 
   const handleSkillsChanged = useCallback(async () => {
     if (!activeAvatarId) return
-    await loadAvatarConfig(activeAvatarId)
+    await loadAvatarConfig(activeAvatarId, activeProjectId)
     showToast('技能已更新，上下文已刷新')
-  }, [activeAvatarId, loadAvatarConfig, showToast])
+  }, [activeAvatarId, activeProjectId, loadAvatarConfig, showToast])
 
   const handleKnowledgeSaved = useCallback(async () => {
     if (!activeAvatarId) return
-    await loadAvatarConfig(activeAvatarId)
+    await loadAvatarConfig(activeAvatarId, activeProjectId)
     showToast('知识已保存，上下文已刷新')
-  }, [activeAvatarId, loadAvatarConfig, showToast])
+  }, [activeAvatarId, activeProjectId, loadAvatarConfig, showToast])
 
   const handleSoulChanged = useCallback(async () => {
     if (!activeAvatarId) return
-    await loadAvatarConfig(activeAvatarId)
+    await loadAvatarConfig(activeAvatarId, activeProjectId)
     showToast('人格已保存，上下文已刷新')
-  }, [activeAvatarId, loadAvatarConfig, showToast])
+  }, [activeAvatarId, activeProjectId, loadAvatarConfig, showToast])
 
   /** 顶栏导航按钮 */
+  const sidebarConversations = useMemo(
+    () => conversations.filter((c) => conversationProjectId(c) === activeProjectId),
+    [conversations, activeProjectId],
+  )
+
   const navButtons = [
     { label: '人设', icon: '♦', key: 'soul', onClick: () => setActivePanel('soulEditor'), active: showSoulEditor },
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
@@ -360,6 +421,7 @@ function App() {
     { label: '人生', icon: '❀', key: 'life', onClick: () => setActivePanel('life'), active: showLifePanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
+    { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
@@ -426,9 +488,13 @@ function App() {
         renderAvatarSelectPage()
       ) : (
         <Sidebar
-          conversations={conversations}
+          conversations={sidebarConversations}
           activeConversationId={activeConversationId}
           activeAvatarId={activeAvatarId}
+          activeProjectId={activeProjectId}
+          knownProjectIds={knownProjectIds}
+          onProjectChange={handleProjectChange}
+          onCreateProjectId={handleCreateProjectId}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
@@ -470,6 +536,7 @@ function App() {
                       await refreshAvatarList()
                     }}
                     showToast={showToast}
+                    qualityRefreshNonce={qualityReportNonce}
                   />
                 </div>
                 <PixelNavBar items={navButtons} />
@@ -554,6 +621,7 @@ function App() {
           chatModel={chatModel}
           systemPrompt={systemPrompt}
           onClose={() => setActivePanel(null)}
+          onReportSaved={() => setQualityReportNonce((v) => v + 1)}
         />
       )}
 
@@ -600,6 +668,13 @@ function App() {
             setActivePanel(null)
             setTimeout(() => setTemplateFillText(undefined), 0)
           }}
+        />
+      )}
+
+      {showSchedulesPanel && activeAvatarId && (
+        <SchedulesPanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
         />
       )}
 

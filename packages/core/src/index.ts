@@ -12,6 +12,7 @@ export { SoulLoader } from './soul-loader'
 export type { AvatarConfig } from './soul-loader'
 
 export { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+export { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
 export { CompositeKnowledgeRetriever, reciprocalRankFusion } from './composite-knowledge-retriever'
 
 export { AvatarManager } from './avatar-manager'
@@ -107,6 +108,17 @@ export {
   EMPTY_STRUCTURED_MEMORY_DOCUMENT,
 } from './structured-memory'
 export type { StructuredMemoryEntry, StructuredMemoryDocument } from './structured-memory'
+
+export {
+  mapTestCaseToQualityDimension,
+  computeAvatarQualityScores,
+} from './avatar-quality-scores'
+export type {
+  AvatarQualityAxis,
+  AvatarTestOutcomeForQuality,
+  AvatarQualityDimensionAggregate,
+  AvatarQualityScores,
+} from './avatar-quality-scores'
 
 export { SubAgentManager } from './sub-agent-manager'
 export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'

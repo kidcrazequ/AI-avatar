@@ -413,6 +413,18 @@ function initManagers() {
     .filter((row) => row.enabled)
     .map(mcpRowToConfig)
   mcpManager = new McpClientManager(mcpInitialConfigs)
+
+  const resolveConversationProjectIdFromDb = (cid: string): string => {
+    assertSafeSegment(cid, 'conversationId')
+    const row = getDb().getConversation(cid)
+    const p =
+      typeof row?.project_id === 'string' && row.project_id.trim().length > 0
+        ? row.project_id.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    assertSafeSegment(p, 'projectId')
+    return p
+  }
+
   // 注入跨分身委派依赖：让 delegate_task({ target_avatar }) 能现场加载目标分身的 systemPrompt
   // 同时注入 getSetting：让 web_search 等需要外部凭据的工具能读到 settings 表中的 API Key
   // 同时注入 mcpManager：让 list_mcp_tools / call_mcp_tool 工具能路由到 MCP server
@@ -444,17 +456,9 @@ function initManagers() {
       renderPdf: (html, outputPath) => renderDocumentPdf(html, outputPath, { logger: logger ?? undefined }),
       renderDocx: (ir, outputPath) => renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined }),
     },
+    resolveConversationProjectId: resolveConversationProjectIdFromDb,
   })
-  workspaceManager = new WorkspaceManager(avatarsPath, (cid: string) => {
-    assertSafeSegment(cid, 'conversationId')
-    const row = getDb().getConversation(cid)
-    const p =
-      typeof row?.project_id === 'string' && row.project_id.trim().length > 0
-        ? row.project_id.trim()
-        : DEFAULT_AVATAR_PROJECT_ID
-    assertSafeSegment(p, 'projectId')
-    return p
-  })
+  workspaceManager = new WorkspaceManager(avatarsPath, resolveConversationProjectIdFromDb)
   templateLoader = new TemplateLoader(templatesPath)
   verifierAgent = new VerifierAgent(logger)
   publicFileServer = new PublicFileServer(logger)

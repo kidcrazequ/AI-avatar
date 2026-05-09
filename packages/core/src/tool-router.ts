@@ -5,6 +5,9 @@ import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
 import { SubAgentManager } from './sub-agent-manager'
 import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
+import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
+import { CompositeKnowledgeRetriever } from './composite-knowledge-retriever'
 import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
@@ -372,6 +375,15 @@ export class ToolRouter {
   private avatarsPath: string
   private designSystemsPath: string
   private retrievers = new Map<string, KnowledgeRetriever>()
+  /** projects/<pid>/knowledge 独立索引缓存 */
+  private projectKnowledgeRetrievers = new Map<string, KnowledgeRetriever>()
+  /** 当前 execute 调用栈内的项目分区（线程非安全：假定单会话串行工具执行） */
+  private knowledgeProjectContext: string = DEFAULT_AVATAR_PROJECT_ID
+  /**
+   * 按会话 ID 解析 `project_id`（与主进程 DB 一致），用于 `/projects/<conv>/` 跨会话路径与 ToolRouter 内工作区根解析。
+   * 未注入时跨会话路径按 `default` 分区解析（兼容旧测试）；桌面端由 main 注入真实解析器。
+   */
+  private resolveConversationProjectId?: (conversationId: string) => string
   /** Feature 7: 子代理管理器 */
   readonly subAgentManager = new SubAgentManager()
   /** 主代理 system prompt（用于子代理共享上下文） */
@@ -437,6 +449,7 @@ export class ToolRouter {
    *   - getSetting: 读取应用设置（API Key 等），用于 web_search 等需要外部凭据的工具
    *   - mcpManager: MCP 客户端管理器，用于 list_mcp_tools / call_mcp_tool
    *   - documentRenderers: 文档生成 PDF/DOCX 渲染器（决策 A1 依赖注入）
+   *   - resolveConversationProjectId: 会话 → project_id（与 WorkspaceManager 注入同源，保证工具层工作区与 IPC 一致）
    */
   constructor(
     avatarsPath: string,
@@ -446,6 +459,7 @@ export class ToolRouter {
       getSetting?: (key: string) => string | undefined
       mcpManager?: McpClientManager
       documentRenderers?: DocumentRendererHook
+      resolveConversationProjectId?: (conversationId: string) => string
     },
   ) {
     this.avatarsPath = avatarsPath
@@ -455,6 +469,7 @@ export class ToolRouter {
     this.getSetting = options?.getSetting
     this.mcpManager = options?.mcpManager
     this.documentRenderers = options?.documentRenderers
+    this.resolveConversationProjectId = options?.resolveConversationProjectId
   }
 
   /** 允许在 ToolRouter 创建后再注入（如渲染进程在 ToolRouter 之后才完成 IPC 桥接） */
@@ -469,8 +484,14 @@ export class ToolRouter {
     if (!conversationId) {
       throw new Error('缺少 conversationId，无法定位 workspace')
     }
+    assertSafeSegment(avatarId, '分身ID')
     assertSafeSegment(conversationId, 'conversationId')
-    const root = path.join(this.avatarsPath, avatarId, 'workspaces', conversationId)
+    const root = resolveAvatarWorkspaceSessionRoot(
+      this.avatarsPath,
+      avatarId,
+      this.knowledgeProjectContext,
+      conversationId,
+    )
     fs.mkdirSync(root, { recursive: true })
     return root
   }
@@ -487,7 +508,21 @@ export class ToolRouter {
     }
     const targetConversationId = parts[1]
     assertSafeSegment(targetConversationId, 'conversationId')
-    const targetRoot = path.join(this.avatarsPath, avatarId, 'workspaces', targetConversationId)
+    const resolver = this.resolveConversationProjectId ?? (() => DEFAULT_AVATAR_PROJECT_ID)
+    const rawTargetPid = resolver(targetConversationId)
+    const targetProjectId =
+      typeof rawTargetPid === 'string' && rawTargetPid.trim().length > 0
+        ? rawTargetPid.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    if (targetProjectId !== DEFAULT_AVATAR_PROJECT_ID) {
+      assertSafeSegment(targetProjectId, 'projectId')
+    }
+    const targetRoot = resolveAvatarWorkspaceSessionRoot(
+      this.avatarsPath,
+      avatarId,
+      targetProjectId,
+      targetConversationId,
+    )
     fs.mkdirSync(targetRoot, { recursive: true })
     const rest = parts.slice(2).join('/')
     return resolveUnderRoot(targetRoot, rest || '.')
@@ -516,34 +551,56 @@ export class ToolRouter {
   }
 
   /**
+   * 在指定 knowledge 根目录上构造并 hydrate KnowledgeRetriever。
+   */
+  private loadRetrieverForKnowledgeRoot(knowledgePath: string): KnowledgeRetriever {
+    const retriever = new KnowledgeRetriever(knowledgePath)
+    const index = loadIndex(knowledgePath)
+    if (index) {
+      retriever.setContexts(index.contexts)
+      retriever.setEmbeddings(index.embeddings)
+      if (index.tokens.size > 0) {
+        retriever.setTokens(index.tokens)
+      }
+    }
+    if (!index) {
+      const indexDir = path.join(knowledgePath, '_index')
+      const tokenCache = loadTokensCache(indexDir)
+      if (tokenCache && tokenCache.size > 0) {
+        retriever.setTokens(tokenCache)
+        console.log(`[tool-router] 仅加载 tokens 缓存 (${tokenCache.size} entries)，contexts/embeddings 不存在`)
+      }
+    }
+    return retriever
+  }
+
+  /** 分身全局 knowledge/ + 当前 execute 上下文中的 project 分区（合并检索）。 */
+  private getKnowledgeSurfaceForContext(avatarId: string): CompositeKnowledgeRetriever {
+    const base = this.getRetriever(avatarId)
+    const pid = this.knowledgeProjectContext
+    if (pid === DEFAULT_AVATAR_PROJECT_ID) {
+      return new CompositeKnowledgeRetriever(base, null, '')
+    }
+    const overlayPath = path.join(this.avatarsPath, avatarId, 'projects', pid, 'knowledge')
+    if (!fs.existsSync(overlayPath)) {
+      return new CompositeKnowledgeRetriever(base, null, '')
+    }
+    const cacheKey = `${avatarId}\x1f${pid}`
+    if (!this.projectKnowledgeRetrievers.has(cacheKey)) {
+      this.projectKnowledgeRetrievers.set(cacheKey, this.loadRetrieverForKnowledgeRoot(overlayPath))
+    }
+    const overlay = this.projectKnowledgeRetrievers.get(cacheKey)!
+    return new CompositeKnowledgeRetriever(base, overlay, `projects/${pid}/knowledge/`)
+  }
+
+  /**
    * 获取或创建分身的 KnowledgeRetriever，自动加载持久化索引（contexts + embeddings）。
    */
   getRetriever(avatarId: string): KnowledgeRetriever {
     assertSafeSegment(avatarId, '分身ID')
     if (!this.retrievers.has(avatarId)) {
       const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
-      const retriever = new KnowledgeRetriever(knowledgePath)
-      const index = loadIndex(knowledgePath)
-      if (index) {
-        retriever.setContexts(index.contexts)
-        retriever.setEmbeddings(index.embeddings)
-        if (index.tokens.size > 0) {
-          retriever.setTokens(index.tokens)
-        }
-      }
-      // v0.6.16: 独立加载 tokens，不依赖 loadIndex（因为 loadIndex 在
-      // contexts.json / embeddings.json 不存在时直接 return null，连 tokens.json
-      // 也不加载 —— 这是"每次重启都 260s segmentit 分词"的根因！）
-      // 只要 _index/tokens.json 存在，就加载到 retriever，不管其他索引文件是否存在。
-      if (!index) {
-        const indexDir = path.join(knowledgePath, '_index')
-        const tokenCache = loadTokensCache(indexDir)
-        if (tokenCache && tokenCache.size > 0) {
-          retriever.setTokens(tokenCache)
-          console.log(`[tool-router] 仅加载 tokens 缓存 (${tokenCache.size} entries)，contexts/embeddings 不存在`)
-        }
-      }
-      this.retrievers.set(avatarId, retriever)
+      this.retrievers.set(avatarId, this.loadRetrieverForKnowledgeRoot(knowledgePath))
     }
     return this.retrievers.get(avatarId)!
   }
@@ -555,14 +612,29 @@ export class ToolRouter {
    */
   saveRetrieverTokens(avatarId: string): void {
     const retriever = this.retrievers.get(avatarId)
-    if (!retriever || !retriever.isTokensDirty()) return
-    const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
-    const indexDir = path.join(knowledgePath, '_index')
-    try {
-      saveTokensCache(indexDir, retriever.getTokens())
-      retriever.clearTokensDirty()
-    } catch (err) {
-      console.warn(`[tool-router] saveTokensCache 失败: ${err instanceof Error ? err.message : String(err)}`)
+    if (retriever?.isTokensDirty()) {
+      const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+      const indexDir = path.join(knowledgePath, '_index')
+      try {
+        saveTokensCache(indexDir, retriever.getTokens())
+        retriever.clearTokensDirty()
+      } catch (err) {
+        console.warn(`[tool-router] saveTokensCache 失败: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    const pid = this.knowledgeProjectContext
+    if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
+      const cacheKey = `${avatarId}\x1f${pid}`
+      const projR = this.projectKnowledgeRetrievers.get(cacheKey)
+      if (projR?.isTokensDirty()) {
+        const pPath = path.join(this.avatarsPath, avatarId, 'projects', pid, 'knowledge')
+        try {
+          saveTokensCache(path.join(pPath, '_index'), projR.getTokens())
+          projR.clearTokensDirty()
+        } catch (err) {
+          console.warn(`[tool-router] saveTokensCache(project) 失败: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
     }
   }
 
@@ -571,6 +643,10 @@ export class ToolRouter {
    */
   invalidateRetriever(avatarId: string): void {
     this.retrievers.delete(avatarId)
+    const pfx = `${avatarId}\x1f`
+    for (const key of [...this.projectKnowledgeRetrievers.keys()]) {
+      if (key.startsWith(pfx)) this.projectKnowledgeRetrievers.delete(key)
+    }
     this.linkGraphCache.delete(avatarId)
     for (const key of this.excelSourceCache.keys()) {
       if (key.startsWith(`${avatarId}:`)) this.excelSourceCache.delete(key)
@@ -605,7 +681,7 @@ export class ToolRouter {
     avatarId: string,
     chunks: Array<{ file: string; heading: string; content: string; score: number }>,
   ): KnowledgeSearchResult[] {
-    const retriever = this.getRetriever(avatarId)
+    const retriever = this.getKnowledgeSurfaceForContext(avatarId)
     const fileCache = new Map<string, string>()
 
     const readMarkdown = (file: string): string => {
@@ -649,7 +725,7 @@ export class ToolRouter {
     const linkedFiles = expandLinkedFiles(graph, uniqueSeedFiles, { maxDepth: 2, maxFiles: maxRelatedFiles })
     if (linkedFiles.length === 0) return []
 
-    const retriever = this.getRetriever(avatarId)
+    const retriever = this.getKnowledgeSurfaceForContext(avatarId)
     const results: KnowledgeSearchResult[] = []
 
     for (const linked of linkedFiles) {
@@ -688,7 +764,10 @@ export class ToolRouter {
       maxRelatedFiles = 4,
     } = options
 
-    const rawChunks = this.anchorKnowledgeChunks(avatarId, this.getRetriever(avatarId).searchChunks(query, rawTopN))
+    const rawChunks = this.anchorKnowledgeChunks(
+      avatarId,
+      this.getKnowledgeSurfaceForContext(avatarId).searchChunks(query, rawTopN),
+    )
     const reranked = rerankChunksWithDiversity(rawChunks, {
       maxChunks,
       maxPerFile,
@@ -749,9 +828,23 @@ export class ToolRouter {
     request: ToolCallRequest,
     callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>,
     conversationId?: string,
+    /** 会话所属 Avatar 项目分区，影响合并知识检索范围 */
+    knowledgeProjectId?: string,
   ): Promise<ToolCallResult> {
     assertSafeSegment(avatarId, '分身ID')
     const { name, arguments: args } = request
+
+    const prevCtx = this.knowledgeProjectContext
+    const pid =
+      typeof knowledgeProjectId === 'string' && knowledgeProjectId.trim().length > 0
+        ? knowledgeProjectId.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    try {
+      if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    this.knowledgeProjectContext = pid
 
     try {
       let result: ToolCallResult
@@ -851,6 +944,8 @@ export class ToolRouter {
       return result
     } catch (error) {
       return { content: '', error: error instanceof Error ? error.message : String(error) }
+    } finally {
+      this.knowledgeProjectContext = prevCtx
     }
   }
 
@@ -1529,7 +1624,7 @@ export class ToolRouter {
    */
   private isKnowledgeBaseEmpty(avatarId: string): boolean {
     try {
-      return this.getRetriever(avatarId).listFiles().length === 0
+      return this.getKnowledgeSurfaceForContext(avatarId).listFiles().length === 0
     } catch (err) {
       console.warn(`[tool-router] isKnowledgeBaseEmpty 检测失败 avatarId=${avatarId}: ${err instanceof Error ? err.message : String(err)}`)
       return false
@@ -1564,7 +1659,7 @@ export class ToolRouter {
       console.log(`[tool-router] read_knowledge_file 短路：知识库为空 avatarId=${avatarId} file=${filePath}`)
       return this.buildEmptyKnowledgeBaseHint()
     }
-    const content = this.getRetriever(avatarId).readFile(filePath)
+    const content = this.getKnowledgeSurfaceForContext(avatarId).readFile(filePath)
     const anchor = formatSourceAnchor(buildWholeFileKnowledgeAnchor(filePath, content))
     return { content: `${anchor}
 ${content}` }
@@ -1632,7 +1727,7 @@ ${content}` }
   }
 
   private listKnowledgeFiles(avatarId: string): ToolCallResult {
-    const files = this.getRetriever(avatarId).listFiles()
+    const files = this.getKnowledgeSurfaceForContext(avatarId).listFiles()
     if (files.length === 0) {
       console.log(`[tool-router] list_knowledge_files 短路：知识库为空 avatarId=${avatarId}`)
       return this.buildEmptyKnowledgeBaseHint()

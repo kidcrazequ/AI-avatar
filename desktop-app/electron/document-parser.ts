@@ -261,6 +261,24 @@ export class DocumentParser {
     }
   }
 
+  /**
+   * 解析 PDF 文件：提取每页文字、统计字符数、按文字密度筛选需要 Vision OCR 的图表页。
+   *
+   * Template-based chunking（#14 子任务 1）：
+   *   多页 PDF（pages.length >= 2）会在每页内容前注入 `### 第 N 页` 三级标题，
+   *   返回的 text 形如：
+   *     ### 第 1 页
+   *
+   *     <page 1 文字>
+   *
+   *     ### 第 2 页
+   *
+   *     <page 2 文字>
+   *   这样 packages/core/src/knowledge-retriever.ts 的 buildChunks 会按 heading
+   *   切 chunk，让"PDF 第 N 页"自然成为最小检索单元。本方法只负责注入侧，
+   *   不依赖也不修改 knowledge-retriever。
+   *   单页 PDF 不注入，保持现有行为不变。
+   */
   private async parsePdf(filePath: string, fileName: string): Promise<ParsedDocument> {
     // pdfjs-dist 的 fake worker 模式通过 import("./pdf.worker.mjs") 加载 worker。
     // 在 Windows 打包后 asar 内 import() 加载 .mjs 有兼容性问题。
@@ -283,7 +301,7 @@ export class DocumentParser {
 
     // 1. 提取全文
     const textResult = await parser.getText({ parsePageInfo: true })
-    const fullText: string = textResult.text || ''
+    const rawFullText: string = textResult.text || ''
 
     // 2. 统计每页字符数（用于 Vision 数据定位），并找出图表页
     const perPageChars: Array<{ num: number; chars: number }> = []
@@ -299,11 +317,36 @@ export class DocumentParser {
       })
     }
 
+    // 2.5 多页 PDF 注入 `### 第 N 页` 三级标题，让下游 knowledge-retriever.buildChunks
+    //     按页自然切分 chunk（# / ## / ### 都是 buildChunks 识别的 section 边界）。
+    //     - 用 ###（三级）而非 ##（二级），避开 PPTX 的 `## 第 N 页` 命名空间，
+    //       两类文档同时出现时不会互相吞并 chunk。
+    //     - 单页 PDF（pages.length < 2）不注入，保持现有行为；过短文档加 heading
+    //       反而会被 chunker 当成独立 section 误切。
+    //     - 空页（page.text 空白或仅空白）跳过，不产生空 heading。
+    //     - pages 数组缺失（pdfjs 异常）时回退到 textResult.text。
+    //     注：本逻辑仅修改返回的 text 字段，不触碰 packages/core/src/knowledge-retriever.ts
+    //     —— heading 注入侧 + chunker 识别侧解耦，互不感知具体规则。
+    let fullText: string = rawFullText
+    if (hasPageInfo && textResult.pages.length >= 2) {
+      const sections: string[] = []
+      for (const page of textResult.pages as Array<{ num: number; text: string }>) {
+        const pageText = page.text || ''
+        if (pageText.trim() === '') continue
+        sections.push(`### 第 ${page.num} 页\n\n${pageText}`)
+      }
+      if (sections.length > 0) {
+        fullText = sections.join('\n\n')
+      }
+    }
+
     // 分页信息缺失的 fallback：若全文本身稀疏/乱码，就把所有页当图表页走 OCR，
     // 避免 pdfjs 拿不到 perPage 时整份文档零截图（曾出现于某些 CNAS 测试报告）。
     // 页号列表从 getScreenshot 拿，这样即使分页 API 失败也能兜底。
+    // 注意：这里判定原文质量必须用 rawFullText（pdfjs 提取的原始文字），
+    //      不能用注入了 `### 第 N 页` 的 fullText —— 注入的标题字符不属于 PDF 原文。
     let needsFullDocFallback = false
-    if (imageDensePages.length === 0 && shouldOcrPage(fullText)) {
+    if (imageDensePages.length === 0 && shouldOcrPage(rawFullText)) {
       needsFullDocFallback = true
     }
 
@@ -358,11 +401,74 @@ export class DocumentParser {
     }
   }
 
+  /**
+   * 解析 Word .docx 文件：优先用 mammoth.convertToHtml + Turndown 拿带标题层级的 markdown，
+   * 让 packages/core/src/knowledge-retriever.ts 的 buildChunks 按 # / ## / ### 切 chunk。
+   *
+   * 三级兜底链：
+   *   1. mammoth.convertToHtml(styleMap) → HTML → Turndown → Markdown（主路径）
+   *   2. mammoth.extractRawText（一级回退：丢失标题层级，但纯文本可用）
+   *   3. adm-zip 解 word/document.xml 直抽 <w:t>（二级回退：覆盖表格/文本框/SDT 控件）
+   *
+   * styleMap 同时声明中英文标题样式，因为 Office 中文版创建的文档 style-name 是 `标题 1/2/...`，
+   * 而英文 Office 创建的是 `Heading 1/2/...`，mammoth 默认 styleMap 只覆盖英文映射。
+   */
   private async parseWord(filePath: string, fileName: string): Promise<ParsedDocument> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mammoth = require('mammoth')
-    const result = await mammoth.extractRawText({ path: filePath })
-    let text: string = result.value || ''
+
+    // 中英文 Word 标题样式 → HTML h1-h6 的显式映射。`:fresh` 修饰确保每个标题
+    // 独占段落，不会和前后内容合并到同一行。
+    const styleMap = [
+      "p[style-name='标题 1'] => h1:fresh",
+      "p[style-name='标题 2'] => h2:fresh",
+      "p[style-name='标题 3'] => h3:fresh",
+      "p[style-name='标题 4'] => h4:fresh",
+      "p[style-name='标题 5'] => h5:fresh",
+      "p[style-name='标题 6'] => h6:fresh",
+      "p[style-name='Heading 1'] => h1:fresh",
+      "p[style-name='Heading 2'] => h2:fresh",
+      "p[style-name='Heading 3'] => h3:fresh",
+      "p[style-name='Heading 4'] => h4:fresh",
+      "p[style-name='Heading 5'] => h5:fresh",
+      "p[style-name='Heading 6'] => h6:fresh",
+    ]
+
+    let text = ''
+
+    // 主路径：convertToHtml → Turndown 转 markdown，保留标题层级与列表/表格
+    try {
+      const htmlResult = await mammoth.convertToHtml({ path: filePath, styleMap })
+      const html: string = htmlResult?.value || ''
+      if (html.trim() !== '') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const TurndownService = require('turndown')
+        const turndown = new TurndownService({
+          headingStyle: 'atx',
+          bulletListMarker: '-',
+          codeBlockStyle: 'fenced',
+        })
+        text = turndown.turndown(html)
+      }
+    } catch (err) {
+      console.warn(
+        `[DocumentParser] docx convertToHtml/Turndown 失败（${fileName}），回退到 extractRawText:`,
+        err,
+      )
+    }
+
+    // 一级回退：extractRawText（主路径无输出 / 抛错时使用）
+    if (text.trim() === '') {
+      try {
+        const result = await mammoth.extractRawText({ path: filePath })
+        text = result?.value || ''
+      } catch (err) {
+        console.warn(
+          `[DocumentParser] docx extractRawText 也失败（${fileName}）:`,
+          err,
+        )
+      }
+    }
 
     // docx 是 zip 包。同一次打开拿两样东西：① word/media/* 图片（兜底 Vision OCR）
     // ② 如果 mammoth 输出过短，从 word/document.xml 直抽 <w:t> 节点 fallback

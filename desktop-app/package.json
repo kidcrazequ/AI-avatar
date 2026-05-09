@@ -85,6 +85,7 @@
     "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.2.2",
     "tar": "^7.4.3",
+    "turndown": "^7.2.0",
     "word-extractor": "^1.0.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.12"
@@ -104,6 +105,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/tar": "^6.1.13",
+    "@types/turndown": "^5.0.5",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",

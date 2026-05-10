@@ -10,6 +10,7 @@ import os from 'os'
 import path from 'path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { DEFAULT_AVATAR_PROJECT_ID } from '@soul/core'
 import { WorkspaceManager } from './WorkspaceManager'
 
 function makeTempRoot(): string {
@@ -18,19 +19,18 @@ function makeTempRoot(): string {
 
 test('WorkspaceManager: 路径穿越应被拒绝', () => {
   const root = makeTempRoot()
-  const mgr = new WorkspaceManager(root)
+  const mgr = new WorkspaceManager(root, () => DEFAULT_AVATAR_PROJECT_ID)
   assert.throws(() => {
-    mgr.resolveSafe('avatar-a', 'conv-a', '../evil.txt')
+    mgr.resolveSafe('avatar-a', 'default', 'conv-a', '../evil.txt')
   })
 })
 
 test('WorkspaceManager: 同 avatar 跨项目路径可读', () => {
   const root = makeTempRoot()
-  const mgr = new WorkspaceManager(root)
-  const abs = mgr.writeFile('avatar-a', 'conv-a', 'demo.txt', 'hello')
+  const mgr = new WorkspaceManager(root, () => DEFAULT_AVATAR_PROJECT_ID)
+  const abs = mgr.writeFile('avatar-a', 'default', 'conv-a', 'demo.txt', 'hello')
   assert.equal(fs.existsSync(abs), true)
 
-  const fromOtherConv = mgr.readFile('avatar-a', 'conv-b', '/projects/conv-a/demo.txt')
+  const fromOtherConv = mgr.readFile('avatar-a', 'default', 'conv-b', '/projects/conv-a/demo.txt')
   assert.equal(fromOtherConv, 'hello')
 })
-

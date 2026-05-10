@@ -1,0 +1,57 @@
+# Skill 路由索引 v1.0 — 财务专家（财研）
+#
+# 路径约定：
+#   source: shared → path 相对仓库根目录
+#   source: local  → path 相对本分身目录
+#
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  # ── Excel / 结构化数据场景的图表链路（先于 query_excel，遵守 G1）──
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 财务报表可视化
+      - 柱状图
+      - 折线图
+      - 营业收入趋势
+      - 可视化
+      - 对比图
+    when: 需要基于 knowledge/ 或已导入表格数据输出 ECharts（先 load_skill，再 query_excel / search_knowledge）
+    priority: 1
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 饼图
+      - 柱状图
+      - 折线图
+      - 散点图
+      - 雷达图
+      - chart
+      - 指标对比
+      - 画图
+    when: 需要将多个精确数值制图展示时（首工具须为 load_skill）
+    priority: 2
+
+  # ── 结构与流程 ──
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - 流程图
+      - 时序图
+      - 关账流程
+      - 现金流路径
+      - mermaid
+    when: 展示结算流程、业务流程、系统间资金流时
+    priority: 3

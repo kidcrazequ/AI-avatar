@@ -17,12 +17,22 @@ export interface TestCase {
 export interface TestResult {
   caseId: string
   caseName: string
+  /** 与用例 Markdown 前置 `category` 一致；历史报告可能缺省，分桶时回落到 id 推断 */
+  category?: string
   passed: boolean
   score: number
   response: string
   feedback: string
   timestamp: number
   duration: number
+}
+
+/** 嵌套结构与 @soul/core `AvatarQualityScores` 对齐，便于落盘 JSON 自描述 */
+export interface AvatarQualityScoresReport {
+  redline: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  knowledgeCompleteness: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  citationAccuracy: { passRatePercent: number; passedCount: number; totalCount: number; averageScore: number } | null
+  otherRanCount: number
 }
 
 export interface TestReport {
@@ -34,6 +44,8 @@ export interface TestReport {
   results: TestResult[]
   timestamp: number
   duration: number
+  /** 三维质量勋章（PASS 通过率）；无该类用例的维度为 null */
+  qualityScores?: AvatarQualityScoresReport
 }
 
 export class TestManager {

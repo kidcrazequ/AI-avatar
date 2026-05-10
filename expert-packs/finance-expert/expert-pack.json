@@ -1,0 +1,11 @@
+{
+  "id": "finance-expert",
+  "name": "财务专家（财研）",
+  "description": "报表阅读、经营分析、预算测算与风险提示",
+  "domain": "财务分析",
+  "version": "1.0.0",
+  "author": "zhi.qu",
+  "sourceAvatarId": "finance-expert",
+  "redline": "提供财务分析草案与经营建议，不替代审计、税务申报或注册会计师意见。",
+  "installable": true
+}

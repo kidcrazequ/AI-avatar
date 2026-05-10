@@ -1,3 +1,7 @@
+import {
+  extractParsedSourceAnchors,
+  mapTestCaseToQualityDimension,
+} from '@soul/core/browser'
 import { LLMService, LLMMessage, ModelConfig } from './llm-service'
 
 export class TestRunner {
@@ -31,6 +35,7 @@ export class TestRunner {
       return {
         caseId: testCase.id,
         caseName: testCase.name,
+        category: testCase.category,
         passed: evaluation.passed,
         score: evaluation.score,
         response,
@@ -46,6 +51,7 @@ export class TestRunner {
       return {
         caseId: testCase.id,
         caseName: testCase.name,
+        category: testCase.category,
         passed: false,
         score: 0,
         response: '',
@@ -151,6 +157,15 @@ export class TestRunner {
       if (response.includes(keyword)) {
         feedbackParts.push(`❌ 包含禁止内容: "${keyword}"`)
         score -= 20
+      }
+    }
+
+    // 数据溯源类：必须出现至少一条可解析的 `[来源: …]`（与 source-anchor 同源，含 knowledge / _excel）
+    if (mapTestCaseToQualityDimension(testCase.category, testCase.id) === 'citation') {
+      const anchors = extractParsedSourceAnchors(response)
+      if (anchors.length === 0) {
+        feedbackParts.push('❌ 数据溯源：未发现可解析的知识引用锚点（需 `[来源: knowledge/...]` 等形式）')
+        score -= 35
       }
     }
 

@@ -1,0 +1,33 @@
+# Skill 路由索引 v1.0 — HR（人研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 流程与制度可视化
+    keywords:
+      - 入职流程
+      - 离职交接
+      - 绩效校准
+      - 招聘漏斗
+      - 组织架构调整沟通
+      - mermaid
+    when: HR 流程图 / 日历排期可视化（材料须来自 knowledge/；先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 统计分析
+    keywords:
+      - Offer 漏斗
+      - 编制对比
+      - 离职率台账
+      - KPI
+      - HR 指标
+    when: 表中数字已入库或可 query 时画图（先 load_skill）
+    priority: 2

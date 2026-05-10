@@ -104,6 +104,13 @@ Soul 支持从 GitHub 安装社区开源技能。
 | 分身 | 目录 | 说明 |
 |------|------|------|
 | 工商储产品解决方案专家「小堵」 | `avatars/ci-storage-expert/` | 工商业储能方案设计、收益测算、政策解读 |
+| 财务分析专家「财研」 | `avatars/finance-expert/` | 报表阅读、溯源、红线（准则/报税不编造） |
+| 电气工程师「电图」 | `avatars/electrical-engineer-expert/` | 图纸/OCR + 国标 IEC 可追溯阅读 |
+| 产品经理「品研」 | `avatars/product-manager-expert/` | PRD / 指标体系结构；决策须标 AI 草案 |
+| HR 专家「人研」 | `avatars/hr-expert/` | 制度与劳资沟通；反歧视 / 候选人脱敏 |
+| 法务专家「法研」 | `avatars/legal-expert/` | 参阅级草案；条文不编造；非执业意见书 |
+| 市场分析师「市研」 | `avatars/market-analyst-expert/` | 可追溯数据与竞品备忘；外链须日期 |
+| 项目经理「项枢」 | `avatars/project-manager-expert/` | 甘特/risk/Mermaid；不占位承诺工期 |
 
 ---
 

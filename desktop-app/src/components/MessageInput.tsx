@@ -34,6 +34,10 @@ const MAX_IMAGE_DIMENSION = 1920
 const IMAGE_QUALITY = 0.85
 /** 文件选择器 accept 字符串：用稳定常量派生，避免 dev 缓存拿到旧函数导出。 */
 const ATTACHMENT_ACCEPT_STRING = ['image/*', ...ATTACHMENT_WHITELIST_EXTENSIONS].join(',')
+/** 豆包流式 ASR 目标采样率：协议层固定 16kHz / s16le / mono。 */
+const ASR_TARGET_SAMPLE_RATE = 16_000
+/** ASR PCM 分片发送间隔：低于 200ms 保持输入框实时感。 */
+const ASR_CHUNK_INTERVAL_MS = 160
 
 /** 待发送的本地附件（图片单独存 dataURL，其它走 saveAttachment 拿 ID） */
 interface PendingDocAttachment {
@@ -109,6 +113,32 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
+function concatFloat32Chunks(chunks: Float32Array[]): Float32Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const merged = new Float32Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.length
+  }
+  return merged
+}
+
+function downsampleToPcm16(chunks: Float32Array[], inputSampleRate: number): Uint8Array {
+  const input = concatFloat32Chunks(chunks)
+  if (input.length === 0) return new Uint8Array()
+  const ratio = inputSampleRate / ASR_TARGET_SAMPLE_RATE
+  const outputLength = Math.max(0, Math.floor(input.length / ratio))
+  const output = new Uint8Array(outputLength * 2)
+  const view = new DataView(output.buffer)
+
+  for (let i = 0; i < outputLength; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[Math.floor(i * ratio)] ?? 0))
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+  }
+  return output
+}
+
 interface Props {
   /**
    * 发送回调。
@@ -133,10 +163,19 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [pendingDocs, setPendingDocs] = useState<PendingDocAttachment[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [isAsrStarting, setIsAsrStarting] = useState(false)
   /** 文件被拒/警告的提示，3 秒后自动消失 */
   const [hint, setHint] = useState<{ type: 'error' | 'warn' | 'info'; msg: string } | null>(null)
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null)
+  const asrFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const asrChunksRef = useRef<Float32Array[]>([])
+  const asrInputSampleRateRef = useRef(ASR_TARGET_SAMPLE_RATE)
+  const lastAsrTextRef = useRef('')
   /** 同步追踪图片 + 文档总数，用于异步流程的提前检查 */
   const totalCountRef = useRef(0)
   /** 组件是否仍挂载，防止异步压缩/IPC 完成后 setState 到已卸载组件 */
@@ -157,9 +196,146 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
     hintTimerRef.current = setTimeout(() => setHint(null), 3500)
   }, [])
 
+  const cleanupAudioCapture = useCallback(() => {
+    if (asrFlushTimerRef.current) {
+      clearInterval(asrFlushTimerRef.current)
+      asrFlushTimerRef.current = null
+    }
+    audioProcessorRef.current?.disconnect()
+    audioProcessorRef.current = null
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().catch((error: unknown) => {
+        const msg = error instanceof Error ? error.message : String(error)
+        window.electronAPI.logEvent('warn', 'asr-audio-context-close-failed', msg)
+      })
+    }
+    audioContextRef.current = null
+    asrChunksRef.current = []
+  }, [])
+
+  const flushAsrChunks = useCallback(() => {
+    const chunks = asrChunksRef.current
+    if (chunks.length === 0) return
+    asrChunksRef.current = []
+    const pcm = downsampleToPcm16(chunks, asrInputSampleRateRef.current)
+    if (pcm.byteLength === 0) return
+    window.electronAPI.asrPushPcm(pcm).catch((error: unknown) => {
+      const msg = error instanceof Error ? error.message : String(error)
+      showHint('error', `语音分片发送失败: ${msg}`)
+      window.electronAPI.logEvent('error', 'asr-push-pcm-failed', msg)
+    })
+  }, [showHint])
+
+  const stopAsrRecording = useCallback(async () => {
+    flushAsrChunks()
+    cleanupAudioCapture()
+    setIsRecording(false)
+    setIsAsrStarting(false)
+    try {
+      await window.electronAPI.asrStop()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      showHint('error', `停止语音输入失败: ${msg}`)
+      window.electronAPI.logEvent('error', 'asr-stop-failed', msg)
+    }
+  }, [cleanupAudioCapture, flushAsrChunks, showHint])
+
+  const startAsrRecording = useCallback(async () => {
+    if (disabled || isAsrStarting || isRecording) return
+    if (!navigator.mediaDevices?.getUserMedia) {
+      showHint('error', '当前环境不支持麦克风录音')
+      return
+    }
+
+    setIsAsrStarting(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      await window.electronAPI.asrStart()
+
+      const audioContext = new AudioContext()
+      const source = audioContext.createMediaStreamSource(stream)
+      const processor = audioContext.createScriptProcessor(4096, 1, 1)
+      processor.onaudioprocess = (event) => {
+        const inputData = event.inputBuffer.getChannelData(0)
+        asrChunksRef.current.push(new Float32Array(inputData))
+      }
+      source.connect(processor)
+      processor.connect(audioContext.destination)
+
+      audioContextRef.current = audioContext
+      audioProcessorRef.current = processor
+      asrInputSampleRateRef.current = audioContext.sampleRate
+      lastAsrTextRef.current = ''
+      asrFlushTimerRef.current = setInterval(flushAsrChunks, ASR_CHUNK_INTERVAL_MS)
+      setIsRecording(true)
+      showHint('info', '正在听写，点击麦克风结束')
+    } catch (error) {
+      cleanupAudioCapture()
+      const msg = error instanceof Error ? error.message : String(error)
+      showHint('error', `启动语音输入失败: ${msg}`)
+      window.electronAPI.logEvent('error', 'asr-start-failed', msg)
+      window.electronAPI.asrCancel().catch((cancelError: unknown) => {
+        const cancelMsg = cancelError instanceof Error ? cancelError.message : String(cancelError)
+        window.electronAPI.logEvent('warn', 'asr-cancel-after-start-failed', cancelMsg)
+      })
+    } finally {
+      setIsAsrStarting(false)
+    }
+  }, [cleanupAudioCapture, disabled, flushAsrChunks, isAsrStarting, isRecording, showHint])
+
+  const toggleAsrRecording = useCallback(() => {
+    if (isRecording) {
+      void stopAsrRecording()
+    } else {
+      void startAsrRecording()
+    }
+  }, [isRecording, startAsrRecording, stopAsrRecording])
+
   useEffect(() => () => {
     if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    const offPartial = window.electronAPI.onAsrPartial((payload) => {
+      const nextText = payload.text.trim()
+      if (!nextText || nextText === lastAsrTextRef.current) return
+      setInput(prev => {
+        const lastText = lastAsrTextRef.current
+        const base = lastText && prev.endsWith(lastText) ? prev.slice(0, -lastText.length).trimEnd() : prev.trimEnd()
+        return base ? `${base} ${nextText}` : nextText
+      })
+      lastAsrTextRef.current = nextText
+    })
+    const offError = window.electronAPI.onAsrError((payload) => {
+      cleanupAudioCapture()
+      setIsRecording(false)
+      setIsAsrStarting(false)
+      showHint('error', `语音识别失败: ${payload.message}`)
+      window.electronAPI.logEvent('error', 'asr-session-error', payload.message)
+    })
+    const offEnd = window.electronAPI.onAsrEnd(() => {
+      cleanupAudioCapture()
+      setIsRecording(false)
+      setIsAsrStarting(false)
+      lastAsrTextRef.current = ''
+    })
+    return () => {
+      offPartial()
+      offError()
+      offEnd()
+    }
+  }, [cleanupAudioCapture, showHint])
+
+  useEffect(() => () => {
+    cleanupAudioCapture()
+    window.electronAPI.asrCancel().catch((error: unknown) => {
+      const msg = error instanceof Error ? error.message : String(error)
+      window.electronAPI.logEvent('warn', 'asr-cancel-on-unmount-failed', msg)
+    })
+  }, [cleanupAudioCapture])
 
   const addImageFile = useCallback((file: File) => {
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
@@ -483,6 +659,20 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
               transition-none"
           >
             附件
+          </button>
+
+          <button
+            onClick={toggleAsrRecording}
+            disabled={disabled || isAsrStarting}
+            aria-label={isRecording ? '停止语音输入' : '开始语音输入'}
+            title={isRecording ? '停止语音输入' : '开始语音输入（豆包 ASR）'}
+            className={`px-4 py-3 border-2 font-game text-[13px] tracking-wider transition-none
+              ${isRecording
+                ? 'bg-px-danger/10 text-px-danger border-px-danger'
+                : 'bg-px-surface text-px-text-sec border-px-border hover:border-px-primary hover:text-px-primary'}
+              disabled:opacity-30 disabled:cursor-not-allowed`}
+          >
+            {isAsrStarting ? '...' : isRecording ? '停止' : '语音'}
           </button>
 
           <button

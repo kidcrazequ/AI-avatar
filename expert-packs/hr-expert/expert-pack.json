@@ -1,0 +1,11 @@
+{
+  "id": "hr-expert",
+  "name": "HR 专家（人研）",
+  "description": "制度解读、劳动关系沟通、招聘与绩效建议",
+  "domain": "人力资源",
+  "version": "1.0.0",
+  "author": "zhi.qu",
+  "sourceAvatarId": "hr-expert",
+  "redline": "避免歧视性建议与未经确认的候选人隐私处理，不替代当地劳动法专业意见。",
+  "installable": true
+}

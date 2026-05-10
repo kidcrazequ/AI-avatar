@@ -37,6 +37,8 @@ extraResources:
     to: templates
   - from: ../shared
     to: shared
+  - from: ../expert-packs
+    to: expert-packs
 
 # ========== macOS ==========
 mac:

@@ -2,6 +2,90 @@
 
 ## Unreleased
 
+## v0.12.0 (2026-05-10)
+
+> **重大里程碑**：本次发布跨越 ISS #2 / #3 / #4 / #5.5 / #7 / #8 / #11 / #13 / #14 / #15 / #16 共 11 个迭代单（指挥官-W19 周期），并新增 ASR 流式语音、Anthropic 兼容 Proxy、LangBot 集成、专家分身包、复合知识检索等多项 P0+ 能力。版本号 0.11.0 → 0.12.0。
+
+### 数据持久化与一致性
+
+- **#2 SQLite + JSONL 双写架构** — 对话与消息从纯 JSONL 升级为 SQLite 主库 + JSONL 影子日志双写：SQLite 提供 O(1) 查询和事务，JSONL 保留人类可读 / 可手动恢复的 fallback。
+- **#5.5 全新安装时补建 `mcp_servers` 表** — DB schema migration 修复，避免新机器首启 schema 不一致。
+- **#4 ToolRouter workspace paths 与 WorkspaceManager 对齐** — 修复 `query_excel` / `read_knowledge_file` 等工具在引入 WorkspaceManager 后路径解析不一致的回归。
+- **`scripts/migrate-workspaces-to-default-layout.mjs`** — 历史 workspaces 一次性迁移到 `<avatarRoot>/projects/default/workspaces/` 二级分区结构。
+- **`packages/core/src/avatar-project.ts`** — 引入 `DEFAULT_AVATAR_PROJECT_ID = 'default'` 常量，为「分身 → 项目（二级分区）→ 会话」三级数据模型奠基。
+
+### 知识与 RAG
+
+- **#13 `knowledge-inspect` CLI** — 新增 `scripts/knowledge-inspect.mjs`，命令行直接诊断分身知识库的 chunk 切分、embedding 命中、source-anchor 覆盖。
+- **#14 模板化文档分块（Template-based chunking）** — `document-parser` 新增 PDF 页 heading 与 Word 标题层级感知，长文档分块更贴合人类目录结构，检索召回提升。
+- **ISS #3 工具列表 embedding 重排** — LLM 调用前对工具描述按 query 做 embedding rerank，热点工具优先曝光（详见 `tool-embedding-rerank` 模块）。
+- **`packages/core/src/composite-knowledge-retriever.ts`** — RRF（Reciprocal Rank Fusion）合并「分身全局知识」与「`projects/<id>/knowledge` 项目级知识」检索结果，为多项目多知识源场景做检索融合（`RRF_K = 60` 经典参数）。
+
+### 记忆系统
+
+- **#8 结构化白盒记忆条目** — `memory/MEMORY.entries.json` 取代纯文本 `MEMORY.md`，每条记忆带 id / type / source / timestamp / confidence / tags 等结构化字段，支持「白盒检索 + 黑盒回放」双模式。
+
+### 自动化
+
+- **#11 用户自定义定时任务（cron expressions）** — 用户可在桌面端配置 cron 触发的定时任务（如「每天 9 点汇报昨日工作」「每周一推送本周计划」），与 Phase 2 持续生长 cron 共用调度框架。
+
+### 集成 / 互操作
+
+- **#15 Web Embed widget 双进程双端点架构** — 独立 `widget-server` 进程 + Preact bundle（gzip 仅 10KB），可嵌入任意网页与分身对话，与桌面端共用 SQLite 数据库。
+- **#16 WebDAV 跨设备同步（指挥官-W19）** — 通过任意 WebDAV 服务（坚果云 / Nextcloud / 自建）实现分身、对话、记忆、知识库的跨设备增量同步，冲突自动按 mtime 取较新版本。
+- **Anthropic 兼容 Proxy 服务（P0+ 方案 A）** — `desktop-app/electron/proxy-server.ts` + `src/lib/anthropic-proxy-protocol.ts` + `src/services/proxy-api-bridge.ts`：本地 `127.0.0.1:18888` 暴露 Anthropic Messages API 兼容端点（鉴权 + 协议转换），让 Claude Code / Cursor / 任何 Anthropic SDK 客户端可直接把分身当作 LLM 后端调用。业务对话仍由渲染进程 `sendMessage` 同源链路执行（避免双重路由）。
+- **LangBot 集成** — `desktop-app/docs/langbot-integration.md` 完整接入指南，覆盖 OneBot / 微信 / QQ / 钉钉等多平台机器人通过 Anthropic Proxy 调用分身。
+
+### 语音
+
+- **豆包流式 ASR（Doubao ASR Streaming）**：
+  - `packages/core/src/audio/doubao-asr-protocol.ts` — 协议帧编解码（FullClientRequest / AudioOnlyRequest / parseDoubaoAsrServerResponse）
+  - `desktop-app/electron/asr-session.ts` — 主进程 WebSocket 鉴权与协议帧收发，渲染进程只上传 16kHz PCM 分片（无浏览器侧鉴权暴露）
+  - `desktop-app/electron/asr-session.test.ts` + `packages/core/src/tests/doubao-asr-protocol.test.ts` — 协议解析与 session 生命周期单测
+  - `desktop-app/docs/doubao-asr-streaming.md` — 接入文档与配置说明
+
+### 权限 / 模式
+
+- **ISS #7 会话级 Permission Mode（Ask / Plan / Agent）+ 工具灰名单**：
+  - `packages/core/src/tool-permission-policy.ts` — 纯函数门禁，按会话模式 + 信任层（`ui` / `proxy`）双维度评估每次工具调用
+  - Plan 模式下自动禁用写操作类工具（`PLAN_MODE_BLOCKED_TOOL_NAMES`），与会话侧边栏 badge 对齐
+  - `desktop-app/electron/conversation-tool-mode-registry.ts` — 主进程会话模式注册表
+  - `packages/core/src/tests/tool-permission-policy.test.ts` — 模式 × 信任层全矩阵覆盖
+
+### 分身工程化
+
+- **专家分身包（Expert Packs）`expert-packs/`** — 7 套开箱即用的专科分身脚手架（含 `expert-pack.json` 清单 + `soul.md` + `AGENTS.md` / `CLAUDE.md` + `knowledge/` 占位 + `skills/skill-index.yaml` + `tests/cases/`：红线 2 + 知识库约束 1 + 数据溯源 1 + 人格 1）：
+  - `electrical-engineer-expert` — 电气工程专家
+  - `finance-expert` — 财务分析专家
+  - `hr-expert` — 人力资源专家
+  - `legal-expert` — 法律合规专家
+  - `market-analyst-expert` — 市场分析专家
+  - `product-manager-expert` — 产品经理
+  - `project-manager-expert` — 项目经理
+- **`desktop-app/src/components/ExpertPackPanel.tsx`** — 桌面端专家包安装/管理 UI
+- **`packages/core/src/avatar-quality-scores.ts`** + 测试 — 分身质量评分模型（红线通过率 + 知识库覆盖 + 人格一致性等多维度）
+- **`templates/avatar-project-layout.md`** — 二级分区目录结构规范文档
+
+### 桌面端 UI / 主进程改动
+
+- `desktop-app/electron/main.ts` — 新增大量 IPC（asr / proxy / 专家包 / 项目分区 / 定时任务等）
+- `desktop-app/electron/preload.ts` / `desktop-app/src/global.d.ts` — API + 类型同步
+- `desktop-app/electron/connectors/github-connector.ts` — GitHub 连接器修复
+- `desktop-app/electron/test-manager.ts` + `desktop-app/src/services/test-runner.ts` — 测试管理器与 runner 升级
+- `desktop-app/electron/workspace/WorkspaceManager.test.ts` — WorkspaceManager 测试补强
+- `desktop-app/electron-builder.yml` — 打包配置更新（新增 widget-server / asr 相关 native deps）
+- `desktop-app/src/App.tsx` — 注册 ExpertPackPanel + Anthropic Proxy 状态显示
+- `desktop-app/src/components/AvatarSelector.tsx` / `ConversationList.tsx` / `MessageInput.tsx` / `SettingsPanel.tsx` / `Sidebar.tsx` / `TestPanel.tsx` — UI 多处升级（项目分区切换、ASR 麦克风入口、Permission Mode badge、Proxy 端口配置等）
+- `desktop-app/src/stores/chatStore.ts` — 接入 SQLite 双写、Permission Mode 守卫、composite knowledge retriever
+- `packages/core/src/browser.ts` / `index.ts` — 公开导出 audio / avatar-project / composite-knowledge-retriever / tool-permission-policy 等新模块
+
+### 文档与项目治理
+
+- **`AGENTS.md` / `CLAUDE.md`** — 根目录全局规则同步：补充 expert-packs、Permission Mode、Anthropic Proxy 章节
+- **`.gitignore`** — 新增大文件资产排除规则（`assets/*.mp4` / `*.mov` / `归档.zip` / `AI分身提效案例.*`）防止误提交超过 GitHub 100MB 限制的素材
+- **`desktop-app/package.json`** — 0.11.0 → 0.12.0
+- **`desktop-app/package-lock.json`** — 同步新依赖（`ws` / `webdav-client` 等）
+
 ## v0.11.0 (2026-05-09)
 
 ### 新功能：AI 分身「人生经历」系统（Phase 1-6 完整落地）

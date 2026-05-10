@@ -366,6 +366,12 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [showImageKey, setShowImageKey] = useState(false)
   const [showTavilyKey, setShowTavilyKey] = useState(false)
   const [integrationsStatusMsg, setIntegrationsStatusMsg] = useState('')
+  const [doubaoAsrApiKey, setDoubaoAsrApiKey] = useState('')
+  const [doubaoAsrResourceId, setDoubaoAsrResourceId] = useState('')
+  const [doubaoAsrEndpoint, setDoubaoAsrEndpoint] = useState('wss://openspeech.bytedance.com/api/v3/sauc/bigmodel')
+  const [doubaoAsrModel, setDoubaoAsrModel] = useState('bigmodel')
+  const [showDoubaoAsrKey, setShowDoubaoAsrKey] = useState(false)
+  const [doubaoAsrStatusMsg, setDoubaoAsrStatusMsg] = useState('')
   /** P0 ISS：工具 embedding 重排（依赖 OCR 槽位的 DashScope Key 作 embedding） */
   const [issRerankEnabled, setIssRerankEnabled] = useState(true)
   const [issTopNInput, setIssTopNInput] = useState(String(ISS_DEFAULT_TOP_N))
@@ -429,6 +435,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const wikiTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const memoryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const integrationsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const doubaoAsrTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const issTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const proxyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const embedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -442,6 +449,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     clearTimeout(wikiTimerRef.current)
     clearTimeout(memoryTimerRef.current)
     clearTimeout(integrationsTimerRef.current)
+    clearTimeout(doubaoAsrTimerRef.current)
     clearTimeout(issTimerRef.current)
     clearTimeout(proxyTimerRef.current)
     clearTimeout(embedTimerRef.current)
@@ -530,13 +538,33 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setSlots(prev => loadedSlots.map((s, i) => ({ ...s, showApiKey: prev[i]?.showApiKey ?? false })))
 
       // 并行加载 Wiki / 记忆 / 定时任务 / 工具集成设置
-      const [wikiInject, wikiSediment, nudge, cronConfigs, tavilyKey, imageKey, issEn, issTop, proxEn, proxPort, proxTok] = await Promise.all([
+      const [
+        wikiInject,
+        wikiSediment,
+        nudge,
+        cronConfigs,
+        tavilyKey,
+        imageKey,
+        doubaoKey,
+        doubaoResourceId,
+        doubaoEndpoint,
+        doubaoModel,
+        issEn,
+        issTop,
+        proxEn,
+        proxPort,
+        proxTok,
+      ] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
         window.electronAPI.getSetting('memory_nudge_interval'),
         window.electronAPI.getCronConfig(),
         window.electronAPI.getSetting('tavily_api_key'),
         window.electronAPI.getSetting('image_api_key'),
+        window.electronAPI.getSetting('doubao_asr_api_key'),
+        window.electronAPI.getSetting('doubao_asr_resource_id'),
+        window.electronAPI.getSetting('doubao_asr_endpoint'),
+        window.electronAPI.getSetting('doubao_asr_model'),
         window.electronAPI.getSetting('iss_skill_rerank_enabled'),
         window.electronAPI.getSetting('iss_skill_rerank_top_n'),
         window.electronAPI.getSetting('proxy_server_enabled'),
@@ -553,6 +581,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       }
       setTavilyApiKey(tavilyKey ?? '')
       setImageApiKey(imageKey ?? '')
+      setDoubaoAsrApiKey(doubaoKey ?? '')
+      setDoubaoAsrResourceId(doubaoResourceId ?? '')
+      setDoubaoAsrEndpoint(doubaoEndpoint && doubaoEndpoint.trim() !== '' ? doubaoEndpoint : 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel')
+      setDoubaoAsrModel(doubaoModel && doubaoModel.trim() !== '' ? doubaoModel : 'bigmodel')
       setIssRerankEnabled(issEn !== 'false')
       setIssTopNInput(issTop && issTop.trim() !== '' ? issTop : String(ISS_DEFAULT_TOP_N))
       setProxyEnabled(proxEn === 'true')
@@ -897,6 +929,28 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       integrationsTimerRef.current = setTimeout(() => setIntegrationsStatusMsg(''), 2000)
     } catch (error) {
       setIntegrationsStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  const handleSaveDoubaoAsrSettings = async () => {
+    const endpoint = doubaoAsrEndpoint.trim() || 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel'
+    if (!endpoint.startsWith('wss://')) {
+      setDoubaoAsrStatusMsg('INVALID — endpoint 必须使用 wss://')
+      return
+    }
+    try {
+      await Promise.all([
+        window.electronAPI.setSetting('doubao_asr_api_key', doubaoAsrApiKey.trim()),
+        window.electronAPI.setSetting('doubao_asr_resource_id', doubaoAsrResourceId.trim()),
+        window.electronAPI.setSetting('doubao_asr_endpoint', endpoint),
+        window.electronAPI.setSetting('doubao_asr_model', doubaoAsrModel.trim() || 'bigmodel'),
+      ])
+      setDoubaoAsrEndpoint(endpoint)
+      setDoubaoAsrStatusMsg('SAVED')
+      clearTimeout(doubaoAsrTimerRef.current)
+      doubaoAsrTimerRef.current = setTimeout(() => setDoubaoAsrStatusMsg(''), 2000)
+    } catch (error) {
+      setDoubaoAsrStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -1873,6 +1927,74 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       <div className="font-game text-[11px] text-px-text-dim mt-1.5">
                         留空则禁用 generate_image 工具；本地 sqlite 加密存储，不会上传任何服务器
                       </div>
+                    </div>
+                  </div>
+
+                  {/* 豆包流式 ASR */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-game text-[14px] text-px-text">豆包流式语音输入</span>
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider">DOUBAO_ASR</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      输入框麦克风按钮使用火山引擎豆包 ASR WebSocket；主进程持有 API Key 与自定义 Header，渲染端只发送 16k PCM 分片。
+                    </p>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">API KEY</label>
+                      <div className="flex gap-2">
+                        <input
+                          type={showDoubaoAsrKey ? 'text' : 'password'}
+                          value={doubaoAsrApiKey}
+                          onChange={(e) => setDoubaoAsrApiKey(e.target.value)}
+                          placeholder="火山引擎 API Key"
+                          className="pixel-input flex-1 font-mono text-[13px]"
+                        />
+                        <button
+                          onClick={() => setShowDoubaoAsrKey(!showDoubaoAsrKey)}
+                          className="pixel-btn-ghost px-3"
+                          title={showDoubaoAsrKey ? '隐藏' : '显示'}
+                        >
+                          {showDoubaoAsrKey ? '◉' : '○'}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">RESOURCE ID</label>
+                      <input
+                        type="text"
+                        value={doubaoAsrResourceId}
+                        onChange={(e) => setDoubaoAsrResourceId(e.target.value)}
+                        placeholder="例如 volc.bigasr.sauc.duration"
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">ENDPOINT</label>
+                      <input
+                        type="text"
+                        value={doubaoAsrEndpoint}
+                        onChange={(e) => setDoubaoAsrEndpoint(e.target.value)}
+                        className="pixel-input w-full font-mono text-[12px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">MODEL</label>
+                      <input
+                        type="text"
+                        value={doubaoAsrModel}
+                        onChange={(e) => setDoubaoAsrModel(e.target.value)}
+                        placeholder="bigmodel"
+                        className="pixel-input w-40 font-mono text-[13px]"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={handleSaveDoubaoAsrSettings} className="pixel-btn-primary text-[12px] px-3 py-1">
+                        保存 ASR 设置
+                      </button>
+                      <span className={`font-game text-[12px] ${
+                        doubaoAsrStatusMsg.includes('SAVED') ? 'text-px-success' :
+                        doubaoAsrStatusMsg.includes('FAIL') || doubaoAsrStatusMsg.includes('INVALID') ? 'text-px-danger' : 'text-px-text-dim'
+                      }`}>{doubaoAsrStatusMsg}</span>
                     </div>
                   </div>
 

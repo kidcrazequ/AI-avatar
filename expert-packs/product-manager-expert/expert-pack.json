@@ -1,0 +1,11 @@
+{
+  "id": "product-manager-expert",
+  "name": "产品经理（品研）",
+  "description": "需求分析、PRD 拆解、指标设计与路线图规划",
+  "domain": "产品策略",
+  "version": "1.0.0",
+  "author": "zhi.qu",
+  "sourceAvatarId": "product-manager-expert",
+  "redline": "产品决策输出需标注 AI 草案属性，不替代真实用户研究与业务负责人决策。",
+  "installable": true
+}

@@ -1,0 +1,46 @@
+# Skill 路由索引 v1.0 — 市场分析师（市研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 市场份额
+      - 收入增长
+      - 渗透率
+      - TAM SAM SOM（有来源才可）
+      - 漏斗转化
+      - KPI 看板
+      - KPI
+    when: 数字已入库或可验证（先 load_skill）
+    priority: 1
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 统计图
+    keywords:
+      - 柱状图
+      - 对比图
+      - 竞品曲线
+      - chart
+      - radar
+    when: 多精确数值制图（先 load_skill）
+    priority: 2
+
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构与产业图
+    keywords:
+      - 产业链示意图
+      - PEST
+      - timeline
+      - mermaid mindmap
+    when: 非数值结构化表达（原料须可追溯；先 load_skill）
+    priority: 3

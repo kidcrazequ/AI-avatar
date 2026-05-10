@@ -1,0 +1,32 @@
+# Skill 路由索引 v1.0 — 法务（法研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 法律关系与流程可视化
+    keywords:
+      - 违约责任因果
+      - 交割条件
+      - 救济路径
+      - 诉讼流程概览草案
+      - mermaid
+    when: 结构图（事实须来自 knowledge/；非法条推断；先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 时间与金额对齐
+    keywords:
+      - 违约金阶梯
+      - 里程碑回款
+      - 赔偿测算表可视化
+      - KPI
+      - （数据须来自用户提供或 knowledge）
+    when: 多数字制图且已取证（先 load_skill）
+    priority: 2

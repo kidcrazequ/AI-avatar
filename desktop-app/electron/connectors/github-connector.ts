@@ -173,6 +173,7 @@ export class GitHubConnector {
    */
   async importFiles(
     avatarId: string,
+    projectId: string,
     conversationId: string,
     owner: string,
     repo: string,
@@ -184,7 +185,7 @@ export class GitHubConnector {
     for (const f of files) {
       const content = await this.readFile(owner, repo, f.path, ref)
       const dest = f.saveAs || f.path
-      const abs = this.workspaceManager.resolveSafe(avatarId, conversationId, dest)
+      const abs = this.workspaceManager.resolveSafe(avatarId, projectId, conversationId, dest)
       fs.mkdirSync(path.dirname(abs), { recursive: true })
       fs.writeFileSync(abs, content, 'utf-8')
       result.push({ path: dest, bytes: Buffer.byteLength(content, 'utf-8') })

@@ -65,6 +65,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 设置管理
   getSetting: (key: string) => ipcRenderer.invoke('get-setting', key),
   setSetting: (key: string, value: string) => ipcRenderer.invoke('set-setting', key, value),
+  asrStart: () => ipcRenderer.invoke('asr:start'),
+  asrPushPcm: (pcm: Uint8Array) => ipcRenderer.invoke('asr:push-pcm', pcm),
+  asrStop: () => ipcRenderer.invoke('asr:stop'),
+  asrCancel: () => ipcRenderer.invoke('asr:cancel'),
+  onAsrPartial: (callback: (payload: AsrPartialPayload) => void) => {
+    const handler = (_: unknown, payload: AsrPartialPayload) => callback(payload)
+    ipcRenderer.on('asr:partial', handler)
+    return () => { ipcRenderer.removeListener('asr:partial', handler) }
+  },
+  onAsrError: (callback: (payload: AsrErrorPayload) => void) => {
+    const handler = (_: unknown, payload: AsrErrorPayload) => callback(payload)
+    ipcRenderer.on('asr:error', handler)
+    return () => { ipcRenderer.removeListener('asr:error', handler) }
+  },
+  onAsrEnd: (callback: (payload: AsrEndPayload) => void) => {
+    const handler = (_: unknown, payload: AsrEndPayload) => callback(payload)
+    ipcRenderer.on('asr:end', handler)
+    return () => { ipcRenderer.removeListener('asr:end', handler) }
+  },
   claudeBridgeComplete: (conversationId: string, input: string | { messages?: Array<{ role: string; content: string }> }, filePath?: string) =>
     ipcRenderer.invoke('claudebridge:complete', conversationId, input, filePath),
   claudeBridgeGetLimits: () => ipcRenderer.invoke('claudebridge:get-limits'),
@@ -273,6 +292,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 分身管理
   listAvatars: () => ipcRenderer.invoke('list-avatars'),
+  listExpertPacks: () => ipcRenderer.invoke('expert-packs:list'),
+  installExpertPack: (packId: string) => ipcRenderer.invoke('expert-packs:install', packId),
+  isExpertPackInstalled: (packId: string) => ipcRenderer.invoke('expert-packs:is-installed', packId),
   getAvatarSoulIntro: (targetAvatarId: string) => ipcRenderer.invoke('get-avatar-soul-intro', targetAvatarId),
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) =>
     ipcRenderer.invoke('create-avatar', id, soulContent, skills, knowledgeFiles),

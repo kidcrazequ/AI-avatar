@@ -5,7 +5,7 @@
  * @date 2026-04-03
  */
 
-import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, nativeImage, shell, session as electronSession } from 'electron'
 
 // V8 堆上限：默认 ~2GB，回归批跑 1063 题 + 知识检索器（3002 chunks）+ embeddings（29MB JSON
 // → 50MB Map）+ chart cache 等多个大缓存常驻主进程，2GB 频繁 OOM。提到 8GB 留充足空间。
@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
@@ -55,6 +55,7 @@ import { GitHubConnector } from './connectors/github-connector'
 import { CommunitySkillManager } from './community-skill-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
+import { DoubaoAsrSession } from './asr-session'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -89,6 +90,16 @@ function resolveTemplatesPath(): string {
   return path.join(process.resourcesPath, 'templates')
 }
 
+/**
+ * 解析可选专家包目录。生产环境作为只读资源随应用打包，安装时复制到用户 avatars/。
+ */
+function resolveExpertPacksPath(): string {
+  if (process.env.NODE_ENV === 'development') {
+    return path.join(__dirname, '../../expert-packs')
+  }
+  return path.join(process.resourcesPath, 'expert-packs')
+}
+
 // ─── 单例 ────────────────────────────────────────────────────────────────────
 
 const knowledgeManagers = new Map<string, KnowledgeManager>()
@@ -96,6 +107,7 @@ const wikiCompilers = new Map<string, WikiCompiler>()
 
 let avatarsPath: string
 let templatesPath: string
+let expertPacksPath: string
 let soulLoader: SoulLoader
 let db: DatabaseManager
 let avatarManager: AvatarManager
@@ -223,6 +235,8 @@ let toolResultSpool: ToolResultSpool
  * 文件本体落 userData/attachments/<convId>/<hash>.<ext>，元信息进 attachments 表。
  */
 let attachmentStore: AttachmentStore
+/** 当前豆包 ASR 流式会话：MVP 保持全局单会话互斥，避免多输入框抢同一麦克风/WS。 */
+let activeAsrSession: DoubaoAsrSession | null = null
 
 /**
  * 附件全文解析缓存（read_attachment / search_attachment 共享）。
@@ -252,6 +266,32 @@ function getDb(): DatabaseManager {
     db = new DatabaseManager()
   }
   return db
+}
+
+function isAllowedMediaPermissionOrigin(requestingUrl: string): boolean {
+  try {
+    const url = new URL(requestingUrl)
+    if (url.protocol === 'file:') return true
+    return process.env.NODE_ENV === 'development' && url.origin === 'http://localhost:5173'
+  } catch {
+    return false
+  }
+}
+
+function registerMediaPermissionHandler(): void {
+  electronSession.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission !== 'media') {
+      callback(false)
+      return
+    }
+    const requestingUrl = details.requestingUrl || webContents.getURL()
+    const isMainWindow = mainWindow !== null && webContents.id === mainWindow.webContents.id
+    const allowed = isMainWindow && isAllowedMediaPermissionOrigin(requestingUrl)
+    if (logger) {
+      logger.activity('media-permission', `allowed=${allowed} url=${requestingUrl}`)
+    }
+    callback(allowed)
+  })
 }
 
 /**
@@ -415,9 +455,9 @@ function createWindow() {
   // 打开 DevTools 会强制 attach 输入 handler + 触发 reflow，事件链才被踹活。
   // backgroundColor 防止 show 之前出现系统默认白底闪烁。
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 1024,
+    width: 1440,
+    height: 900,
+    minWidth: 1280,
     minHeight: 680,
     icon: iconPath ? nativeImage.createFromPath(iconPath) : undefined,
     show: false,
@@ -463,6 +503,7 @@ function createWindow() {
 function initManagers() {
   avatarsPath = resolveAvatarsPath()
   templatesPath = resolveTemplatesPath()
+  expertPacksPath = resolveExpertPacksPath()
   logger = new Logger(app.getPath('userData'))
   // Stage 三 P2 #15: 工具返回值 spool（>12000 字符自动落盘到 userData/tool-results/）
   toolResultSpool = new ToolResultSpool(app.getPath('userData'))
@@ -563,7 +604,7 @@ function loadBridgeLimits(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     initManagers()
   } catch (error) {
@@ -573,6 +614,7 @@ app.whenReady().then(() => {
     return
   }
   createWindow()
+  registerMediaPermissionHandler()
   if (mainWindow) {
     scheduledTester.setWindow(mainWindow)
     cronScheduler.setWindow(mainWindow)
@@ -740,6 +782,182 @@ async function atomicWriteFile(filePath: string, content: string): Promise<void>
     await fs.promises.unlink(tmpPath).catch(() => {})
     throw err
   }
+}
+
+interface ExpertPackMeta {
+  id: string
+  name: string
+  description: string
+  domain: string
+  version: string
+  author: string
+  sourceAvatarId: string
+  redline: string
+  installable: boolean
+}
+
+interface ExpertPackView extends ExpertPackMeta {
+  installed: boolean
+  installedAvatarId?: string
+  avatarImage?: string
+}
+
+interface InstalledAvatarConfig {
+  expertPack?: {
+    id: string
+    version: string
+    installedAt: string
+  }
+  [key: string]: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readJsonObject(filePath: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function readExpertPackMeta(packDir: string): ExpertPackMeta | null {
+  const metaPath = path.join(packDir, 'expert-pack.json')
+  const raw = readJsonObject(metaPath)
+  if (!raw) return null
+
+  const required = ['id', 'name', 'description', 'domain', 'version', 'author', 'sourceAvatarId', 'redline'] as const
+  for (const key of required) {
+    if (typeof raw[key] !== 'string' || raw[key].trim() === '') return null
+  }
+
+  return {
+    id: raw.id as string,
+    name: raw.name as string,
+    description: raw.description as string,
+    domain: raw.domain as string,
+    version: raw.version as string,
+    author: raw.author as string,
+    sourceAvatarId: raw.sourceAvatarId as string,
+    redline: raw.redline as string,
+    installable: raw.installable !== false,
+  }
+}
+
+function readAvatarImageFromDir(avatarPath: string): string | undefined {
+  try {
+    const pngPath = path.join(avatarPath, 'avatar.png')
+    if (fs.existsSync(pngPath)) {
+      const stat = fs.statSync(pngPath)
+      if (stat.size > 512 * 1024) return undefined
+      const buf = fs.readFileSync(pngPath)
+      return `data:image/png;base64,${buf.toString('base64')}`
+    }
+    const txtPath = path.join(avatarPath, 'avatar.txt')
+    if (fs.existsSync(txtPath)) {
+      const content = fs.readFileSync(txtPath, 'utf-8').trim()
+      if (content.startsWith('default:')) return content
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+function findInstalledAvatarForPack(packId: string): string | undefined {
+  const directAvatarPath = path.join(avatarsPath, packId)
+  if (fs.existsSync(path.join(directAvatarPath, 'CLAUDE.md'))) return packId
+
+  try {
+    const entries = fs.readdirSync(avatarsPath, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const configPath = path.join(avatarsPath, entry.name, 'avatar.config.json')
+      const config = readJsonObject(configPath)
+      const expertPack = isRecord(config?.expertPack) ? config.expertPack : null
+      if (expertPack && expertPack.id === packId) return entry.name
+    }
+  } catch (err) {
+    if (logger) logger.error('expert-pack.find-installed', err instanceof Error ? err : new Error(String(err)))
+  }
+
+  return undefined
+}
+
+function listExpertPacks(): ExpertPackView[] {
+  if (!fs.existsSync(expertPacksPath)) return []
+
+  const packs: ExpertPackView[] = []
+  const entries = fs.readdirSync(expertPacksPath, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const packDir = path.join(expertPacksPath, entry.name)
+    const meta = readExpertPackMeta(packDir)
+    if (!meta) continue
+    const installedAvatarId = findInstalledAvatarForPack(meta.id)
+    packs.push({
+      ...meta,
+      installed: Boolean(installedAvatarId),
+      installedAvatarId,
+      avatarImage: readAvatarImageFromDir(packDir),
+    })
+  }
+
+  return packs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+}
+
+function shouldCopyExpertPackPath(src: string): boolean {
+  const rel = path.relative(expertPacksPath, src)
+  const parts = rel.split(path.sep)
+  return !parts.includes('workspaces') &&
+    !parts.includes('runs') &&
+    !(parts.includes('tests') && parts.includes('reports')) &&
+    !parts.some(part => part === '.cache' || part === '.DS_Store')
+}
+
+async function writeInstalledAvatarConfig(avatarId: string, pack: ExpertPackMeta): Promise<void> {
+  const configPath = path.join(avatarsPath, avatarId, 'avatar.config.json')
+  const existing = readJsonObject(configPath) ?? {}
+  const config: InstalledAvatarConfig = {
+    ...existing,
+    expertPack: {
+      id: pack.id,
+      version: pack.version,
+      installedAt: localDateString(),
+    },
+  }
+  await atomicWriteFile(configPath, `${JSON.stringify(config, null, 2)}\n`)
+}
+
+async function installExpertPack(packId: string): Promise<{ avatarId: string; installed: boolean }> {
+  assertSafeSegment(packId, '专家包 ID')
+  const installedAvatarId = findInstalledAvatarForPack(packId)
+  if (installedAvatarId) return { avatarId: installedAvatarId, installed: false }
+
+  const packDir = resolveUnderRoot(expertPacksPath, packId)
+  const pack = readExpertPackMeta(packDir)
+  if (!pack || !pack.installable) {
+    throw new Error(`专家包不存在或不可安装：${packId}`)
+  }
+
+  const avatarId = pack.sourceAvatarId || pack.id
+  assertSafeSegment(avatarId, '分身 ID')
+  const targetDir = resolveUnderRoot(avatarsPath, avatarId)
+  if (fs.existsSync(targetDir)) {
+    throw new Error(`分身 "${avatarId}" 已存在，无法安装专家包`)
+  }
+
+  await fs.promises.mkdir(path.dirname(targetDir), { recursive: true })
+  fs.cpSync(packDir, targetDir, {
+    recursive: true,
+    filter: (src) => shouldCopyExpertPackPath(src),
+  })
+  await writeInstalledAvatarConfig(avatarId, pack)
+  if (logger) logger.recordGenerated('avatar', avatarId, targetDir, { action: 'install-expert-pack', packId })
+  return { avatarId, installed: true }
 }
 
 const getKnowledgeManager = (avatarId: string): KnowledgeManager => {
@@ -1172,6 +1390,54 @@ wrapHandler('get-setting', (_, key: string) => {
 
 wrapHandler('set-setting', (_, key: string, value: string) => {
   getDb().setSetting(key, value)
+})
+
+function toAsrPcmBytes(input: unknown): Uint8Array {
+  if (input instanceof Uint8Array) return input
+  if (input instanceof ArrayBuffer) return new Uint8Array(input)
+  throw new Error('asr:push-pcm 需要 Uint8Array 或 ArrayBuffer')
+}
+
+// ─── 豆包流式 ASR（#12 子任务 2）─────────────────────────────────────────────
+
+wrapHandler('asr:start', async (event) => {
+  if (activeAsrSession?.active) {
+    throw new Error('已有豆包 ASR 会话正在进行')
+  }
+  const session = new DoubaoAsrSession({
+    getSetting: (key) => getDb().getSetting(key),
+    logger,
+    webContents: event.sender,
+    onEnd: (endedSession) => {
+      if (activeAsrSession === endedSession) activeAsrSession = null
+    },
+  })
+  activeAsrSession = session
+  try {
+    return await session.start()
+  } catch (error) {
+    if (activeAsrSession === session) activeAsrSession = null
+    throw error
+  }
+})
+
+wrapHandler('asr:push-pcm', (_event, pcm: unknown) => {
+  if (!activeAsrSession?.active) throw new Error('豆包 ASR 会话未启动')
+  activeAsrSession.pushPcm(toAsrPcmBytes(pcm))
+  return { ok: true }
+})
+
+wrapHandler('asr:stop', () => {
+  if (!activeAsrSession?.active) return { ok: true, ignored: true }
+  activeAsrSession.stop()
+  return { ok: true }
+})
+
+wrapHandler('asr:cancel', () => {
+  if (!activeAsrSession?.active) return { ok: true, ignored: true }
+  activeAsrSession.cancel()
+  activeAsrSession = null
+  return { ok: true }
 })
 
 // ─── Window Claude Bridge（L3 Phase F）──────────────────────────────────────
@@ -1931,6 +2197,19 @@ wrapHandler('write-soul', async (_, avatarId: string, content: string) => {
 
 wrapHandler('list-avatars', () => {
   return avatarManager.listAvatars()
+})
+
+wrapHandler('expert-packs:list', () => {
+  return listExpertPacks()
+})
+
+wrapHandler('expert-packs:install', async (_, packId: string) => {
+  return installExpertPack(packId)
+})
+
+wrapHandler('expert-packs:is-installed', (_, packId: string) => {
+  assertSafeSegment(packId, '专家包 ID')
+  return Boolean(findInstalledAvatarForPack(packId))
 })
 
 /**

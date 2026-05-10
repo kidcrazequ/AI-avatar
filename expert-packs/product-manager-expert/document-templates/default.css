@@ -1,0 +1,45 @@
+/*
+ * default.css —— 产品经理分身的默认 PDF 文档模板
+ *
+ * 与内置基础样式叠加：中文阅读优先字体、GitHub 风表格、A4 页边距。
+ *
+ * @author zhi.qu
+ * @date 2026-05-09
+ */
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  font-size: 12pt;
+  line-height: 1.7;
+  color: #1f2328;
+}
+
+.document {
+  max-width: 800px;
+  padding: 0 32px;
+}
+
+.document-title {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  color: #1f2328;
+}
+
+h2 {
+  border-bottom: 1px solid #d0d7de;
+  padding-bottom: 6px;
+}
+
+table th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+@page {
+  size: A4;
+  margin: 18mm;
+}

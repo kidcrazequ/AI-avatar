@@ -1,0 +1,11 @@
+{
+  "id": "legal-expert",
+  "name": "法务专家（法研）",
+  "description": "合同审阅、条款风险识别与合规草案建议",
+  "domain": "法律合规",
+  "version": "1.0.0",
+  "author": "zhi.qu",
+  "sourceAvatarId": "legal-expert",
+  "redline": "仅提供参阅级法律草案与风险提示，不替代执业律师意见。",
+  "installable": true
+}

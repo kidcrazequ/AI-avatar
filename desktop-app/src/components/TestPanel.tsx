@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { computeAvatarQualityScores } from '@soul/core/browser'
 import { TestRunner } from '../services/test-runner'
 import { ModelConfig } from '../services/llm-service'
 import Modal from './shared/Modal'
@@ -9,9 +10,11 @@ interface Props {
   chatModel: ModelConfig
   systemPrompt: string
   onClose: () => void
+  /** 成功落盘 `tests/reports/report-*.json` 后回调（用于刷新顶栏质量勋章等） */
+  onReportSaved?: () => void
 }
 
-export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }: Props) {
+export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose, onReportSaved }: Props) {
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set())
   const [isRunning, setIsRunning] = useState(false)
@@ -105,6 +108,15 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
       setResults(testResults)
       setShowResults(true)
 
+      const qualityScores = computeAvatarQualityScores(
+        testResults.map((r) => ({
+          caseId: r.caseId,
+          category: r.category ?? '',
+          passed: r.passed,
+          score: r.score,
+        }))
+      )
+
       const report = {
         avatarId,
         totalCases: testResults.length,
@@ -114,9 +126,11 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
         results: testResults,
         timestamp: Date.now(),
         duration: testResults.reduce((sum, r) => sum + r.duration, 0),
+        qualityScores,
       }
 
       await window.electronAPI.saveTestReport(avatarId, report)
+      onReportSaved?.()
     } catch (error) {
       console.error('运行测试失败:', error)
       showAlert('运行测试失败，请重试')
@@ -125,11 +139,30 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
     }
   }
 
-  const { passedCount, failedCount } = useMemo(() => {
+  const { passedCount, failedCount, qualityScores } = useMemo(() => {
     let passed = 0
     for (const r of results) { if (r.passed) passed++ }
-    return { passedCount: passed, failedCount: results.length - passed }
+    const qs =
+      results.length === 0
+        ? null
+        : computeAvatarQualityScores(
+            results.map((r) => ({
+              caseId: r.caseId,
+              category: r.category ?? '',
+              passed: r.passed,
+              score: r.score,
+            }))
+          )
+    return { passedCount: passed, failedCount: results.length - passed, qualityScores: qs }
   }, [results])
+
+  const formatAxis = (
+    agg: { passRatePercent: number; averageScore: number; totalCount: number } | null,
+    emptyLabel: string
+  ): string => {
+    if (!agg || agg.totalCount === 0) return emptyLabel
+    return `${agg.passRatePercent}% (均分 ${agg.averageScore})`
+  }
 
   const groupedCases = useMemo(() =>
     testCases.reduce((acc, tc) => {
@@ -256,6 +289,16 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose }
                   {results.length > 0 ? Math.round((passedCount / results.length) * 100) : 0}%
                 </span>
               </div>
+              {qualityScores && (
+                <div className="mt-2 space-y-1 font-game text-[11px] text-px-text-dim tracking-wide leading-snug border-t border-px-border-dim pt-2">
+                  <div>红线 {formatAxis(qualityScores.redline, '— 本轮无该类用例')}</div>
+                  <div>知识完整度 {formatAxis(qualityScores.knowledgeCompleteness, '— 本轮无该类用例')}</div>
+                  <div>引用准确率 {formatAxis(qualityScores.citationAccuracy, '— 本轮无该类用例')}</div>
+                  {qualityScores.otherRanCount > 0 ? (
+                    <div className="text-px-text-dim/80">其它类用例 {qualityScores.otherRanCount} 条（未计入三维）</div>
+                  ) : null}
+                </div>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto bg-px-bg">
               {results.map((result) => (

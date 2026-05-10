@@ -48,3 +48,11 @@ desktop-app/test-output/
 avatars/*/_cache/
 avatars/*/workspaces/
 avatars/*/wiki/evolution-report.json
+
+# 大文件资产与归档（超过 GitHub 100MB 硬限制，禁止入库）
+assets/*.mp4
+assets/*.mov
+归档.zip
+AI分身提效案例.html
+AI分身提效案例.md
+AI分身提效案例-*.md

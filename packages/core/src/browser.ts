@@ -123,6 +123,22 @@ export type {
   ToolPermissionEval,
 } from './tool-permission-policy'
 
+// ─── 测试中心评分与溯源校验（纯函数）─────────────────────────────────────────
+export {
+  mapTestCaseToQualityDimension,
+  computeAvatarQualityScores,
+} from './avatar-quality-scores'
+export type {
+  AvatarQualityAxis,
+  AvatarTestOutcomeForQuality,
+  AvatarQualityDimensionAggregate,
+  AvatarQualityScores,
+} from './avatar-quality-scores'
+
+export {
+  extractParsedSourceAnchors,
+} from './source-anchor'
+
 export {
   stableToolDocHash,
   buildToolDocForEmbedding,

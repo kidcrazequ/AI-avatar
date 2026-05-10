@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, detectReasoning } from '../services/llm-service'
-import { MEMORY_CHAR_LIMIT, localDateString, hashQueryContent } from '@soul/core/browser'
+import {
+  MEMORY_CHAR_LIMIT,
+  localDateString,
+  hashQueryContent,
+  PLAN_MODE_BLOCKED_TOOL_NAMES,
+  evaluateConversationModeToolPolicy,
+} from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
+import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
@@ -72,6 +79,22 @@ export function nextMessageId(): string {
  * @author zhi.qu
  * @date 2026-05-01
  */
+/**
+ * P0+ Proxy API（方案 A）可选参数：将助手回复通过 IPC 回写主进程 HTTP。
+ *
+ * @author zhi.qu
+ * @date 2026-05-09
+ */
+export interface SendMessageProxyOptions {
+  proxyJobId?: string
+  proxyStream?: boolean
+  proxyAnthropicMessageId?: string
+  proxyModelLabel?: string
+  onProxyComplete?: (
+    r: { ok: true; assistantText: string } | { ok: false; error: string },
+  ) => void | Promise<void>
+}
+
 export interface AttachmentRef {
   id: string
   name: string
@@ -188,9 +211,23 @@ export interface AgentTask {
  *   - plan：只输出方案，禁止 write/exec/delete 类写工具
  *   - ask：纯问答，禁止任何工具
  *
- * 模式由前端独立维护，不持久化（重启回归 agent）；每次发起 LLM 请求时按 mode 过滤工具列表。
+ * 模式由前端维护（重启默认 agent）；发起 LLM 请求时按 mode 过滤工具列表，
+ * 同时经 `syncConversationToolMode` 同步到主进程，供 execute-tool-call 统一门禁（#7）。
  */
 export type ConversationMode = 'agent' | 'plan' | 'ask'
+
+/**
+ * #7：主进程 execute-tool-call 需与会话 mode 对齐；会话切换 / UI / switch_mode 时推送。
+ */
+function pushConversationToolModeToMain(conversationId: string, mode: ConversationMode): void {
+  void window.electronAPI.syncConversationToolMode(conversationId, mode).catch((e) => {
+    window.electronAPI.logEvent(
+      'warn',
+      'sync-conversation-tool-mode',
+      e instanceof Error ? e.message : String(e),
+    )
+  })
+}
 
 interface ChatStore {
   messages: ChatMessage[]
@@ -239,6 +276,7 @@ interface ChatStore {
     visionModel?: ModelConfig,
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    proxyOpts?: SendMessageProxyOptions,
   ) => Promise<void>
   clearMessages: () => void
   resetTransientState: () => void
@@ -2062,6 +2100,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setMode: (mode) => {
     if (get().mode === mode) return
     set({ mode })
+    const cid = get().currentConversationId
+    if (cid) pushConversationToolModeToMain(cid, mode)
   },
 
   setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
@@ -2081,6 +2121,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   bindConversation: async (conversationId) => {
     set({ currentConversationId: conversationId })
+    pushConversationToolModeToMain(conversationId, get().mode)
     try {
       const json = await window.electronAPI.getAgentTasks(conversationId)
       // 二次校验：会话切换很快时可能在 await 期间又切走，避免覆盖新会话的任务
@@ -2212,8 +2253,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     visionModel?: ModelConfig,
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    proxyOpts?: SendMessageProxyOptions,
   ) => {
-    if (get().isLoading) return
+    const invokeProxyComplete = async (
+      r: { ok: true; assistantText: string } | { ok: false; error: string },
+    ): Promise<void> => {
+      if (proxyOpts?.onProxyComplete) await proxyOpts.onProxyComplete(r)
+    }
+    const writeProxyStreamDelta = (textChunk: string): void => {
+      if (!proxyOpts?.proxyJobId || !proxyOpts.proxyStream || !textChunk) return
+      const line = formatSseEvent('content_block_delta', textDeltaJson(textChunk))
+      void window.electronAPI.soulProxyApiSseWrite(proxyOpts.proxyJobId, line)
+    }
+
+    if (get().isLoading) {
+      await invokeProxyComplete({ ok: false, error: 'Soul 正有一条对话进行中（isLoading）' })
+      return
+    }
     // 每次新提问都清空上一轮的工具调用时间线，保证 UI 顶部只展示本轮
     set({ isLoading: true, toolCallTimeline: [] })
     const requestId = ++chatRequestSeq
@@ -2225,6 +2281,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // eslint-disable-next-line no-console -- 本地性能诊断日志，便于定位对话链路慢点
       console.log(`${perfTag} ${event} (+${elapsed}ms)${suffix}`)
     }
+    /** #7：Proxy/API 同源 sendMessage，工具走主进程时需标 trustTier 以便拦截灰名单 */
+    const toolInvocationMeta =
+      proxyOpts?.proxyJobId !== undefined ? ({ trustTier: 'proxy' as const }) : undefined
+
     logPerf('sendMessage:start', `avatar=${avatarId} contentLen=${content.length} hasImages=${Boolean(images && images.length > 0)}`)
     regressionTelemetry.emit({
       type: 'conversation-started',
@@ -2254,6 +2314,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
       await window.electronAPI.saveMessage(conversationId, 'user', content)
       await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
+      await invokeProxyComplete({ ok: false, error: errorMsg })
       return
     }
 
@@ -2323,6 +2384,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         isLoading: false,
         toolCallStatus: '',
       }))
+      await invokeProxyComplete({ ok: false, error: `保存用户消息失败：${errMsg}` })
       return
     }
 
@@ -2355,20 +2417,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const cacheResult = await window.electronAPI.getChartCacheHit(avatarId, chartQueryHash)
         if (cacheResult.hit) {
           logPerf('chart-cache:hit', `queryHash=${chartQueryHash} age=${Date.now() - cacheResult.createdAt}ms`)
-          if (!isStale()) {
-            const cachedMsg: ChatMessage = {
-              id: nextMessageId(),
-              role: 'assistant',
-              content: cacheResult.assistantContent,
-            }
-            set((state) => ({
-              messages: [...state.messages, cachedMsg],
-              isLoading: false,
-              toolCallStatus: '',
-            }))
-            await window.electronAPI.saveMessage(conversationId, 'assistant', cacheResult.assistantContent)
-            activeChatRequest = null
+          if (isStale()) {
+            await invokeProxyComplete({ ok: false, error: '请求已过期或已取消' })
+            return
           }
+          const cachedMsg: ChatMessage = {
+            id: nextMessageId(),
+            role: 'assistant',
+            content: cacheResult.assistantContent,
+          }
+          set((state) => ({
+            messages: [...state.messages, cachedMsg],
+            isLoading: false,
+            toolCallStatus: '',
+          }))
+          await window.electronAPI.saveMessage(conversationId, 'assistant', cacheResult.assistantContent)
+          activeChatRequest = null
+          if (proxyOpts?.proxyStream) {
+            writeProxyStreamDelta(cacheResult.assistantContent)
+          }
+          await invokeProxyComplete({ ok: true, assistantText: cacheResult.assistantContent })
           return
         }
         logPerf('chart-cache:miss', `queryHash=${chartQueryHash}`)
@@ -2590,15 +2658,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      *   - ask：完全禁用工具
      */
     const currentMode = get().mode
-    const PLAN_MODE_BLOCKED_TOOLS = new Set([
-      'write_file', 'multi_edit', 'str_replace_edit', 'delete_file', 'copy_files',
-      'exec_shell', 'exec_code', 'kill_shell',
-      'register_assets', 'unregister_assets',
-      'apply_tweaks', 'save_as_html', 'save_as_pdf', 'export_pptx', 'gen_pptx',
-      'super_inline_html', 'github_import_files',
-      'task', 'delegate_task',
-      'generate_image',
-    ])
     // 对话框附件扩展：有图片时旧策略是清空 tools（视觉模型常不支持 function calling），
     // 但若同时有附件存在则必须保留 read_attachment / search_attachment 工具，否则模型
     // 拿到 <attachment id /> 元信息却无法读取本体。这里只保留附件相关工具集。
@@ -2633,7 +2692,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } else if (currentMode === 'ask') {
       tools = []
     } else if (currentMode === 'plan') {
-      tools = AVATAR_TOOLS.filter(t => !PLAN_MODE_BLOCKED_TOOLS.has(t.function.name))
+      tools = AVATAR_TOOLS.filter(t => !PLAN_MODE_BLOCKED_TOOL_NAMES.has(t.function.name))
     } else {
       tools = AVATAR_TOOLS
     }
@@ -2715,7 +2774,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
 
       try {
-        const result = await window.electronAPI.executeToolCall(avatarId, conversationId, 'load_skill', toolArgs)
+        const result = await window.electronAPI.executeToolCall(avatarId, conversationId, 'load_skill', toolArgs, toolInvocationMeta)
         if (isStale()) return
         loadSkillCallCount++
         resultText = result.error
@@ -2834,6 +2893,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               return
             }
             assistantText += chunk
+            writeProxyStreamDelta(chunk)
             // 工具调用中间轮次（round > 0）不实时显示文字给用户，
             // 避免 LLM 在中间轮输出半成品分析后最终轮又重复一遍。
             // 只在第一轮（用户刚发消息）和最终轮（下面 resolve 后判断无 tool_calls 再刷新）时显示。
@@ -2994,6 +3054,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           let toolOk = true
           try {
             if (tc.function.name === 'todo_write') {
+              const modePol = evaluateConversationModeToolPolicy(get().mode, 'todo_write')
+              if (modePol.denied) {
+                resultText = `工具执行失败: ${modePol.message}`
+                logPerf('tool-call:todo-write-blocked', `round=${round} reason=mode-policy`)
+              } else {
               // 前端原生工具：不走 IPC，直接更新 store
               // 容错：toolArgs.todos 必须是数组，每项必须有 id/content/status，
               // 非法项目静默丢弃并在结果文本中提示 LLM 修正。
@@ -3046,6 +3111,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 tasksJson: JSON.stringify(all),
                 merge,
               })
+              }
             } else if (ENABLE_QUERY_EXCEL_GUARD && tc.function.name === 'query_excel') {
               const queryExcelCacheKey = normalizeQueryExcelArgs(toolArgs)
               if (typeof toolArgs.file === 'string' && toolArgs.file.length > 0) {
@@ -3063,7 +3129,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   logPerf('tool-loop:converge-mode-on', `round=${round} reason=query_excel-max-calls`)
                 }
               } else {
-                const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs)
+                const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
                 if (isStale()) return
                 queryExcelCallCount++
                 resultText = result.error
@@ -3086,7 +3152,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   logPerf('tool-loop:converge-mode-on', `round=${round} reason=load_skill-max-calls`)
                 }
               } else {
-                const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs)
+                const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
                 if (isStale()) return
                 loadSkillCallCount++
                 resultText = result.error
@@ -3094,7 +3160,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   : result.content
               }
             } else {
-              const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs)
+              const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
               if (isStale()) return
               resultText = result.error
                 ? `工具执行失败: ${result.error}`
@@ -3409,6 +3475,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         timestamp: Date.now(),
         content: displayText,
       })
+      await invokeProxyComplete({ ok: true, assistantText: displayText })
       if (!isStale()) activeChatRequest = null
     } catch (error) {
       if (isStale()) return
@@ -3422,6 +3489,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         timestamp: Date.now(),
         error: errMsg,
       })
+      await invokeProxyComplete({ ok: false, error: errMsg })
       const errorMessage = `抱歉，发生了错误：${errMsg}`
       set((state) => ({
         messages: upsertLastAssistant(state.messages, nextMessageId(), errorMessage),

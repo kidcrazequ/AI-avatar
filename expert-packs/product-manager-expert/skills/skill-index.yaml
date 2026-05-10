@@ -1,0 +1,48 @@
+# Skill 路由索引 v1.0 — 产品经理（品研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - PRD 流程图
+      - 里程碑
+      - 评审顺序
+      - 甘特
+      - 路线图
+      - 用户旅程
+      - kanban
+    when: PRD / 路线图 / 里程碑需要 mermaid（先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据分析
+    keywords:
+      - 漏斗图
+      - 转化率
+      - 留存
+      - cohort
+      - 指标体系
+      - KPI
+    when: 已知数据在 knowledge/ 或多表对齐后画图（先 load_skill）
+    priority: 2
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 数据分析
+    keywords:
+      - 柱状图
+      - 折线图
+      - 竞品对比维度
+      - AB 实验
+      - chart
+    when: 多精确数值制图（先 load_skill）
+    priority: 3

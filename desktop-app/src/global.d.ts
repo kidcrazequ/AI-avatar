@@ -427,6 +427,27 @@ interface StructuredMemoryDocumentDTO {
   entries: StructuredMemoryEntryDTO[]
 }
 
+interface AsrStartResult {
+  requestId: string
+  endpoint: string
+}
+
+interface AsrPartialPayload {
+  requestId: string
+  text: string
+  isFinal: boolean
+}
+
+interface AsrErrorPayload {
+  requestId: string
+  message: string
+}
+
+interface AsrEndPayload {
+  requestId: string
+  reason: 'stopped' | 'cancelled' | 'error' | 'server-final' | 'closed'
+}
+
 interface ElectronAPI {
   ping: () => Promise<string>
   loadAvatar: (avatarId: string, projectId?: string) => Promise<AvatarConfig>
@@ -491,6 +512,13 @@ interface ElectronAPI {
   // 设置管理
   getSetting: (key: string) => Promise<string | undefined>
   setSetting: (key: string, value: string) => Promise<void>
+  asrStart: () => Promise<AsrStartResult>
+  asrPushPcm: (pcm: Uint8Array) => Promise<{ ok: boolean }>
+  asrStop: () => Promise<{ ok: boolean; ignored?: boolean }>
+  asrCancel: () => Promise<{ ok: boolean; ignored?: boolean }>
+  onAsrPartial: (callback: (payload: AsrPartialPayload) => void) => (() => void)
+  onAsrError: (callback: (payload: AsrErrorPayload) => void) => (() => void)
+  onAsrEnd: (callback: (payload: AsrEndPayload) => void) => (() => void)
   claudeBridgeComplete: (conversationId: string, input: string | { messages?: Array<{ role: string; content: string }> }, filePath?: string) => Promise<string>
   claudeBridgeGetLimits: () => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
   claudeBridgeSetLimits: (limits: Record<string, number>) => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
@@ -636,6 +664,9 @@ interface ElectronAPI {
 
   // 分身管理
   listAvatars: () => Promise<Avatar[]>
+  listExpertPacks: () => Promise<ExpertPack[]>
+  installExpertPack: (packId: string) => Promise<ExpertPackInstallResult>
+  isExpertPackInstalled: (packId: string) => Promise<boolean>
   getAvatarSoulIntro: (targetAvatarId: string) => Promise<string | null>
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => Promise<void>
   writeSkillFile: (avatarId: string, fileName: string, content: string) => Promise<void>
@@ -1028,6 +1059,27 @@ interface Avatar {
   createdAt: number
   /** 头像图片：data URL（自定义上传）或 "default:<key>"（预置头像） */
   avatarImage?: string
+}
+
+interface ExpertPack {
+  id: string
+  name: string
+  description: string
+  domain: string
+  version: string
+  author: string
+  sourceAvatarId: string
+  redline: string
+  installable: boolean
+  installed: boolean
+  installedAvatarId?: string
+  /** 头像图片：data URL（自定义上传）或 "default:<key>"（预置头像） */
+  avatarImage?: string
+}
+
+interface ExpertPackInstallResult {
+  avatarId: string
+  installed: boolean
 }
 
 interface TestCase {

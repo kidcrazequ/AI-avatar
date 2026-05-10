@@ -1,0 +1,50 @@
+# Skill 路由索引 v1.0 — 电气工程师（电图）
+#
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  # 拓扑 / 单线图 / 供配电关系示意（先于口头描述）
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - 单线图
+      - 一次系统
+      - 配电
+      - 拓扑
+      - 接线关系
+      - 甘特
+      - 验收流程
+      - mermaid
+    when: 需要结构化表达系统拓扑、工序或验收流转时（先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 负载曲线
+      - 趋势
+      - 用电量
+      - 实测对比
+      - 图表
+    when: 基于知识库或台账数值输出 ECharts 时（先 load_skill）
+    priority: 2
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 谐波
+      - 柱状图
+      - 折线图
+      - 波形数据
+      - chart
+    when: 多组精确数值需制图对比时（先 load_skill）
+    priority: 3

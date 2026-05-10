@@ -16,6 +16,11 @@ interface Props {
   conversations: Conversation[]
   activeConversationId: string | null
   activeAvatarId?: string
+  /** 当前选中的 Avatar 项目分区 */
+  activeProjectId: string
+  knownProjectIds: string[]
+  onProjectChange: (projectId: string) => void
+  onCreateProjectId: () => void
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
   onNewConversation: () => void
@@ -26,6 +31,10 @@ export default function ConversationList({
   conversations,
   activeConversationId,
   activeAvatarId,
+  activeProjectId,
+  knownProjectIds,
+  onProjectChange,
+  onCreateProjectId,
   onSelectConversation,
   onDeleteConversation,
   onNewConversation,
@@ -36,6 +45,15 @@ export default function ConversationList({
   const [isSearching, setIsSearching] = useState(false)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchSeq = useRef(0)
+
+  const projectOptions = useMemo(
+    () => [...new Set([...knownProjectIds, activeProjectId])].sort(),
+    [knownProjectIds, activeProjectId],
+  )
+
+  const formatProjectLabel = (projectId: string): string => (
+    projectId === 'default' ? '默认项目' : projectId
+  )
 
   const filtered = useMemo(() => {
     // 隐藏批量回归测试产生的临时会话（id 前缀 'regression-'）。
@@ -99,6 +117,34 @@ export default function ConversationList({
             <span className="font-game text-[12px] text-px-bg leading-none">S</span>
           </div>
           <span className="font-game text-[13px] text-px-text tracking-wider">SOUL</span>
+        </div>
+        <div className="mb-3 space-y-1">
+          <label className="font-game text-[10px] text-px-text-dim tracking-wider uppercase block">Project</label>
+          <div className="relative">
+            <select
+              value={activeProjectId}
+              disabled={!activeAvatarId}
+              onChange={(e) => onProjectChange(e.target.value)}
+              className="w-full appearance-none px-2 pr-10 py-2 bg-px-surface text-px-text border-2 border-px-border-dim font-game text-[12px] focus:border-px-primary focus:outline-none"
+            >
+              {projectOptions.map((pid) => (
+                <option key={pid} value={pid}>
+                  {formatProjectLabel(pid)}
+                </option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-px-text-sec font-game text-[12px]">
+              ˅
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={!activeAvatarId}
+            onClick={onCreateProjectId}
+            className="w-full px-2 py-1.5 border-2 border-px-border-dim text-px-text-dim font-game text-[11px] hover:border-px-primary hover:text-px-text transition-none disabled:opacity-40"
+          >
+            ＋ 新建项目
+          </button>
         </div>
         <button
           onClick={onNewConversation}

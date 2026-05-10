@@ -1,0 +1,33 @@
+# Skill 路由索引 v1.0 — 项目经理（项枢）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 计划与路线图
+    keywords:
+      - 甘特图
+      - timeline
+      - 里程碑
+      - RACI
+      - dependency
+      - 关键路径草稿
+      - mermaid gantt
+    when: 排期须有任务列表与日历输入（源自 knowledge 或本会话；禁止臆造资源；先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 度量
+    keywords:
+      - 燃尽图数据
+      - 工时对比
+      - burndown
+      - KPI
+    when: 数值已取证（先 load_skill）
+    priority: 2

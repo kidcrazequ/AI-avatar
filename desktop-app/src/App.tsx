@@ -14,13 +14,14 @@ import SoulEditorPanel from './components/SoulEditorPanel'
 import PromptTemplatePanel from './components/PromptTemplatePanel'
 import SchedulesPanel from './components/SchedulesPanel'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
+import ExpertPackPanel from './components/ExpertPackPanel'
 import PixelNavBar from './components/PixelNavBar'
 import AvatarImage from './components/AvatarImage'
 import Toast from './components/shared/Toast'
 import { useShallow } from 'zustand/react/shallow'
 import { useThemeStore } from './stores/themeStore'
 import { useChatStore } from './stores/chatStore'
-import { MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core/browser'
+import { localDateString, MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core/browser'
 import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
 import { registerSoulProxyApiBridge } from './services/proxy-api-bridge'
 import { registerScheduleTriggerListener } from './services/schedule-trigger-handler'
@@ -29,15 +30,87 @@ function conversationProjectId(c: Conversation): string {
   return c.project_id && c.project_id.length > 0 ? c.project_id : 'default'
 }
 
+function getAvatarDomainTag(avatar: Avatar): string {
+  const source = `${avatar.name} ${avatar.id}`.toLowerCase()
+  if (source.includes('项目')) return '项目管理'
+  if (source.includes('市场')) return '市场分析'
+  if (source.includes('法务') || source.includes('legal')) return '法律合规'
+  if (source.includes('hr')) return '人力资源'
+  if (source.includes('产品')) return '产品策略'
+  if (source.includes('电气') || source.includes('electrical')) return '电气工程'
+  if (source.includes('财务') || source.includes('finance')) return '财务分析'
+  if (source.includes('设计') || source.includes('design')) return '设计体验'
+  if (source.includes('储') || source.includes('storage')) return '工商储能'
+  return '专业分身'
+}
+
+function getAvatarFallbackAbility(avatar: Avatar): string {
+  const tag = getAvatarDomainTag(avatar)
+  switch (tag) {
+    case '项目管理':
+      return '项目计划、风险跟踪、里程碑与交付协同'
+    case '市场分析':
+      return '市场研究、竞品对比、趋势洞察与机会判断'
+    case '法律合规':
+      return '合同审阅、条款风险识别与合规草案建议'
+    case '人力资源':
+      return '制度解读、劳动关系沟通、招聘与绩效建议'
+    case '产品策略':
+      return '需求分析、PRD 拆解、指标设计与路线图规划'
+    case '电气工程':
+      return '图纸理解、标准核查、电气方案与技术答疑'
+    case '财务分析':
+      return '报表阅读、经营分析、预算测算与风险提示'
+    case '设计体验':
+      return '界面评审、体验优化、视觉系统与原型建议'
+    case '工商储能':
+      return '工商业储能方案设计、收益测算与政策解读'
+    default:
+      return '围绕专属知识库提供可追溯的专业问答与任务协作'
+  }
+}
+
+function isInternalAvatarDescription(description: string): boolean {
+  const normalized = description.toLowerCase()
+  return [
+    '行为准则',
+    '灵魂文档',
+    'soul.md',
+    'agents.md',
+    'claude.md',
+    '模板',
+    'g1-g4',
+    '继承根目录',
+    '请先阅读',
+  ].some(keyword => normalized.includes(keyword.toLowerCase()))
+}
+
+function getAvatarAbilityDescription(avatar: Avatar): string {
+  const description = avatar.description.trim()
+  if (!description || isInternalAvatarDescription(description)) {
+    return getAvatarFallbackAbility(avatar)
+  }
+  return description
+}
+
+function getAvatarSourceLabel(avatar: Avatar): string {
+  const description = avatar.description.trim()
+  if (!description) return '来源：默认能力画像'
+  if (description.includes('soul.md') || description.includes('灵魂文档')) return '来源：灵魂文档'
+  if (description.includes('AGENTS.md') || description.includes('CLAUDE.md') || description.includes('行为准则')) return '来源：行为准则'
+  return '来源：能力描述'
+}
+
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
   const showCreateWizard = activePanel === 'createWizard'
+  const showExpertPackPanel = activePanel === 'expertPacks'
   const showTestPanel = activePanel === 'test'
   const showSkillsPanel = activePanel === 'skills'
   const showMemoryPanel = activePanel === 'memory'
@@ -332,6 +405,11 @@ function App() {
     }
   }
 
+  const handleExpertPackInstalled = async (avatarId: string) => {
+    await refreshAvatarList()
+    await handleSelectAvatar(avatarId)
+  }
+
   // 并发锁：防止双击或同时点击两个"新建对话"按钮导致重复创建
   const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 
@@ -427,57 +505,99 @@ function App() {
 
   /** 未选择分身时的引导页 */
   const renderAvatarSelectPage = () => (
-    <div className="flex items-center justify-center h-screen bg-px-bg relative overflow-hidden">
+    <div className="min-h-screen bg-px-bg relative overflow-y-auto">
       <div className="absolute inset-0 pixel-grid opacity-50" />
+      <div className="absolute left-1/2 top-10 h-64 w-[560px] -translate-x-1/2 rounded-full bg-px-primary/10 blur-3xl" />
 
-      <div className="text-center max-w-lg px-8 relative z-10 animate-fade-in">
-        <div className="inline-flex items-center justify-center w-20 h-20 border-2 border-px-primary bg-px-primary/10 mb-8 shadow-pixel-glow">
-          <span className="font-game text-[24px] text-px-primary leading-none">S</span>
-        </div>
+      <div className="w-full max-w-6xl mx-auto px-8 py-8 relative z-10 animate-fade-in">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-8">
+          <div className="flex items-center gap-4 text-left">
+            <div className="inline-flex items-center justify-center w-16 h-16 border-2 border-px-primary bg-px-primary/10 shadow-pixel-glow">
+              <span className="font-game text-[20px] text-px-primary leading-none">S</span>
+            </div>
+            <div>
+              <div className="font-game text-[20px] text-px-primary tracking-widest">
+                SOUL DESKTOP
+              </div>
+              <p className="font-game text-[13px] text-px-text-sec tracking-wider mt-2">
+                选择一个 AI 专家，进入对应工作台
+              </p>
+              <div className="flex items-center gap-3 mt-3 font-game text-[10px] text-px-text-dim tracking-wider">
+                <span className="border border-px-border-dim px-2 py-1">专家 {avatarList.length}</span>
+                <span className="border border-px-border-dim px-2 py-1">工作台 READY</span>
+              </div>
+            </div>
+          </div>
 
-        <div className="font-game text-[20px] text-px-primary tracking-widest mb-4">
-          SOUL DESKTOP
+          <div className="flex items-center gap-3 md:pb-1">
+            <button
+              onClick={() => setActivePanel('createWizard')}
+              className="pixel-btn-primary px-5 py-3"
+            >
+              [+] 新建分身
+            </button>
+            <button
+              onClick={() => setActivePanel('expertPacks')}
+              className="pixel-btn-outline-muted px-5 py-3"
+            >
+              专家包
+            </button>
+            <button
+              onClick={() => setActivePanel('settings')}
+              className="pixel-btn-outline-muted px-5 py-3"
+            >
+              设置
+            </button>
+          </div>
         </div>
-        <p className="font-game text-[14px] text-px-text-sec tracking-wider mb-8">
-          AI 分身专家系统
-        </p>
 
         {avatarList.length > 0 ? (
-          <div className="space-y-2 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {avatarList.map((avatar) => (
               <button
                 key={avatar.id}
                 onClick={() => handleSelectAvatar(avatar.id)}
-                className="w-full flex items-center gap-4 px-5 py-4 border-2 border-px-border bg-px-surface
-                  hover:border-px-primary hover:bg-px-primary/5 transition-none text-left"
+                className="group w-full min-h-[150px] flex flex-col justify-between px-5 py-4 border-2 border-px-border bg-px-surface/95
+                  hover:border-px-primary hover:bg-px-primary/5 hover:shadow-pixel-glow transition-none text-left"
               >
-                <AvatarImage avatarImage={avatar.avatarImage} name={avatar.name} size="md" className="flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-game text-[16px] text-px-text font-bold truncate">{avatar.name}</p>
-                  <p className="font-game text-[13px] text-px-text-dim mt-0.5 truncate">{avatar.description || avatar.id}</p>
+                <div className="flex items-start gap-4">
+                  <AvatarImage avatarImage={avatar.avatarImage} name={avatar.name} size="md" className="flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="font-game text-[15px] text-px-text font-bold leading-snug line-clamp-2">{avatar.name}</p>
+                      <span className="font-game text-[12px] text-px-text-dim group-hover:text-px-primary">&gt;</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim mt-2 line-clamp-2">{getAvatarAbilityDescription(avatar)}</p>
+                  </div>
                 </div>
-                <span className="font-game text-[12px] text-px-text-dim">&gt;</span>
+
+                <div className="mt-5 pt-3 border-t border-px-border-dim/70">
+                  <div className="mb-3 font-game text-[10px] text-px-text-dim/80 truncate">
+                    {getAvatarSourceLabel(avatar)}
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-game text-[10px] text-px-primary border border-px-primary/60 px-2 py-1 whitespace-nowrap">
+                        {getAvatarDomainTag(avatar)}
+                      </span>
+                      <span className="font-game text-[10px] text-px-text-dim border border-px-border-dim px-2 py-1 whitespace-nowrap">
+                        可用
+                      </span>
+                    </div>
+                    <span className="font-game text-[10px] text-px-text-dim tabular-nums whitespace-nowrap">
+                      {localDateString(new Date(avatar.createdAt))}
+                    </span>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         ) : (
-          <p className="font-game text-[14px] text-px-text-dim tracking-wider mb-8">暂无分身，请先创建</p>
+          <div className="border-2 border-dashed border-px-border bg-px-surface/70 px-8 py-14 text-center">
+            <p className="font-game text-[15px] text-px-text tracking-wider">暂无分身</p>
+            <p className="font-game text-[12px] text-px-text-dim mt-3">先创建一个专家分身，首页会自动生成专家矩阵。</p>
+          </div>
         )}
-
-        <div className="flex justify-center gap-3">
-          <button
-            onClick={() => setActivePanel('createWizard')}
-            className="pixel-btn-primary px-6 py-3"
-          >
-            [+] 新建分身
-          </button>
-          <button
-            onClick={() => setActivePanel('settings')}
-            className="pixel-btn-outline-muted px-6 py-3"
-          >
-            设置
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -526,8 +646,8 @@ function App() {
                 </div>
               )}
               {/* ── 顶部操作栏 ── */}
-              <div className="flex items-center justify-between px-5 py-2.5 bg-px-surface border-b-2 border-px-border">
-                <div className="flex items-center gap-4">
+              <div className="flex items-center justify-between gap-6 px-5 py-2.5 bg-px-surface border-b-2 border-px-border">
+                <div className="min-w-0 flex items-center gap-4">
                   <AvatarSelector
                     activeAvatarId={activeAvatarId}
                     onSelectAvatar={handleSelectAvatar}
@@ -539,7 +659,9 @@ function App() {
                     qualityRefreshNonce={qualityReportNonce}
                   />
                 </div>
-                <PixelNavBar items={navButtons} />
+                <div className="shrink-0 ml-2">
+                  <PixelNavBar items={navButtons} />
+                </div>
               </div>
               <div className="flex-1 overflow-hidden">
                 <ChatWindow
@@ -605,6 +727,15 @@ function App() {
           onClose={() => setActivePanel(null)}
           onCreated={handleAvatarCreated}
           onOpenSettings={() => setActivePanel('settings')}
+        />
+      )}
+
+      {showExpertPackPanel && (
+        <ExpertPackPanel
+          onClose={() => setActivePanel(null)}
+          onInstalled={handleExpertPackInstalled}
+          onOpenAvatar={handleSelectAvatar}
+          showToast={showToast}
         />
       )}
 

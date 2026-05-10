@@ -157,6 +157,29 @@ export type { AttachmentRoute } from './utils/attachment-types'
 
 export { fetchWithTimeout, HttpError } from './utils/http'
 export type { FetchWithTimeoutOptions } from './utils/http'
+export {
+  DOUBAO_ASR_PROTOCOL_VERSION,
+  DOUBAO_ASR_BASE_HEADER_SIZE_WORDS,
+  DOUBAO_ASR_BASE_HEADER_SIZE_BYTES,
+  DOUBAO_ASR_DEFAULT_AUDIO,
+  DoubaoAsrMessageType,
+  DoubaoAsrMessageFlags,
+  DoubaoAsrSerialization,
+  DoubaoAsrCompressionCode,
+  DoubaoAsrProtocolError,
+  buildDoubaoAsrFullClientRequest,
+  buildDoubaoAsrAudioOnlyRequest,
+  parseDoubaoAsrServerResponse,
+} from './audio/doubao-asr-protocol'
+export type {
+  JsonValue,
+  JsonObject,
+  DoubaoAsrCompression,
+  DoubaoAsrAudioMetadata,
+  DoubaoAsrFullClientRequestOptions,
+  DoubaoAsrAudioOnlyRequestOptions,
+  DoubaoAsrParsedServerResponse,
+} from './audio/doubao-asr-protocol'
 export { callVisionOcr, DEFAULT_VISION_MODEL, DEFAULT_VISION_CONCURRENCY, DEFAULT_VISION_PROMPT, DEFAULT_VISION_TIMEOUT_MS } from './utils/vision-ocr'
 export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './utils/vision-ocr'
 export { loadTokensCache, saveTokensCache, TOKENS_FILE } from './utils/chunk-cache'

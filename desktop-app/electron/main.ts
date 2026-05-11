@@ -239,6 +239,71 @@ let attachmentStore: AttachmentStore
 let activeAsrSession: DoubaoAsrSession | null = null
 
 /**
+ * 写入崩溃诊断日志。
+ *
+ * 这里不能只依赖 Logger：uncaughtException / renderer crash 可能发生在 initManagers
+ * 之前，或发生在 Logger 自身不可用时。fallback 直接追加到 userData/logs/error-YYYY-MM-DD.log，
+ * 保证 Windows 安装版出现“窗口直接消失”时仍能留下 crash / oom / GPU 进程退出原因。
+ *
+ * @author zhi.qu
+ * @date 2026-05-11
+ */
+function writeCrashDiagnostic(source: string, detail: unknown): void {
+  const error = detail instanceof Error ? detail : new Error(String(detail))
+  const lines = [
+    `[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] CRASH ${source} | ${error.message}`,
+    error.stack ?? '',
+  ].filter(Boolean)
+
+  try {
+    if (logger) {
+      logger.error(source, error)
+      return
+    }
+  } catch {
+    // Logger 失效时继续走文件 fallback，避免二次异常吞掉真正的崩溃原因。
+  }
+
+  try {
+    const logDir = path.join(app.getPath('userData'), 'logs')
+    fs.mkdirSync(logDir, { recursive: true })
+    fs.appendFileSync(
+      path.join(logDir, `error-${localDateString(new Date())}.log`),
+      `${lines.join('\n')}\n`,
+      'utf8',
+    )
+  } catch {
+    // 崩溃兜底路径不能再抛异常。
+  }
+}
+
+/**
+ * 注册主进程级崩溃保护。
+ *
+ * @author zhi.qu
+ * @date 2026-05-11
+ */
+function registerProcessCrashHandlers(): void {
+  process.on('uncaughtException', (err) => {
+    writeCrashDiagnostic('process:uncaughtException', err)
+    try {
+      dialog.showErrorBox('AI分身运行异常', `主进程出现未捕获异常：${err.message}\n\n错误已写入 logs/error-${localDateString(new Date())}.log`)
+    } catch {
+      // 对话框显示失败时只保留日志。
+    }
+  })
+
+  process.on('unhandledRejection', (reason) => {
+    writeCrashDiagnostic('process:unhandledRejection', reason)
+  })
+
+  app.on('child-process-gone', (_event, details) => {
+    writeCrashDiagnostic('app:child-process-gone', JSON.stringify(details))
+  })
+}
+registerProcessCrashHandlers()
+
+/**
  * 附件全文解析缓存（read_attachment / search_attachment 共享）。
  * 同一附件被反复 tool call 时不重复跑 documentParser.parseFile。
  *
@@ -448,6 +513,7 @@ function resolveIconPath(): string | undefined {
 
 function createWindow() {
   const iconPath = resolveIconPath()
+  let rendererCrashReloaded = false
   // show: false + ready-to-show 是 Electron 官方推荐的"优雅显示"模式。
   // 修复 Windows 安装版的 bug：BrowserWindow 默认 show: true 时窗口立即可见，
   // 但此时 WebContents 尚未完成首屏渲染和合成器初始化，OS 输入派发链未建立。
@@ -484,6 +550,27 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeCrashDiagnostic('webContents:render-process-gone', JSON.stringify(details))
+    const shouldReload = ['crashed', 'oom', 'abnormal-exit'].includes(details.reason)
+    if (shouldReload && !rendererCrashReloaded && !mainWindow?.isDestroyed()) {
+      rendererCrashReloaded = true
+      setTimeout(() => {
+        if (!mainWindow?.isDestroyed()) {
+          mainWindow.webContents.reload()
+        }
+      }, 500)
+    }
+  })
+
+  mainWindow.webContents.on('unresponsive', () => {
+    writeCrashDiagnostic('webContents:unresponsive', 'renderer became unresponsive')
+  })
+
+  mainWindow.webContents.on('responsive', () => {
+    if (logger) logger.activity('webContents:responsive')
+  })
 
   // preview-preload 与 chat 主窗口的 preload 完全独立：用于 WebContentsView 内部的
   // window.claude / inspector / tweaks 协议

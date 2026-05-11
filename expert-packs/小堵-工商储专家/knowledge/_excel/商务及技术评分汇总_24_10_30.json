@@ -1,0 +1,1031 @@
+{
+  "fileName": "商务及技术评分汇总(24.10.30).xlsx",
+  "importedAt": "2026-04-30T09:24:17.838Z",
+  "sheets": [
+    {
+      "name": "变更记录",
+      "rowCount": 3,
+      "columns": [
+        {
+          "name": "文件编号 Document No.",
+          "dtype": "string",
+          "uniqueCount": 3,
+          "samples": [
+            "©远景能源有限公司  保密信息，未经授权禁止扩散\n© Envision Energy Co., Ltd. Confidential，no transmission without authorization",
+            "版本号\nVersion",
+            "V1.0"
+          ]
+        },
+        {
+          "name": "EM-Shared Biddi-Rec-0006",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "修订人\nAuthor",
+            "赵珊"
+          ]
+        },
+        {
+          "name": "文件名称 Document Name",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "批准人\nApprover",
+            "杨明"
+          ]
+        },
+        {
+          "name": "商务及技术评分汇总",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "描述\nDescription",
+            "初版发布"
+          ]
+        },
+        {
+          "name": "版本 version",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "保密等级\nConfidential Level"
+          ]
+        },
+        {
+          "name": "V1.0",
+          "dtype": "string",
+          "uniqueCount": 3,
+          "samples": [
+            "秘密\nSecret",
+            "日期\nUpdate Date",
+            "2024.10.30"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "文件编号 Document No.": "©远景能源有限公司  保密信息，未经授权禁止扩散\n© Envision Energy Co., Ltd. Confidential，no transmission without authorization",
+          "EM-Shared Biddi-Rec-0006": null,
+          "文件名称 Document Name": null,
+          "商务及技术评分汇总": null,
+          "版本 version": "保密等级\nConfidential Level",
+          "V1.0": "秘密\nSecret"
+        },
+        {
+          "文件编号 Document No.": "版本号\nVersion",
+          "EM-Shared Biddi-Rec-0006": "修订人\nAuthor",
+          "文件名称 Document Name": "批准人\nApprover",
+          "商务及技术评分汇总": "描述\nDescription",
+          "版本 version": null,
+          "V1.0": "日期\nUpdate Date"
+        },
+        {
+          "文件编号 Document No.": "V1.0",
+          "EM-Shared Biddi-Rec-0006": "赵珊",
+          "文件名称 Document Name": "杨明",
+          "商务及技术评分汇总": "初版发布",
+          "版本 version": null,
+          "V1.0": "2024.10.30"
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "综合评分（新）",
+      "rowCount": 6,
+      "columns": [
+        {
+          "name": "供应商名称",
+          "dtype": "string",
+          "uniqueCount": 6,
+          "samples": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+          ]
+        },
+        {
+          "name": "商务报价-未税",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "技术评分-绝对值",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "商务评分-相对值",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "技术评分-相对值",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "综合得分",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "综合排名",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "供应商名称": "A",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": 0,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        },
+        {
+          "供应商名称": "B",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": null,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        },
+        {
+          "供应商名称": "C",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": null,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        },
+        {
+          "供应商名称": "D",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": null,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        },
+        {
+          "供应商名称": "E",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": null,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        },
+        {
+          "供应商名称": "F",
+          "商务报价-未税": null,
+          "技术评分-绝对值": null,
+          "商务评分-相对值": null,
+          "技术评分-相对值": null,
+          "综合得分": 0,
+          "综合排名": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    },
+    {
+      "name": "技术评分 (含公式)",
+      "rowCount": 3,
+      "columns": [
+        {
+          "name": "技术分权重系数",
+          "dtype": "string",
+          "uniqueCount": 3,
+          "samples": [
+            "技术分评分-绝对值",
+            "技术分评分-相对值（计入综合分）",
+            "1、技术评分标准，需要按满分100分设置；\n2、请在B2位置填写技术分权重，然后在各家供应商位置填写技术分绝对值"
+          ]
+        },
+        {
+          "name": "15%",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "供应商A",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商B",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商C",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商D",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商E",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商F",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商G",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商H",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        }
+      ],
+      "rows": [
+        {
+          "技术分权重系数": "技术分评分-绝对值",
+          "15%": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "技术分权重系数": "技术分评分-相对值（计入综合分）",
+          "15%": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "技术分权重系数": "1、技术评分标准，需要按满分100分设置；\n2、请在B2位置填写技术分权重，然后在各家供应商位置填写技术分绝对值",
+          "15%": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "subtitle"
+      ]
+    },
+    {
+      "name": "商务评分（含公式）",
+      "rowCount": 31,
+      "columns": [
+        {
+          "name": "商务成本权重系数",
+          "dtype": "string",
+          "uniqueCount": 21,
+          "samples": [
+            "供应商总报价",
+            "物流成本",
+            "保险",
+            "税",
+            "其他",
+            "总拥有成本",
+            "利息收益",
+            "远景实际成本"
+          ]
+        },
+        {
+          "name": "85%",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "6.00%",
+            "付款日期",
+            "付款比例",
+            "到账日期"
+          ]
+        },
+        {
+          "name": "成本区分系数",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "供应商A",
+            "0%"
+          ]
+        },
+        {
+          "name": "1.00",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "供应商B",
+            "0%"
+          ]
+        },
+        {
+          "name": "目标价",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商C"
+          ]
+        },
+        {
+          "name": "供应商A",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商D"
+          ]
+        },
+        {
+          "name": "供应商B",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商E"
+          ]
+        },
+        {
+          "name": "供应商C",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商F"
+          ]
+        },
+        {
+          "name": "供应商D",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商G"
+          ]
+        },
+        {
+          "name": "供应商E",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "0",
+            "供应商H"
+          ]
+        },
+        {
+          "name": "供应商F",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商G",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        },
+        {
+          "name": "供应商H",
+          "dtype": "number",
+          "uniqueCount": 1,
+          "samples": [
+            0
+          ],
+          "min": 0,
+          "max": 0
+        }
+      ],
+      "rows": [
+        {
+          "商务成本权重系数": "供应商总报价",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "物流成本",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "保险",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "税",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "其他",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "总拥有成本",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": 0,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "利息收益",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "远景实际成本",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": 0,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "成本权重打分（满分100）",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "最终商务成本得分（计入综合得分）",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": 0,
+          "供应商B": 0,
+          "供应商C": 0,
+          "供应商D": 0,
+          "供应商E": 0,
+          "供应商F": 0,
+          "供应商G": 0,
+          "供应商H": 0
+        },
+        {
+          "商务成本权重系数": "备注：1.目标价为预算价格，若无预算价格请留空。\n      2.成本区分系数放大或缩小供应商对远景所产生的实际成本差距，显示在成本权重打分。\n      3.商务成本权重系数体现商务成本与技术成本占比，显示在最终商务成本得分（商务成本权重系数与技术成本权重系数之和为100%）。",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": 0,
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "供应商付款信息详情",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "年利率",
+          "85%": "6.00%",
+          "成本区分系数": "供应商A",
+          "1.00": "供应商B",
+          "目标价": "供应商C",
+          "供应商A": "供应商D",
+          "供应商B": "供应商E",
+          "供应商C": "供应商F",
+          "供应商D": "供应商G",
+          "供应商E": "供应商H",
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "到货日期",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "第一笔",
+          "85%": "付款日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "付款比例",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "到账日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "第二笔",
+          "85%": "付款日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "付款比例",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "到账日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "第三笔",
+          "85%": "付款日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "付款比例",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "到账日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "第四笔",
+          "85%": "付款日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "付款比例",
+          "成本区分系数": "0%",
+          "1.00": "0%",
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "到账日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "第五笔",
+          "85%": "付款日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "付款比例",
+          "成本区分系数": "0%",
+          "1.00": "0%",
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": null,
+          "85%": "到账日期",
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        },
+        {
+          "商务成本权重系数": "备注：1.年利率为工商银行最近一次人民币存款利率表中的活期年化利率，请手动输入数值。具体工行查询地址为：http://www.icbc.com.cn/ICBC/%E9%87%91%E8%9E%8D%E4%BF%A1%E6%81%AF/%E5%AD%98%E8%B4%B7%E6%AC%BE%E5%88%A9%E7%8E%87%E8%A1%A8/%E4%BA%BA%E6%B0%91%E5%B8%81%E5%AD%98%E6%AC%BE%E5%88%A9%E7%8E%87%E8%A1%A8/default.htm\n     2. 质保金在项目结束一定周期内，无任何质量问题后再付清，因此算作最后一笔付款。\n     3. 第一至第五笔付款比例之和应为100%。",
+          "85%": null,
+          "成本区分系数": null,
+          "1.00": null,
+          "目标价": null,
+          "供应商A": null,
+          "供应商B": null,
+          "供应商C": null,
+          "供应商D": null,
+          "供应商E": null,
+          "供应商F": null,
+          "供应商G": null,
+          "供应商H": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "subtitle",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle"
+      ]
+    }
+  ]
+}

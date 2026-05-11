@@ -1,0 +1,389 @@
+{
+  "fileName": "简捷EMS硬件对比.xlsx",
+  "importedAt": "2026-04-30T09:24:20.302Z",
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rowCount": 25,
+      "columns": [
+        {
+          "name": "规格名称",
+          "dtype": "string",
+          "uniqueCount": 8,
+          "samples": [
+            "产品名称",
+            "无线网络",
+            "供电电源",
+            "工作功耗",
+            "硬件参数",
+            "通讯接口",
+            "其它接口",
+            "其它"
+          ]
+        },
+        {
+          "name": "参数说明",
+          "dtype": "string",
+          "uniqueCount": 23,
+          "samples": [
+            "EMS控制器",
+            "4G全网通",
+            "DC24V/1A 或 DC12V/2A",
+            "10W",
+            "ARM工业级CPU",
+            "上架尺寸",
+            "主机尺寸",
+            "大约重量"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "备注",
+          "dtype": "string",
+          "uniqueCount": 25,
+          "samples": [
+            "站端EMS",
+            "支持全网通4G Cat.1",
+            "参考供电范围DC12~48V",
+            "满负荷工作 <15W",
+            "四核",
+            "25.7 x 18.5 x 4.5cm（长x宽x高）",
+            "21 x 16.5 x 4.5cm（长x宽x高）",
+            "2Kg左右"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "备注_2",
+          "dtype": "string",
+          "uniqueCount": 24,
+          "samples": [
+            "本地控制器",
+            "支持全网通4G Cat.1",
+            "参考供电范围DC12~48V",
+            "满负荷工作 <15W",
+            "单核",
+            "25.7 x 18.5 x 4.5cm（长x宽x高）",
+            "21 x 16.5 x 4.5cm（长x宽x高）",
+            "2Kg左右"
+          ]
+        },
+        {
+          "name": "差异项",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "规格名称": "产品名称",
+          "参数说明": "EMS控制器",
+          "col3": null,
+          "备注": "站端EMS",
+          "col5": null,
+          "col6": null,
+          "备注_2": "本地控制器",
+          "差异项": null
+        },
+        {
+          "规格名称": "无线网络",
+          "参数说明": "4G全网通",
+          "col3": null,
+          "备注": "支持全网通4G Cat.1",
+          "col5": null,
+          "col6": null,
+          "备注_2": "支持全网通4G Cat.1",
+          "差异项": null
+        },
+        {
+          "规格名称": "供电电源",
+          "参数说明": "DC24V/1A 或 DC12V/2A",
+          "col3": null,
+          "备注": "参考供电范围DC12~48V",
+          "col5": null,
+          "col6": null,
+          "备注_2": "参考供电范围DC12~48V",
+          "差异项": null
+        },
+        {
+          "规格名称": "工作功耗",
+          "参数说明": "10W",
+          "col3": null,
+          "备注": "满负荷工作 <15W",
+          "col5": null,
+          "col6": null,
+          "备注_2": "满负荷工作 <15W",
+          "差异项": null
+        },
+        {
+          "规格名称": "硬件参数",
+          "参数说明": "ARM工业级CPU",
+          "col3": null,
+          "备注": "四核",
+          "col5": null,
+          "col6": null,
+          "备注_2": "单核",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "上架尺寸",
+          "col3": null,
+          "备注": "25.7 x 18.5 x 4.5cm（长x宽x高）",
+          "col5": null,
+          "col6": null,
+          "备注_2": "25.7 x 18.5 x 4.5cm（长x宽x高）",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "主机尺寸",
+          "col3": null,
+          "备注": "21 x 16.5 x 4.5cm（长x宽x高）",
+          "col5": null,
+          "col6": null,
+          "备注_2": "21 x 16.5 x 4.5cm（长x宽x高）",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "大约重量",
+          "col3": null,
+          "备注": "2Kg左右",
+          "col5": null,
+          "col6": null,
+          "备注_2": "2Kg左右",
+          "差异项": null
+        },
+        {
+          "规格名称": "通讯接口",
+          "参数说明": "以太网",
+          "col3": null,
+          "备注": "共6路以太网，其中：",
+          "col5": null,
+          "col6": null,
+          "备注_2": "共5路以太网，其中：",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": null,
+          "col3": null,
+          "备注": "2路WAN，10/100/1000M自适应",
+          "col5": null,
+          "col6": null,
+          "备注_2": "1路WAN，10/100M自适应",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": null,
+          "col3": null,
+          "备注": "4路LAN，10/100M自适应",
+          "col5": null,
+          "col6": null,
+          "备注_2": "4路LAN，10/100M自适应",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "工业串口",
+          "col3": null,
+          "备注": "8路RS485",
+          "col5": null,
+          "col6": null,
+          "备注_2": "8路RS485",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "CAN总线",
+          "col3": null,
+          "备注": "2路",
+          "col5": null,
+          "col6": null,
+          "备注_2": "2路",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "DI",
+          "col3": null,
+          "备注": "16路",
+          "col5": null,
+          "col6": null,
+          "备注_2": "16路",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "DO",
+          "col3": null,
+          "备注": "8路（继电器输出）其中2路常闭，6路常开",
+          "col5": null,
+          "col6": null,
+          "备注_2": "8路（继电器输出）",
+          "差异项": null
+        },
+        {
+          "规格名称": "其它接口",
+          "参数说明": "4G天线接口",
+          "col3": null,
+          "备注": "1路4G天线（50Ω/SMA 阴头）",
+          "col5": null,
+          "col6": null,
+          "备注_2": "1路4G天线（50Ω/SMA 阴头）",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "TF卡插口",
+          "col3": null,
+          "备注": "标准TF卡接口* 1",
+          "col5": null,
+          "col6": null,
+          "备注_2": "无",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "SIM卡插口",
+          "col3": null,
+          "备注": "双卡单待，内置贴片SIM卡；外置Micro Card中卡卡座",
+          "col5": null,
+          "col6": null,
+          "备注_2": "双卡单待，内置贴片SIM卡，外置Micro Card中卡卡座",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "USB接口",
+          "col3": null,
+          "备注": "2路USB 2.0接口，可用于触屏",
+          "col5": null,
+          "col6": null,
+          "备注_2": "1路USB 2.0接口",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "HDMI接口",
+          "col3": null,
+          "备注": "1路HDMI接口，用于外接显示屏",
+          "col5": null,
+          "col6": null,
+          "备注_2": "无",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "指示灯",
+          "col3": null,
+          "备注": "LED指示灯（PWR、RUN、NET、WiFi）",
+          "col5": null,
+          "col6": null,
+          "备注_2": "LED指示灯（PWR、RUN、NET、WiFi）",
+          "差异项": null
+        },
+        {
+          "规格名称": "其它",
+          "参数说明": "MTBF",
+          "col3": null,
+          "备注": ">100000小时",
+          "col5": null,
+          "col6": null,
+          "备注_2": ">100000小时",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "工作温度",
+          "col3": null,
+          "备注": "-20℃ ~ 60℃",
+          "col5": null,
+          "col6": null,
+          "备注_2": "-20℃ ~ 60℃",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "存储温度",
+          "col3": null,
+          "备注": "-40℃ ~ 85℃",
+          "col5": null,
+          "col6": null,
+          "备注_2": "-40℃ ~ 85℃",
+          "差异项": null
+        },
+        {
+          "规格名称": null,
+          "参数说明": "工作湿度",
+          "col3": null,
+          "备注": "≤95%RH（无凝露）",
+          "col5": null,
+          "col6": null,
+          "备注_2": "≤95%RH（无凝露）",
+          "差异项": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "Sheet2",
+      "rowCount": 0,
+      "columns": [],
+      "rows": [],
+      "rowMetaRoles": []
+    },
+    {
+      "name": "Sheet3",
+      "rowCount": 0,
+      "columns": [],
+      "rows": [],
+      "rowMetaRoles": []
+    }
+  ]
+}

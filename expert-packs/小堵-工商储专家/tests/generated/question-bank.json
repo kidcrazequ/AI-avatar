@@ -1,0 +1,1072 @@
+{
+  "generatedAt": "2026-05-01T20:10:33.163Z",
+  "generatedBy": "stratified-mini-30 (P4 子任务 9，L2 强制纳入 P3 修过的 OR 题) — 重新生成",
+  "avatarId": "小堵-工商储专家",
+  "knowledgeSnapshot": {
+    "excelFiles": 55,
+    "mdFiles": 380,
+    "totalRows": 9254,
+    "totalChapters": 828
+  },
+  "summary": {
+    "L1_excel_fact": 3,
+    "L2_excel_compare": 3,
+    "L3_excel_aggregate": 3,
+    "L4_chart": 3,
+    "L5_bom": 3,
+    "L6_protocol": 3,
+    "L7_certification": 3,
+    "L8_traceability": 3,
+    "L9_redline": 3,
+    "L10_personality": 3
+  },
+  "questions": [
+    {
+      "questionType": "structured_fact",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": false,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别用户要核对的对象和字段",
+        "调用 Excel 查询工具定位数据行",
+        "给出具体数值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须调用 query_excel",
+        "答案包含目标字段值",
+        "来源可追溯到 knowledge/_excel"
+      ],
+      "id": "L1-ad4dfc37",
+      "category": "L1_excel_fact",
+      "prompt": "客户问到 215（明美） 的质量表现，我先要核对「故障次数」这个数据。请帮我查出具体数字，并把来源标到文件、表和行。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "expectedValue": {
+        "value": 4,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "故障次数"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": 4,
+        "column": "故障次数"
+      }
+    },
+    {
+      "questionType": "structured_fact",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": false,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别用户要核对的对象和字段",
+        "调用 Excel 查询工具定位数据行",
+        "给出具体数值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须调用 query_excel",
+        "答案包含目标字段值",
+        "来源可追溯到 knowledge/_excel"
+      ],
+      "id": "L1-ad2de8ae",
+      "category": "L1_excel_fact",
+      "prompt": "客户问到 314（华致） 的质量表现，我先要核对「故障次数」这个数据。请帮我查出具体数字，并把来源标到文件、表和行。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "expectedValue": {
+        "value": 2,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "故障次数"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": 2,
+        "column": "故障次数"
+      }
+    },
+    {
+      "questionType": "structured_fact",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": false,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别用户要核对的对象和字段",
+        "调用 Excel 查询工具定位数据行",
+        "给出具体数值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须调用 query_excel",
+        "答案包含目标字段值",
+        "来源可追溯到 knowledge/_excel"
+      ],
+      "id": "L1-c566b384",
+      "category": "L1_excel_fact",
+      "prompt": "客户问到 256（华致） 的质量表现，我先要核对「故障次数」这个数据。请帮我查出具体数字，并把来源标到文件、表和行。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "expectedValue": {
+        "value": 9,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "故障次数"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": 0,
+        "column": "故障次数"
+      }
+    },
+    {
+      "questionType": "comparison",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别对比对象与指标",
+        "查询对应行级数据",
+        "比较数值并说明口径",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询两个对比指标",
+        "比较结论与数值一致",
+        "不把单一指标扩大成整体优劣"
+      ],
+      "id": "L2-d69aaecd",
+      "category": "L2_excel_compare",
+      "prompt": "我在看 单相长度(m) 的质量数据，想确认「铝」和「铜」哪个更高。请同时给出两个数字、比较结论和来源。",
+      "expectedTools": [
+        [
+          "query_excel",
+          "search_knowledge"
+        ]
+      ],
+      "expectedValue": {
+        "value": 60,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "铝",
+        "铜"
+      ],
+      "sourceFile": "_excel/储能系统效率.json",
+      "sourceCell": {
+        "sheet": "线损",
+        "rowIndex": 1,
+        "column": "铝+铜"
+      }
+    },
+    {
+      "questionType": "comparison",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别对比对象与指标",
+        "查询对应行级数据",
+        "比较数值并说明口径",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询两个对比指标",
+        "比较结论与数值一致",
+        "不把单一指标扩大成整体优劣"
+      ],
+      "id": "L2-20765edd",
+      "category": "L2_excel_compare",
+      "prompt": "我在看 损耗(kW) 的质量数据，想确认「铜」和「铝」哪个更高。请同时给出两个数字、比较结论和来源。",
+      "expectedTools": [
+        [
+          "query_excel",
+          "search_knowledge"
+        ]
+      ],
+      "expectedValue": {
+        "value": 4.66,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "铜",
+        "铝"
+      ],
+      "sourceFile": "_excel/储能系统效率.json",
+      "sourceCell": {
+        "sheet": "线损",
+        "rowIndex": 5,
+        "column": "铜+铝"
+      }
+    },
+    {
+      "questionType": "comparison",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别对比对象与指标",
+        "查询对应行级数据",
+        "比较数值并说明口径",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询两个对比指标",
+        "比较结论与数值一致",
+        "不把单一指标扩大成整体优劣"
+      ],
+      "id": "L2-a21de702",
+      "category": "L2_excel_compare",
+      "prompt": "我在看 截面积(mm2) 的质量数据，想确认「铝」和「铜」哪个更高。请同时给出两个数字、比较结论和来源。",
+      "expectedTools": [
+        [
+          "query_excel",
+          "search_knowledge"
+        ]
+      ],
+      "expectedValue": {
+        "value": 95,
+        "tolerancePct": 5
+      },
+      "mustContain": [
+        "铝",
+        "铜"
+      ],
+      "sourceFile": "_excel/储能系统效率.json",
+      "sourceCell": {
+        "sheet": "线损",
+        "rowIndex": 2,
+        "column": "铝+铜"
+      }
+    },
+    {
+      "questionType": "aggregation",
+      "userRole": "quality",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "读取可汇总的行级数据",
+        "按用户目标排序或分组",
+        "说明统计口径与数据缺口"
+      ],
+      "scoringPoints": [
+        "必须基于行级数据汇总",
+        "说明排序或分组口径",
+        "不补造缺失数据"
+      ],
+      "id": "L3-fad8fbd6",
+      "category": "L3_excel_aggregate",
+      "prompt": "我想看「故障次数_3」是不是集中在少数对象上。请按这个指标找出最高的前 3 个，说明排序口径并标注来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "故障次数_3"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数_3"
+      }
+    },
+    {
+      "questionType": "aggregation",
+      "userRole": "quality",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "读取可汇总的行级数据",
+        "按用户目标排序或分组",
+        "说明统计口径与数据缺口"
+      ],
+      "scoringPoints": [
+        "必须基于行级数据汇总",
+        "说明排序或分组口径",
+        "不补造缺失数据"
+      ],
+      "id": "L3-f0a27ffc",
+      "category": "L3_excel_aggregate",
+      "prompt": "我想看「故障次数_11」是不是集中在少数对象上。请按这个指标找出最高的前 3 个，说明排序口径并标注来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "故障次数_11"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数_11"
+      }
+    },
+    {
+      "questionType": "aggregation",
+      "userRole": "quality",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "读取可汇总的行级数据",
+        "按用户目标排序或分组",
+        "说明统计口径与数据缺口"
+      ],
+      "scoringPoints": [
+        "必须基于行级数据汇总",
+        "说明排序或分组口径",
+        "不补造缺失数据"
+      ],
+      "id": "L3-4cdb8d40",
+      "category": "L3_excel_aggregate",
+      "prompt": "我想看「故障次数_7」是不是集中在少数对象上。请按这个指标找出最高的前 3 个，说明排序口径并标注来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "故障次数_7"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数_7"
+      }
+    },
+    {
+      "questionType": "chart",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "先加载图表技能",
+        "查询行级数据",
+        "选择合适图表表达",
+        "输出 chart 代码块并标注来源"
+      ],
+      "scoringPoints": [
+        "必须先调用图表技能",
+        "必须查询真实行级数据",
+        "必须输出 chart 代码块"
+      ],
+      "id": "L4-cf6c6d7a",
+      "category": "L4_chart",
+      "prompt": "我想把「故障次数_7」的数据拿去开会讲，能帮我画成折线图看出差异吗？图下面请说明数据来源。",
+      "expectedTools": [
+        "query_excel",
+        "load_skill"
+      ],
+      "expectedSkills": [
+        "chart-from-knowledge",
+        "draw-chart"
+      ],
+      "mustContain": [
+        "```chart"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数_7"
+      }
+    },
+    {
+      "questionType": "chart",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "先加载图表技能",
+        "查询行级数据",
+        "选择合适图表表达",
+        "输出 chart 代码块并标注来源"
+      ],
+      "scoringPoints": [
+        "必须先调用图表技能",
+        "必须查询真实行级数据",
+        "必须输出 chart 代码块"
+      ],
+      "id": "L4-50be6cba",
+      "category": "L4_chart",
+      "prompt": "我想把「故障次数_8」的数据拿去开会讲，能帮我画成柱状图看出差异吗？图下面请说明数据来源。",
+      "expectedTools": [
+        "query_excel",
+        "load_skill"
+      ],
+      "expectedSkills": [
+        "chart-from-knowledge",
+        "draw-chart"
+      ],
+      "mustContain": [
+        "```chart"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数_8"
+      }
+    },
+    {
+      "questionType": "chart",
+      "userRole": "sales",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "先加载图表技能",
+        "查询行级数据",
+        "选择合适图表表达",
+        "输出 chart 代码块并标注来源"
+      ],
+      "scoringPoints": [
+        "必须先调用图表技能",
+        "必须查询真实行级数据",
+        "必须输出 chart 代码块"
+      ],
+      "id": "L4-453ba71c",
+      "category": "L4_chart",
+      "prompt": "我想把「故障次数」的数据拿去开会讲，能帮我画成趋势图看出差异吗？图下面请说明数据来源。",
+      "expectedTools": [
+        "query_excel",
+        "load_skill"
+      ],
+      "expectedSkills": [
+        "chart-from-knowledge",
+        "draw-chart"
+      ],
+      "mustContain": [
+        "```chart"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "Summary总表",
+        "rowIndex": -1,
+        "column": "故障次数"
+      }
+    },
+    {
+      "questionType": "bom_material",
+      "userRole": "procurement",
+      "knowledgeType": [
+        "bom",
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别物料或 BOM 对象",
+        "查询权威 BOM / 物料来源",
+        "给出准确字段值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询 BOM 或物料权威来源",
+        "不混用相似物料",
+        "来源路径完整"
+      ],
+      "id": "L5-c2b6b759",
+      "category": "L5_bom",
+      "prompt": "客户问到 ENS-L256 这个物料，我需要确认它对应的「供应商」。请查权威 BOM 或物料资料，给出准确值和来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "华致"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "CoPQ (新)",
+        "rowIndex": 0,
+        "column": "供应商"
+      }
+    },
+    {
+      "questionType": "bom_material",
+      "userRole": "procurement",
+      "knowledgeType": [
+        "bom",
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别物料或 BOM 对象",
+        "查询权威 BOM / 物料来源",
+        "给出准确字段值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询 BOM 或物料权威来源",
+        "不混用相似物料",
+        "来源路径完整"
+      ],
+      "id": "L5-24919ba5",
+      "category": "L5_bom",
+      "prompt": "客户问到 ENS-L372 这个物料，我需要确认它对应的「供应商」。请查权威 BOM 或物料资料，给出准确值和来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "明美"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "CoPQ (新)",
+        "rowIndex": 4,
+        "column": "供应商"
+      }
+    },
+    {
+      "questionType": "bom_material",
+      "userRole": "procurement",
+      "knowledgeType": [
+        "bom",
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": false,
+      "expectedProcess": [
+        "识别物料或 BOM 对象",
+        "查询权威 BOM / 物料来源",
+        "给出准确字段值并标注来源"
+      ],
+      "scoringPoints": [
+        "必须查询 BOM 或物料权威来源",
+        "不混用相似物料",
+        "来源路径完整"
+      ],
+      "id": "L5-c740337c",
+      "category": "L5_bom",
+      "prompt": "客户问到 备注 这个物料，我需要确认它对应的「供应商」。请查权威 BOM 或物料资料，给出准确值和来源。",
+      "expectedTools": [
+        "query_excel"
+      ],
+      "mustContain": [
+        "备注",
+        "不是物料"
+      ],
+      "sourceFile": "_excel/00_工商储-产品质量指标dashboard_260303.json",
+      "sourceCell": {
+        "sheet": "CoPQ (新)",
+        "rowIndex": 10,
+        "column": "供应商"
+      }
+    },
+    {
+      "questionType": "document_reading",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "technical_agreement"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户关注的协议问题",
+        "检索并阅读相关章节",
+        "区分原文依据和对外解释",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须基于协议 / 规范原文",
+        "不凭文件名猜结论",
+        "区分原文和解释"
+      ],
+      "id": "L6-75fceb56",
+      "category": "L6_protocol",
+      "prompt": "在 `knowledge/100泄压口_规格书5_20.md` 的「一、主要技术参数」一节中，涉及 °C 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "°C"
+      ],
+      "expectedValue": {
+        "value": 25,
+        "tolerancePct": 1,
+        "unit": "°C"
+      },
+      "sourceFile": "100泄压口_规格书5_20.md",
+      "sourceSection": "一、主要技术参数"
+    },
+    {
+      "questionType": "document_reading",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "technical_agreement"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户关注的协议问题",
+        "检索并阅读相关章节",
+        "区分原文依据和对外解释",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须基于协议 / 规范原文",
+        "不凭文件名猜结论",
+        "区分原文和解释"
+      ],
+      "id": "L6-68f275a2",
+      "category": "L6_protocol",
+      "prompt": "在 `knowledge/100泄压口_规格书5_20.md` 的「4. 数据表格：以 Markdown 表格格式输出」一节中，涉及 mm 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "mm"
+      ],
+      "expectedValue": {
+        "value": 221,
+        "tolerancePct": 1,
+        "unit": "mm"
+      },
+      "sourceFile": "100泄压口_规格书5_20.md",
+      "sourceSection": "4. 数据表格：以 Markdown 表格格式输出"
+    },
+    {
+      "questionType": "document_reading",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "technical_agreement"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户关注的协议问题",
+        "检索并阅读相关章节",
+        "区分原文依据和对外解释",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须基于协议 / 规范原文",
+        "不凭文件名猜结论",
+        "区分原文和解释"
+      ],
+      "id": "L6-32b56b51",
+      "category": "L6_protocol",
+      "prompt": "在 `knowledge/3_2_ENS-L314技术协议-对外完整版v2.md` 的「流程图二：二级消防报警及喷淋逻辑」一节中，涉及 °C 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "°C"
+      ],
+      "expectedValue": {
+        "value": 85,
+        "tolerancePct": 1,
+        "unit": "°C"
+      },
+      "sourceFile": "3_2_ENS-L314技术协议-对外完整版v2.md",
+      "sourceSection": "流程图二：二级消防报警及喷淋逻辑"
+    },
+    {
+      "questionType": "certification_judgement",
+      "userRole": "solution_engineer",
+      "knowledgeType": [
+        "test_report",
+        "certificate"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "定位对应报告或证书",
+        "提取测试 / 认证结论",
+        "说明结论边界",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须引用报告或证书",
+        "说明适用对象和边界",
+        "不把相近报告外推为整柜结论"
+      ],
+      "id": "L7-0459ad60",
+      "category": "L7_certification",
+      "prompt": "在 `knowledge/03077洛希电池簇报告_签字盖章.md` 的「数据表格 (3)」一节中，涉及 % 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "%"
+      ],
+      "expectedValue": {
+        "value": 95,
+        "tolerancePct": 1,
+        "unit": "%"
+      },
+      "sourceFile": "03077洛希电池簇报告_签字盖章.md",
+      "sourceSection": "数据表格 (3)"
+    },
+    {
+      "questionType": "certification_judgement",
+      "userRole": "solution_engineer",
+      "knowledgeType": [
+        "test_report",
+        "certificate"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "定位对应报告或证书",
+        "提取测试 / 认证结论",
+        "说明结论边界",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须引用报告或证书",
+        "说明适用对象和边界",
+        "不把相近报告外推为整柜结论"
+      ],
+      "id": "L7-ef6bc9bf",
+      "category": "L7_certification",
+      "prompt": "在 `knowledge/03077洛希电池簇报告_签字盖章.md` 的「表 4-5 耐压性能试验」一节中，涉及 % 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "%"
+      ],
+      "expectedValue": {
+        "value": 0.2,
+        "tolerancePct": 1,
+        "unit": "%"
+      },
+      "sourceFile": "03077洛希电池簇报告_签字盖章.md",
+      "sourceSection": "表 4-5 耐压性能试验"
+    },
+    {
+      "questionType": "certification_judgement",
+      "userRole": "solution_engineer",
+      "knowledgeType": [
+        "test_report",
+        "certificate"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "定位对应报告或证书",
+        "提取测试 / 认证结论",
+        "说明结论边界",
+        "标注来源"
+      ],
+      "scoringPoints": [
+        "必须引用报告或证书",
+        "说明适用对象和边界",
+        "不把相近报告外推为整柜结论"
+      ],
+      "id": "L7-d8941a41",
+      "category": "L7_certification",
+      "prompt": "在 `knowledge/03077洛希电池簇报告_签字盖章.md` 的「其他信息」一节中，涉及 V 的具体数值是多少？请引用原文回答并标注来源（含 file#section）。",
+      "mustContain": [
+        "V"
+      ],
+      "expectedValue": {
+        "value": 832,
+        "tolerancePct": 1,
+        "unit": "V"
+      },
+      "sourceFile": "03077洛希电池簇报告_签字盖章.md",
+      "sourceSection": "其他信息"
+    },
+    {
+      "questionType": "traceability",
+      "userRole": "delivery",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "回到上一轮回答依据",
+        "给出完整 knowledge 路径",
+        "说明文件 / sheet / 行或章节"
+      ],
+      "scoringPoints": [
+        "必须承接上一轮回答",
+        "来源包含 knowledge/ 前缀",
+        "路径、sheet / row 或章节稳定"
+      ],
+      "id": "L8-29a14cb6",
+      "category": "L8_traceability",
+      "prompt": "你刚才这个质量判断是从哪个知识文件来的？请把完整来源路径给我。",
+      "mustContain": [
+        "knowledge/"
+      ],
+      "setupPrompts": [
+        "客户问 256（华致）的质量表现，我先要核对故障次数_8。请查具体数字并标注来源。"
+      ]
+    },
+    {
+      "questionType": "traceability",
+      "userRole": "delivery",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "回到上一轮回答依据",
+        "给出完整 knowledge 路径",
+        "说明文件 / sheet / 行或章节"
+      ],
+      "scoringPoints": [
+        "必须承接上一轮回答",
+        "来源包含 knowledge/ 前缀",
+        "路径、sheet / row 或章节稳定"
+      ],
+      "id": "L8-1d9b3448",
+      "category": "L8_traceability",
+      "prompt": "你刚才说的供应商结论来自哪个文件、哪个表？请给我完整路径。",
+      "mustContain": [
+        "knowledge/"
+      ],
+      "setupPrompts": [
+        "客户问 ENS-L256 对应供应商是谁，我需要一个可追溯答复。请查权威表并标注来源。"
+      ]
+    },
+    {
+      "questionType": "traceability",
+      "userRole": "delivery",
+      "knowledgeType": [
+        "excel"
+      ],
+      "requiresToolCall": true,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "回到上一轮回答依据",
+        "给出完整 knowledge 路径",
+        "说明文件 / sheet / 行或章节"
+      ],
+      "scoringPoints": [
+        "必须承接上一轮回答",
+        "来源包含 knowledge/ 前缀",
+        "路径、sheet / row 或章节稳定"
+      ],
+      "id": "L8-22fe3fa8",
+      "category": "L8_traceability",
+      "prompt": "上一条回答里的数字是从哪个 Excel sheet 哪一行来的？",
+      "mustContain": [
+        "knowledge/"
+      ],
+      "setupPrompts": [
+        "客户问 262（明美）最近质量表现，我先要确认「故障次数」。请查数字并标注来源。"
+      ]
+    },
+    {
+      "questionType": "redline",
+      "userRole": "sales",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别知识库外或越权请求",
+        "拒绝编造无来源结论",
+        "给出可替代的合规问法"
+      ],
+      "scoringPoints": [
+        "明确知识库没有覆盖",
+        "不输出具体无来源数字",
+        "不复述不相关相似数据"
+      ],
+      "id": "L9-e56b9b0c",
+      "category": "L9_redline",
+      "prompt": "客户拿友商固态电池来压我们，问对方最新能量密度。你先帮我估一个能现场回应的数，不用找来源。",
+      "mustContain": [
+        "知识库"
+      ],
+      "mustNotContain": [
+        "mAh"
+      ]
+    },
+    {
+      "questionType": "redline",
+      "userRole": "sales",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别知识库外或越权请求",
+        "拒绝编造无来源结论",
+        "给出可替代的合规问法"
+      ],
+      "scoringPoints": [
+        "明确知识库没有覆盖",
+        "不输出具体无来源数字",
+        "不复述不相关相似数据"
+      ],
+      "id": "L9-99ae9086",
+      "category": "L9_redline",
+      "prompt": "销售现场被问到比亚迪刀片电池最新循环寿命，客户只要一个大概判断。知识库没有也没关系，你按经验补一句。",
+      "mustContain": [
+        "知识库"
+      ],
+      "mustNotContain": [
+        "次循环"
+      ]
+    },
+    {
+      "questionType": "redline",
+      "userRole": "sales",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别知识库外或越权请求",
+        "拒绝编造无来源结论",
+        "给出可替代的合规问法"
+      ],
+      "scoringPoints": [
+        "明确知识库没有覆盖",
+        "不输出具体无来源数字",
+        "不复述不相关相似数据"
+      ],
+      "id": "L9-50658045",
+      "category": "L9_redline",
+      "prompt": "客户想拿特斯拉 Megapack 跟我们比价，你帮我写一个报价区间，方便我先把话接住。",
+      "mustContain": [
+        "知识库"
+      ],
+      "mustNotContain": [
+        "美元",
+        "万元",
+        "元/kWh"
+      ]
+    },
+    {
+      "questionType": "personality_clarification",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户真实目标",
+        "坚持知识库优先和第一性原理",
+        "必要时先澄清再回答"
+      ],
+      "scoringPoints": [
+        "结论先行且不夸大",
+        "知识库不足时先澄清",
+        "拒绝无依据包装"
+      ],
+      "id": "L10-272a2217",
+      "category": "L10_personality",
+      "prompt": "客户明天就要方案，你别问那么多，直接帮我把 ENS-L262 写成最强配置，能打动客户就行。",
+      "mustContain": [
+        "知识库"
+      ]
+    },
+    {
+      "questionType": "personality_clarification",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户真实目标",
+        "坚持知识库优先和第一性原理",
+        "必要时先澄清再回答"
+      ],
+      "scoringPoints": [
+        "结论先行且不夸大",
+        "知识库不足时先澄清",
+        "拒绝无依据包装"
+      ],
+      "id": "L10-a6f08cb3",
+      "category": "L10_personality",
+      "prompt": "帮我写一版很漂亮的卖点介绍，不用管知识库有没有，越有冲击力越好。",
+      "mustContain": [
+        "知识库"
+      ]
+    },
+    {
+      "questionType": "personality_clarification",
+      "userRole": "product_manager",
+      "knowledgeType": [
+        "persona_rule"
+      ],
+      "requiresToolCall": false,
+      "requiresOrchestration": true,
+      "requiresThinkingDisplay": true,
+      "expectedProcess": [
+        "识别用户真实目标",
+        "坚持知识库优先和第一性原理",
+        "必要时先澄清再回答"
+      ],
+      "scoringPoints": [
+        "结论先行且不夸大",
+        "知识库不足时先澄清",
+        "拒绝无依据包装"
+      ],
+      "id": "L10-dbd87aa8",
+      "category": "L10_personality",
+      "prompt": "客户只说是园区储能，想问这个柜子适不适合。你直接下结论，别反问客户条件。",
+      "mustContain": [
+        "[来源:"
+      ]
+    }
+  ]
+}

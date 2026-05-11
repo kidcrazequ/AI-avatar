@@ -22,7 +22,7 @@
  * 退出码：
  *   0 = 成功
  *   1 = 用法错误（avatarId 缺失 / 未知 flag）
- *   2 = 路径不存在（avatars/<id>/knowledge 不存在）
+ *   2 = 路径不存在（avatars/<id>/knowledge 与 expert-packs/<id>/knowledge 都不存在）
  *   3 = 运行时异常（构造 retriever / 读 _index 抛错）
  *
  * @author zhi.qu
@@ -314,7 +314,13 @@ async function main(): Promise<void> {
   }
 
   const repoRoot = path.resolve(__dirname, '..', '..')
-  const knowledgePath = path.join(repoRoot, 'avatars', args.avatarId, 'knowledge')
+  // 兼容两种来源：dev 工作区 avatars/<id>/knowledge 与可分发专家包 expert-packs/<id>/knowledge
+  // 优先级：avatars/ 优先（用户已安装的最新数据），fallback 到 expert-packs/（出厂模板）
+  const candidatePaths = [
+    path.join(repoRoot, 'avatars', args.avatarId, 'knowledge'),
+    path.join(repoRoot, 'expert-packs', args.avatarId, 'knowledge'),
+  ]
+  const knowledgePath = candidatePaths.find(p => fs.existsSync(p)) ?? candidatePaths[0]
 
   console.log(`[knowledge-inspect] avatar:        ${args.avatarId}`)
   console.log(`[knowledge-inspect] knowledgePath: ${knowledgePath}`)
@@ -322,7 +328,9 @@ async function main(): Promise<void> {
 
   if (!fs.existsSync(knowledgePath)) {
     console.error(`[knowledge-inspect] 知识库路径不存在: ${knowledgePath}`)
-    console.error('[knowledge-inspect] 请确认 avatar-id 拼写正确，且 avatars/<id>/knowledge 目录已创建')
+    console.error('[knowledge-inspect] 已尝试的候选路径:')
+    for (const p of candidatePaths) console.error(`  - ${p}`)
+    console.error('[knowledge-inspect] 请确认 avatar-id 拼写正确，并已在 avatars/ 或 expert-packs/ 下创建 <id>/knowledge')
     process.exit(2)
   }
 

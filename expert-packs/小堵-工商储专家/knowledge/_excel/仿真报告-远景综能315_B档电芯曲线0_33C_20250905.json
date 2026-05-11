@@ -1,0 +1,1168 @@
+{
+  "fileName": "仿真报告-远景综能315 B档电芯曲线0.33C 20250905.xlsx",
+  "importedAt": "2026-04-30T09:24:17.132Z",
+  "sheets": [
+    {
+      "name": "报告准备信息",
+      "rowCount": 4,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "Date: 2025/09/05",
+            "AESC-可靠性与验证中心(RVC)",
+            "Prepared",
+            "沈腾腾"
+          ]
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "Reviewed",
+            "卢洁晨"
+          ]
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "Approved",
+            "卢洁晨"
+          ]
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col14",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col15",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col16",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col17",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col18",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col19",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col20",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col21",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col22",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col23",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col24",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col25",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col26",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col27",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col28",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col29",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col30",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col31",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col32",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col33",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col34",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col35",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col36",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col37",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col38",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col39",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col40",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col41",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col42",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col43",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col44",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": "Date: 2025/09/05",
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null,
+          "col18": null,
+          "col19": null,
+          "col20": null,
+          "col21": null,
+          "col22": null,
+          "col23": null,
+          "col24": null,
+          "col25": null,
+          "col26": null,
+          "col27": null,
+          "col28": null,
+          "col29": null,
+          "col30": null,
+          "col31": null,
+          "col32": null,
+          "col33": null,
+          "col34": null,
+          "col35": null,
+          "col36": null,
+          "col37": null,
+          "col38": null,
+          "col39": null,
+          "col40": null,
+          "col41": null,
+          "col42": null,
+          "col43": null,
+          "col44": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": "AESC-可靠性与验证中心(RVC)",
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null,
+          "col18": null,
+          "col19": null,
+          "col20": null,
+          "col21": null,
+          "col22": null,
+          "col23": null,
+          "col24": null,
+          "col25": null,
+          "col26": null,
+          "col27": null,
+          "col28": null,
+          "col29": null,
+          "col30": null,
+          "col31": null,
+          "col32": null,
+          "col33": null,
+          "col34": null,
+          "col35": null,
+          "col36": null,
+          "col37": null,
+          "col38": null,
+          "col39": null,
+          "col40": null,
+          "col41": null,
+          "col42": null,
+          "col43": null,
+          "col44": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": "Prepared",
+          "col8": "Reviewed",
+          "col9": "Approved",
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null,
+          "col18": null,
+          "col19": null,
+          "col20": null,
+          "col21": null,
+          "col22": null,
+          "col23": null,
+          "col24": null,
+          "col25": null,
+          "col26": null,
+          "col27": null,
+          "col28": null,
+          "col29": null,
+          "col30": null,
+          "col31": null,
+          "col32": null,
+          "col33": null,
+          "col34": null,
+          "col35": null,
+          "col36": null,
+          "col37": null,
+          "col38": null,
+          "col39": null,
+          "col40": null,
+          "col41": null,
+          "col42": null,
+          "col43": null,
+          "col44": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": "沈腾腾",
+          "col8": "卢洁晨",
+          "col9": "卢洁晨",
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null,
+          "col18": null,
+          "col19": null,
+          "col20": null,
+          "col21": null,
+          "col22": null,
+          "col23": null,
+          "col24": null,
+          "col25": null,
+          "col26": null,
+          "col27": null,
+          "col28": null,
+          "col29": null,
+          "col30": null,
+          "col31": null,
+          "col32": null,
+          "col33": null,
+          "col34": null,
+          "col35": null,
+          "col36": null,
+          "col37": null,
+          "col38": null,
+          "col39": null,
+          "col40": null,
+          "col41": null,
+          "col42": null,
+          "col43": null,
+          "col44": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "Application Form",
+      "rowCount": 17,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 17,
+          "samples": [
+            "储能产品寿命质保仿真申请表",
+            "项目来源",
+            "客户名称",
+            "项目地点",
+            "电芯类型",
+            "供货级别",
+            "冷却方式",
+            "冷却策略"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 13,
+          "samples": [
+            "标准工况",
+            "远景能源-综合能源团队-海外DHL客户项目",
+            "中国境外",
+            "315Ah",
+            "电芯",
+            "液冷",
+            "电芯温度在22~36℃",
+            "未定义"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "注意：以下说明作为上述保证可用容量的前提\n①：容量测试验收工步：充电周期内，以0.5P恒功率充电至单体电池截至电压3.65V，静置2 min，以0.1P恒功率充电至单体电池截至电压3.65V；\n②：容量测试验收工步：放电周期内，以0.5P恒功率放电至电池单体的放电终止电压2.5V，静置2 min，以0.1P恒功率放电至电池单体的放电终止电压2.5V；\n③：容量测试验收工步：如果充电周期或放电周期内全范围保持恒功率0.5P，此时可用电量会减小2%；\n④：SOH保证值存在±1%的核容误差"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": "储能产品寿命质保仿真申请表",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "项目来源",
+          "col2": "标准工况",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "客户名称",
+          "col2": "远景能源-综合能源团队-海外DHL客户项目",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "项目地点",
+          "col2": "中国境外",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "电芯类型",
+          "col2": "315Ah",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "供货级别",
+          "col2": "电芯",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "冷却方式",
+          "col2": "液冷",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "冷却策略",
+          "col2": "电芯温度在22~36℃",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "装机能量[Mwh]",
+          "col2": "未定义",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "可用能量[Mwh]",
+          "col2": "未定义",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "使用功率[Mw]",
+          "col2": "未定义",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "年循环天数",
+          "col2": "TBD\nZN客户要求，第10年SOH不低于80%。请据此要求及以下工况描述，提供满足要求的年循环天数及每日等效循环次数的数值。",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "每日等效循环次数",
+          "col2": "TBD\nZN客户要求，第10年SOH不低于80%。请据此要求及以下工况描述，提供满足要求的年循环天数及每日等效循环次数的数值。",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "充放电倍率",
+          "col2": "0.5P",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "放电深度DOD",
+          "col2": "100.00%",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "使用工况描述",
+          "col2": "电芯使用工况：从项目验收完成开始日计，一个自然年内，单个Pack内NTC监测到的电芯的最高温度小于36度，且单个Pack内NTC监测到所有最高温度的平均值小于22度（监测位置为busbar处），电芯充放电倍率小于0.5P，年平均SOC≤50%，年度循环圈数小于等于每条质保曲线的规定值，每天最大循环圈数小于等于2.",
+          "col3": "注意：以下说明作为上述保证可用容量的前提\n①：容量测试验收工步：充电周期内，以0.5P恒功率充电至单体电池截至电压3.65V，静置2 min，以0.1P恒功率充电至单体电池截至电压3.65V；\n②：容量测试验收工步：放电周期内，以0.5P恒功率放电至电池单体的放电终止电压2.5V，静置2 min，以0.1P恒功率放电至电池单体的放电终止电压2.5V；\n③：容量测试验收工步：如果充电周期或放电周期内全范围保持恒功率0.5P，此时可用电量会减小2%；\n④：SOH保证值存在±1%的核容误差",
+          "col4": null,
+          "col5": null,
+          "col6": null
+        },
+        {
+          "col1": "质保仿真交付日期\n(备注:仿真时间1-2周)",
+          "col2": "本周五（2025/9/5）之前",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null
+        }
+      ],
+      "rowMetaRoles": [
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "subtitle"
+      ]
+    },
+    {
+      "name": "Simulation report for 315cell",
+      "rowCount": 17,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 17,
+          "samples": [
+            "Note：质保曲线考虑了B档电芯的容量超配，相关项目必须使用B档电芯.",
+            "315电芯使用工况：从项目验收完成开始日计，一个自然年内，单个Pack内NTC监测到的电芯的最高温度小于36度，静置时Pack内NTC监测到所有最高温度的平均值小于22度(监测位置为busbar处)，电芯最大充放电倍率小于等于0.5P，年平均SOC小于等于50%，年度循环圈数小于等于365，每天最大循环圈数小于等于2；",
+            "Annual average SOC",
+            "Annual cycle number",
+            "Max. Power Rate",
+            "Year",
+            "0",
+            "1"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 15,
+          "samples": [
+            "≤50%",
+            "≤365",
+            "≤0.5",
+            "SOH",
+            "100.0%",
+            "95.2%",
+            "93.0%",
+            "91.1%"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col14",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col15",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col16",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col17",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": null,
+          "col2": "Note：质保曲线考虑了B档电芯的容量超配，相关项目必须使用B档电芯.",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": "315电芯使用工况：从项目验收完成开始日计，一个自然年内，单个Pack内NTC监测到的电芯的最高温度小于36度，静置时Pack内NTC监测到所有最高温度的平均值小于22度(监测位置为busbar处)，电芯最大充放电倍率小于等于0.5P，年平均SOC小于等于50%，年度循环圈数小于等于365，每天最大循环圈数小于等于2；",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": "Annual average SOC",
+          "col3": "≤50%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": "Annual cycle number",
+          "col3": "≤365",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": "Max. Power Rate",
+          "col3": "≤0.5",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": "Year",
+          "col3": "SOH",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 0,
+          "col3": "100.0%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 1,
+          "col3": "95.2%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 2,
+          "col3": "93.0%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 3,
+          "col3": "91.1%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 4,
+          "col3": "89.4%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 5,
+          "col3": "87.8%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 6,
+          "col3": "86.3%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 7,
+          "col3": "84.9%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 8,
+          "col3": "83.5%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 9,
+          "col3": "82.1%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        },
+        {
+          "col1": null,
+          "col2": 10,
+          "col3": "80.8%",
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null,
+          "col17": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    }
+  ]
+}

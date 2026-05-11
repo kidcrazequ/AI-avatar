@@ -18,7 +18,7 @@ import fs from 'fs'
 import path from 'path'
 import { DocumentParser } from '../electron/document-parser'
 
-const AVATAR_ROOT = path.resolve(__dirname, '../../avatars/小堵-工商储专家/knowledge')
+const AVATAR_ROOT = path.resolve(__dirname, '../../expert-packs/小堵-工商储专家/knowledge')
 const RAW_DIR = path.join(AVATAR_ROOT, '_raw')
 const EXCEL_DIR = path.join(AVATAR_ROOT, '_excel')
 const OUT_MD = '/tmp/regression-md'

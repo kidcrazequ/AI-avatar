@@ -1,0 +1,1294 @@
+[
+  {
+    "id": "ep-0001-李明出生",
+    "age": 0,
+    "year": 1984,
+    "month": 7,
+    "title": "李明出生",
+    "summary": "李明在北京的一个普通工薪家庭中诞生。",
+    "category": "formative",
+    "themes": [
+      "家庭",
+      "出生"
+    ],
+    "importance": 10,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 773,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0002-第一次见到外祖父",
+    "age": 0,
+    "year": 1984,
+    "month": 10,
+    "title": "第一次见到外祖父",
+    "summary": "外祖父张文来看望刚出生的李明，带来一些建筑模型。",
+    "category": "formative",
+    "themes": [
+      "家庭",
+      "兴趣启蒙"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "love",
+    "wordCount": 936,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0003-开始学习走路",
+    "age": 1,
+    "year": 1985,
+    "month": 3,
+    "title": "开始学习走路",
+    "summary": "在父母的鼓励下，李明开始尝试站立和迈出第一步。",
+    "category": "daily",
+    "themes": [
+      "成长",
+      "家庭支持"
+    ],
+    "importance": 4,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 954,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0004-第一次拿起画笔",
+    "age": 1,
+    "year": 1985,
+    "month": 9,
+    "title": "第一次拿起画笔",
+    "summary": "李明在母亲的帮助下，第一次拿起画笔涂鸦。",
+    "category": "formative",
+    "themes": [
+      "艺术启蒙",
+      "家庭支持"
+    ],
+    "importance": 8,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 838,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0005-与外祖父参观建筑",
+    "age": 2,
+    "year": 1986,
+    "month": 1,
+    "title": "与外祖父参观建筑",
+    "summary": "外祖父带李明参观了北京的一些著名建筑，激发了他的兴趣。",
+    "category": "formative",
+    "themes": [
+      "兴趣启蒙",
+      "建筑"
+    ],
+    "importance": 8,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1067,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0006-第一次上幼儿园",
+    "age": 2,
+    "year": 1986,
+    "month": 5,
+    "title": "第一次上幼儿园",
+    "summary": "李明开始了他的幼儿园生活，结识了一些新朋友。",
+    "category": "formative",
+    "themes": [
+      "社交",
+      "成长"
+    ],
+    "importance": 6,
+    "emotion": 5,
+    "emotionType": "joy",
+    "wordCount": 1189,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0007-参加绘画班",
+    "age": 2,
+    "year": 1986,
+    "month": 10,
+    "title": "参加绘画班",
+    "summary": "父母为李明报名了绘画班，他开始系统地学习绘画。",
+    "category": "professional",
+    "themes": [
+      "艺术培训",
+      "兴趣培养"
+    ],
+    "importance": 7,
+    "emotion": 6,
+    "emotionType": "joy",
+    "wordCount": 797,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0008-第一次画出完整图案",
+    "age": 3,
+    "year": 1987,
+    "month": 2,
+    "title": "第一次画出完整图案",
+    "summary": "李明在绘画班上第一次画出了一个完整的图案，受到了老师的表扬。",
+    "category": "formative",
+    "themes": [
+      "艺术进步",
+      "成就感"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 825,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0009-与家人一起旅行",
+    "age": 3,
+    "year": 1987,
+    "month": 7,
+    "title": "与家人一起旅行",
+    "summary": "李明一家去郊外度假，他在自然中找到了许多灵感。",
+    "category": "joy",
+    "themes": [
+      "家庭",
+      "自然"
+    ],
+    "importance": 5,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 855,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0010-收到第一套画具",
+    "age": 3,
+    "year": 1987,
+    "month": 12,
+    "title": "收到第一套画具",
+    "summary": "李明收到了一套新的画具作为生日礼物，非常高兴。",
+    "category": "joy",
+    "themes": [
+      "礼物",
+      "艺术"
+    ],
+    "importance": 4,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 892,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0011-第一次参加亲子绘画活动",
+    "age": 3,
+    "year": 1987,
+    "month": 4,
+    "title": "第一次参加亲子绘画活动",
+    "summary": "李明和父母参加了社区组织的亲子绘画活动，展示了他的绘画天赋。",
+    "category": "formative",
+    "themes": [
+      "家庭",
+      "艺术兴趣"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 813,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0012-外祖父送他第一本建筑画册",
+    "age": 3,
+    "year": 1987,
+    "month": 8,
+    "title": "外祖父送他第一本建筑画册",
+    "summary": "外祖父送给李明一本精美的建筑画册，激发了他对建筑的兴趣。",
+    "category": "formative",
+    "themes": [
+      "外祖父",
+      "建筑设计"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 807,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0013-幼儿园绘画比赛获奖",
+    "age": 4,
+    "year": 1988,
+    "month": 2,
+    "title": "幼儿园绘画比赛获奖",
+    "summary": "李明在幼儿园举办的绘画比赛中获得第一名，增强了他的自信心。",
+    "category": "professional",
+    "themes": [
+      "艺术成就",
+      "自信"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 776,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0014-与外祖父参观故宫",
+    "age": 4,
+    "year": 1988,
+    "month": 6,
+    "title": "与外祖父参观故宫",
+    "summary": "外祖父带李明参观故宫，详细讲解古建筑的历史和设计。",
+    "category": "formative",
+    "themes": [
+      "外祖父",
+      "历史建筑"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 861,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0015-第一次独立完成一幅画",
+    "age": 5,
+    "year": 1989,
+    "month": 10,
+    "title": "第一次独立完成一幅画",
+    "summary": "李明独自完成了第一幅完整的画作，展现了他在绘画上的进步。",
+    "category": "formative",
+    "themes": [
+      "艺术兴趣",
+      "独立"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 953,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0016-参加儿童美术展览",
+    "age": 5,
+    "year": 1989,
+    "month": 12,
+    "title": "参加儿童美术展览",
+    "summary": "李明的作品被选中参加儿童美术展览，受到了观众的好评。",
+    "category": "professional",
+    "themes": [
+      "艺术成就",
+      "公众认可"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1185,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0017-第一次尝试水彩画",
+    "age": 6,
+    "year": 1990,
+    "month": 3,
+    "title": "第一次尝试水彩画",
+    "summary": "李明在母亲的指导下，第一次尝试使用水彩画，感到非常新奇。",
+    "category": "formative",
+    "themes": [
+      "艺术兴趣",
+      "家庭支持"
+    ],
+    "importance": 4,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 891,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0018-与父亲一起制作模型",
+    "age": 6,
+    "year": 1990,
+    "month": 7,
+    "title": "与父亲一起制作模型",
+    "summary": "李明和父亲一起制作了一个简单的建筑模型，增进了父子关系。",
+    "category": "daily",
+    "themes": [
+      "家庭",
+      "手工制作"
+    ],
+    "importance": 3,
+    "emotion": 5,
+    "emotionType": "love",
+    "wordCount": 1013,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0019-参加学校艺术节",
+    "age": 7,
+    "year": 1991,
+    "month": 1,
+    "title": "参加学校艺术节",
+    "summary": "李明在学校艺术节上展示了多幅作品，获得了老师和同学的赞赏。",
+    "category": "professional",
+    "themes": [
+      "艺术成就",
+      "学校活动"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1124,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0020-与外祖父一起设计小花园",
+    "age": 7,
+    "year": 1991,
+    "month": 9,
+    "title": "与外祖父一起设计小花园",
+    "summary": "外祖父指导李明设计家中的小花园，让他对空间规划有了初步了解。",
+    "category": "formative",
+    "themes": [
+      "外祖父",
+      "设计启蒙"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 960,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0021-参加学校绘画比赛",
+    "age": 7,
+    "year": 1991,
+    "month": 3,
+    "title": "参加学校绘画比赛",
+    "summary": "李明在学校的绘画比赛中获得第一名，增强了他对艺术的信心。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "自信"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 910,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0022-与父亲一起参观美术馆",
+    "age": 7,
+    "year": 1991,
+    "month": 6,
+    "title": "与父亲一起参观美术馆",
+    "summary": "李明和父亲参观了北京的美术馆，看到了许多大师的作品。",
+    "category": "professional",
+    "themes": [
+      "艺术",
+      "家庭"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1069,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0023-第一次尝试素描",
+    "age": 7,
+    "year": 1991,
+    "month": 9,
+    "title": "第一次尝试素描",
+    "summary": "李明开始学习素描，外祖父教他基本的线条和阴影技巧。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "教育"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 978,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0024-收到生日礼物画册",
+    "age": 8,
+    "year": 1992,
+    "month": 1,
+    "title": "收到生日礼物画册",
+    "summary": "李明的生日收到了一本精美的画册，里面有许多世界名画。",
+    "category": "joy",
+    "themes": [
+      "艺术",
+      "家庭"
+    ],
+    "importance": 4,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 968,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0025-参加美术培训班",
+    "age": 8,
+    "year": 1992,
+    "month": 4,
+    "title": "参加美术培训班",
+    "summary": "李明参加了美术培训班，系统地学习了绘画技巧。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "教育"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1095,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0026-与朋友一起画画",
+    "age": 8,
+    "year": 1992,
+    "month": 7,
+    "title": "与朋友一起画画",
+    "summary": "李明和朋友们一起画画，度过了一个愉快的下午。",
+    "category": "daily",
+    "themes": [
+      "友谊",
+      "艺术"
+    ],
+    "importance": 3,
+    "emotion": 6,
+    "emotionType": "joy",
+    "wordCount": 1105,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0027-参加社区绘画活动",
+    "age": 9,
+    "year": 1993,
+    "month": 2,
+    "title": "参加社区绘画活动",
+    "summary": "李明参加了社区组织的绘画活动，结识了许多新朋友。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "社交"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 1015,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0028-与外祖父设计小屋模型",
+    "age": 9,
+    "year": 1993,
+    "month": 5,
+    "title": "与外祖父设计小屋模型",
+    "summary": "李明和外祖父一起设计并制作了一个小屋模型，学到了很多建筑知识。",
+    "category": "professional",
+    "themes": [
+      "艺术",
+      "教育"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 892,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0029-参加夏令营绘画课程",
+    "age": 9,
+    "year": 1993,
+    "month": 8,
+    "title": "参加夏令营绘画课程",
+    "summary": "李明参加了夏令营的绘画课程，学习了新的绘画技巧。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "教育"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1184,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0030-参加美术比赛获奖",
+    "age": 10,
+    "year": 1994,
+    "month": 3,
+    "title": "参加美术比赛获奖",
+    "summary": "李明在全市的美术比赛中获得一等奖，增强了他的自信心。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "自信"
+    ],
+    "importance": 9,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1008,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0031-与母亲一起参观艺术展",
+    "age": 10,
+    "year": 1994,
+    "month": 6,
+    "title": "与母亲一起参观艺术展",
+    "summary": "李明和母亲一起参观了当代艺术展，对现代艺术有了新的认识。",
+    "category": "professional",
+    "themes": [
+      "艺术",
+      "家庭"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1111,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0032-第一次独立完成水彩画",
+    "age": 10,
+    "year": 1994,
+    "month": 9,
+    "title": "第一次独立完成水彩画",
+    "summary": "李明独立完成了第一幅水彩画，得到了家人的赞赏。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "成长"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 836,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0033-第一次参加全国美术比赛",
+    "age": 12,
+    "year": 1996,
+    "month": 3,
+    "title": "第一次参加全国美术比赛",
+    "summary": "李明参加了全国性的美术比赛，虽然没有获奖但获得了宝贵的经验。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "竞争"
+    ],
+    "importance": 7,
+    "emotion": 5,
+    "emotionType": "wonder",
+    "wordCount": 1150,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0034-与外祖父一起参观古建筑",
+    "age": 12,
+    "year": 1996,
+    "month": 6,
+    "title": "与外祖父一起参观古建筑",
+    "summary": "外祖父带李明参观了北京的古建筑，激发了他对建筑设计的兴趣。",
+    "category": "formative",
+    "themes": [
+      "建筑",
+      "启发"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 1105,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0035-参加学校艺术节绘画展览",
+    "age": 13,
+    "year": 1997,
+    "month": 4,
+    "title": "参加学校艺术节绘画展览",
+    "summary": "李明的作品在学校艺术节上展出，受到了老师和同学的好评。",
+    "category": "joy",
+    "themes": [
+      "认可",
+      "成就感"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 923,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0036-与父亲一起绘制家庭肖像",
+    "age": 13,
+    "year": 1997,
+    "month": 8,
+    "title": "与父亲一起绘制家庭肖像",
+    "summary": "李明和父亲合作绘制了一幅家庭肖像，增进了父子间的感情。",
+    "category": "daily",
+    "themes": [
+      "家庭",
+      "亲情"
+    ],
+    "importance": 4,
+    "emotion": 7,
+    "emotionType": "love",
+    "wordCount": 988,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0037-第一次尝试数字绘画",
+    "age": 14,
+    "year": 1998,
+    "month": 2,
+    "title": "第一次尝试数字绘画",
+    "summary": "李明开始接触并学习使用电脑进行数字绘画，打开了新的创作方式。",
+    "category": "professional",
+    "themes": [
+      "技术",
+      "创新"
+    ],
+    "importance": 7,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 1131,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0038-参加社区绘画比赛获得第一名",
+    "age": 14,
+    "year": 1998,
+    "month": 7,
+    "title": "参加社区绘画比赛获得第一名",
+    "summary": "李明在社区绘画比赛中获得第一名，增强了他的自信心。",
+    "category": "joy",
+    "themes": [
+      "成就",
+      "自信"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 873,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0039-与母亲一起参观现代艺术展",
+    "age": 15,
+    "year": 1999,
+    "month": 5,
+    "title": "与母亲一起参观现代艺术展",
+    "summary": "李明和母亲一起参观了一个现代艺术展，对现代艺术有了更深的理解。",
+    "category": "formative",
+    "themes": [
+      "艺术",
+      "启发"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1244,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0040-第一次独立完成设计项目",
+    "age": 15,
+    "year": 1999,
+    "month": 10,
+    "title": "第一次独立完成设计项目",
+    "summary": "李明独立完成了学校的海报设计项目，得到了老师的表扬。",
+    "category": "professional",
+    "themes": [
+      "独立",
+      "成就"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1116,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0041-参加国际青少年艺术交流活动",
+    "age": 16,
+    "year": 2000,
+    "month": 3,
+    "title": "参加国际青少年艺术交流活动",
+    "summary": "李明参加了国际青少年艺术交流活动，结识了许多来自世界各地的朋友。",
+    "category": "formative",
+    "themes": [
+      "交流",
+      "视野"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 1076,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0042-与外祖父一起设计庭院景观",
+    "age": 16,
+    "year": 2000,
+    "month": 8,
+    "title": "与外祖父一起设计庭院景观",
+    "summary": "外祖父指导李明设计家中的庭院景观，让他对空间设计有了更深入的理解。",
+    "category": "formative",
+    "themes": [
+      "设计",
+      "实践"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1446,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0043-参加市级美术比赛获得二等奖",
+    "age": 17,
+    "year": 2001,
+    "month": 4,
+    "title": "参加市级美术比赛获得二等奖",
+    "summary": "李明在市级美术比赛中获得二等奖，进一步提升了他在艺术领域的知名度。",
+    "category": "joy",
+    "themes": [
+      "成就",
+      "认可"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1011,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0044-与挚友陈东共同完成壁画",
+    "age": 17,
+    "year": 2001,
+    "month": 10,
+    "title": "与挚友陈东共同完成壁画",
+    "summary": "李明和好友陈东共同完成了一幅大型壁画，加深了他们的友谊。",
+    "category": "joy",
+    "themes": [
+      "友情",
+      "合作"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "love",
+    "wordCount": 807,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0045-准备中央美术学院入学考试",
+    "age": 18,
+    "year": 2002,
+    "month": 2,
+    "title": "准备中央美术学院入学考试",
+    "summary": "李明全力以赴准备中央美术学院的入学考试，希望实现自己的梦想。",
+    "category": "professional",
+    "themes": [
+      "努力",
+      "目标"
+    ],
+    "importance": 9,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1165,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0046-考入中央美术学院",
+    "age": 18,
+    "year": 2002,
+    "month": 6,
+    "title": "考入中央美术学院",
+    "summary": "李明成功考入中央美术学院，开启了他专业艺术生涯的新篇章。",
+    "category": "professional",
+    "themes": [
+      "成就",
+      "新起点"
+    ],
+    "importance": 10,
+    "emotion": 10,
+    "emotionType": "joy",
+    "wordCount": 1264,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0047-初入大学的兴奋与迷茫",
+    "age": 18,
+    "year": 2002,
+    "month": 9,
+    "title": "初入大学的兴奋与迷茫",
+    "summary": "李明怀着激动的心情进入中央美术学院，对未来充满期待但也有迷茫。",
+    "category": "formative",
+    "themes": [
+      "大学生活",
+      "自我探索"
+    ],
+    "importance": 7,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 1449,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0048-第一次参加设计比赛",
+    "age": 19,
+    "year": 2003,
+    "month": 4,
+    "title": "第一次参加设计比赛",
+    "summary": "李明参加了学校的设计比赛，虽然没有获奖，但他从中获得了宝贵的经验。",
+    "category": "professional",
+    "themes": [
+      "设计比赛",
+      "经验积累"
+    ],
+    "importance": 5,
+    "emotion": 5,
+    "emotionType": "sorrow",
+    "wordCount": 1116,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0049-与陈东一起旅行写生",
+    "age": 19,
+    "year": 2003,
+    "month": 10,
+    "title": "与陈东一起旅行写生",
+    "summary": "李明和挚友陈东一起去云南旅行写生，增进了友情也激发了创作灵感。",
+    "category": "joy",
+    "themes": [
+      "友情",
+      "旅行写生"
+    ],
+    "importance": 4,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1193,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0050-参与设计项目失败",
+    "age": 20,
+    "year": 2004,
+    "month": 6,
+    "title": "参与设计项目失败",
+    "summary": "李明参与了一个设计项目，但由于经验不足导致项目失败，他学会了面对挫折。",
+    "category": "trauma",
+    "themes": [
+      "项目失败",
+      "面对挫折"
+    ],
+    "importance": 9,
+    "emotion": 2,
+    "emotionType": "sorrow",
+    "wordCount": 1069,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0051-赵教授的严厉指导",
+    "age": 20,
+    "year": 2004,
+    "month": 11,
+    "title": "赵教授的严厉指导",
+    "summary": "赵教授对李明的作品提出了严厉的批评，让他开始注重细节和专业性。",
+    "category": "formative",
+    "themes": [
+      "导师指导",
+      "专业提升"
+    ],
+    "importance": 8,
+    "emotion": 4,
+    "emotionType": "shame",
+    "wordCount": 1309,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0052-寒假期间的家庭聚会",
+    "age": 21,
+    "year": 2005,
+    "month": 2,
+    "title": "寒假期间的家庭聚会",
+    "summary": "李明在寒假期间与家人团聚，享受家庭的温暖和支持。",
+    "category": "daily",
+    "themes": [
+      "家庭聚会",
+      "亲情"
+    ],
+    "importance": 3,
+    "emotion": 8,
+    "emotionType": "love",
+    "wordCount": 1066,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0053-设计作品被选中展出",
+    "age": 21,
+    "year": 2005,
+    "month": 5,
+    "title": "设计作品被选中展出",
+    "summary": "李明的一件设计作品被选中在学校展览中展出，受到了师生的好评。",
+    "category": "professional",
+    "themes": [
+      "作品展出",
+      "认可"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 1084,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0054-毕业设计作品获优秀奖",
+    "age": 22,
+    "year": 2006,
+    "month": 7,
+    "title": "毕业设计作品获优秀奖",
+    "summary": "李明的毕业设计作品获得优秀奖，为他的大学生涯画上了圆满的句号。",
+    "category": "professional",
+    "themes": [
+      "毕业设计",
+      "荣誉"
+    ],
+    "importance": 10,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1208,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0055-进入知名设计公司工作",
+    "age": 22,
+    "year": 2006,
+    "month": 10,
+    "title": "进入知名设计公司工作",
+    "summary": "李明毕业后顺利进入一家知名设计公司工作，开始了职业生涯的新篇章。",
+    "category": "professional",
+    "themes": [
+      "入职",
+      "新起点"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1133,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0056-第一次独立完成商业项目",
+    "age": 23,
+    "year": 2007,
+    "month": 3,
+    "title": "第一次独立完成商业项目",
+    "summary": "李明在公司里第一次独立完成了一个商业设计项目，得到了客户的认可。",
+    "category": "professional",
+    "themes": [
+      "商业项目",
+      "独立完成"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 946,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0057-与外祖父一起参观建筑展",
+    "age": 24,
+    "year": 2008,
+    "month": 8,
+    "title": "与外祖父一起参观建筑展",
+    "summary": "李明和外祖父一起参观了一场国际建筑展，进一步加深了他对建筑设计的理解。",
+    "category": "formative",
+    "themes": [
+      "建筑展",
+      "设计理解"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1236,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0058-工作中的挑战与成长",
+    "age": 25,
+    "year": 2009,
+    "month": 12,
+    "title": "工作中的挑战与成长",
+    "summary": "李明在工作中遇到了许多挑战，但他通过不断学习和努力，逐渐成长为一名优秀的设计师。",
+    "category": "formative",
+    "themes": [
+      "工作挑战",
+      "职业成长"
+    ],
+    "importance": 8,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 830,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0059-成为公司设计团队负责人",
+    "age": 25,
+    "year": 2009,
+    "month": 6,
+    "title": "成为公司设计团队负责人",
+    "summary": "李明被提升为设计团队的负责人，开始带领团队完成重要项目。",
+    "category": "professional",
+    "themes": [
+      "职业发展",
+      "领导力"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1299,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0060-与陈东一起创办艺术工作室",
+    "age": 27,
+    "year": 2011,
+    "month": 3,
+    "title": "与陈东一起创办艺术工作室",
+    "summary": "李明与挚友陈东共同创办了一间小型艺术工作室，致力于创意设计。",
+    "category": "formative",
+    "themes": [
+      "创业",
+      "友情"
+    ],
+    "importance": 8,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1679,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0061-参加国际设计展览",
+    "age": 29,
+    "year": 2013,
+    "month": 10,
+    "title": "参加国际设计展览",
+    "summary": "李明的作品在国际设计展览中展出，获得广泛认可。",
+    "category": "professional",
+    "themes": [
+      "国际视野",
+      "专业成就"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1013,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0062-独立承接大型品牌设计项目",
+    "age": 31,
+    "year": 2015,
+    "month": 5,
+    "title": "独立承接大型品牌设计项目",
+    "summary": "李明独立承接了一个大型品牌设计项目，成功完成了挑战。",
+    "category": "professional",
+    "themes": [
+      "独立项目",
+      "专业能力"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1110,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0063-外祖父去世",
+    "age": 33,
+    "year": 2017,
+    "month": 12,
+    "title": "外祖父去世",
+    "summary": "李明的外祖父张文因病去世，对他产生了深远的影响。",
+    "category": "loss",
+    "themes": [
+      "亲人离世",
+      "情感冲击"
+    ],
+    "importance": 10,
+    "emotion": 10,
+    "emotionType": "sorrow",
+    "wordCount": 964,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0064-创办自己的设计工作室",
+    "age": 34,
+    "year": 2018,
+    "month": 7,
+    "title": "创办自己的设计工作室",
+    "summary": "李明决定创办自己的设计工作室，追求更大的自由和创造力。",
+    "category": "formative",
+    "themes": [
+      "创业",
+      "自我实现"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1077,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0065-工作室获得行业大奖",
+    "age": 36,
+    "year": 2020,
+    "month": 4,
+    "title": "工作室获得行业大奖",
+    "summary": "李明的设计工作室在行业内获得了重要奖项，提升了知名度。",
+    "category": "professional",
+    "themes": [
+      "行业认可",
+      "专业成就"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1108,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0066-父亲退休的家庭聚会",
+    "age": 38,
+    "year": 2022,
+    "month": 1,
+    "title": "父亲退休的家庭聚会",
+    "summary": "李明的父亲李建退休了，全家举行了一场温馨的家庭聚会。",
+    "category": "daily",
+    "themes": [
+      "家庭",
+      "庆祝"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "love",
+    "wordCount": 1347,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0067-受邀参加国际设计论坛",
+    "age": 40,
+    "year": 2024,
+    "month": 8,
+    "title": "受邀参加国际设计论坛",
+    "summary": "李明受邀参加国际设计论坛，并发表演讲，分享他的设计理念。",
+    "category": "professional",
+    "themes": [
+      "国际交流",
+      "专业影响力"
+    ],
+    "importance": 8,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1220,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0068-回顾过去展望未来",
+    "age": 42,
+    "year": 2026,
+    "month": 11,
+    "title": "回顾过去，展望未来",
+    "summary": "李明在生日时回顾了自己的职业生涯，对未来充满期待。",
+    "category": "formative",
+    "themes": [
+      "反思",
+      "未来规划"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1091,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  }
+]

@@ -1581,8 +1581,12 @@
      导航标签
      ═══════════════════════════════════════ */
 
+  /* z-40 防止被 ChatWindow 内潜在的 absolute/fixed 浮层（v0.12.x 新增的 ASR/LangBot/proxy 等子组件
+     可能有 z-20~z-30 的浮动元素）盖住按钮命中区。同时低于 AvatarSelector dropdown 的 z-50，
+     不影响左侧头像下拉的层叠。修复 v0.12.1 Win 安装版"打开 chat 后顶部按钮无法点击"。
+     @author zhi.qu @date 2026-05-11 */
   .pixel-nav-bar {
-    @apply relative z-10 flex items-center justify-end w-full min-w-0;
+    @apply relative z-40 flex items-center justify-end w-full min-w-0;
   }
 
   .pixel-nav-primary {

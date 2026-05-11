@@ -31,7 +31,7 @@ export const RAW_FILE_IPC_CHANNELS = {
 
 /**
  * `knowledge:resolve-raw-file` 入参。
- * - avatarId：分身目录名（如 `小堵-工商储专家`）
+ * - avatarId：分身 ID（专家包或 avatars 目录名，如 `小堵-工商储专家`）
  * - mdRelativePath：知识 .md 相对 `<avatar>/knowledge/` 的路径，如
  *   `02_01_01_0221_BMU吸塑盖板.md`，**不带** `knowledge/` 前缀。
  */

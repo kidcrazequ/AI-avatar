@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import assert from 'assert'
 
-const p = path.resolve(__dirname, '../avatars/小堵-工商储专家/skills/draw-chart.md')
+const p = path.resolve(__dirname, '../expert-packs/小堵-工商储专家/skills/draw-chart.md')
 const md = fs.readFileSync(p, 'utf-8')
 
 // ── 结构断言 ──

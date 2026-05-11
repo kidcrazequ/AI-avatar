@@ -56,3 +56,12 @@ assets/*.mov
 AI分身提效案例.html
 AI分身提效案例.md
 AI分身提效案例-*.md
+
+# 知识库原始文件（PDF/DOCX/XLSX 等二进制源），单文件常 >100MB 超 GitHub 限制；
+# 真实产物是 chunk 后的 .md，原始文件由用户在本地保留即可。
+expert-packs/*/knowledge/_raw/
+avatars/*/knowledge/_raw/
+
+# 知识库衍生缓存（embedding 索引等），可由 _raw/ + .md 重新生成，无需入库
+expert-packs/*/knowledge/_index/
+avatars/*/knowledge/_index/

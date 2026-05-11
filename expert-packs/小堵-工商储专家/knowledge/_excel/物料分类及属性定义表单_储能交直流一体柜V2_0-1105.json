@@ -1,0 +1,264 @@
+{
+  "fileName": "物料分类及属性定义表单_储能交直流一体柜V2.0-1105.xlsx",
+  "importedAt": "2026-04-30T09:24:18.668Z",
+  "sheets": [
+    {
+      "name": "分类属性定义",
+      "rowCount": 7,
+      "columns": [
+        {
+          "name": "零件系列名称",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "工商业储能交直流一体柜"
+          ]
+        },
+        {
+          "name": "分类属性中文",
+          "dtype": "string",
+          "uniqueCount": 6,
+          "samples": [
+            "品牌商",
+            "型号",
+            "电芯型号",
+            "防腐等级",
+            "消防等级",
+            "是否带EMS"
+          ]
+        },
+        {
+          "name": "分类属性英文",
+          "dtype": "string",
+          "uniqueCount": 7,
+          "samples": [
+            "Brand Owner",
+            "Type",
+            "Cell Type",
+            "Anticorrosion Grade",
+            "Fire protection Grade",
+            "Whether with EMS",
+            "注：\n已形成标准术语的分类属性英文字段，请优先从《EM-RDMCD-Rec-0006 物料字段中英文字典库》中选取"
+          ]
+        },
+        {
+          "name": "选项中文",
+          "dtype": "string",
+          "uniqueCount": 7,
+          "samples": [
+            "明美/华致",
+            "ENS-L215/\nENS-L256/\nENS-L372",
+            "280Ah-8000次循环（KA级）/\n280Ah-6000次循环（强配）/\n280Ah-长库存",
+            "C3M/C4M/C5M",
+            "Pack气溶胶+舱级气溶胶/\nPack气溶胶+舱级气溶胶+水消防/\nPack全氟己酮+舱级全氟己酮/\nPack全氟己酮+舱级全氟己酮+水消防",
+            "是/否",
+            "选项中文和选项英文：\n是指填写中文和英文值时，不需要手动填写，而是下拉选择已定义好的某一个具体的值。"
+          ]
+        },
+        {
+          "name": "选项中文调整",
+          "dtype": "string",
+          "uniqueCount": 6,
+          "samples": [
+            "明美/华致",
+            "ENS-L215/\nENS-L256/\nENS-L372",
+            "280Ah\n315Ah",
+            "C3M/C4M/C5M",
+            "气溶胶(PACK+舱)/\n气溶胶(PACK+舱)+水消防/\n全氟己酮(PACK+舱)/\n全氟己酮(PACK+舱)+水消防",
+            "是/否"
+          ]
+        },
+        {
+          "name": "选项英文",
+          "dtype": "string",
+          "uniqueCount": 6,
+          "samples": [
+            "Mingmei|Huazhi",
+            "ENS-L215/ENS-L256/ENS-L372",
+            "280Ah/\n315Ah",
+            "C3M/C4M/C5M",
+            "Gasoloid(Pack+Rack)/\nGasoloid(Pack+Rack)+submerged water/\nC6F12O(Pack+Rack)/\nC6F12O(Pack+Rack)+submerged water",
+            "Yes/No"
+          ]
+        },
+        {
+          "name": "特殊要求",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "必填"
+          ]
+        },
+        {
+          "name": "备注",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "零件系列名称": "工商业储能交直流一体柜",
+          "分类属性中文": "品牌商",
+          "分类属性英文": "Brand Owner",
+          "选项中文": "明美/华致",
+          "选项中文调整": "明美/华致",
+          "选项英文": "Mingmei|Huazhi",
+          "特殊要求": "必填",
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": "型号",
+          "分类属性英文": "Type",
+          "选项中文": "ENS-L215/\nENS-L256/\nENS-L372",
+          "选项中文调整": "ENS-L215/\nENS-L256/\nENS-L372",
+          "选项英文": "ENS-L215/ENS-L256/ENS-L372",
+          "特殊要求": null,
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": "电芯型号",
+          "分类属性英文": "Cell Type",
+          "选项中文": "280Ah-8000次循环（KA级）/\n280Ah-6000次循环（强配）/\n280Ah-长库存",
+          "选项中文调整": "280Ah\n315Ah",
+          "选项英文": "280Ah/\n315Ah",
+          "特殊要求": "必填",
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": "防腐等级",
+          "分类属性英文": "Anticorrosion Grade",
+          "选项中文": "C3M/C4M/C5M",
+          "选项中文调整": "C3M/C4M/C5M",
+          "选项英文": "C3M/C4M/C5M",
+          "特殊要求": "必填",
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": "消防等级",
+          "分类属性英文": "Fire protection Grade",
+          "选项中文": "Pack气溶胶+舱级气溶胶/\nPack气溶胶+舱级气溶胶+水消防/\nPack全氟己酮+舱级全氟己酮/\nPack全氟己酮+舱级全氟己酮+水消防",
+          "选项中文调整": "气溶胶(PACK+舱)/\n气溶胶(PACK+舱)+水消防/\n全氟己酮(PACK+舱)/\n全氟己酮(PACK+舱)+水消防",
+          "选项英文": "Gasoloid(Pack+Rack)/\nGasoloid(Pack+Rack)+submerged water/\nC6F12O(Pack+Rack)/\nC6F12O(Pack+Rack)+submerged water",
+          "特殊要求": "必填",
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": "是否带EMS",
+          "分类属性英文": "Whether with EMS",
+          "选项中文": "是/否",
+          "选项中文调整": "是/否",
+          "选项英文": "Yes/No",
+          "特殊要求": "必填",
+          "备注": null
+        },
+        {
+          "零件系列名称": null,
+          "分类属性中文": null,
+          "分类属性英文": "注：\n已形成标准术语的分类属性英文字段，请优先从《EM-RDMCD-Rec-0006 物料字段中英文字典库》中选取",
+          "选项中文": "选项中文和选项英文：\n是指填写中文和英文值时，不需要手动填写，而是下拉选择已定义好的某一个具体的值。",
+          "选项中文调整": null,
+          "选项英文": null,
+          "特殊要求": null,
+          "备注": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "业务方评审意见",
+      "rowCount": 5,
+      "columns": [
+        {
+          "name": "序号",
+          "dtype": "string",
+          "uniqueCount": 5,
+          "samples": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "评审意见截图"
+          ]
+        },
+        {
+          "name": "物料类别团队主要成员",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "DRE",
+            "DQE",
+            "PMC",
+            "采购"
+          ]
+        },
+        {
+          "name": "评审意见",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "同意"
+          ]
+        },
+        {
+          "name": "备注说明",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "序号": 1,
+          "物料类别团队主要成员": "DRE",
+          "评审意见": "同意",
+          "备注说明": null
+        },
+        {
+          "序号": 2,
+          "物料类别团队主要成员": "DQE",
+          "评审意见": "同意",
+          "备注说明": null
+        },
+        {
+          "序号": 3,
+          "物料类别团队主要成员": "PMC",
+          "评审意见": "同意",
+          "备注说明": null
+        },
+        {
+          "序号": 4,
+          "物料类别团队主要成员": "采购",
+          "评审意见": "同意",
+          "备注说明": null
+        },
+        {
+          "序号": "评审意见截图",
+          "物料类别团队主要成员": null,
+          "评审意见": null,
+          "备注说明": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle"
+      ]
+    }
+  ]
+}

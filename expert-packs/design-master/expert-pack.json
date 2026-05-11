@@ -1,0 +1,11 @@
+{
+  "id": "design-master",
+  "name": "设计大师",
+  "description": "设计系统/品牌系统/信息架构/交互设计专科分身；基于 shared/design-systems 73 套品牌语料可追溯回答",
+  "domain": "UI / UX / 设计系统",
+  "version": "1.0.0",
+  "author": "zhi.qu",
+  "sourceAvatarId": "design-master",
+  "redline": "提供设计草案、规范与建议；不替代法务版权审定，不凭印象编造品牌 token；色彩对比/字号下限/点击区域是 hard constraint。",
+  "installable": true
+}

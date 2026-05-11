@@ -28,7 +28,7 @@ import {
 // ─── 配置 ─────────────────────────────────────────────────────────────────────
 
 const AVATAR_ID = '小堵-工商储专家'
-const KNOWLEDGE_DIR = path.resolve(__dirname, `../../avatars/${AVATAR_ID}/knowledge`)
+const KNOWLEDGE_DIR = path.resolve(__dirname, `../../expert-packs/${AVATAR_ID}/knowledge`)
 const RAW_DIR = path.join(KNOWLEDGE_DIR, '_raw')
 
 // ─── 统计 ─────────────────────────────────────────────────────────────────────

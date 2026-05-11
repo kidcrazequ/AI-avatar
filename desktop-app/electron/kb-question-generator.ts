@@ -2,17 +2,18 @@
  * kb-question-generator.ts — 分身知识库题库生成器
  *
  * 职责：
- *   - 扫描 avatars/{id}/knowledge/_excel/*.json 提取 Excel 单元格 → 单点事实/对比/聚合/图表题
- *   - 扫描 avatars/{id}/knowledge/*.md 按 H2/H3 章节 → 协议条款/认证报告题
+ *   - 扫描 <avatarRoot>/{id}/knowledge/_excel/*.json 提取 Excel 单元格 → 单点事实/对比/聚合/图表题
+ *   - 扫描 <avatarRoot>/{id}/knowledge/*.md 按 H2/H3 章节 → 协议条款/认证报告题
  *   - 内置红线 / 人格 / 溯源题模板
  *   - 输出 question-bank.json 到 tests/generated/
  *
  * 不依赖 Electron API，可独立 Node.js 跑测试（用 tsx --test）。
+ * <avatarRoot> 调用方决定：dev 工作区为 `avatars/`，出厂分发为 `expert-packs/`。
  *
  * 使用：
  *   const bank = await generateQuestionBank({
  *     avatarId: '小堵-工商储专家',
- *     knowledgePath: '/abs/path/to/avatars/小堵-工商储专家/knowledge',
+ *     knowledgePath: '/abs/path/to/expert-packs/小堵-工商储专家/knowledge',
  *   })
  *
  * @author zhi.qu

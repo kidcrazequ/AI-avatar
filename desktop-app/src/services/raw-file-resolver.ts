@@ -130,7 +130,7 @@ export const extractMdPathsFromAnchor: ExtractMdPathsFromAnchorFn = (anchor) => 
  * - IPC 抛错 → console.error + 返回 null，不写缓存（让调用方下次重试）
  * - IPC 正常返回（含返回 null）→ 写缓存
  *
- * @param avatarId 分身目录名，如 `小堵-工商储专家`
+ * @param avatarId 分身 ID（专家包或 avatars 目录名），如 `小堵-工商储专家`
  * @param mdRelativePath 相对 `<avatar>/knowledge/` 的 .md 路径，**不含** `knowledge/` 前缀
  */
 export const resolveRawFile: ResolveRawFileFn = async (avatarId, mdRelativePath) => {

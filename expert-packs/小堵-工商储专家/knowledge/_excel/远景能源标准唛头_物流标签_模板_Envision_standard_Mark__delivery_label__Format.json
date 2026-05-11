@@ -1,0 +1,1016 @@
+{
+  "fileName": "远景能源标准唛头（物流标签）模板 Envision standard Mark (delivery label) Format.xlsx",
+  "importedAt": "2026-04-30T09:24:20.679Z",
+  "sheets": [
+    {
+      "name": "乌兹别克斯坦标签",
+      "rowCount": 10,
+      "columns": [
+        {
+          "name": "A. PROJECT NUMBER:",
+          "dtype": "string",
+          "uniqueCount": 9,
+          "samples": [
+            "B. SHIPPING MARK:",
+            "C. PORT OF DESTINATION:",
+            "D. CONSIGNER NAME:",
+            "E. ONSIGNEE NAME:",
+            "F. CASE NO./BALE NO.:",
+            "G. NAME OF EQUIPMENT:",
+            "H. GROSS/NET WEIGHT(KG):",
+            "I.  DIMENSIONS L×W×H (CM):"
+          ]
+        },
+        {
+          "name": "P-1288",
+          "dtype": "string",
+          "uniqueCount": 10,
+          "samples": [
+            "P-1288",
+            "BUXORO, UZBEKISTAN",
+            "BASH-Uzbekistan",
+            "CHINA ENERGY INTERNATIONAL GROUP CO.,LTD.",
+            "ACWA Power Bash Wind LLC",
+            "P-1288-YJP001—P8070",
+            "Tower Section 2 (tyep B)",
+            "69806.2 KG/69736KG"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "A. PROJECT NUMBER:": "B. SHIPPING MARK:",
+          "P-1288": "P-1288",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": null,
+          "P-1288": "BUXORO, UZBEKISTAN",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "C. PORT OF DESTINATION:",
+          "P-1288": "BASH-Uzbekistan",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "D. CONSIGNER NAME:",
+          "P-1288": "CHINA ENERGY INTERNATIONAL GROUP CO.,LTD.",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "E. ONSIGNEE NAME:",
+          "P-1288": "ACWA Power Bash Wind LLC",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "F. CASE NO./BALE NO.:",
+          "P-1288": "P-1288-YJP001—P8070",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "G. NAME OF EQUIPMENT:",
+          "P-1288": "Tower Section 2 (tyep B)",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "H. GROSS/NET WEIGHT(KG):",
+          "P-1288": "69806.2 KG/69736KG",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "I.  DIMENSIONS L×W×H (CM):",
+          "P-1288": "(L)2492*(W)448*(H)448.7CM",
+          "col3": null
+        },
+        {
+          "A. PROJECT NUMBER:": "J. REF NO.(DN NO.):",
+          "P-1288": 80733601,
+          "col3": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "老挝标签",
+      "rowCount": 11,
+      "columns": [
+        {
+          "name": "SHIPPER:",
+          "dtype": "string",
+          "uniqueCount": 11,
+          "samples": [
+            "CONSIGNEE:",
+            "PROJECT NAME:",
+            "PORT OF LOADING：",
+            "PORT OF DISCHARGING:",
+            "DESTINATION:",
+            "PACKAGE NO.:",
+            "GROSS WEIGHT:",
+            "NET WEIGHT:"
+          ]
+        },
+        {
+          "name": "POWERCHINA INTERNATIONAL GROUP LIMITED",
+          "dtype": "string",
+          "uniqueCount": 11,
+          "samples": [
+            "MONSOON WIND POWER COMPANY LIMITED",
+            "MONSOON PROJECT",
+            "SHANGHAI PORT, CHINA",
+            "SATTAHIP/LAEM CHABANG , TAILAND",
+            "LAOS",
+            "P-1320-P001-P8020",
+            "530 KGS",
+            "622 KGS"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "SHIPPER:": "CONSIGNEE:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "MONSOON WIND POWER COMPANY LIMITED"
+        },
+        {
+          "SHIPPER:": "PROJECT NAME:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "MONSOON PROJECT"
+        },
+        {
+          "SHIPPER:": "PORT OF LOADING：",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "SHANGHAI PORT, CHINA"
+        },
+        {
+          "SHIPPER:": "PORT OF DISCHARGING:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "SATTAHIP/LAEM CHABANG , TAILAND"
+        },
+        {
+          "SHIPPER:": "DESTINATION:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "LAOS"
+        },
+        {
+          "SHIPPER:": "PACKAGE NO.:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "P-1320-P001-P8020"
+        },
+        {
+          "SHIPPER:": "GROSS WEIGHT:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "530 KGS"
+        },
+        {
+          "SHIPPER:": "NET WEIGHT:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "622 KGS"
+        },
+        {
+          "SHIPPER:": "VOLUME:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "35325 M3"
+        },
+        {
+          "SHIPPER:": "DIMENSIONS:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "433CM x 378CM x 388CM"
+        },
+        {
+          "SHIPPER:": "COUNTRY OF ORIGIN:",
+          "POWERCHINA INTERNATIONAL GROUP LIMITED": "MADE IN CHINA"
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "远景国际通用标签",
+      "rowCount": 19,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 16,
+          "samples": [
+            "PROJECT NUMBER/NAME:",
+            "SHIPPER:",
+            "CONSIGNEE:",
+            "PORT OF LOADING:",
+            "PORT OF DISCHARGING:",
+            "DESTINATION:",
+            "COUNTRY OF ORIGIN:",
+            "EQUIPMENT NUMBER："
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 7,
+          "samples": [
+            "P-1334 摩洛哥Nareva_Dakhla_60MW项目",
+            "ENVISION ENERGY INTERNATIONAL TRADING LIMITED",
+            "DAKHLA WATER & ENERGY COMPANY",
+            "Taicang",
+            "Laayoune",
+            "Dakhla",
+            "China"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 6,
+          "samples": [
+            "PACKAGE NO.：",
+            "SERIAL NUMBER:",
+            "TYPE：",
+            "CONFIGURATION CODE：",
+            "LOCATION CODE:",
+            "REFERENCE NUMBER："
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": "PROJECT NUMBER/NAME:",
+          "col2": "P-1334 摩洛哥Nareva_Dakhla_60MW项目",
+          "col3": null,
+          "col4": "PACKAGE NO.：",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": "SERIAL NUMBER:",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": "TYPE：",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "SHIPPER:",
+          "col2": "ENVISION ENERGY INTERNATIONAL TRADING LIMITED",
+          "col3": null,
+          "col4": "CONFIGURATION CODE：",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": "LOCATION CODE:",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "CONSIGNEE:",
+          "col2": "DAKHLA WATER & ENERGY COMPANY",
+          "col3": null,
+          "col4": "REFERENCE NUMBER：",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "PORT OF LOADING:",
+          "col2": "Taicang",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "PORT OF DISCHARGING:",
+          "col2": "Laayoune",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "DESTINATION:",
+          "col2": "Dakhla",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "COUNTRY OF ORIGIN:",
+          "col2": "China",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "EQUIPMENT NUMBER：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "NAME OF EQUIPMENT:",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "PROCESS NUMBER：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "STO NUMBER：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "DN NUMBER：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "GROSS/NET WEIGHT(KG):",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "DIMENSIONS L×W×H (CM)：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "VOLUME(m³):",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        },
+        {
+          "col1": "SHORTAGE：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    },
+    {
+      "name": "Sheet1",
+      "rowCount": 1,
+      "columns": [
+        {
+          "name": "货架完整",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "流程文件(压力输入、包装要求、包装SPEC、包装规范、WI、checklist)"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "货架完整": "流程文件(压力输入、包装要求、包装SPEC、包装规范、WI、checklist)"
+        }
+      ],
+      "rowMetaRoles": [
+        "data"
+      ]
+    },
+    {
+      "name": "远景国内标签",
+      "rowCount": 13,
+      "columns": [
+        {
+          "name": "项目",
+          "dtype": "string",
+          "uniqueCount": 11,
+          "samples": [
+            "机型",
+            "物料号",
+            "物料描述",
+            "参考点",
+            "配置号",
+            "STO单号",
+            "箱次号",
+            "预留编辑位置（塔筒段数）"
+          ]
+        },
+        {
+          "name": "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP",
+          "dtype": "string",
+          "uniqueCount": 8,
+          "samples": [
+            "EN-156/3.3",
+            "P001",
+            "SP68689",
+            "2100614889",
+            "P0001(补)",
+            "机舱总成半成舱总成半机舱总成半成舱总成半机舱舱总成半成舱总成半机舱舱总成半机舱",
+            "80735928",
+            "Y"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "设备编号",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "序列号",
+            "机位码",
+            "配置识别码",
+            "配置号|参考点ID|STO单号|DN号|箱次号|配置识别码|序列号"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "T01",
+            "1"
+          ]
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "直发件生成方式",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "供应商打印OR远景打（数字化工具推送标签格式给到供应商）",
+          "dtype": "string",
+          "uniqueCount": 7,
+          "samples": [
+            "SCM送货单如何定位到台",
+            "送货单格式",
+            "国内叶片：DN/参考点等信息不相关",
+            "项目号、物料号、参考点、机位码等信息输入",
+            "信息入湖，SCM信息获取",
+            "SCM建送货单时带信息入湖，即可以通过逻辑查找到相关信息",
+            "PMC对叶片进去确认的时候生成"
+          ]
+        },
+        {
+          "name": "SCM+计划协议（SAP）",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "项目": null,
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": null,
+          "col3": null,
+          "设备编号": "序列号",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "机型",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "EN-156/3.3",
+          "col3": null,
+          "设备编号": "机位码",
+          "col5": "T01",
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "SCM送货单如何定位到台",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "物料号",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": null,
+          "col3": null,
+          "设备编号": "配置识别码",
+          "col5": 1,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "送货单格式",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "物料描述",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": null,
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "参考点",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "P001",
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "国内叶片：DN/参考点等信息不相关",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "配置号",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "SP68689",
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "项目号、物料号、参考点、机位码等信息输入",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "STO单号",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": 2100614889,
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "信息入湖，SCM信息获取",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "箱次号",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "P0001(补)",
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "SCM建送货单时带信息入湖，即可以通过逻辑查找到相关信息",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "预留编辑位置（塔筒段数）",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": null,
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": "PMC对叶片进去确认的时候生成",
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "箱次描述",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "机舱总成半成舱总成半机舱总成半成舱总成半机舱舱总成半成舱总成半机舱舱总成半机舱",
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "DN号/PO号",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": 80735928,
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": "短缺标识",
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": "Y",
+          "col3": null,
+          "设备编号": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        },
+        {
+          "项目": null,
+          "P-1335 India AMGEPL AP 148.5MW_Pinnapuram KurnoolP-1335 India AMGEPL AP": null,
+          "col3": null,
+          "设备编号": "配置号|参考点ID|STO单号|DN号|箱次号|配置识别码|序列号",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "直发件生成方式": null,
+          "供应商打印OR远景打（数字化工具推送标签格式给到供应商）": null,
+          "SCM+计划协议（SAP）": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data"
+      ]
+    },
+    {
+      "name": "Sheet2",
+      "rowCount": 30,
+      "columns": [
+        {
+          "name": "标题",
+          "dtype": "string",
+          "uniqueCount": 30,
+          "samples": [
+            "JIANGYIN ENVISION ASSET MANAGEMENTCO.,LTD",
+            "SHIPPING:",
+            "CONSIGNEE:",
+            "PORT OF LOADING:",
+            "PORT OF DISCHARGING:",
+            "DESTINATION:",
+            "COUNTRY OF ORIGIN:",
+            "DIMENSIONS L×W×H (CM)："
+          ]
+        },
+        {
+          "name": "获取方式",
+          "dtype": "string",
+          "uniqueCount": 5,
+          "samples": [
+            "字段名称设置在系统里，自动获取",
+            "系统获取SAP",
+            "拼接：项目号—描述—参考点—箱次号",
+            "项目号—描述—参考点—箱次号",
+            "与台次绑定，跟着台次的属性，定义颜色"
+          ]
+        },
+        {
+          "name": "维护方",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "标题": "JIANGYIN ENVISION ASSET MANAGEMENTCO.,LTD",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "SHIPPING:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "CONSIGNEE:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "PORT OF LOADING:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "PORT OF DISCHARGING:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "DESTINATION:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "COUNTRY OF ORIGIN:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "DIMENSIONS L×W×H (CM)：",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "GROSS/NET WEIGHT(KG):",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "VOLUME:",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "预留1（系统模板不做，实际预留空位）",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "预留2",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "预留3",
+          "获取方式": "字段名称设置在系统里，自动获取",
+          "维护方": null
+        },
+        {
+          "标题": "EQUIPMENT number：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "NAME OF EQUIPMENT:",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "process NUMBER：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "STO NUMBER：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "DN NUMBER：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "Shortage：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "serial number",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "TYPE：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "Configuration CODE：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "location code：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "reference NUMBER：",
+          "获取方式": "系统获取SAP",
+          "维护方": null
+        },
+        {
+          "标题": "PACKAGE NO.：",
+          "获取方式": "拼接：项目号—描述—参考点—箱次号",
+          "维护方": null
+        },
+        {
+          "标题": "唛头号拼接逻辑",
+          "获取方式": "项目号—描述—参考点—箱次号",
+          "维护方": null
+        },
+        {
+          "标题": "空白无内容，自动带出N/A",
+          "获取方式": null,
+          "维护方": null
+        },
+        {
+          "标题": "是否可以实现外网打印？",
+          "获取方式": null,
+          "维护方": null
+        },
+        {
+          "标题": "二维码内容：基于现有基础，新增内容家在末尾",
+          "获取方式": null,
+          "维护方": null
+        },
+        {
+          "标题": "配置识别码",
+          "获取方式": "与台次绑定，跟着台次的属性，定义颜色",
+          "维护方": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data"
+      ]
+    }
+  ]
+}

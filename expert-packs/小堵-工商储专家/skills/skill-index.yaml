@@ -1,0 +1,190 @@
+# Skill 路由索引 v1.0 — 小堵·工商储专家
+#
+# 三层架构：
+#   Layer 1 (本文件): 索引层 — name / keywords / when / priority
+#   Layer 2 (SkillRouter): 路由层 — 意图提取 → grep 召回 → 冲突裁决
+#   Layer 3 (执行层): 加载选中 skill 的完整 SKILL.md → 注入对话
+#
+# 路径约定：
+#   - source: shared → path 相对项目根目录（shared/skills/xxx.md）
+#   - source: local  → path 相对分身目录（skills/xxx.md）
+#   - 当 local 和 shared 有同名技能时，local 版本为本分身的领域增强覆写
+#
+# keywords 在打包阶段由 LLM 扩充到 30-50 个，覆盖口语/简称/行业黑话/同义词。
+# 运行时 grep 匹配，不依赖 LLM。
+#
+# priority: 数字越小优先级越高。同分时按 keywords 命中数排序。
+
+version: "1.0"
+
+# ═══════════════════════════════════════
+# 本地专属技能（仅工商储分身使用）
+# ═══════════════════════════════════════
+local_skills:
+  - name: query-product-quality
+    path: skills/query-product-quality.md
+    source: local
+    domain: 产品质量数据查询
+    keywords:
+      - 产品质量
+      - 质量指标
+      - 设备侧效率
+      - 系统效率
+      - 故障率
+      - 机型
+      - 215机型
+      - 372机型
+      - 工商储
+      - dashboard
+      - 统计周期
+      - 指标折线
+      - 指标趋势
+      - 质量趋势
+      - 质量折线
+      - 质量柱状
+      - 质量数据
+      - 月度指标
+      - 年度指标
+      - KPI查询
+      - 指标对比
+      - 项目效率
+      - 月份效率
+    when: 用户询问工商储产品质量 KPI（机型/项目/统计周期/设备侧效率/系统效率/故障率等），需要查询 Excel 质量数据看板再画图
+    priority: 0
+
+# ═══════════════════════════════════════
+# 本地覆写技能（基于公共版本的领域增强）
+# ═══════════════════════════════════════
+local_overrides:
+  - name: draw-chart
+    path: skills/draw-chart.md
+    source: local
+    domain: 数据可视化
+    overrides: shared/skills/draw-chart.md
+    override_reason: 增加了空数据兜底模板、工商储 query_excel 示例、N=1 KPI 卡片硬约束
+    keywords:
+      - 柱状图
+      - 折线图
+      - 饼图
+      - 散点图
+      - 雷达图
+      - 热力图
+      - 桑基图
+      - 趋势图
+      - 数据图
+      - 图表
+      - 可视化
+      - 对比图
+      - 占比
+      - 分布
+      - 统计
+      - 效率
+      - 折线
+      - 柱状
+      - 环形图
+      - K线
+      - chart
+      - echarts
+      - 画图
+      - 画个图
+      - 生成图
+      - 数据展示
+      - 走势
+      - 变化趋势
+      - 同比
+      - 环比
+    when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
+    priority: 2
+
+  - name: chart-from-knowledge
+    path: skills/chart-from-knowledge.md
+    source: local
+    overrides: shared/skills/chart-from-knowledge.md
+    override_reason: 增加了空数据兜底模板、chart 代码块前置骨架、工商储 query_excel 路由、工具调用纪律
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 基于数据画
+      - 从表格画
+      - 用数据生成
+      - Excel画图
+      - 表格可视化
+      - 时间范围
+      - 1到3月
+      - 2026年
+      - 按月趋势
+      - 查询数据
+      - 数据筛选
+    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用（非产品质量 KPI 场景）
+    priority: 1
+
+# ═══════════════════════════════════════
+# 公共技能（引用 shared/skills/）
+# ═══════════════════════════════════════
+shared_skills:
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - 甘特图
+      - 流程图
+      - 时序图
+      - 思维导图
+      - 看板
+      - 状态机
+      - ER图
+      - 类图
+      - Git图
+      - 架构图
+      - 工作流
+      - 调用链
+      - 交互图
+      - 关系图
+      - 全景图
+      - 项目计划
+      - 时间表
+      - 排期
+      - 里程碑
+      - gantt
+      - flowchart
+      - mermaid
+      - 脑图
+      - 序列图
+      - 泳道图
+      - 状态流转
+      - 数据模型
+    when: 用户需要结构化可视化（甘特图/流程图/时序图/思维导图/看板/状态机/ER图等），输出 mermaid 语法
+    priority: 1
+
+  - name: draw-infographic
+    path: shared/skills/draw-infographic.md
+    source: shared
+    domain: 信息图叙事
+    keywords:
+      - 信息图
+      - 演示图
+      - 卡片
+      - SWOT
+      - 对比卡
+      - 金字塔
+      - 词云
+      - 阶梯图
+      - 列表展示
+      - 汇报材料
+      - 演示用
+      - 给领导看
+      - 漂亮的图
+      - 产品对比
+      - 时间线
+      - 特性展示
+      - 信息展示
+      - infographic
+      - 组织架构图
+      - 层级图
+      - 市场结构
+      - 产品特性
+      - 对比展示
+      - 服务列表
+    when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
+    priority: 1

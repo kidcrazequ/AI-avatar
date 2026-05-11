@@ -1,0 +1,192 @@
+---
+source: pdf
+raw_file: _raw/48.400.24.0422.01-00,01 Battery Regulation_HC-L315B.pdf
+keywords: ["TUV-SUD", "SUB-DISTRICT", "HC-L315A"]
+summary: TÜV SÜD Certification and Testing (China) Co., Ltd.
+---
+
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+Floor 1-4, Building B, No.37, Tuanjie Road(Middle), Xishan
+Economic and Technological Development Zone, Wuxi, Jiangsu,
+214 101, P. R. China
+Laboratory: TÜV SÜD Certification and Testing (China)
+Co., Ltd. Shanghai Branch Testing Center
+No. 1999 Du Hui Rd, Minhang District, Shanghai 201108
+P.R. China
+Tel.: +86-510-8820-3737 Fax: +86-510-8820-3636 Tel.: +86-21-6037-6501
+www.tuv-sud.cn info@tuv-sud.cn Page 1 of 5
+Test Report No.: 48.400.24.0422.01-00/01
+Rev.: 00
+Dated: 2024-04-22
+TEC_
+WUX_F_25.05
+E – Rev.
+ 00 2021
+-06-24
+Applicant: Envision Dynamics Technology (Jiangsu) Co., Ltd
+Address: No.66 Shentai Road, Shengang Sub-District, Jiangyin City, Wuxi, 214000 Jiangsu, P.R.
+China
+Attn: Mr. ZHAO
+Sample Description: Rechargeable Lithium-ion cell
+Model No.: HC-L315A
+Sample Received Date: 2024-04-09
+Test Period: 2024-04-10 ~ 2024-04-18
+Purpose of examination: Determine the Lead, Cadmium and Mercury content in accordance with EU Batteries
+Regulation (EU) 2023/1542, concerning batteries and waste batteries, amending Directive
+2008/98/EC and Regulation (EU) 2019/1020 and repealing Directive 2006/66/EC.
+Test Results: Refer to following page(s)
+Remark: (1) The results relate only to the items tested.
+(2) Samples are tested as received.
+(3) The scope of testing was defined by the customer
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+TÜV SÜD Group
+Prepared by: Reviewed by:
+Yongfeng Du
+Project Handler
+Feng Zhang
+Designated Reviewer
+Any use for advertising purposes must be granted in writing. This test report may only be quoted in full. This report is the result of a single examination of the object in
+question and is not generally applicable evaluation of the quality of other products in regular production. For further details, please see testing and certification
+regulation, chapter A-3.4.
+Disclaimer Measurement Uncertainty: Unless otherwise agreed upon, pass or fail verdicts are given based on the measured values without consideration of measurement
+uncertainties. Please note, every test method has a measurement uncertainty which has been evaluated by the laboratory according to ISO IEC 17025 requirements. By
+taking measurement uncertainties into account it might happen that measured values can neither be assessed as pass or fail.
+
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+Floor 1-4, Building B, No.37, Tuanjie Road(Middle), Xishan
+Economic and Technological Development Zone, Wuxi, Jiangsu,
+214 101, P. R. China
+Laboratory: TÜV SÜD Certification and Testing (China)
+Co., Ltd. Shanghai Branch Testing Center
+No. 1999 Du Hui Rd, Minhang District, Shanghai 201108
+P.R. China
+Tel.: +86-510-8820-3737 Fax: +86-510-8820-3636 Tel.: +86-21-6037-6501
+www.tuv-sud.cn info@tuv-sud.cn Page 2 of 5
+Test Report No.: 48.400.24.0422.01-00/01
+Rev.: 00
+Dated: 2024-04-22
+TEC_
+WUX_F_25.05
+E – Rev.
+ 00 2021
+-06-24
+1. SUMMARY OF TEST RESULTS
+No. Test Requested Conclusion Battery Category
+1. Restrictions for the presence of mercury, cadmium and
+lead in certain categories of batteries PASS /
+
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+Floor 1-4, Building B, No.37, Tuanjie Road(Middle), Xishan
+Economic and Technological Development Zone, Wuxi, Jiangsu,
+214 101, P. R. China
+Laboratory: TÜV SÜD Certification and Testing (China)
+Co., Ltd. Shanghai Branch Testing Center
+No. 1999 Du Hui Rd, Minhang District, Shanghai 201108
+P.R. China
+Tel.: +86-510-8820-3737 Fax: +86-510-8820-3636 Tel.: +86-21-6037-6501
+www.tuv-sud.cn info@tuv-sud.cn Page 3 of 5
+Test Report No.: 48.400.24.0422.01-00/01
+Rev.: 00
+Dated: 2024-04-22
+TEC_
+WUX_F_25.05
+E – Rev.
+ 00 2021
+-06-24
+2. TESTED SUBJECT DESCRIPTION
+Sample No.: 001
+Description: Name: Rechargeable Lithium-ion cell
+Model: HC-L315A
+Parameter: 3.2V, 315Ah, 1008Wh
+Weight: 5714.9g
+Photograph:
+
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+Floor 1-4, Building B, No.37, Tuanjie Road(Middle), Xishan
+Economic and Technological Development Zone, Wuxi, Jiangsu,
+214 101, P. R. China
+Laboratory: TÜV SÜD Certification and Testing (China)
+Co., Ltd. Shanghai Branch Testing Center
+No. 1999 Du Hui Rd, Minhang District, Shanghai 201108
+P.R. China
+Tel.: +86-510-8820-3737 Fax: +86-510-8820-3636 Tel.: +86-21-6037-6501
+www.tuv-sud.cn info@tuv-sud.cn Page 4 of 5
+Test Report No.: 48.400.24.0422.01-00/01
+Rev.: 00
+Dated: 2024-04-22
+TEC_
+WUX_F_25.05
+E – Rev.
+ 00 2021
+-06-24
+3. TEST RESULT(S)
+3.1 TOTAL LEAD, CADMIUM AND MERCURY CONTENT TEST
+Test method: Acid digestion method, and then analyzed by Atomic Absorption or Inductively Coupled Argon Plasma
+Spectrometry.
+Test item MDL
+[%]
+Result [%] Maximum
+Permissible Limit [%]
+Sample 001
+Total Mercury (Hg) 0.0005 N.D. 0.0005
+Total Cadmium (Cd) 0.001 N.D. 0.002*
+Total Lead (Pb) 0.002 N.D. 0.01*
+Remark:
+1. MDL = Method Detection Limit
+2. N.D. =Not Detected (<MDL)
+3. Restriction on substances quoted from Regulation (EU) 2023/1542 Annex I.
+4. Batteries, whether or not incorporated into appliances, light means of transport or other vehicles, shall not contain
+more than 0,0005 % of mercury (expressed as mercury metal) by weight.
+5. Portable batteries, whether or not incorporated into appliances, light means of transport or other vehicles, shall not
+contain more than 0,002 % of cadmium (expressed as cadmium metal) by weight.
+6. (1) From 18 August 2024, portable batteries, whether or not incorporated into appliances, shall not contain more
+than 0,01 % of lead (expressed as lead metal) by weight.
+(2) The restriction set out in point (1) shall not apply to portable zinc-air button cells until 18 August 2028.
+7. “*” denotes requirement applies for Portable batteries only.
+
+TÜV SÜD Certification and Testing (China) Co., Ltd.
+Floor 1-4, Building B, No.37, Tuanjie Road(Middle), Xishan
+Economic and Technological Development Zone, Wuxi, Jiangsu,
+214 101, P. R. China
+Laboratory: TÜV SÜD Certification and Testing (China)
+Co., Ltd. Shanghai Branch Testing Center
+No. 1999 Du Hui Rd, Minhang District, Shanghai 201108
+P.R. China
+Tel.: +86-510-8820-3737 Fax: +86-510-8820-3636 Tel.: +86-21-6037-6501
+www.tuv-sud.cn info@tuv-sud.cn Page 5 of 5
+Test Report No.: 48.400.24.0422.01-00/01
+Rev.: 00
+Dated: 2024-04-22
+TEC_
+WUX_F_25.05
+E – Rev.
+ 00 2021
+-06-24
+APPENDIX I: LABELLING, MARKING AND INFORMATION REQUIREMENTS
+Part A: General information on batteries
+Information on the label of a battery shall comprise the following information regarding the battery:
+1. information identifying the manufacturer in accordance with Article 38(7);
+2. the battery category and information identifying the battery in accordance with Article 38(6);
+3. the place of manufacture (geographical location of a battery manufacturing plant);
+4. the date of manufacture (month and year);
+5. the weight;
+6. the capacity;
+7. the chemistry;
+8. the hazardous substances present in the battery, other than mercury, cadmium or lead;
+9. usable extinguishing agent;
+10. critical raw materials present in the battery in a concentration of more than 0,1 % weight by weight
+Part B: Symbol for separate collection of batterie
+– Covered area on battery, accumulator or battery pack;
+– Cylindrical cells: 1.5 % of surface area (maximum 5 × 5 cm);
+– Others: 3 % of surface area of the largest side (maximum 5 × 5 cm);
+– When the size of the battery, accumulator or battery pack is such that the symbol would be smaller than 0.47
+× 0.47 cm, a symbol at least 1 × 1 cm shall be printed on the packaging;
+– Symbols shall be printed visibly, legibly and indelibly.
+All batteries containing more than 0,002 % cadmium or more than 0,004 % lead:
+– Shall be marked with the chemical symbol for the metal concerned: Cd or Pb;
+– The symbol indicating the heavy metal content shall be printed beneath the above symbol;
+– Shall cover an area of at least one quarter the size of above symbol.
+Part C: QR code
+The QR code shall be in high contrast to the background colour and of a size that is easily readable by a commonly
+available QR reader, such as those integrated in hand-held communication devices.
+---------End of Report---------

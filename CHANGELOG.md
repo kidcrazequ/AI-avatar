@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+## v0.12.2 (2026-05-11)
+
+> **架构里程碑**：分身体系正式从 `avatars/` 迁移到 `expert-packs/`。`expert-packs/` 成为唯一的「分身分发源」，`avatars/` 退化为运行时安装目录。同步发布「设计大师」专家包，并新增 G3.3 反结构错位幻觉规则。
+
+### 架构变更：分身分发源迁移到 `expert-packs/`
+
+**变更动机**：v0.12.0 引入 `expert-packs/` 时只放了 7 个占位脚手架，真实分身（小堵）仍住在 `avatars/`，造成「分发源」与「运行时数据」混在同一个目录的歧义。本版本完成清晰分层：
+
+- **`expert-packs/<id>/`** = 分身的**分发源**（含完整 `expert-pack.json` + soul.md + AGENTS.md / CLAUDE.md + 完整 knowledge/ + skills/ + 测试用例）
+- **`avatars/<id>/`** = 用户安装后的**运行时数据**（由 expert-pack 复制而来，加上用户自己的 memory / life / workspaces 等运行时产物）
+
+**首发的两个含真实知识的专家包**：
+
+- **`expert-packs/小堵-工商储专家/`** — 工商业储能产品解决方案专家「小堵」正式作为开源专家包发布：含 382 个真实知识库 .md（产品质量 dashboard / BOM / 认证报告 / 技术协议 / 电气原理图等）+ life/ 出厂记忆 + memory/ + skills/（chart-from-knowledge / draw-chart / query-product-quality 等）+ document-templates/ + 5 个测试用例
+  - 红线：「提供方案与测算草案；不替代正式商务报价、合同条款或施工签证；友商比价禁止报任何数字。」
+- **`expert-packs/design-master/`** — 「设计大师」专家包首次公开发布：基于 `shared/design-systems/` 73 套品牌语料的设计系统 / 品牌 / 信息架构 / 交互设计专家
+
+**`avatars/` 目录改造**：
+- 仓库内 `avatars/` 目录用 `.gitkeep` 占位保留，实际分身数据全部迁出
+- 旧的 `avatars/小堵-工商储专家/{CLAUDE.md, soul.md, skills/, memory/, wiki/, ...}` 等已跟踪文件全部 `git rm`（迁移到 `expert-packs/小堵-工商储专家/` 对应路径）
+
+**文档同步**：
+- **`AGENTS.md`** / **`CLAUDE.md`** — 「当前可用分身」表格全部指向 `expert-packs/` 路径，新增「所有分身均以专家包形式存放在 `expert-packs/` 下，安装后会被复制到 `avatars/<id>/`」说明，并补齐 8 个分身（含 design-master）
+- **`desktop-app/electron/kb-question-generator.ts`** — JSDoc 路径示例从硬编码 `avatars/` 改为 `<avatarRoot>`，明确「dev 工作区为 `avatars/`，出厂分发为 `expert-packs/`」
+- **`desktop-app/src/services/raw-file-resolver.ts`** + **`src/types/raw-file-anchor.ts`** — `avatarId` JSDoc 更新为「分身 ID（专家包或 avatars 目录名）」
+
+### 新增反幻觉规则
+
+- **`templates/agent-template.md`** — 新增 **G3.3 结构错位禁令**（"标题先写数字、正文再说没有"反模式）：
+  - **真实事故触发**：用户问"土壤密实度 / 桥架管 / 间距 / 排水"四项施工要求，分身在「❌ 土壤密实度 ≥98%」标题里直接写了 ≥98%（知识库实际无此数据），后文才说"知识库未提供"。用户第一眼看到带数字的标题就被误导
+  - **5 条硬性约束**：
+    1. 禁止在结构骨架的「标识位」（章节标题 / 表头 / 卡片标题 / 列表项首句 / 总结表数值列）出现具体数字 / 型号 / 单位，除非该数字已被本轮工具真实返回
+    2. 禁止「先写数字标题，后写未查到正文」（用户读不到第二行）
+    3. 没有数据的项：标题/表头格只允许写 `❓ <项目名>（知识库未提供）` 或 `<项目名> — 待补充`，禁止数值 / 单位 / 范围 / 比较符号
+    4. 总结表「数值」列未命中填 `—` 或「未提供」，禁止「≥98%」「约 X 米」「通常为 Y」等占位数字
+    5. 部分命中只写工具真实返回的部分，禁止补齐（如「地面坚实平坦」不得升级成「地面密实度 ≥X%」）
+  - 等同 G3.2 红线，违反按编造数据处理
+  - 配套回答前自检默念句 + 反面示范 + 正面示范
+
+### 小型改动
+
+- **`desktop-app/scripts/batch-enhance-frontmatter.ts`** / **`batch-reparse-excel.ts`** / **`knowledge-inspect.ts`** / **`regression-prepare-table.ts`** — 路径与文档微调（适配 `expert-packs/` 安装路径）
+- **`desktop-app/src/App.tsx`** / **`index.css`** — UI 小调整
+- **`testdocs/dry-run-format.ts`** / **`test-draw-chart-template.ts`** / **`knowledge-standard-gate-baseline.json`** — 测试基线更新
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.12.1 → 0.12.2
+
 ## v0.12.1 (2026-05-11)
 
 > Life 模块完善 + UI 优化的聚焦补丁版。核心是「**人生姓名三态体系**」，禁止 AI 在用户未确认前自行编造真实姓名；同时新增骨架编辑 / 重新生成能力，与 Stage 0 质量硬校验。

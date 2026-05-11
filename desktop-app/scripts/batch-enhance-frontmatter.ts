@@ -67,11 +67,19 @@ function run(): void {
   const applyMode = process.argv.includes('--apply')
   const mode = applyMode ? 'APPLY' : 'DRY-RUN'
 
-  const avatarRoot = path.resolve(__dirname, '../../avatars', avatarId)
+  // 兼容两种来源：dev 工作区 avatars/<id> 与可分发专家包 expert-packs/<id>
+  // 优先级：avatars/ 优先（用户安装后的最新数据），fallback 到 expert-packs/（出厂模板）
+  const candidateRoots = [
+    path.resolve(__dirname, '../../avatars', avatarId),
+    path.resolve(__dirname, '../../expert-packs', avatarId),
+  ]
+  const avatarRoot = candidateRoots.find(p => fs.existsSync(path.join(p, 'knowledge'))) ?? candidateRoots[0]
   const knowledgeDir = path.join(avatarRoot, 'knowledge')
 
   if (!fs.existsSync(knowledgeDir)) {
     console.error(`知识库目录不存在: ${knowledgeDir}`)
+    console.error('已尝试的候选根目录:')
+    for (const p of candidateRoots) console.error(`  - ${p}`)
     process.exit(1)
   }
 

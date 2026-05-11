@@ -11,7 +11,7 @@ import { DocumentParser, isGarbledText } from '../desktop-app/electron/document-
 import { cleanPdfFullText, stripDocxToc } from '../packages/core/dist/utils/ocr-html-cleaner'
 import { splitIntoChapters } from '../packages/core/dist/document-formatter'
 
-const KNOWLEDGE_DIR = path.join(__dirname, '../avatars/小堵-工商储专家/knowledge')
+const KNOWLEDGE_DIR = path.join(__dirname, '../expert-packs/小堵-工商储专家/knowledge')
 const RAW_DIR = path.join(KNOWLEDGE_DIR, '_raw')
 
 // 不需要格式化的文件类型

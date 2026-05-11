@@ -1,0 +1,281 @@
+{
+  "fileName": "远景出货报告模板 - V1.xlsx",
+  "importedAt": "2026-04-30T09:24:20.633Z",
+  "sheets": [
+    {
+      "name": "出货报告",
+      "rowCount": 15,
+      "columns": [
+        {
+          "name": "基础信息 Basic Info",
+          "dtype": "string",
+          "uniqueCount": 14,
+          "samples": [
+            "序号",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7"
+          ]
+        },
+        {
+          "name": "产品型号 Product Model：",
+          "dtype": "string",
+          "uniqueCount": 12,
+          "samples": [
+            "整机序列号\nS/N",
+            "检测项目",
+            "外观",
+            "防护等级",
+            "启停机",
+            "功率控制",
+            "报警和保护",
+            "通信"
+          ]
+        },
+        {
+          "name": "ENS-L262 （此为示例，请填写实际型号）",
+          "dtype": "string",
+          "uniqueCount": 5,
+          "samples": [
+            "标准/要求",
+            "无脏污、异物，无撞伤、变形等不良",
+            "此处指可以正常满充满放功能",
+            "PCS的充放电功率控制",
+            "PASS"
+          ]
+        },
+        {
+          "name": "产品名称： Product Name",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "检验日期：\nDate：",
+            "检验方法"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "结果"
+          ]
+        },
+        {
+          "name": "工商业 一体柜",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "判定"
+          ]
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "基础信息 Basic Info": null,
+          "产品型号 Product Model：": "整机序列号\nS/N",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": "检验日期：\nDate：",
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "序号",
+          "产品型号 Product Model：": "检测项目",
+          "ENS-L262 （此为示例，请填写实际型号）": "标准/要求",
+          "产品名称： Product Name": "检验方法",
+          "col5": "结果",
+          "工商业 一体柜": "判定",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 1,
+          "产品型号 Product Model：": "外观",
+          "ENS-L262 （此为示例，请填写实际型号）": "无脏污、异物，无撞伤、变形等不良",
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 2,
+          "产品型号 Product Model：": "防护等级",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 3,
+          "产品型号 Product Model：": "启停机",
+          "ENS-L262 （此为示例，请填写实际型号）": "此处指可以正常满充满放功能",
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 4,
+          "产品型号 Product Model：": "功率控制",
+          "ENS-L262 （此为示例，请填写实际型号）": "PCS的充放电功率控制",
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 5,
+          "产品型号 Product Model：": "报警和保护",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 6,
+          "产品型号 Product Model：": "通信",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 7,
+          "产品型号 Product Model：": "显示",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 8,
+          "产品型号 Product Model：": "绝缘值",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 9,
+          "产品型号 Product Model：": "耐压测试",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 10,
+          "产品型号 Product Model：": "接地连续性测试",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "备注\nRemark",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "最终判定\nFinal Conclusion",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": "PASS",
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "Form No:QR18TOD00001-01A",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    }
+  ]
+}

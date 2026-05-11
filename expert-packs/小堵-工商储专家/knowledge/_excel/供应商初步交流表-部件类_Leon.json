@@ -1,0 +1,1309 @@
+{
+  "fileName": "供应商初步交流表-部件类 Leon.xlsx",
+  "importedAt": "2026-04-30T09:24:17.162Z",
+  "sheets": [
+    {
+      "name": "公司概况",
+      "rowCount": 59,
+      "columns": [
+        {
+          "name": "序号",
+          "dtype": "number",
+          "uniqueCount": 9,
+          "samples": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "min": 1,
+          "max": 9
+        },
+        {
+          "name": "信息分类",
+          "dtype": "string",
+          "uniqueCount": 9,
+          "samples": [
+            "公司概况",
+            "开发案例",
+            "研发能力",
+            "质量表现",
+            "售后质保",
+            "工厂情况",
+            "IT系统应用",
+            "体系应用"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 56,
+          "samples": [
+            "公司地址（研发，生产）",
+            "注册资本，营业额，企业性质",
+            "成立年限",
+            "员工总人数（管理职，生产职）",
+            "研发总人数及构成（5年以上工作经验人员占比）",
+            "质量人数及岗位构成",
+            "生产管理人数",
+            "在行业内的排名情况，可提供第三方机构的排名"
+          ]
+        },
+        {
+          "name": "供应商答复",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "姓名",
+            "职务",
+            "电话",
+            "邮箱"
+          ]
+        },
+        {
+          "name": "证据(照片/文件）",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "序号": 1,
+          "信息分类": "公司概况",
+          "col3": "公司地址（研发，生产）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "注册资本，营业额，企业性质",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "成立年限",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "员工总人数（管理职，生产职）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "研发总人数及构成（5年以上工作经验人员占比）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "质量人数及岗位构成",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "生产管理人数",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "在行业内的排名情况，可提供第三方机构的排名",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "行业标杆",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "主要竞争对手",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "进出口资质",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 2,
+          "信息分类": "开发案例",
+          "col3": "待定点产品or同类产品出货量（2023年，2024年）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "类似产品主要客户，占比，千台故障率（2023年，2024年）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "类似产品设计开发能力（案例展示）\n同类产品成功交付经验>=3个",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "可提供相关技术文档(性能测试报告、可靠性测试报告)等",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "产品认证及测试",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "符合国家Rohs报告、安规认证证书",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 3,
+          "信息分类": "研发能力",
+          "col3": "是否有新产品研发项目管理团队，岗位及人数",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "项目管理团队到工厂距离",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "研发投入占年销售多少？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "研发到工厂距离",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "技术合作",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "优秀技术骨干(姓名/岗位/成就)",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 4,
+          "信息分类": "质量表现",
+          "col3": "产品开发问题履历",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "近一年生产现场质量问题趋势图及问题点",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "近一年售后市场质量问题趋势图及问题点",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 5,
+          "信息分类": "售后质保",
+          "col3": "质保周期",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "设计寿命",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "售后服务网点分布，技术支持人员数量",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "问题处理时效性要求",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "是否有售后(客诉)质量问题管理流程或制度，承诺售后服务及售后技术支持",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 6,
+          "信息分类": "工厂情况",
+          "col3": "工厂状态（租赁厂房or自有厂房）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "工厂运营时间",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "精益生产",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "待定点产品工艺经验",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "待定点产品材料经验",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "待定点产品的年度生产数量",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "待定点产品最大生产产能",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "生产节拍",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "生产周期",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "研发周期",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "交付周期",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "员工离职率",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "工厂劳动力是否充足",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "是否有独立仓库，是否通过当地消防安全检查(提供消防检查合格证书，或相关证明)",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 7,
+          "信息分类": "IT系统应用",
+          "col3": "PLM系统",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "MES系统",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "WMS系统",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "其他IT系统",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 8,
+          "信息分类": "体系应用",
+          "col3": "ISO9001",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "IATF16949",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "是否有PPAP提交经验？APQP,FMEA,CP, SPC,MSA是否了解并应用？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "ISO45001",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "CNAS17025",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "其他认证（如ISO27001等）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 9,
+          "信息分类": "签署",
+          "col3": "盖章/签字",
+          "供应商答复": "姓名",
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": null,
+          "供应商答复": "职务",
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": null,
+          "供应商答复": "电话",
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": null,
+          "供应商答复": "邮箱",
+          "证据(照片/文件）": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "设备及工装清单",
+      "rowCount": 8,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 7,
+          "samples": [
+            "主要生产设备",
+            "防错技术",
+            "质量保证",
+            "实验室能力",
+            "二级供应商情况",
+            "模具供应商",
+            "检具供应商"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 5,
+          "samples": [
+            "设备名称",
+            "工序",
+            "检测设备",
+            "试验项目",
+            "零件名称"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 5,
+          "samples": [
+            "规格",
+            "防错设备",
+            "模拟分析",
+            "二级供应商名称",
+            "供应商名称"
+          ]
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "品牌",
+            "防错功能",
+            "需要委外测试的试验项目",
+            "供应商简介和联系方式"
+          ]
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "价格"
+          ]
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "主要客户"
+          ]
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "数量"
+          ]
+        },
+        {
+          "name": "col14",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col15",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "备注",
+            "到工厂距离"
+          ]
+        },
+        {
+          "name": "col16",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": null,
+          "col2": null,
+          "col3": "设备名称",
+          "col4": null,
+          "col5": "规格",
+          "col6": null,
+          "col7": null,
+          "col8": "品牌",
+          "col9": null,
+          "col10": "价格",
+          "col11": null,
+          "col12": null,
+          "col13": "数量",
+          "col14": null,
+          "col15": "备注",
+          "col16": null
+        },
+        {
+          "col1": "主要生产设备",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "防错技术",
+          "col2": null,
+          "col3": "工序",
+          "col4": null,
+          "col5": "防错设备",
+          "col6": null,
+          "col7": null,
+          "col8": "防错功能",
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": "数量",
+          "col14": null,
+          "col15": "备注",
+          "col16": null
+        },
+        {
+          "col1": "质量保证",
+          "col2": null,
+          "col3": "检测设备",
+          "col4": null,
+          "col5": "规格",
+          "col6": null,
+          "col7": null,
+          "col8": "品牌",
+          "col9": null,
+          "col10": "价格",
+          "col11": null,
+          "col12": null,
+          "col13": "数量",
+          "col14": null,
+          "col15": "备注",
+          "col16": null
+        },
+        {
+          "col1": "实验室能力",
+          "col2": null,
+          "col3": "试验项目",
+          "col4": null,
+          "col5": "模拟分析",
+          "col6": null,
+          "col7": null,
+          "col8": "需要委外测试的试验项目",
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": "备注",
+          "col16": null
+        },
+        {
+          "col1": "二级供应商情况",
+          "col2": null,
+          "col3": "零件名称",
+          "col4": null,
+          "col5": "二级供应商名称",
+          "col6": null,
+          "col7": null,
+          "col8": "供应商简介和联系方式",
+          "col9": null,
+          "col10": null,
+          "col11": "主要客户",
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": "备注",
+          "col16": null
+        },
+        {
+          "col1": "模具供应商",
+          "col2": null,
+          "col3": "零件名称",
+          "col4": null,
+          "col5": "供应商名称",
+          "col6": null,
+          "col7": null,
+          "col8": "供应商简介和联系方式",
+          "col9": null,
+          "col10": null,
+          "col11": "主要客户",
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": "到工厂距离",
+          "col16": null
+        },
+        {
+          "col1": "检具供应商",
+          "col2": null,
+          "col3": "零件名称",
+          "col4": null,
+          "col5": "供应商名称",
+          "col6": null,
+          "col7": null,
+          "col8": "供应商简介和联系方式",
+          "col9": null,
+          "col10": null,
+          "col11": "主要客户",
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": "到工厂距离",
+          "col16": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    },
+    {
+      "name": "制造过程流程图",
+      "rowCount": 0,
+      "columns": [
+        {
+          "name": "步骤",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "操作 运输 检验 储存",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "操作描述",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "重要或关键产品特性",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "重要或关键过程特性",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "机器设备",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "工具",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [],
+      "rowMetaRoles": []
+    },
+    {
+      "name": "产品概况 ",
+      "rowCount": 42,
+      "columns": [
+        {
+          "name": "序号",
+          "dtype": "number",
+          "uniqueCount": 4,
+          "samples": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "min": 1,
+          "max": 4
+        },
+        {
+          "name": "信息分类",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "产品",
+            "关键部件",
+            "现有产品文档",
+            "备件清单"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 42,
+          "samples": [
+            "产品型号",
+            "产品上市时间",
+            "产品销售历史数量",
+            "产品销售国家",
+            "第三方型式测试报告（整机和部件）",
+            "安规认证证书（整机和部件）",
+            "PCS厂家和型号",
+            "空调厂家和型号"
+          ]
+        },
+        {
+          "name": "供应商答复",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "证据(照片/文件）",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "序号": 1,
+          "信息分类": "产品",
+          "col3": "产品型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "产品上市时间",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "产品销售历史数量",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "产品销售国家",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "第三方型式测试报告（整机和部件）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "安规认证证书（整机和部件）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 2,
+          "信息分类": "关键部件",
+          "col3": "PCS厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "空调厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "BMS厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "电池厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "Pack厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "本地控制器厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "站端EMS厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "网关厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "消防厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "高压箱厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "交流断路器（或开关）厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "直流断路器（或开关）厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "微断开关厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "开关电源厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "熔断丝厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "SPD（防浪涌保护器）厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "泄压阀厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "急停开关厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "指示灯厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "电池线端子厂家和型号",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 3,
+          "信息分类": "现有产品文档",
+          "col3": "用户手册",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "操作手册",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "安装手册",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "调试手册",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "尺寸图",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "一次接线图",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "二次接线图",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "通信拓扑图",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "接线图（强电和弱电）",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "施工基础图",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": 4,
+          "信息分类": "备件清单",
+          "col3": "备件1？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "备件2？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "备件3？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "备件4？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "…",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        },
+        {
+          "序号": null,
+          "信息分类": null,
+          "col3": "备件n？",
+          "供应商答复": null,
+          "证据(照片/文件）": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    }
+  ]
+}

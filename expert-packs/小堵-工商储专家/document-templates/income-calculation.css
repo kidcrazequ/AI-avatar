@@ -1,0 +1,143 @@
+/*
+ * income-calculation.css —— 小堵分身的收益测算 PDF 模板
+ *
+ * 适用场景：储能项目 IRR / 投资回报 / 现金流测算文档
+ *
+ * 设计要点：
+ *   - 紧凑布局（默认更窄边距，让数字表多塞一些列）
+ *   - 大数字加粗：表格里的数字加粗 + 等宽字体（视觉对齐）
+ *   - 突出关键指标：第一列（指标名）加粗，行高列首加深色
+ *   - IRR / NPV / 回本期等关键单元格高亮（用 .pp 类，需 LLM 主动标注）
+ *   - 货币列右对齐
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+
+:root {
+  --calc-primary: #0F4C81;
+  --calc-accent: #FFC107;
+  --calc-bg-soft: #F5F7FA;
+}
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #1A2332;
+}
+
+.document {
+  max-width: 880px;
+  padding: 0 28px;
+}
+
+.document-title {
+  color: var(--calc-primary);
+  font-size: 24pt;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.title-meta {
+  color: #57606a;
+  font-size: 10.5pt;
+}
+
+h1 {
+  color: var(--calc-primary);
+  font-size: 18pt;
+  border-bottom: 2px solid var(--calc-primary);
+  padding-bottom: 4px;
+  margin: 24px 0 10px;
+}
+
+h2 {
+  color: var(--calc-primary);
+  font-size: 14pt;
+  margin: 18px 0 8px;
+}
+
+h3 {
+  color: #1873B6;
+  font-size: 12.5pt;
+  margin: 14px 0 6px;
+}
+
+p {
+  margin: 6px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 10.5pt;
+}
+
+th {
+  background: var(--calc-primary);
+  color: #fff;
+  border: 1px solid var(--calc-primary);
+  padding: 6px 10px;
+  text-align: center;
+  font-weight: 600;
+}
+
+td {
+  border: 1px solid #c4cdd5;
+  padding: 5px 10px;
+  vertical-align: middle;
+}
+
+/* 数字单元格：等宽字体 + 右对齐（默认数据列都按数字处理；左对齐需在 LLM 输出加 .label class） */
+td:not(:first-child) {
+  font-family: "SF Mono", Consolas, "Courier New", monospace;
+  text-align: right;
+  font-weight: 600;
+}
+
+/* 第一列（指标名）：左对齐 + 加粗 + 浅色背景 */
+td:first-child {
+  background: var(--calc-bg-soft);
+  font-weight: 600;
+  color: var(--calc-primary);
+}
+
+tbody tr:nth-child(even) td:not(:first-child) {
+  background: #fcfcfd;
+}
+
+/* 关键指标高亮（IRR / NPV / 回本期）— 由 LLM 在 IR 里加 callout 块表达 */
+.callout {
+  border-left: 4px solid var(--calc-accent);
+  background: #FFFBEA;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+.callout-success { border-left-color: #1a7f37; background: #dafbe1; }
+.callout-danger  { border-left-color: #d1242f; background: #ffebe9; }
+.callout-info    { border-left-color: var(--calc-primary); background: #E3EDF7; }
+
+blockquote.cite {
+  border-left: 4px solid #8250df;
+  background: #f6efff;
+  padding: 10px 14px;
+  margin: 12px 0;
+  font-size: 10.5pt;
+}
+
+@page {
+  size: A4;
+  margin: 18mm 14mm 20mm 14mm;
+  @top-left {
+    content: "收益测算";
+    color: #57606a;
+    font-size: 9pt;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    color: #57606a;
+    font-size: 9pt;
+  }
+}

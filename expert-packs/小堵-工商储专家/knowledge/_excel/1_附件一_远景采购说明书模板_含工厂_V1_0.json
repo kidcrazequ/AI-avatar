@@ -1,0 +1,683 @@
+{
+  "fileName": "1.附件一 远景采购说明书模板（含工厂）V1.0.xlsx",
+  "importedAt": "2026-04-30T09:24:15.107Z",
+  "sheets": [
+    {
+      "name": "采购说明书",
+      "rowCount": 12,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 11,
+          "samples": [
+            "采购说明书",
+            "供应商名称*：",
+            "供应商代码（Vendor code)*：",
+            "合同名称：",
+            "合同编号（FWA号）：",
+            "产品范围及价格",
+            "序号",
+            "1"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "物料号*",
+            "附加费用于承载除物流包装费外的费用（价格保护、分摊等）"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "物料名称*"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "工厂*"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "单位*"
+          ]
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "货币*"
+          ]
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "出厂未税单价*\n（元）"
+          ]
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "未税物流费（元）"
+          ]
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "未税包装费（元）"
+          ]
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "未税附加费\n（元）"
+          ]
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "税率*（%）"
+          ]
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "标准交货期*（天）"
+          ]
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "价格有效期始*"
+          ]
+        },
+        {
+          "name": "col14",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "价格有效期止*"
+          ]
+        },
+        {
+          "name": "col15",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "备注"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "col1": "采购说明书",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "供应商名称*：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "供应商代码（Vendor code)*：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "合同名称：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "合同编号（FWA号）：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "产品范围及价格",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "序号",
+          "col2": "物料号*",
+          "col3": "物料名称*",
+          "col4": "工厂*",
+          "col5": "单位*",
+          "col6": "货币*",
+          "col7": "出厂未税单价*\n（元）",
+          "col8": "未税物流费（元）",
+          "col9": "未税包装费（元）",
+          "col10": "未税附加费\n（元）",
+          "col11": "税率*（%）",
+          "col12": "标准交货期*（天）",
+          "col13": "价格有效期始*",
+          "col14": "价格有效期止*",
+          "col15": "备注"
+        },
+        {
+          "col1": 1,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": 2,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "备注：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": "甲方(盖章):  ________                                               乙方(盖章):  ________ \n\n\n                  签订日期： ________                                                 签订日期： ________",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        },
+        {
+          "col1": 1,
+          "col2": "附加费用于承载除物流包装费外的费用（价格保护、分摊等）",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null
+        }
+      ],
+      "rowMetaRoles": [
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    },
+    {
+      "name": "Sheet1",
+      "rowCount": 32,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 21,
+          "samples": [
+            "EA_每一个",
+            "GEN_根",
+            "MWH_兆瓦特小时",
+            "PAA_双",
+            "G_Gram",
+            "M_米",
+            "CAR_箱",
+            "M2_平方米"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 10,
+          "samples": [
+            "CAD_加拿大元",
+            "EUR_欧元",
+            "INR_卢比",
+            "RMB_人民币",
+            "USD_美元",
+            "VND_越南盾",
+            "GBP_英镑",
+            "JPY_日元"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 32,
+          "samples": [
+            "Q000_无质保期",
+            "Q001 收货后72月/过240后60月/后到",
+            "Q002_收货后72月/过240后60月/先到",
+            "Q003 收货后66月/过240后60月/后到",
+            "Q004 收货后66月/过240后60月/先到",
+            "Q005收货后60月/过240后60月/先到",
+            "Q006 收货后60月/过240后48月/后到",
+            "Q007 收货后36月/过240后36月/后到"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "col1": "EA_每一个",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q000_无质保期"
+        },
+        {
+          "col1": "GEN_根",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q001 收货后72月/过240后60月/后到"
+        },
+        {
+          "col1": "MWH_兆瓦特小时",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q002_收货后72月/过240后60月/先到"
+        },
+        {
+          "col1": "PAA_双",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q003 收货后66月/过240后60月/后到"
+        },
+        {
+          "col1": "G_Gram",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q004 收货后66月/过240后60月/先到"
+        },
+        {
+          "col1": "M_米",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q005收货后60月/过240后60月/先到"
+        },
+        {
+          "col1": "EA_每一个",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q006 收货后60月/过240后48月/后到"
+        },
+        {
+          "col1": "CAR_箱",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q007 收货后36月/过240后36月/后到"
+        },
+        {
+          "col1": "M2_平方米",
+          "col2": null,
+          "col3": "CAD_加拿大元",
+          "col4": null,
+          "col5": "Q008 收货后36月/过240后24月/后到"
+        },
+        {
+          "col1": "ZU_组",
+          "col2": null,
+          "col3": "EUR_欧元",
+          "col4": null,
+          "col5": "Q009 收货后48月/过240后36月/后到"
+        },
+        {
+          "col1": "L_公升",
+          "col2": null,
+          "col3": "INR_卢比",
+          "col4": null,
+          "col5": "Q010 收货后72月"
+        },
+        {
+          "col1": "ML_毫升",
+          "col2": null,
+          "col3": "RMB_人民币",
+          "col4": null,
+          "col5": "Q011_收货后60月"
+        },
+        {
+          "col1": "BOT_瓶",
+          "col2": null,
+          "col3": "USD_美元",
+          "col4": null,
+          "col5": "Q012_收货42月内"
+        },
+        {
+          "col1": "GAN_管",
+          "col2": null,
+          "col3": "VND_越南盾",
+          "col4": null,
+          "col5": "Q013_收货后36月"
+        },
+        {
+          "col1": "M3_立方米",
+          "col2": null,
+          "col3": "GBP_英镑",
+          "col4": null,
+          "col5": "Q014 收货后1年"
+        },
+        {
+          "col1": "KUN_捆",
+          "col2": null,
+          "col3": "JPY_日元",
+          "col4": null,
+          "col5": "Q015_收货后2年"
+        },
+        {
+          "col1": "KG_千克",
+          "col2": null,
+          "col3": "KRW_韩元",
+          "col4": null,
+          "col5": "Q016_收货后3年"
+        },
+        {
+          "col1": "T01_桶",
+          "col2": null,
+          "col3": "KZT 哈萨克斯坦腾格",
+          "col4": null,
+          "col5": "Q017_收货后5年"
+        },
+        {
+          "col1": "CAN_罐",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q018 收货后72月/产品出远景工厂那天起算60个月/后到"
+        },
+        {
+          "col1": "TAO_套",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q019 收货后18月/并网后12月/先到"
+        },
+        {
+          "col1": "BOX_盒",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q020收货后60月/过240后54月/先到"
+        },
+        {
+          "col1": "COI_卷",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q021_自投产日期起60月但不超过出具发票日66月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q022_收货后6月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q023_收货后24月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q024_3年/大黑山项目出质保/先到"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q025_3年/项目出质保/先到"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q026_收货后66月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q027_收货后18月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q028_收货后9月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q029_收货后30月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q030_收货后6个月"
+        },
+        {
+          "col1": null,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "Q032 收货后48个月/240后24个月/先到"
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data"
+      ]
+    }
+  ]
+}

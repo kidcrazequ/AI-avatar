@@ -659,7 +659,11 @@ function App() {
                     qualityRefreshNonce={qualityReportNonce}
                   />
                 </div>
-                <div className="min-w-0 flex justify-end">
+                {/* relative z-40 与 PixelNavBar 自身的 z-40 共同建立堆叠上下文，
+                    防止下方 ChatWindow 内任何 absolute/fixed 浮动子组件（v0.12.x 新增）
+                    在 Windows 安装版下盖住命中区导致按钮无响应。
+                    @author zhi.qu @date 2026-05-11 */}
+                <div className="min-w-0 flex justify-end relative z-40">
                   <PixelNavBar items={navButtons} />
                 </div>
               </div>

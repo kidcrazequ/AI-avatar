@@ -72,9 +72,9 @@ describe('DoubaoAsrSession', () => {
 
     assert.equal(socket.sentFrames.length, 3)
     assert.equal(socket.sentFrames[1][1], 0x21)
-    assert.equal(socket.sentFrames[1].readInt32BE(DOUBAO_ASR_BASE_HEADER_SIZE_BYTES), 1)
+    assert.equal(socket.sentFrames[1].readInt32BE(DOUBAO_ASR_BASE_HEADER_SIZE_BYTES), 2)
     assert.equal(socket.sentFrames[2][1], 0x23)
-    assert.equal(socket.sentFrames[2].readInt32BE(DOUBAO_ASR_BASE_HEADER_SIZE_BYTES), -2)
+    assert.equal(socket.sentFrames[2].readInt32BE(DOUBAO_ASR_BASE_HEADER_SIZE_BYTES), -3)
     session.cancel()
   })
 

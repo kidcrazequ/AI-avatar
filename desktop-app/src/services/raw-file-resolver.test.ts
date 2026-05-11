@@ -1,6 +1,6 @@
 /**
  * raw-file-resolver.test.ts — 两个核心 API 的单测：
- *   组 1: extractMdPathsFromAnchor（提取阶段，9 个用例覆盖单/多文件/全半角/子目录/排除 _excel/ 去重/空/混合）
+ *   组 1: extractMdPathsFromAnchor（提取阶段，10 个用例覆盖单/多文件/全半角/顿号/子目录/排除 _excel/ 去重/空/混合）
  *   组 2: resolveRawFile（解析阶段，4 个用例覆盖缓存/IPC 注入/null/抛错）
  *
  * 运行：
@@ -126,37 +126,47 @@ describe('raw-file-resolver', () => {
       assert.deepEqual(extractMdPathsFromAnchor(anchor), ['a.md', 'b.md'])
     })
 
-    // ─── 用例 1.4：章节名后缀 ───────────────────────────────────────────
+    // ─── 用例 1.4：多文件 anchor（顿号分隔）─────────────────────────────
+    it('多文件 anchor（顿号分隔）→ 按出现顺序返回', () => {
+      const anchor =
+        '[来源: knowledge/ENS-L262用户手册_ODM2_0_V2.md、knowledge/ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.md]'
+      assert.deepEqual(extractMdPathsFromAnchor(anchor), [
+        'ENS-L262用户手册_ODM2_0_V2.md',
+        'ENS-L262储能一体机投标参数汇总-上海申毅洛希能源科技有限公司.md',
+      ])
+    })
+
+    // ─── 用例 1.5：章节名后缀 ───────────────────────────────────────────
     it('章节名后缀（#2. 设备布局图）→ 提取 .md 文件名忽略后缀', () => {
       const anchor = '[来源: knowledge/ENS-L262-01用户手册_-V1.md#2. 设备布局图]'
       assert.deepEqual(extractMdPathsFromAnchor(anchor), ['ENS-L262-01用户手册_-V1.md'])
     })
 
-    // ─── 用例 1.5：子目录路径 ───────────────────────────────────────────
+    // ─── 用例 1.6：子目录路径 ───────────────────────────────────────────
     it('子目录路径（#section=技术参数）→ 完整保留子目录前缀', () => {
       const anchor = '[来源: knowledge/sub/foo.md#section=技术参数]'
       assert.deepEqual(extractMdPathsFromAnchor(anchor), ['sub/foo.md'])
     })
 
-    // ─── 用例 1.6：排除 _excel/ 路径 ────────────────────────────────────
+    // ─── 用例 1.7：排除 _excel/ 路径 ────────────────────────────────────
     it('排除 _excel/ 路径 → Excel JSON 不被提取，只留下普通 .md', () => {
       const anchor = '[来源: knowledge/_excel/x.json#sheet=A&rows=2-5, knowledge/foo.md]'
       assert.deepEqual(extractMdPathsFromAnchor(anchor), ['foo.md'])
     })
 
-    // ─── 用例 1.7：去重 ────────────────────────────────────────────────
+    // ─── 用例 1.8：去重 ────────────────────────────────────────────────
     it('同一路径多次出现 → 去重，只返回一次', () => {
       const anchor = '[来源: knowledge/a.md#L1, knowledge/a.md#L20]'
       assert.deepEqual(extractMdPathsFromAnchor(anchor), ['a.md'])
     })
 
-    // ─── 用例 1.8：完全没有 .md 命中 ────────────────────────────────────
+    // ─── 用例 1.9：完全没有 .md 命中 ────────────────────────────────────
     it('没有任何 .md 命中 → 返回空数组', () => {
       const anchor = '[来源: 见 Excel]'
       assert.deepEqual(extractMdPathsFromAnchor(anchor), [])
     })
 
-    // ─── 用例 1.9：混合无关文本 ─────────────────────────────────────────
+    // ─── 用例 1.10：混合无关文本 ────────────────────────────────────────
     it('正文中混入 anchor 块 → 仍能全局扫描提取出 .md 路径', () => {
       const text = '这是正文 [来源: knowledge/foo.md] 后续'
       assert.deepEqual(extractMdPathsFromAnchor(text), ['foo.md'])

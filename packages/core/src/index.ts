@@ -222,6 +222,8 @@ export type {
   LifeConsolidationStatus,
   LifeGenerationStatus,
   LifePipelineStage,
+  LifePersonaNameSource,
+  LifeManifestUpdate,
 } from './life/types'
 export {
   getLifeDir,
@@ -243,6 +245,8 @@ export {
   appendLifeTimelineEntry,
   writeLifeEpisode,
   deleteLifeEpisode,
+  updateLifeManifest,
+  resetGeneratedLife,
   writeLifeConsolidated,
   writeLifeProgress,
 } from './life/store'

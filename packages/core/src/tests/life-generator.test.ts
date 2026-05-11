@@ -219,7 +219,10 @@ describe('life-generator', () => {
       const manifest = await readLifeManifest(tmpRoot, AVATAR_ID)
       assert.ok(manifest)
       assert.equal(manifest.generationStatus, 'complete')
-      assert.equal(manifest.personaName, '陈默')
+      assert.equal(manifest.displayName, '测试')
+      assert.equal(manifest.personaName, '测试')
+      assert.equal(manifest.realNameConfirmed, false)
+      assert.equal(manifest.nameSource, 'avatarName')
       assert.equal(manifest.timeScale, 1)
 
       const timeline = await readLifeTimeline(tmpRoot, AVATAR_ID)
@@ -249,6 +252,95 @@ describe('life-generator', () => {
       // 至少调过 creation LLM（因为 creationConfigured=true）
       assert.ok(counter.creation > 0)
       assert.equal(counter.chat, 0, 'creationConfigured=true 时不应该调用 chat LLM')
+    })
+
+    it('用户确认真实姓名时才允许覆盖分身展示名', async () => {
+      const llms = makeMockLLMs()
+      await generateLife({
+        avatarsRoot: tmpRoot,
+        avatarId: AVATAR_ID,
+        avatarName: '小堵',
+        userParams: makeUserParams({
+          currentAge: 10,
+          personaName: '杜明',
+          personaNameConfirmed: true,
+          nameSource: 'user',
+        }),
+        llms,
+        now: () => FIXED_NOW,
+      })
+
+      const manifest = await readLifeManifest(tmpRoot, AVATAR_ID)
+      assert.ok(manifest)
+      assert.equal(manifest.displayName, '小堵')
+      assert.equal(manifest.personaName, '杜明')
+      assert.equal(manifest.realNameConfirmed, true)
+      assert.equal(manifest.nameSource, 'user')
+    })
+
+    it('default:* 头像标识不会作为分身简介进入 Stage 0 prompt', async () => {
+      fs.writeFileSync(path.join(tmpRoot, AVATAR_ID, 'avatar.txt'), 'default:data-analyst')
+      let manifestPrompt = ''
+      const llms = makeMockLLMs({
+        onCall: (_ch, system, user) => {
+          if (system.includes('人生设计师')) {
+            manifestPrompt = user
+          }
+        },
+      })
+
+      await generateLife({
+        avatarsRoot: tmpRoot,
+        avatarId: AVATAR_ID,
+        avatarName: '小堵',
+        userParams: makeUserParams({ currentAge: 10 }),
+        llms,
+        now: () => FIXED_NOW,
+      })
+
+      assert.ok(manifestPrompt.includes('## avatar.txt\n（空）'))
+      assert.equal(manifestPrompt.includes('default:data-analyst'), false)
+    })
+
+    it('Stage 0 返回空人生骨架时应失败，避免继续生成跑偏经历', async () => {
+      const llms: LifeLLMConfig = {
+        creationConfigured: true,
+        creationLLM: async (system: string) => {
+          if (system.includes('人生设计师')) {
+            return JSON.stringify({
+              personaName: '小堵',
+              birthYear: 1991,
+              birthMonth: 5,
+              birthDay: 15,
+              gender: '男',
+              birthplace: '湖北',
+              familyBackground: '',
+              personalityArc: [],
+              professionalSpine: [],
+              majorRelationships: [],
+            })
+          }
+          throw new Error(`不应进入后续阶段: ${system.slice(0, 40)}`)
+        },
+        chatLLM: async () => 'unused',
+      }
+
+      await assert.rejects(
+        () => generateLife({
+          avatarsRoot: tmpRoot,
+          avatarId: AVATAR_ID,
+          avatarName: '小堵',
+          userParams: makeUserParams({ currentAge: 10 }),
+          llms,
+          now: () => FIXED_NOW,
+        }),
+        /人生骨架生成失败.*professionalSpine/,
+      )
+
+      const progress = await readLifeProgress(tmpRoot, AVATAR_ID)
+      assert.ok(progress)
+      assert.equal(progress.stage, 'failed')
+      assert.match(progress.lastError, /人生骨架生成失败/)
     })
   })
 
@@ -414,10 +506,23 @@ describe('life-generator', () => {
               birthDay: 15,
               gender: '男',
               birthplace: '湖北',
-              familyBackground: '一个普通家庭。',
-              personalityArc: [],
-              professionalSpine: [],
-              majorRelationships: [],
+              familyBackground: '父亲是机械厂工程师，母亲是中学教师。家里堆满旧报纸和拆开一半的收音机。'.repeat(3),
+              personalityArc: [
+                { age: 1, shift: '从安静观察转向主动探索' },
+                { age: 2, shift: '开始对物件结构产生好奇' },
+                { age: 3, shift: '学会表达自己的判断' },
+                { age: 4, shift: '面对陌生环境更稳定' },
+              ],
+              professionalSpine: [
+                { age: 1, milestone: '第一次被机械声音吸引' },
+                { age: 2, milestone: '观察父亲修理小家电' },
+                { age: 3, milestone: '尝试拼装简单积木结构' },
+              ],
+              majorRelationships: [
+                { role: '父亲', name: '陈建国', description: '机械厂工程师，常在家修理旧设备。' },
+                { role: '母亲', name: '李雅琴', description: '中学教师，重视耐心表达和事实核对。' },
+                { role: '邻居', name: '王师傅', description: '退休电工，常讲设备安全和用电常识。' },
+              ],
             })
           }
           if (system.includes('人生编剧')) {
@@ -479,7 +584,10 @@ describe('life-generator', () => {
     it('给定 manifest + timeline + entry 能产出非空 LifeEpisode', async () => {
       const manifest: LifeManifest = {
         schemaVersion: 1,
+        displayName: '测试',
         personaName: '陈默',
+        realNameConfirmed: true,
+        nameSource: 'user',
         birthYear: 1991,
         birthMonth: 8,
         birthDay: 15,

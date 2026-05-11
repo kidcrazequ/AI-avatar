@@ -37,6 +37,13 @@ interface Props {
   lifeExtraHints: string
   setLifeExtraHints: (v: string) => void
 
+  /** 人生经历姓名策略 */
+  lifeNameMode: 'avatar' | 'custom'
+  setLifeNameMode: (v: 'avatar' | 'custom') => void
+  lifePersonaName: string
+  setLifePersonaName: (v: string) => void
+  avatarName: string
+
   /** 创作模型是否已配置（缺失时显示黄色 fallback 提示） */
   hasCreationApiKey: boolean
 
@@ -57,10 +64,14 @@ export default function LifeScriptStep({
   lifeAge, setLifeAge,
   lifeTimeScale, setLifeTimeScale,
   lifeExtraHints, setLifeExtraHints,
+  lifeNameMode, setLifeNameMode,
+  lifePersonaName, setLifePersonaName,
+  avatarName,
   hasCreationApiKey,
   onOpenSettings,
 }: Props) {
   const ageInvalid = lifeEnabled && (!Number.isFinite(lifeAge) || lifeAge < 3 || lifeAge > 65)
+  const nameInvalid = lifeEnabled && lifeNameMode === 'custom' && lifePersonaName.trim().length === 0
 
   return (
     <div className="space-y-5 max-w-xl">
@@ -90,6 +101,54 @@ export default function LifeScriptStep({
           </p>
         </div>
       </label>
+
+      {/* 姓名确认 */}
+      <div className={lifeEnabled ? '' : 'opacity-40 pointer-events-none'}>
+        <label className="pixel-label">人生经历使用名 *</label>
+        <div className="space-y-1.5">
+          <label className={`flex items-center gap-3 px-3 py-2 border-2 cursor-pointer transition-none
+            ${lifeNameMode === 'avatar' ? 'border-px-primary bg-px-primary/5' : 'border-px-border bg-px-elevated hover:border-px-primary/50'}`}
+          >
+            <input
+              type="radio"
+              name="wizard-life-name"
+              checked={lifeNameMode === 'avatar'}
+              onChange={() => setLifeNameMode('avatar')}
+              className="accent-px-primary"
+              disabled={!lifeEnabled}
+            />
+            <span className="font-game text-[13px] text-px-text-sec tracking-wider">
+              使用分身名「{avatarName || '未命名分身'}」
+            </span>
+          </label>
+          <label className={`flex items-center gap-3 px-3 py-2 border-2 cursor-pointer transition-none
+            ${lifeNameMode === 'custom' ? 'border-px-primary bg-px-primary/5' : 'border-px-border bg-px-elevated hover:border-px-primary/50'}`}
+          >
+            <input
+              type="radio"
+              name="wizard-life-name"
+              checked={lifeNameMode === 'custom'}
+              onChange={() => setLifeNameMode('custom')}
+              className="accent-px-primary"
+              disabled={!lifeEnabled}
+            />
+            <span className="font-game text-[13px] text-px-text-sec tracking-wider">指定真实姓名</span>
+          </label>
+        </div>
+        {lifeNameMode === 'custom' && (
+          <input
+            type="text"
+            value={lifePersonaName}
+            onChange={(e) => setLifePersonaName(e.target.value)}
+            placeholder="例如：杜明。填写后将作为人生经历里的名字"
+            className="pixel-input w-full mt-2"
+            disabled={!lifeEnabled}
+          />
+        )}
+        {nameInvalid && (
+          <p className="mt-1 font-game text-[12px] text-px-danger tracking-wider">请填写已确认的人生经历姓名</p>
+        )}
+      </div>
 
       {/* 年龄 */}
       <div className={lifeEnabled ? '' : 'opacity-40 pointer-events-none'}>

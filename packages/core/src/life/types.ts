@@ -51,6 +51,9 @@ export type LifeGenerationStatus =
   | 'failed'
   | 'growing'
 
+/** 人生经历姓名来源：分身展示名 / 用户确认 / AI 建议后确认 */
+export type LifePersonaNameSource = 'avatarName' | 'user' | 'aiSuggested'
+
 /**
  * 当前生成器所处的 Pipeline 阶段。
  * - idle: 未开始
@@ -101,8 +104,14 @@ export interface LifeRelationship {
 export interface LifeManifest {
   /** schema 版本，破坏性升级时递增 */
   schemaVersion: number
-  /** 角色名（AI 想象，可与 avatar 名不同） */
+  /** 分身展示名，来自 avatar.config.json / 创建向导，用于和 personaName 对照 */
+  displayName: string
+  /** 人生经历使用名；未获用户确认时必须等于 displayName */
   personaName: string
+  /** personaName 是否经过用户显式确认 */
+  realNameConfirmed: boolean
+  /** personaName 的来源，用于 UI 提醒和后续迁移 */
+  nameSource: LifePersonaNameSource
 
   // ─── 出生与年龄 ───
   birthYear: number
@@ -147,6 +156,20 @@ export interface LifeManifest {
   lastConsolidatedAt: string
   /** 已 reconsolidate 次数（每 +5 个事件触发 1 次） */
   consolidationCounter: number
+}
+
+/** 允许 UI 编辑的人生骨架字段。生成文件的统计字段不在这里修改。 */
+export interface LifeManifestUpdate {
+  displayName?: string
+  personaName?: string
+  realNameConfirmed?: boolean
+  nameSource?: LifePersonaNameSource
+  gender?: string
+  birthplace?: string
+  familyBackground?: string
+  personalityArc?: LifeArcItem[]
+  professionalSpine?: LifeArcItem[]
+  majorRelationships?: LifeRelationship[]
 }
 
 /**

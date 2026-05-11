@@ -17,7 +17,7 @@
  * @date 2026-05-09
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type KeyboardEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Modal from './shared/Modal'
@@ -66,8 +66,10 @@ export default function LifePanel({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showTimeScaleModal, setShowTimeScaleModal] = useState(false)
   const [showConsolidated, setShowConsolidated] = useState(false)
+  const [showEditManifest, setShowEditManifest] = useState(false)
   const [showStartForm, setShowStartForm] = useState(false)
-  const [actionBusy, setActionBusy] = useState<'' | 'pause' | 'resume' | 'cancel' | 'restart'>('')
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [actionBusy, setActionBusy] = useState<'' | 'pause' | 'resume' | 'cancel' | 'restart' | 'edit' | 'reset'>('')
   const [tickNow, setTickNow] = useState(() => new Date())  // 倒计时 tick
   const mountedRef = useRef(true)
   const loadSeqRef = useRef(0)
@@ -183,7 +185,15 @@ export default function LifePanel({
   }, [])
 
   // 工具栏：开始 / 重启
-  const handleStartGeneration = async (currentAge: number, timeScale: LifeTimeScale, growthEnabled: boolean, extraHints: string) => {
+  const handleStartGeneration = async (
+    currentAge: number,
+    timeScale: LifeTimeScale,
+    growthEnabled: boolean,
+    extraHints: string,
+    personaName: string,
+    personaNameConfirmed: boolean,
+    nameSource: LifePersonaNameSource,
+  ) => {
     if (!hasChatApiKey) {
       onToast('请先在「设置」中配置对话模型 API Key', 'error')
       return
@@ -192,6 +202,9 @@ export default function LifePanel({
     try {
       const result = await window.electronAPI.life.startGeneration(avatarId, {
         avatarName,
+        personaName,
+        personaNameConfirmed,
+        nameSource,
         currentAge,
         timeScale,
         growthEnabled,
@@ -245,15 +258,23 @@ export default function LifePanel({
       const validTs: LifeTimeScale = (VALID_TIME_SCALES as readonly number[]).includes(ts)
         ? (ts as LifeTimeScale)
         : 1
-      const result = await window.electronAPI.life.retryGeneration(avatarId, {
+      const shouldResetManifest = (bundle.progress?.completedEpisodes ?? 0) === 0
+      const preserveConfirmedName = shouldPreserveConfirmedName(bundle)
+      const params = {
         avatarName,
+        personaName: preserveConfirmedName ? bundle.manifest.personaName : avatarName,
+        personaNameConfirmed: preserveConfirmedName,
+        nameSource: preserveConfirmedName ? (bundle.manifest.nameSource ?? 'user') : 'avatarName',
         currentAge: initialAge,
         timeScale: validTs,
         growthEnabled: bundle.manifest.growthEnabled,
         extraHints: '',
-      })
+      } as const
+      const result = shouldResetManifest
+        ? await window.electronAPI.life.resetAndRegenerate(avatarId, params)
+        : await window.electronAPI.life.retryGeneration(avatarId, params)
       if (!mountedRef.current) return
-      onToast('已重新启动生成（断点续传）', 'success')
+      onToast(shouldResetManifest ? '已清空失败骨架并重新生成' : '已重新启动生成（断点续传）', 'success')
       // 关键：retry 时 manifest.generationStatus 残留 'failed' + progress.stage 残留 'failed'
       // 会让 deriveLifePanelMode 死锁在 FailedView。乐观更新立即破除死锁。
       applyOptimisticGenerating(result.usedFallback)
@@ -263,6 +284,65 @@ export default function LifePanel({
       console.error('[LifePanel] 重新生成失败:', err)
       window.electronAPI.logEvent('error', 'life-retry-generation-error', message)
       if (mountedRef.current) onToast('重新生成失败：' + message, 'error')
+    } finally {
+      if (mountedRef.current) setActionBusy('')
+    }
+  }
+
+  const handleResetAndRegenerate = () => {
+    if (!bundle?.manifest || actionBusy === 'reset') return
+    setShowResetConfirm(true)
+  }
+
+  const executeResetAndRegenerate = async () => {
+    if (!bundle?.manifest) return
+    setActionBusy('reset')
+    setShowResetConfirm(false)
+    try {
+      window.electronAPI.logEvent('info', 'life-reset-regenerate-confirmed', avatarId)
+      const initialAge = Math.max(3, Math.min(65, bundle.manifest.initialAge))
+      const ts = bundle.manifest.timeScale
+      const validTs: LifeTimeScale = (VALID_TIME_SCALES as readonly number[]).includes(ts)
+        ? (ts as LifeTimeScale)
+        : 1
+      const preserveConfirmedName = shouldPreserveConfirmedName(bundle)
+      const result = await window.electronAPI.life.resetAndRegenerate(avatarId, {
+        avatarName,
+        personaName: preserveConfirmedName ? bundle.manifest.personaName : avatarName,
+        personaNameConfirmed: preserveConfirmedName,
+        nameSource: preserveConfirmedName ? (bundle.manifest.nameSource ?? 'user') : 'avatarName',
+        currentAge: initialAge,
+        timeScale: validTs,
+        growthEnabled: bundle.manifest.growthEnabled,
+        extraHints: '',
+      })
+      if (!mountedRef.current) return
+      onToast('已清空旧人生并开始从零重建', 'success')
+      applyOptimisticGenerating(result.usedFallback)
+      await refreshBundle()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[LifePanel] 从零重建失败:', err)
+      window.electronAPI.logEvent('error', 'life-reset-regenerate-error', message)
+      if (mountedRef.current) onToast('从零重建失败：' + message, 'error')
+    } finally {
+      if (mountedRef.current) setActionBusy('')
+    }
+  }
+
+  const handleUpdateManifest = async (patch: LifeManifestUpdate) => {
+    setActionBusy('edit')
+    try {
+      await window.electronAPI.life.updateManifest(avatarId, patch)
+      if (!mountedRef.current) return
+      setShowEditManifest(false)
+      onToast('人生设定已更新', 'success')
+      await refreshBundle()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[LifePanel] 更新人生设定失败:', err)
+      window.electronAPI.logEvent('error', 'life-update-manifest-error', message)
+      if (mountedRef.current) onToast('更新失败：' + message, 'error')
     } finally {
       if (mountedRef.current) setActionBusy('')
     }
@@ -400,8 +480,10 @@ export default function LifePanel({
             onToast={onToast}
             onOpenTimeScale={() => setShowTimeScaleModal(true)}
             onOpenConsolidated={() => setShowConsolidated(true)}
+            onOpenEditManifest={() => setShowEditManifest(true)}
             onToggleGrowth={handleToggleGrowth}
             onRestart={handleRetry}
+            onResetAndRegenerate={handleResetAndRegenerate}
             actionBusy={actionBusy}
           />
         )}
@@ -425,7 +507,140 @@ export default function LifePanel({
           onClose={() => setShowConsolidated(false)}
         />
       )}
+
+      {showEditManifest && bundle?.manifest && (
+        <LifeManifestEditor
+          manifest={bundle.manifest}
+          saving={actionBusy === 'edit'}
+          onClose={() => setShowEditManifest(false)}
+          onSubmit={handleUpdateManifest}
+        />
+      )}
+
+      {showResetConfirm && bundle?.manifest && (
+        <ResetLifeConfirmDialog
+          personaName={bundle.manifest.personaName || avatarName}
+          busy={actionBusy === 'reset'}
+          onCancel={() => setShowResetConfirm(false)}
+          onConfirm={executeResetAndRegenerate}
+        />
+      )}
     </Modal>
+  )
+}
+
+function shouldPreserveConfirmedName(bundle: LifeBundle): boolean {
+  const manifest = bundle.manifest
+  if (!manifest || manifest.realNameConfirmed !== true) return false
+  return manifest.familyBackground.trim().length > 0 &&
+    manifest.personalityArc.length > 0 &&
+    manifest.professionalSpine.length > 0
+}
+
+// ─── 子组件：从零重建二次确认 ───────────────────────────────────────────────
+function ResetLifeConfirmDialog({
+  personaName, busy, onCancel, onConfirm,
+}: {
+  personaName: string
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Escape') return
+    e.stopPropagation()
+    if (!busy) onCancel()
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#070917]/75 backdrop-blur-sm animate-fade-in"
+      onClick={busy ? undefined : onCancel}
+      onKeyDown={handleKeyDown}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reset-life-title"
+    >
+      <div
+        className="relative w-[min(460px,calc(100vw-32px))] overflow-hidden rounded-[24px] border-2 border-px-primary/45 bg-px-surface shadow-[0_24px_80px_rgba(0,0,0,0.55),0_0_42px_rgba(88,166,255,0.16)]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-px-primary/18 to-transparent" />
+        <div className="relative px-8 pb-7 pt-8">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border-2 border-px-primary/60 bg-[#11162a] shadow-[0_0_34px_rgba(88,166,255,0.28)]">
+            <SoulTimelineResetIcon />
+          </div>
+
+          <h3
+            id="reset-life-title"
+            className="mb-3 text-center font-game text-[18px] font-bold tracking-wider text-px-text"
+          >
+            清空「{personaName}」的人生并重建？
+          </h3>
+          <p className="mb-4 text-center font-body text-[14px] leading-7 text-px-text-sec">
+            这将删除当前已生成的时间线、人生事件和阶段复盘，
+            并根据当前人生设定从零生成新的经历。
+          </p>
+
+          <div className="mb-6 rounded-[14px] border-2 border-px-danger/35 bg-px-danger/10 px-4 py-3">
+            <p className="font-game text-[11px] leading-relaxed tracking-wider text-px-danger">
+              此操作无法撤销；旧人生会被清空，新人生将重新开始。
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onCancel}
+              disabled={busy}
+              autoFocus
+              className="pixel-btn-outline-muted px-5 py-2 disabled:opacity-50"
+            >
+              取消
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={busy}
+              className="border-2 border-px-danger/70 bg-px-danger/15 px-5 py-2 font-game text-[12px] tracking-wider text-px-danger shadow-[0_0_18px_rgba(239,68,68,0.18)] transition-colors hover:bg-px-danger/25 disabled:opacity-50"
+            >
+              {busy ? '...' : '清空并从零重建'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SoulTimelineResetIcon() {
+  return (
+    <svg width="54" height="54" viewBox="0 0 54 54" fill="none" aria-hidden="true">
+      <circle cx="27" cy="27" r="6" fill="currentColor" className="text-px-primary" />
+      <path
+        d="M12 30.5C14.7 17.2 26.6 10.2 39.5 15.2"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        className="text-cyan-200"
+      />
+      <path
+        d="M42 17.2C35.2 22.2 24.4 29.8 16.2 42"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray="5 5"
+        className="text-px-primary"
+      />
+      <path
+        d="M41.5 14.5L43.8 23.4L35.1 20.7"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-px-primary"
+      />
+      <circle cx="12" cy="30.5" r="3" fill="#11162a" stroke="currentColor" strokeWidth="2" className="text-cyan-200" />
+      <circle cx="16.2" cy="42" r="3" fill="#11162a" stroke="currentColor" strokeWidth="2" className="text-px-danger" />
+    </svg>
   )
 }
 
@@ -492,17 +707,37 @@ function LifeStartForm({
   hasChatApiKey: boolean
   busy: boolean
   onCancel: () => void
-  onSubmit: (currentAge: number, timeScale: LifeTimeScale, growthEnabled: boolean, extraHints: string) => void
+  onSubmit: (
+    currentAge: number,
+    timeScale: LifeTimeScale,
+    growthEnabled: boolean,
+    extraHints: string,
+    personaName: string,
+    personaNameConfirmed: boolean,
+    nameSource: LifePersonaNameSource,
+  ) => void
 }) {
   const [currentAge, setCurrentAge] = useState(30)
   const [timeScale, setTimeScale] = useState<LifeTimeScale>(1)
   const [growthEnabled, setGrowthEnabled] = useState(true)
   const [extraHints, setExtraHints] = useState('')
+  const [nameMode, setNameMode] = useState<'avatar' | 'custom'>('avatar')
+  const [customName, setCustomName] = useState('')
 
   const ageInvalid = !Number.isFinite(currentAge) || currentAge < 3 || currentAge > 65
+  const nameInvalid = nameMode === 'custom' && customName.trim().length === 0
   const handleSubmit = () => {
-    if (ageInvalid || busy) return
-    onSubmit(currentAge, timeScale, growthEnabled, extraHints.trim())
+    if (ageInvalid || nameInvalid || busy) return
+    const personaName = nameMode === 'custom' ? customName.trim() : avatarName
+    onSubmit(
+      currentAge,
+      timeScale,
+      growthEnabled,
+      extraHints.trim(),
+      personaName,
+      nameMode === 'custom',
+      nameMode === 'custom' ? 'user' : 'avatarName',
+    )
   }
 
   return (
@@ -514,6 +749,46 @@ function LifeStartForm({
         <p className="font-game text-[12px] text-px-text-dim tracking-wider mb-6">
           填写参数后开始；过程会在后台运行，可关闭面板继续聊天
         </p>
+
+        <div className="mb-5">
+          <label className="block font-game text-[12px] text-px-text tracking-wider mb-2">
+            人生经历使用名
+          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="life-start-name"
+                checked={nameMode === 'avatar'}
+                onChange={() => setNameMode('avatar')}
+                className="accent-px-primary"
+              />
+              <span className="font-game text-[12px] text-px-text-sec tracking-wider">使用分身名「{avatarName}」</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="life-start-name"
+                checked={nameMode === 'custom'}
+                onChange={() => setNameMode('custom')}
+                className="accent-px-primary"
+              />
+              <span className="font-game text-[12px] text-px-text-sec tracking-wider">指定真实姓名</span>
+            </label>
+          </div>
+          {nameMode === 'custom' && (
+            <input
+              type="text"
+              value={customName}
+              onChange={e => setCustomName(e.target.value)}
+              placeholder="填写用户确认过的姓名"
+              className="mt-2 w-full px-3 py-2 bg-px-bg border-2 border-px-border-dim font-game text-[14px] text-px-text focus:border-px-primary focus:outline-none"
+            />
+          )}
+          {nameInvalid && (
+            <p className="font-game text-[11px] text-px-danger tracking-wider mt-1">请填写已确认的人生经历姓名</p>
+          )}
+        </div>
 
         <div className="mb-5">
           <label className="block font-game text-[12px] text-px-text tracking-wider mb-2">
@@ -605,7 +880,7 @@ function LifeStartForm({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={busy || ageInvalid || !hasChatApiKey}
+            disabled={busy || ageInvalid || nameInvalid || !hasChatApiKey}
             className="pixel-btn-primary py-2 disabled:opacity-50"
           >
             {busy ? '...' : '开始生成'}
@@ -710,6 +985,7 @@ function GeneratingView({
 function FailedView({
   progress, onRetry, retryBusy,
 }: { progress: LifeProgress | null; onRetry: () => void; retryBusy: boolean }) {
+  const completedEpisodes = progress?.completedEpisodes ?? 0
   return (
     <div className="flex-1 flex items-center justify-center bg-px-bg p-8">
       <div className="text-center max-w-lg">
@@ -723,7 +999,9 @@ function FailedView({
           </p>
         )}
         <p className="font-game text-[11px] text-px-text-dim mb-4 tracking-wider">
-          已生成的 {progress?.completedEpisodes ?? 0} 个事件不会丢失；点击重试将断点续传
+          {completedEpisodes > 0
+            ? `已生成的 ${completedEpisodes} 个事件不会丢失；点击重试将断点续传`
+            : '尚未生成事件；点击重新生成将清空失败骨架后从头开始'}
         </p>
         <button onClick={onRetry} disabled={retryBusy} className="pixel-btn-primary py-2 disabled:opacity-50">
           {retryBusy ? '...' : '↻ 重新生成'}
@@ -736,7 +1014,8 @@ function FailedView({
 // ─── 子组件：就绪态（完整面板，timeline + 详情 + 工具栏） ─────────────────
 function ReadyView({
   bundle, avatarId, selectedEntry, onSelect, onEpisodeDeleted, onToast,
-  onOpenTimeScale, onOpenConsolidated, onToggleGrowth, onRestart, actionBusy,
+  onOpenTimeScale, onOpenConsolidated, onOpenEditManifest, onToggleGrowth,
+  onRestart, onResetAndRegenerate, actionBusy,
 }: {
   bundle: LifeBundle
   avatarId: string
@@ -746,9 +1025,11 @@ function ReadyView({
   onToast: (m: string, t?: 'success' | 'error') => void
   onOpenTimeScale: () => void
   onOpenConsolidated: () => void
+  onOpenEditManifest: () => void
   onToggleGrowth: () => void
   onRestart: () => void
-  actionBusy: '' | 'pause' | 'resume' | 'cancel' | 'restart'
+  onResetAndRegenerate: () => void
+  actionBusy: '' | 'pause' | 'resume' | 'cancel' | 'restart' | 'edit' | 'reset'
 }) {
   const m = bundle.manifest
   if (!m) return null
@@ -811,6 +1092,14 @@ function ReadyView({
           📜 复盘
         </button>
         <button
+          onClick={onOpenEditManifest}
+          disabled={actionBusy === 'edit'}
+          className="pixel-btn-outline-muted py-1 text-[11px] disabled:opacity-50"
+          title="编辑姓名、出生地、家庭背景等 manifest 级设定"
+        >
+          {actionBusy === 'edit' ? '...' : '✎ 设定'}
+        </button>
+        <button
           onClick={onRestart}
           disabled={actionBusy === 'restart'}
           className="pixel-btn-outline-muted py-1 text-[11px] disabled:opacity-50"
@@ -818,9 +1107,222 @@ function ReadyView({
         >
           {actionBusy === 'restart' ? '...' : '↻ 重新生成'}
         </button>
+        <button
+          onClick={onResetAndRegenerate}
+          disabled={actionBusy === 'reset'}
+          className="pixel-btn-outline-muted py-1 text-[11px] disabled:opacity-50"
+          title="清空已生成事件，并按当前人生设定从零重建"
+        >
+          {actionBusy === 'reset' ? '...' : '从零重建'}
+        </button>
       </div>
     </>
   )
+}
+
+// ─── 子组件：manifest 级人生设定编辑器 ───────────────────────────────────────
+function LifeManifestEditor({
+  manifest, saving, onClose, onSubmit,
+}: {
+  manifest: LifeManifest
+  saving: boolean
+  onClose: () => void
+  onSubmit: (patch: LifeManifestUpdate) => void
+}) {
+  const [personaName, setPersonaName] = useState(manifest.personaName)
+  const [gender, setGender] = useState(manifest.gender)
+  const [birthplace, setBirthplace] = useState(manifest.birthplace)
+  const [familyBackground, setFamilyBackground] = useState(manifest.familyBackground)
+  const [relationshipsText, setRelationshipsText] = useState(formatRelationshipsText(manifest.majorRelationships))
+  const [personalityText, setPersonalityText] = useState(formatArcText(manifest.personalityArc))
+  const [professionalText, setProfessionalText] = useState(formatArcText(manifest.professionalSpine))
+  const [error, setError] = useState('')
+
+  const handleSubmit = () => {
+    const parsedRelationships = parseRelationshipsText(relationshipsText)
+    if (typeof parsedRelationships === 'string') {
+      setError(parsedRelationships)
+      return
+    }
+    const parsedPersonality = parseArcText(personalityText, 'shift', '性格主线')
+    if (typeof parsedPersonality === 'string') {
+      setError(parsedPersonality)
+      return
+    }
+    const parsedProfessional = parseArcText(professionalText, 'milestone', '专业骨架')
+    if (typeof parsedProfessional === 'string') {
+      setError(parsedProfessional)
+      return
+    }
+    const nextName = personaName.trim()
+    if (!nextName) {
+      setError('人生经历使用名不能为空')
+      return
+    }
+    setError('')
+    onSubmit({
+      personaName: nextName,
+      realNameConfirmed: nextName !== manifest.displayName,
+      nameSource: nextName === manifest.displayName ? 'avatarName' : 'user',
+      gender: gender.trim() || manifest.gender,
+      birthplace: birthplace.trim() || manifest.birthplace,
+      familyBackground: familyBackground.trim(),
+      majorRelationships: parsedRelationships,
+      personalityArc: parsedPersonality,
+      professionalSpine: parsedProfessional,
+    })
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] animate-fade-in"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="bg-px-surface border-2 border-px-border shadow-pixel-glow w-[82vw] h-[82vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <PanelHeader title="LIFE SETTINGS" subtitle="编辑 manifest 级人生设定" onClose={onClose} />
+        <div className="flex-1 overflow-y-auto p-6 bg-px-surface space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="pixel-label">人生经历使用名</label>
+              <input value={personaName} onChange={e => setPersonaName(e.target.value)} className="pixel-input w-full" />
+            </div>
+            <div>
+              <label className="pixel-label">性别</label>
+              <input value={gender} onChange={e => setGender(e.target.value)} className="pixel-input w-full" />
+            </div>
+            <div>
+              <label className="pixel-label">出生地</label>
+              <input value={birthplace} onChange={e => setBirthplace(e.target.value)} className="pixel-input w-full" />
+            </div>
+          </div>
+
+          <div>
+            <label className="pixel-label">家庭/时代背景</label>
+            <textarea value={familyBackground} onChange={e => setFamilyBackground(e.target.value)} rows={4} className="pixel-input w-full" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <TextEditBlock
+              title="性格主线"
+              hint="可留空；填写时每行一条，如：12岁：开始变得独立"
+              value={personalityText}
+              onChange={setPersonalityText}
+            />
+            <TextEditBlock
+              title="专业骨架"
+              hint="可留空；填写时每行一条，如：18岁：确定专业方向"
+              value={professionalText}
+              onChange={setProfessionalText}
+            />
+            <TextEditBlock
+              title="重要关系"
+              hint="可留空；填写时每行一条，如：导师 王明：给予关键指导"
+              value={relationshipsText}
+              onChange={setRelationshipsText}
+            />
+          </div>
+
+          <div className="border-2 border-px-border-dim bg-px-bg p-3">
+            <p className="font-game text-[11px] text-px-text-dim tracking-wider leading-relaxed">
+              修改只会更新 manifest 级设定；已生成的旧事件不会自动改写。需要让事件跟随新设定时，请保存后点击“从零重建”。
+            </p>
+          </div>
+
+          {error && (
+            <p className="font-game text-[12px] text-px-danger tracking-wider">{error}</p>
+          )}
+        </div>
+        <div className="flex-shrink-0 flex justify-end gap-2 px-6 py-4 border-t-2 border-px-border bg-px-bg">
+          <button onClick={onClose} disabled={saving} className="pixel-btn-outline-muted py-2 disabled:opacity-50">取消</button>
+          <button onClick={handleSubmit} disabled={saving} className="pixel-btn-primary py-2 disabled:opacity-50">
+            {saving ? '...' : '保存设定'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TextEditBlock({
+  title, hint, value, onChange,
+}: {
+  title: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div>
+      <label className="pixel-label">{title}</label>
+      <p className="font-game text-[10px] text-px-text-dim tracking-wider mb-1 leading-relaxed">{hint}</p>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={10}
+        className="pixel-input w-full text-[12px] leading-relaxed"
+      />
+    </div>
+  )
+}
+
+function formatArcText(items: LifeArcItem[]): string {
+  return items
+    .map(item => `${item.age}岁：${item.shift ?? item.milestone ?? ''}`)
+    .join('\n')
+}
+
+function formatRelationshipsText(items: LifeRelationship[]): string {
+  return items
+    .map(item => `${item.role} ${item.name}：${item.description}`)
+    .join('\n')
+}
+
+function parseArcText(value: string, field: 'shift' | 'milestone', label: string): LifeArcItem[] | string {
+  const lines = splitMeaningfulLines(value)
+  if (lines.length === 0) return []
+
+  const items: LifeArcItem[] = []
+  for (const line of lines) {
+    const match = line.match(/^(\d{1,3})\s*岁?\s*[：:，,\-\s]\s*(.+)$/)
+    if (!match) return `${label}请按“12岁：描述”格式填写，或留空。`
+    items.push({
+      age: Number(match[1]),
+      [field]: match[2].trim(),
+    } as LifeArcItem)
+  }
+  return items
+}
+
+function parseRelationshipsText(value: string): LifeRelationship[] {
+  return splitMeaningfulLines(value).map((line) => {
+    const [rawName = line, ...descriptionParts] = line.split(/[：:]/)
+    const description = descriptionParts.join('：').trim() || line
+    const nameParts = rawName.trim().split(/\s+/).filter(Boolean)
+    if (nameParts.length >= 2) {
+      return {
+        role: nameParts[0],
+        name: nameParts.slice(1).join(''),
+        description,
+      }
+    }
+    return {
+      role: '关系人',
+      name: nameParts[0] ?? '未命名',
+      description,
+    }
+  })
+}
+
+function splitMeaningfulLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
 }
 
 // ─── 子组件：完整复盘 consolidated.md 阅读器 ────────────────────────────────

@@ -21,6 +21,7 @@ import { assertSafeSegment, resolveUnderRoot } from '../utils/path-security'
 import type {
   LifeEpisode,
   LifeManifest,
+  LifeManifestUpdate,
   LifeProgress,
   LifeTimelineEntry,
 } from './types'
@@ -355,6 +356,90 @@ export async function deleteLifeEpisode(
   }
   await writeLifeTimeline(avatarsRoot, avatarId, filtered)
   return true
+}
+
+/**
+ * 更新 manifest.json 中允许用户编辑的人生骨架字段。
+ *
+ * 本函数只处理 manifest 级设定，不会自动改写 timeline / episodes；如需让
+ * 旧事件跟随新设定，应调用 resetGeneratedLife 后重新生成。
+ */
+export async function updateLifeManifest(
+  avatarsRoot: string,
+  avatarId: string,
+  patch: LifeManifestUpdate,
+): Promise<LifeManifest> {
+  const current = await readLifeManifest(avatarsRoot, avatarId)
+  if (!current) {
+    throw new Error(`life-store: 分身 ${avatarId} 尚无 manifest.json，无法编辑人生设定`)
+  }
+  const next: LifeManifest = {
+    ...current,
+    ...patch,
+    personaName: normalizeNonEmpty(patch.personaName, current.personaName),
+    displayName: normalizeNonEmpty(patch.displayName, current.displayName ?? current.personaName),
+    realNameConfirmed: patch.realNameConfirmed ?? current.realNameConfirmed ?? false,
+    nameSource: patch.nameSource ?? current.nameSource ?? 'avatarName',
+  }
+  await writeLifeManifest(avatarsRoot, avatarId, next)
+  return next
+}
+
+/**
+ * 清空由生成器派生出来的人生资产，保留 manifest.json 作为下一次重生成的骨架。
+ *
+ * 会删除 timeline.json / progress.json / consolidated.md / episodes/，并将 manifest
+ * 统计字段重置为 pending，便于 generateLife 从 Stage 1 重新构建事件。
+ */
+export async function resetGeneratedLife(
+  avatarsRoot: string,
+  avatarId: string,
+  now: Date = new Date(),
+  options: { preserveManifest?: boolean } = {},
+): Promise<LifeManifest | null> {
+  const manifest = await readLifeManifest(avatarsRoot, avatarId)
+  const lifeDir = getLifeDir(avatarsRoot, avatarId)
+  const preserveManifest = options.preserveManifest !== false
+  if (!preserveManifest) {
+    await removeIfExists(getLifeManifestPath(avatarsRoot, avatarId))
+  }
+  await removeIfExists(getLifeTimelinePath(avatarsRoot, avatarId))
+  await removeIfExists(getLifeProgressPath(avatarsRoot, avatarId))
+  await removeIfExists(getLifeConsolidatedPath(avatarsRoot, avatarId))
+  await fs.promises.rm(getLifeEpisodesDir(avatarsRoot, avatarId), { recursive: true, force: true })
+  await ensureLifeDir(avatarsRoot, avatarId)
+
+  if (!manifest || !preserveManifest) {
+    await fs.promises.mkdir(lifeDir, { recursive: true })
+    return null
+  }
+
+  const next: LifeManifest = {
+    ...manifest,
+    displayName: manifest.displayName ?? manifest.personaName,
+    realNameConfirmed: manifest.realNameConfirmed ?? false,
+    nameSource: manifest.nameSource ?? 'avatarName',
+    totalEpisodes: 0,
+    totalChars: 0,
+    generationStatus: 'pending',
+    lastConsolidatedAt: now.toISOString(),
+    consolidationCounter: 0,
+  }
+  await writeLifeManifest(avatarsRoot, avatarId, next)
+  return next
+}
+
+async function removeIfExists(filePath: string): Promise<void> {
+  try {
+    await fs.promises.unlink(filePath)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== 'ENOENT') throw err
+  }
+}
+
+function normalizeNonEmpty(value: string | undefined, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback
 }
 
 /**

@@ -621,7 +621,7 @@ function App() {
           isCreatingConversation={isCreatingConversation}
         >
           {activeConversationId ? (
-            <div className="flex flex-col h-screen">
+            <div className="flex flex-col h-screen min-w-0">
               {/* ── 更新提示横幅 ── */}
               {updateInfo && (
                 <div className="flex items-center justify-between px-4 py-2 bg-px-primary/10 border-b border-px-primary/30 text-[12px]">
@@ -646,8 +646,8 @@ function App() {
                 </div>
               )}
               {/* ── 顶部操作栏 ── */}
-              <div className="flex items-center justify-between gap-6 px-5 py-2.5 bg-px-surface border-b-2 border-px-border">
-                <div className="min-w-0 flex items-center gap-4">
+              <div className="grid grid-cols-[240px_minmax(0,1fr)] items-center gap-3 px-5 py-2.5 bg-px-surface border-b-2 border-px-border min-w-0">
+                <div className="relative z-30 w-[240px] max-w-[240px]">
                   <AvatarSelector
                     activeAvatarId={activeAvatarId}
                     onSelectAvatar={handleSelectAvatar}
@@ -659,11 +659,11 @@ function App() {
                     qualityRefreshNonce={qualityReportNonce}
                   />
                 </div>
-                <div className="shrink-0 ml-2">
+                <div className="min-w-0 flex justify-end">
                   <PixelNavBar items={navButtons} />
                 </div>
               </div>
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 min-w-0 overflow-hidden">
                 <ChatWindow
                   conversationId={activeConversationId}
                   avatarId={activeAvatarId}

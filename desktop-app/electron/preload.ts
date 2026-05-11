@@ -256,6 +256,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readConsolidated: (avatarId: string) => ipcRenderer.invoke('life:read-consolidated', avatarId),
     deleteEpisode: (avatarId: string, episodeId: string) =>
       ipcRenderer.invoke('life:delete-episode', avatarId, episodeId),
+    updateManifest: (avatarId: string, patch: LifeManifestUpdate) =>
+      ipcRenderer.invoke('life:update-manifest', avatarId, patch),
 
     // Phase 1：生成器控制 + 进度订阅
     startGeneration: (avatarId: string, params: LifeStartGenerationParams) =>
@@ -264,6 +266,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('life:cancel-generation', avatarId),
     retryGeneration: (avatarId: string, params: LifeStartGenerationParams) =>
       ipcRenderer.invoke('life:retry-generation', avatarId, params),
+    resetAndRegenerate: (avatarId: string, params: LifeStartGenerationParams) =>
+      ipcRenderer.invoke('life:reset-and-regenerate', avatarId, params),
     /**
      * 订阅生成进度推送。
      * @returns unsubscribe 函数；调用即移除监听器

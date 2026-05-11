@@ -33,6 +33,8 @@ import {
   readLifeManifest,
   readLifeProgress,
   readLifeTimeline,
+  resetGeneratedLife,
+  updateLifeManifest,
   writeLifeConsolidated,
   writeLifeEpisode,
   writeLifeManifest,
@@ -52,7 +54,10 @@ const AVATAR_ID = 'test-avatar'
 function makeManifest(overrides: Partial<LifeManifest> = {}): LifeManifest {
   return {
     schemaVersion: 1,
+    displayName: '测试分身',
     personaName: '陈默',
+    realNameConfirmed: true,
+    nameSource: 'user',
     birthYear: 1991,
     birthMonth: 8,
     birthDay: 15,
@@ -226,6 +231,63 @@ describe('life-store', () => {
       await ensureLifeDir(tmpRoot, AVATAR_ID)
       const lifeDir = getLifeDir(tmpRoot, AVATAR_ID)
       assert.ok(fs.existsSync(path.join(lifeDir, 'episodes')))
+    })
+  })
+
+  describe('manifest 编辑与重置', () => {
+    it('updateLifeManifest 只更新允许编辑的人生骨架字段', async () => {
+      await writeLifeManifest(tmpRoot, AVATAR_ID, makeManifest())
+
+      const updated = await updateLifeManifest(tmpRoot, AVATAR_ID, {
+        personaName: '小堵',
+        realNameConfirmed: false,
+        nameSource: 'avatarName',
+        birthplace: '江苏南京',
+      })
+
+      assert.equal(updated.personaName, '小堵')
+      assert.equal(updated.realNameConfirmed, false)
+      assert.equal(updated.nameSource, 'avatarName')
+      assert.equal(updated.birthplace, '江苏南京')
+      assert.equal(updated.totalEpisodes, 0)
+    })
+
+    it('resetGeneratedLife 清空派生文件并保留 manifest 设定', async () => {
+      await writeLifeManifest(tmpRoot, AVATAR_ID, makeManifest({ totalEpisodes: 2, generationStatus: 'complete' }))
+      await writeLifeTimeline(tmpRoot, AVATAR_ID, [
+        makeTimelineEntry('ep-0001-a'),
+        makeTimelineEntry('ep-0002-b'),
+      ])
+      await writeLifeEpisode(tmpRoot, AVATAR_ID, { id: 'ep-0001-a', content: 'a' })
+      await writeLifeConsolidated(tmpRoot, AVATAR_ID, 'summary')
+      await writeLifeProgress(tmpRoot, AVATAR_ID, makeProgress({ stage: 'complete', totalEpisodes: 2 }))
+
+      const reset = await resetGeneratedLife(tmpRoot, AVATAR_ID, new Date('2026-05-10T00:00:00Z'))
+
+      assert.ok(reset)
+      assert.equal(reset.personaName, '陈默')
+      assert.equal(reset.totalEpisodes, 0)
+      assert.equal(reset.generationStatus, 'pending')
+      assert.deepEqual(await readLifeTimeline(tmpRoot, AVATAR_ID), [])
+      assert.deepEqual(await listLifeEpisodeIds(tmpRoot, AVATAR_ID), [])
+      assert.equal(await readLifeConsolidated(tmpRoot, AVATAR_ID), '')
+      assert.equal(await readLifeProgress(tmpRoot, AVATAR_ID), null)
+    })
+
+    it('resetGeneratedLife 可选择删除 manifest 以便从 soul.md 重新生成骨架', async () => {
+      await writeLifeManifest(tmpRoot, AVATAR_ID, makeManifest({ totalEpisodes: 2, generationStatus: 'failed' }))
+      await writeLifeProgress(tmpRoot, AVATAR_ID, makeProgress({ stage: 'failed', totalEpisodes: 0 }))
+
+      const reset = await resetGeneratedLife(
+        tmpRoot,
+        AVATAR_ID,
+        new Date('2026-05-10T00:00:00Z'),
+        { preserveManifest: false },
+      )
+
+      assert.equal(reset, null)
+      assert.equal(await readLifeManifest(tmpRoot, AVATAR_ID), null)
+      assert.equal(await readLifeProgress(tmpRoot, AVATAR_ID), null)
     })
   })
 

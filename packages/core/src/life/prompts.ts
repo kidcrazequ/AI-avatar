@@ -23,6 +23,10 @@ import type { LifeArcItem, LifeManifest, LifeTimelineEntry } from './types'
 export interface BuildManifestPromptOptions {
   /** 分身展示名（如「设计大师」），来自 avatar.config.json */
   avatarName: string
+  /** 用户已确认的人生经历使用名；未确认时等于 avatarName */
+  personaName: string
+  /** personaName 是否由用户显式确认 */
+  personaNameConfirmed: boolean
   /** avatar.txt 内容（一句话简介，可空） */
   avatarBrief: string
   /** soul.md 内容节选（前 ~1500 字，避免 prompt 过长） */
@@ -76,6 +80,8 @@ ${opts.soulExcerpt.trim() || '（空）'}
 
 # 用户参数
 - 当前年龄：${opts.currentAge} 岁
+- 人生经历使用名：${opts.personaName}
+- 姓名是否已由用户确认：${opts.personaNameConfirmed ? '是' : '否'}
 - 当前年份：${opts.currentYear}（出生年 ≈ ${birthYear}）
 - 创建时间：${opts.initialAgeBornAt}
 - 时间生长速度：${describeTimeScale(opts.timeScale)}
@@ -89,12 +95,13 @@ ${opts.soulExcerpt.trim() || '（空）'}
 5. 必须给出 3-5 个重要关系人（祖辈/父母/导师/挚友/对手），有姓名 + 1-3 句画像。
 6. familyBackground 控制在 200-500 字。
 7. personalityArc 给 4-6 项；professionalSpine 给 3-5 项。
+8. 如果姓名未由用户确认，不得自行创造真实姓名；所有自述和家庭背景都围绕「${opts.personaName}」展开。
 
 # 输出 JSON Schema（严格遵守）
 
 \`\`\`
 {
-  "personaName": "string（角色名，可与分身名不同；2-6 字）",
+  "personaName": "${opts.personaName}",
   "birthYear": number,
   "birthMonth": number (1-12),
   "birthDay": number (1-28),
@@ -111,7 +118,7 @@ ${opts.soulExcerpt.trim() || '（空）'}
 
 # 重要
 - 你输出的是「骨架」，不是完整传记。具体事件由后续阶段写。
-- personaName 可以是符合年代的中文名（不要英文名 / 网名）。
+- personaName 必须严格输出为「${opts.personaName}」。不要改名，不要新增真实姓名，除非它已经体现在用户确认的人生经历使用名里。
 - birthMonth / birthDay 应该是合理的具体日子（不要 1 月 1 日这种偷懒值）。
 - 直接输出 JSON 对象本身，第一个字符必须是 \`{\`。`
 }

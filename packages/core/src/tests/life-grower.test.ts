@@ -215,7 +215,10 @@ describe('advanceLife - 集成', () => {
   function makeManifest(overrides: Partial<LifeManifest> = {}): LifeManifest {
     return {
       schemaVersion: 1,
+      displayName: '测试分身',
       personaName: '陈默',
+      realNameConfirmed: true,
+      nameSource: 'user',
       birthYear: 1991,
       birthMonth: 8,
       birthDay: 15,

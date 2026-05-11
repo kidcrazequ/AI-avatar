@@ -61,6 +61,7 @@ import type {
   LifeEventCategory,
   LifeFailedEpisode,
   LifeManifest,
+  LifePersonaNameSource,
   LifePipelineStage,
   LifeProgress,
   LifeRelationship,
@@ -92,6 +93,12 @@ export interface LifeUserParams {
   growthEnabled: boolean
   /** 用户在向导填的额外要求（可空） */
   extraHints: string
+  /** 用户确认的人生经历使用名；未提供时使用 avatarName */
+  personaName?: string
+  /** personaName 是否已经过用户确认 */
+  personaNameConfirmed?: boolean
+  /** personaName 来源，默认由 personaNameConfirmed 推导 */
+  nameSource?: LifePersonaNameSource
 }
 
 /** generateLife 全 Pipeline 入参 */
@@ -191,9 +198,15 @@ export async function generateLife(opts: GenerateLifeOptions): Promise<void> {
     // 让已生成的 episodes 和新 manifest 人生骨架严重不一致。已移除该项；
     // 失败重试时按"哪一步失败就从哪一步续跑"的语义走。
     let manifest = await readLifeManifest(opts.avatarsRoot, opts.avatarId)
-    if (manifest === null || progress.stage === 'idle' || progress.stage === 'manifest') {
+    if (manifest === null || progress.stage === 'manifest') {
       progress = await advanceStage(opts, progress, 'manifest', now)
       manifest = await runStage0Manifest(opts, now)
+      await writeLifeManifest(opts.avatarsRoot, opts.avatarId, manifest)
+    } else {
+      manifest = ensureManifestIdentity(manifest, opts.avatarName)
+      if (manifest.generationStatus !== 'generating') {
+        manifest = { ...manifest, generationStatus: 'generating' }
+      }
       await writeLifeManifest(opts.avatarsRoot, opts.avatarId, manifest)
     }
 
@@ -258,9 +271,12 @@ async function runStage0Manifest(
   const soulExcerpt = await readSoulExcerpt(opts.avatarsRoot, opts.avatarId, 1500)
   const todayStr = localDateString(now())
   const currentYear = now().getFullYear()
+  const nameDecision = resolvePersonaName(opts.userParams, opts.avatarName)
 
   const userPrompt = buildManifestPrompt({
     avatarName: opts.avatarName,
+    personaName: nameDecision.personaName,
+    personaNameConfirmed: nameDecision.confirmed,
     avatarBrief,
     soulExcerpt,
     currentAge: opts.userParams.currentAge,
@@ -281,7 +297,10 @@ async function runStage0Manifest(
 
   const manifest: LifeManifest = {
     schemaVersion: 1,
-    personaName: ensureNonEmptyString(parsed.personaName, opts.avatarName),
+    displayName: opts.avatarName,
+    personaName: nameDecision.personaName,
+    realNameConfirmed: nameDecision.confirmed,
+    nameSource: nameDecision.source,
     birthYear: clampInt(parsed.birthYear, 1900, currentYear, currentYear - opts.userParams.currentAge),
     birthMonth: clampInt(parsed.birthMonth, 1, 12, 1),
     birthDay: clampInt(parsed.birthDay, 1, 28, 15),
@@ -304,6 +323,7 @@ async function runStage0Manifest(
     lastConsolidatedAt: now().toISOString(),
     consolidationCounter: 0,
   }
+  validateGeneratedManifestSkeleton(manifest)
   return manifest
 }
 
@@ -740,6 +760,53 @@ function ensureNonEmptyString(value: unknown, fallback: string): string {
   return fallback
 }
 
+function resolvePersonaName(
+  params: LifeUserParams,
+  avatarName: string,
+): { personaName: string; confirmed: boolean; source: LifePersonaNameSource } {
+  const confirmedName = typeof params.personaName === 'string'
+    ? params.personaName.trim()
+    : ''
+  const displayName = avatarName.trim() || '未命名分身'
+  const confirmed = params.personaNameConfirmed === true && confirmedName.length > 0
+  if (!confirmed) {
+    return { personaName: displayName, confirmed: false, source: 'avatarName' }
+  }
+  return {
+    personaName: confirmedName,
+    confirmed: true,
+    source: params.nameSource ?? 'user',
+  }
+}
+
+function ensureManifestIdentity(manifest: LifeManifest, avatarName: string): LifeManifest {
+  return {
+    ...manifest,
+    displayName: manifest.displayName ?? avatarName,
+    realNameConfirmed: manifest.realNameConfirmed ?? false,
+    nameSource: manifest.nameSource ?? 'avatarName',
+  }
+}
+
+function validateGeneratedManifestSkeleton(manifest: LifeManifest): void {
+  const problems: string[] = []
+  if (manifest.familyBackground.trim().length === 0) {
+    problems.push('familyBackground 为空')
+  }
+  if (manifest.personalityArc.length < 4) {
+    problems.push(`personalityArc 需要至少 4 项，实际 ${manifest.personalityArc.length} 项`)
+  }
+  if (manifest.professionalSpine.length < 3) {
+    problems.push(`professionalSpine 需要至少 3 项，实际 ${manifest.professionalSpine.length} 项`)
+  }
+  if (manifest.majorRelationships.length < 3) {
+    problems.push(`majorRelationships 需要至少 3 项，实际 ${manifest.majorRelationships.length} 项`)
+  }
+  if (problems.length > 0) {
+    throw new Error(`Stage 0 manifest: 人生骨架生成失败，${problems.join('；')}。请重试或补充更明确的 soul.md/额外要求。`)
+  }
+}
+
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return fallback
@@ -777,8 +844,10 @@ function normalizeArcItems(value: unknown, key: 'shift' | 'milestone'): LifeArcI
     const age = typeof obj.age === 'number' ? obj.age : Number(obj.age)
     if (!Number.isFinite(age)) continue
     const text = obj[key] ?? obj.shift ?? obj.milestone ?? ''
+    const normalizedText = String(text).trim().slice(0, 80)
+    if (normalizedText.length === 0) continue
     const item: LifeArcItem = { age: Math.round(age) }
-    item[key] = String(text).slice(0, 80)
+    item[key] = normalizedText
     items.push(item)
   }
   return items
@@ -822,12 +891,19 @@ function formatEpisodeId(seq: number, title: string): string {
 async function readAvatarBrief(avatarsRoot: string, avatarId: string): Promise<string> {
   const p = resolveUnderRoot(avatarsRoot, path.join(avatarId, 'avatar.txt'))
   try {
-    return await fs.promises.readFile(p, 'utf-8')
+    return sanitizeAvatarBrief(await fs.promises.readFile(p, 'utf-8'))
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     if (code === 'ENOENT') return ''
     throw err
   }
+}
+
+function sanitizeAvatarBrief(raw: string): string {
+  const trimmed = raw.trim()
+  // `default:*` 是桌面端默认头像标识，不是角色简介，不能进入人生生成 prompt。
+  if (/^default:[A-Za-z0-9_-]+$/.test(trimmed)) return ''
+  return trimmed
 }
 
 async function readSoulExcerpt(avatarsRoot: string, avatarId: string, maxChars: number): Promise<string> {

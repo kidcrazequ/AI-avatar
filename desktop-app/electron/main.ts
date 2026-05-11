@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
 import { DatabaseManager, type McpServerRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
@@ -455,10 +455,12 @@ function createWindow() {
   // 打开 DevTools 会强制 attach 输入 handler + 触发 reflow，事件链才被踹活。
   // backgroundColor 防止 show 之前出现系统默认白底闪烁。
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1280,
-    minHeight: 680,
+    width: 1180,
+    height: 760,
+    minWidth: 960,
+    minHeight: 600,
+    fullscreen: false,
+    kiosk: false,
     icon: iconPath ? nativeImage.createFromPath(iconPath) : undefined,
     show: false,
     backgroundColor: '#0a0a0a',
@@ -1887,6 +1889,15 @@ wrapHandler('life:delete-episode', async (_, avatarId: string, episodeId: string
   return removed
 })
 
+wrapHandler('life:update-manifest', async (_, avatarId: string, patch: LifeManifestUpdate) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const updated = await updateLifeManifest(avatarsPath, avatarId, patch)
+  if (logger) {
+    logger.activity('life:update-manifest', `avatar=${avatarId} persona=${updated.personaName}`)
+  }
+  return updated
+})
+
 // ─── 人生经历（Avatar Life Experience，Phase 1）──────────────────────────────
 //
 // 生成器 IPC：start / cancel / retry。
@@ -1913,6 +1924,12 @@ interface LifeStartGenerationParams {
   extraHints?: string
   /** 分身展示名（用于 prompt） */
   avatarName: string
+  /** 用户确认的人生经历使用名；未提供时默认 avatarName */
+  personaName?: string
+  /** personaName 是否已经用户确认 */
+  personaNameConfirmed?: boolean
+  /** personaName 来源 */
+  nameSource?: 'avatarName' | 'user' | 'aiSuggested'
 }
 
 /** 每个 avatarId 对应一个 AbortController；start 时新建，cancel/retry 时取消 */
@@ -1963,6 +1980,9 @@ function spawnLifeGeneration(avatarId: string, params: LifeStartGenerationParams
     timeScale: params.timeScale,
     growthEnabled: params.growthEnabled !== false,
     extraHints: params.extraHints ?? '',
+    personaName: params.personaName,
+    personaNameConfirmed: params.personaNameConfirmed,
+    nameSource: params.nameSource,
   }
 
   const ac = new AbortController()
@@ -2039,6 +2059,23 @@ wrapHandler('life:retry-generation', async (_, avatarId: string, params: LifeSta
     // 让 spawn 的 finally 完成清理后再启动新的
     await new Promise<void>((resolve) => setImmediate(resolve))
   }
+  return spawnLifeGeneration(avatarId, params)
+})
+
+/**
+ * life:reset-and-regenerate: 清空 timeline/episodes/consolidated/progress/manifest，
+ * 然后重新启动生成，让 Stage 0 基于 soul.md 重新生成人生骨架。
+ */
+wrapHandler('life:reset-and-regenerate', async (_, avatarId: string, params: LifeStartGenerationParams) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const existing = lifeAbortControllers.get(avatarId)
+  if (existing) {
+    existing.abort()
+    lifeAbortControllers.delete(avatarId)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+  }
+  await resetGeneratedLife(avatarsPath, avatarId, new Date(), { preserveManifest: false })
+  if (logger) logger.activity('life:reset-and-regenerate', `avatar=${avatarId}`)
   return spawnLifeGeneration(avatarId, params)
 })
 

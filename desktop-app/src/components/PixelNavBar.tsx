@@ -4,6 +4,8 @@
  * @date 2026-04-10
  */
 
+import { useEffect, useRef, useState } from 'react'
+
 interface NavItem {
   label: string
   icon: string
@@ -17,25 +19,78 @@ interface PixelNavBarProps {
   items: NavItem[]
 }
 
+const PRIMARY_NAV_KEYS = new Set(['soul', 'skills', 'docs', 'mem', 'life', 'user'])
+
 export default function PixelNavBar({ items }: PixelNavBarProps) {
-  const mainItems = items.filter(i => i.key !== 'set')
-  const utilItems = items.filter(i => i.key === 'set')
+  const [isMoreOpen, setIsMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+  const primaryItems = items.filter(item => PRIMARY_NAV_KEYS.has(item.key))
+  const overflowItems = items.filter(item => !PRIMARY_NAV_KEYS.has(item.key))
+  const moreActive = overflowItems.some(item => item.active)
+
+  useEffect(() => {
+    if (!isMoreOpen) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (!moreRef.current?.contains(event.target)) {
+        setIsMoreOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [isMoreOpen])
 
   return (
-    <nav className="flex items-center" role="tablist">
-      <div className="flex items-center">
-        {mainItems.map(item => (
+    <nav className="pixel-nav-bar" aria-label="分身工作区导航">
+      <div className="pixel-nav-primary">
+        {primaryItems.map(item => (
           <NavTab key={item.key} item={item} />
         ))}
       </div>
 
-      {utilItems.length > 0 && (
-        <>
+      {overflowItems.length > 0 && (
+        <div ref={moreRef} className="pixel-nav-more">
           <span className="pixel-nav-sep" aria-hidden="true" />
-          {utilItems.map(item => (
-            <NavTab key={item.key} item={item} />
-          ))}
-        </>
+          <button
+            type="button"
+            className={`pixel-nav-tab pixel-nav-more-trigger ${moreActive ? 'pixel-nav-tab--active' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={isMoreOpen}
+            onClick={() => setIsMoreOpen(open => !open)}
+          >
+            {moreActive && (
+              <span className="pixel-nav-cursor" aria-hidden="true">►</span>
+            )}
+            <span className="pixel-nav-icon" aria-hidden="true">▣</span>
+            <span className="pixel-nav-label">更多</span>
+          </button>
+          {isMoreOpen && (
+            <div className="pixel-nav-more-menu" role="menu">
+              {overflowItems.map(item => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  className={`pixel-nav-menu-item ${item.active ? 'pixel-nav-menu-item--active' : ''}`}
+                  onClick={() => {
+                    item.onClick()
+                    setIsMoreOpen(false)
+                  }}
+                >
+                  <span className="pixel-nav-icon" aria-hidden="true">{item.icon}</span>
+                  <span className="pixel-nav-label">{item.label}</span>
+                  {item.badge !== null && item.badge !== undefined && item.badge > 0 && (
+                    <span className="pixel-nav-badge">{item.badge}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </nav>
   )

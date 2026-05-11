@@ -68,6 +68,8 @@ export default function CreateAvatarWizard({ chatModel, creationModel, onClose, 
   const [lifeAge, setLifeAge] = useState(30)
   const [lifeTimeScale, setLifeTimeScale] = useState<LifeTimeScale>(1)
   const [lifeExtraHints, setLifeExtraHints] = useState('')
+  const [lifeNameMode, setLifeNameMode] = useState<'avatar' | 'custom'>('avatar')
+  const [lifePersonaName, setLifePersonaName] = useState('')
   const mountedRef = useRef(true)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -184,8 +186,14 @@ ${skillInput}`
    * 与 plan 0 决策表"生成失败不阻塞分身使用"对齐。
    */
   const triggerLifeGeneration = (avatarId: string) => {
+    const confirmedPersonaName = lifeNameMode === 'custom'
+      ? lifePersonaName.trim()
+      : avatarName.trim()
     const params: LifeStartGenerationParams = {
       avatarName,
+      personaName: confirmedPersonaName,
+      personaNameConfirmed: lifeNameMode === 'custom',
+      nameSource: lifeNameMode === 'custom' ? 'user' : 'avatarName',
       currentAge: lifeAge,
       timeScale: lifeTimeScale,
       growthEnabled: lifeTimeScale > 0,
@@ -251,7 +259,9 @@ ${skillInput}`
       case 4:
         // 人生剧本：未启用直接放行；启用则校验年龄
         if (!lifeEnabled) return true
-        return Number.isFinite(lifeAge) && lifeAge >= 3 && lifeAge <= 65
+        if (!Number.isFinite(lifeAge) || lifeAge < 3 || lifeAge > 65) return false
+        if (lifeNameMode === 'custom' && lifePersonaName.trim().length === 0) return false
+        return true
       default: return true
     }
   }
@@ -490,6 +500,11 @@ ${skillInput}`
               setLifeTimeScale={setLifeTimeScale}
               lifeExtraHints={lifeExtraHints}
               setLifeExtraHints={setLifeExtraHints}
+              lifeNameMode={lifeNameMode}
+              setLifeNameMode={setLifeNameMode}
+              lifePersonaName={lifePersonaName}
+              setLifePersonaName={setLifePersonaName}
+              avatarName={avatarName}
               hasCreationApiKey={Boolean(creationModel.apiKey)}
               onOpenSettings={onOpenSettings ? () => {
                 // 先关闭向导（避免设置面板被向导挡住），再切到设置；
@@ -515,6 +530,9 @@ ${skillInput}`
                   ['人格定义', `${soulContent.length} 字`],
                   ['知识文件', `${knowledgeFiles.length} 个`],
                   ['自定义技能', `${customSkills.length} 个`],
+                  ['人生姓名', lifeEnabled
+                    ? (lifeNameMode === 'custom' ? lifePersonaName.trim() || '（未填写）' : avatarName)
+                    : '（未启用）'],
                   ['人生剧本', lifeEnabled
                     ? `${lifeAge} 岁起 · ${lifeTimeScale === 0 ? '冻结' : `${lifeTimeScale}× ${lifeTimeScale === 1 ? '真实同步' : '加速'}`}`
                     : '（未启用）'],

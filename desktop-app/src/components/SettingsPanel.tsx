@@ -917,6 +917,20 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     }
   }
 
+  const persistDoubaoAsrSettings = async (): Promise<string> => {
+    const endpoint = doubaoAsrEndpoint.trim() || 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel'
+    if (!endpoint.startsWith('wss://')) {
+      throw new Error('endpoint 必须使用 wss://')
+    }
+    await Promise.all([
+      window.electronAPI.setSetting('doubao_asr_api_key', doubaoAsrApiKey.trim()),
+      window.electronAPI.setSetting('doubao_asr_resource_id', doubaoAsrResourceId.trim()),
+      window.electronAPI.setSetting('doubao_asr_endpoint', endpoint),
+      window.electronAPI.setSetting('doubao_asr_model', doubaoAsrModel.trim() || 'bigmodel'),
+    ])
+    return endpoint
+  }
+
   const handleSaveIntegrations = async () => {
     try {
       await Promise.all([
@@ -924,27 +938,25 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         // 九层重构 #16 generate_image：DashScope API Key
         window.electronAPI.setSetting('image_api_key', imageApiKey.trim()),
       ])
+      const endpoint = await persistDoubaoAsrSettings()
+      setDoubaoAsrEndpoint(endpoint)
+      setDoubaoAsrStatusMsg('SAVED')
       setIntegrationsStatusMsg('SAVED')
+      clearTimeout(doubaoAsrTimerRef.current)
       clearTimeout(integrationsTimerRef.current)
+      doubaoAsrTimerRef.current = setTimeout(() => setDoubaoAsrStatusMsg(''), 2000)
       integrationsTimerRef.current = setTimeout(() => setIntegrationsStatusMsg(''), 2000)
     } catch (error) {
-      setIntegrationsStatusMsg(`FAILED - ${error instanceof Error ? error.message : String(error)}`)
+      const msg = error instanceof Error ? error.message : String(error)
+      const status = msg.includes('wss://') ? `INVALID — ${msg}` : `FAILED - ${msg}`
+      setIntegrationsStatusMsg(status)
+      setDoubaoAsrStatusMsg(status)
     }
   }
 
   const handleSaveDoubaoAsrSettings = async () => {
-    const endpoint = doubaoAsrEndpoint.trim() || 'wss://openspeech.bytedance.com/api/v3/sauc/bigmodel'
-    if (!endpoint.startsWith('wss://')) {
-      setDoubaoAsrStatusMsg('INVALID — endpoint 必须使用 wss://')
-      return
-    }
     try {
-      await Promise.all([
-        window.electronAPI.setSetting('doubao_asr_api_key', doubaoAsrApiKey.trim()),
-        window.electronAPI.setSetting('doubao_asr_resource_id', doubaoAsrResourceId.trim()),
-        window.electronAPI.setSetting('doubao_asr_endpoint', endpoint),
-        window.electronAPI.setSetting('doubao_asr_model', doubaoAsrModel.trim() || 'bigmodel'),
-      ])
+      const endpoint = await persistDoubaoAsrSettings()
       setDoubaoAsrEndpoint(endpoint)
       setDoubaoAsrStatusMsg('SAVED')
       clearTimeout(doubaoAsrTimerRef.current)
@@ -2922,7 +2934,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                 </span>
                 <div className="flex gap-2">
                   <button onClick={onClose} className="pixel-btn-ghost">CANCEL</button>
-                  <button onClick={handleSaveIntegrations} className="pixel-btn-primary">SAVE</button>
+                  <button onClick={handleSaveIntegrations} className="pixel-btn-primary">SAVE ALL</button>
                 </div>
               </div>
             </>

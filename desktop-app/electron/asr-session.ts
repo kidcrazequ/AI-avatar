@@ -93,7 +93,8 @@ export class DoubaoAsrSession {
   private readonly onEnd?: (session: DoubaoAsrSession, payload: DoubaoAsrEndPayload) => void
   private readonly requestId: string
   private socket: DoubaoAsrSocketLike | null = null
-  private sequence = 1
+  // 豆包服务端会把 full client request 计为 sequence=1；首个 audio-only 包必须从 2 开始。
+  private sequence = 2
   private ended = false
   private closeTimer: ReturnType<typeof setTimeout> | null = null
 

@@ -1581,8 +1581,16 @@
      导航标签
      ═══════════════════════════════════════ */
 
+  .pixel-nav-bar {
+    @apply relative z-10 flex items-center justify-end w-full min-w-0;
+  }
+
+  .pixel-nav-primary {
+    @apply flex items-center justify-end min-w-0;
+  }
+
   .pixel-nav-tab {
-    @apply relative flex items-center gap-2 px-4 py-2.5
+    @apply relative flex items-center gap-2 px-3 py-2.5
            font-game text-[14px] tracking-wider whitespace-nowrap
            text-px-text-dim
            select-none cursor-pointer;
@@ -1629,12 +1637,50 @@
   }
 
   .pixel-nav-sep {
-    @apply block w-[2px] h-4 mx-2;
+    @apply block w-[2px] h-4 mx-1.5;
     background: repeating-linear-gradient(
       180deg,
       var(--px-border) 0px, var(--px-border) 2px,
       transparent 2px, transparent 4px
     );
+  }
+
+  .pixel-nav-more {
+    @apply relative flex items-center flex-shrink-0;
+  }
+
+  .pixel-nav-more-trigger {
+    @apply bg-transparent;
+  }
+
+  .pixel-nav-more-menu {
+    @apply absolute right-0 top-full mt-2 w-36
+           bg-px-surface border-2 border-px-border shadow-pixel-glow
+           p-1 z-50 animate-fade-in;
+  }
+
+  .pixel-nav-menu-item {
+    @apply relative w-full flex items-center gap-2 px-3 py-2
+           font-game text-[13px] tracking-wider text-px-text-dim
+           hover:text-px-text hover:bg-px-hover
+           select-none cursor-pointer;
+  }
+
+  .pixel-nav-menu-item--active {
+    @apply text-px-primary bg-px-primary/10;
+    text-shadow: 0 0 8px var(--px-glow-strong);
+  }
+
+  @media (max-width: 1180px) {
+    .pixel-nav-tab {
+      @apply px-2.5 gap-1.5 text-[13px];
+    }
+  }
+
+  @media (max-width: 1040px) {
+    .pixel-nav-primary .pixel-nav-icon {
+      @apply hidden;
+    }
   }
 }
 

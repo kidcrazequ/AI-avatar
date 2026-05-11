@@ -11,7 +11,7 @@
  *       根据 currentAgeMonths 在已生成事件最后插入 ┄┄ NOW ┄┄ 分隔线；
  *       下方画一个虚线段表示"未来还会生长"。
  *   - 选中态：高亮蓝色边框 + 左侧粗指示条。
- *   - 容器自身可滚动（overflow-y-auto），事件多时不撑爆面板。
+ *   - 仅事件列表滚动，标题与 LEGEND 固定在时间轴上下，避免 sticky 覆盖列表。
  *
  * @author zhi.qu
  * @date 2026-05-09
@@ -88,14 +88,11 @@ export default function LifeTimeline({
 
   return (
     <div
-      ref={containerRef}
-      // h-full + min-h-0 + w-full：让本组件填满父 flex 容器的高度上限，
-      // 否则 overflow-y-auto 永远不触发（flex 子元素默认 min-height:auto 会撑开父容器，
-      // 导致 footer LEGEND 与事件列表重叠）。
-      className="flex flex-col h-full min-h-0 w-full overflow-y-auto bg-px-bg border-r-2 border-px-border"
+      // h-full + min-h-0 + overflow-hidden：让中间事件列表接管滚动，避免上下 sticky 区域覆盖内容。
+      className="flex flex-col h-full min-h-0 w-full overflow-hidden bg-px-bg border-r-2 border-px-border"
     >
       {/* 标题 */}
-      <div className="flex-shrink-0 px-3 py-3 border-b-2 border-px-border-dim sticky top-0 bg-px-bg z-10">
+      <div className="flex-shrink-0 px-3 py-3 border-b-2 border-px-border-dim bg-px-bg">
         <div className="font-game text-[12px] text-px-primary tracking-widest">TIMELINE</div>
         <div className="font-game text-[11px] text-px-text-dim tracking-wider mt-1">
           {sorted.length} 个事件
@@ -103,7 +100,7 @@ export default function LifeTimeline({
       </div>
 
       {/* 时间轴主体 */}
-      <div className="relative px-3 py-3">
+      <div ref={containerRef} className="relative flex-1 min-h-0 overflow-y-auto px-3 py-3">
         {/* 左侧竖线（贯穿） */}
         <div
           className="absolute left-[18px] top-3 bottom-3 w-[2px] bg-px-border-dim"
@@ -202,7 +199,7 @@ export default function LifeTimeline({
       </div>
 
       {/* 图例 */}
-      <div className="flex-shrink-0 px-3 py-3 border-t-2 border-px-border-dim sticky bottom-0 bg-px-bg">
+      <div className="flex-shrink-0 px-3 py-3 border-t-2 border-px-border-dim bg-px-bg">
         <div className="font-game text-[10px] text-px-text-dim tracking-wider mb-2">LEGEND</div>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">

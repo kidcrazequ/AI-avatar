@@ -28,11 +28,11 @@ import type {
  * 全局扫描 `knowledge/<path>.md`：
  * - `knowledge/` 前缀固定字面量
  * - `(?!_excel\/)` 负向先行断言，排除 `knowledge/_excel/` 路径
- * - `([^,，;；\s\]#]+\.md)` 捕获相对路径，字符类排除半角逗号 / 全角逗号 /
- *   半角分号 / 全角分号 / 任意空白 / `]` / `#`，确保命中以 `.md` 结尾的最长合法段
+ * - `([^,，、;；\s\]#]+\.md)` 捕获相对路径，字符类排除半角逗号 / 全角逗号 /
+ *   顿号 / 半角分号 / 全角分号 / 任意空白 / `]` / `#`，确保命中以 `.md` 结尾的最长合法段
  * - 全局 `g` flag，配合 `matchAll` 一次拿到 anchor 里所有命中
  */
-const MD_PATH_GLOBAL_REGEX = /knowledge\/(?!_excel\/)([^,，;；\s\]#]+\.md)/g
+const MD_PATH_GLOBAL_REGEX = /knowledge\/(?!_excel\/)([^,，、;；\s\]#]+\.md)/g
 
 /**
  * LRU 上限：覆盖典型一次会话中所有引用，超过则按插入顺序淘汰最早项。

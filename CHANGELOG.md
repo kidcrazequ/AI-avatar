@@ -2,6 +2,70 @@
 
 ## Unreleased
 
+## v0.12.1 (2026-05-11)
+
+> Life 模块完善 + UI 优化的聚焦补丁版。核心是「**人生姓名三态体系**」，禁止 AI 在用户未确认前自行编造真实姓名；同时新增骨架编辑 / 重新生成能力，与 Stage 0 质量硬校验。
+
+### 新功能
+
+#### 人生姓名三态体系（防 AI 自行编造真实姓名）
+
+- **`packages/core/src/life/types.ts`** — `LifeManifest` 引入 4 个新字段：
+  - `displayName` — 分身展示名（来自 `avatar.config.json` / 创建向导）
+  - `personaName` — 人生经历使用名（**未获用户确认时必须等于 displayName**）
+  - `realNameConfirmed: boolean` — 用户是否已显式确认真名
+  - `nameSource: LifePersonaNameSource` — `'avatarName' | 'user' | 'aiSuggested'` 三态来源
+- **`packages/core/src/life/generator.ts`** — `resolvePersonaName()` 在 Stage 0 决定 personaName，未确认时强制回退到 displayName；`ensureManifestIdentity()` 兼容 v0.11/v0.12.0 旧 manifest 在 Stage 1+ 续跑时补齐三态字段
+- **`packages/core/src/life/prompts.ts`** — Stage 0 manifest prompt 增加：
+  - 上下文段：`人生经历使用名` + `姓名是否已由用户确认`
+  - 硬规则 #8：「如果姓名未由用户确认，不得自行创造真实姓名；所有自述和家庭背景都围绕「{personaName}」展开」
+  - JSON Schema：`personaName` 字段值固定为传入的 personaName，重要提示禁止改名
+- **`desktop-app/src/components/wizard/LifeScriptStep.tsx`** — 创建向导第 5 步「人生剧本」新增姓名输入项 + 「使用分身名」/「自定义姓名」切换 + 确认勾选
+- **`desktop-app/src/components/LifePanel.tsx`** — `handleStartGeneration` / `handleRetry` 全链路传递 `personaName / personaNameConfirmed / nameSource`
+
+#### Manifest 编辑 + 重新生成
+
+- **`packages/core/src/life/store.ts`** — 新增 2 个 API：
+  - `updateLifeManifest(avatarsRoot, avatarId, patch)` — 用户在 UI 编辑骨架字段（displayName / personaName / gender / birthplace / familyBackground / personalityArc / professionalSpine / majorRelationships），不动 timeline / episodes
+  - `resetGeneratedLife(avatarsRoot, avatarId, now, options)` — 清空 timeline / progress / consolidated / episodes/，**保留 manifest** 作为下一次重生成的骨架；统计字段重置为 pending
+- **`packages/core/src/life/types.ts`** — `LifeManifestUpdate` 新类型，明确允许 UI 编辑的字段白名单（生成器统计字段不暴露）
+- **`packages/core/src/index.ts`** — 公开导出 `updateLifeManifest` / `resetGeneratedLife` / `LifePersonaNameSource` / `LifeManifestUpdate`
+- **`desktop-app/electron/main.ts`** — 新增 IPC `life:update-manifest` / `life:reset-and-regenerate`，配套 `preload.ts` + `global.d.ts` 暴露 API
+- **`desktop-app/src/components/LifePanel.tsx`** — 新增「编辑骨架」弹窗与「重置并重新生成」确认弹窗：
+  - **智能 retry**：如果 `completedEpisodes === 0`（从未生成成功），调用 `resetAndRegenerate` 清空失败骨架；否则走断点续传 `retryGeneration`
+  - 骨架编辑界面允许微调 personaName / familyBackground / arc 等设定，保存后下次重生成基于新设定
+
+### 修复
+
+- **`packages/core/src/life/generator.ts`** — Stage 0 manifest 质量硬校验 `validateGeneratedManifestSkeleton()`：
+  - `familyBackground` 不能为空
+  - `personalityArc` ≥ 4 项 / `professionalSpine` ≥ 3 项 / `majorRelationships` ≥ 3 项
+  - 任一不达标抛出明确错误信息，让用户重试或补充更明确的 soul.md / 额外要求（之前 LLM 偷懒输出空骨架时会无声写入 manifest，导致 Stage 1 outline 失败原因不清晰）
+- **`packages/core/src/life/generator.ts`** — `sanitizeAvatarBrief()` 过滤桌面端默认头像哨兵字符串（如 `default:avatar-007`）；之前会被当作角色简介塞进 prompt，污染 manifest 生成
+- **`packages/core/src/life/generator.ts`** — `normalizeArcItems()` 对 trim 后为空的文本项直接跳过；之前会写入 `{ age: N, shift: '' }` 造成时间轴展示空白条目
+- **`packages/core/src/life/generator.ts`** — manifest 续跑逻辑收紧：之前 `progress.stage === 'idle'` 也会重跑 Stage 0，可能让已生成的 episodes 与新 manifest 严重不一致；现在仅在 `manifest === null` 或显式 `stage === 'manifest'` 时才重跑
+- **`desktop-app/src/services/raw-file-resolver.ts`** + 测试 — 原始文件解析微调
+
+### UI 改进
+
+- **`desktop-app/src/components/LifePanel.tsx`** (+528 行) — 编辑骨架 / 重置确认 / 姓名展示等大量 UI 完善
+- **`desktop-app/src/components/PixelNavBar.tsx`** (+77 行) — 像素风导航栏视觉与交互优化
+- **`desktop-app/src/components/SettingsPanel.tsx`** (+38 行) — 设置面板调整
+- **`desktop-app/src/components/Sidebar.tsx`** / **`App.tsx`** / **`CreateAvatarWizard.tsx`** / **`life/LifeTimeline.tsx`** — 配套 props / 状态联动
+- **`desktop-app/src/index.css`** (+50 行) — 像素风样式补充
+
+### 测试
+
+- **`packages/core/src/tests/life-store.test.ts`** (+62 行) — 新增 `updateLifeManifest` / `resetGeneratedLife` 双向校验
+- **`packages/core/src/tests/life-generator.test.ts`** (+118 行) — 新增 personaName 三态分支 / Stage 0 质量校验抛错 / sanitizeAvatarBrief / normalizeArcItems 空文本过滤
+- **`packages/core/src/tests/life-forgetter.test.ts`** / **`life-grower.test.ts`** — 跟随 manifest 三态字段的小幅适配
+- **`desktop-app/electron/asr-session.test.ts`** + **`asr-session.ts`** — ASR 会话生命周期微调
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.12.0 → 0.12.1
+- **`expert-packs/finance-expert/avatar.txt`** — 简介微调
+
 ## v0.12.0 (2026-05-10)
 
 > **重大里程碑**：本次发布跨越 ISS #2 / #3 / #4 / #5.5 / #7 / #8 / #11 / #13 / #14 / #15 / #16 共 11 个迭代单（指挥官-W19 周期），并新增 ASR 流式语音、Anthropic 兼容 Proxy、LangBot 集成、专家分身包、复合知识检索等多项 P0+ 能力。版本号 0.11.0 → 0.12.0。

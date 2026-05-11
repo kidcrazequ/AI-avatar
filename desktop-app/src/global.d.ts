@@ -618,6 +618,8 @@ interface ElectronAPI {
     readConsolidated: (avatarId: string) => Promise<string>
     /** 删除单个 episode 的 .md 并从 timeline 移除条目，返回是否实际从 timeline 移除 */
     deleteEpisode: (avatarId: string, episodeId: string) => Promise<boolean>
+    /** 更新 manifest.json 中可编辑的人生设定 */
+    updateManifest: (avatarId: string, patch: LifeManifestUpdate) => Promise<LifeManifest>
 
     // ─── Phase 1：生成器控制 + 进度订阅 ────────────────────────────────────
     /**
@@ -630,6 +632,8 @@ interface ElectronAPI {
     cancelGeneration: (avatarId: string) => Promise<LifeCancelGenerationResult>
     /** 取消（如有）+ 重新启动 generateLife（内部按 progress.json 断点续传） */
     retryGeneration: (avatarId: string, params: LifeStartGenerationParams) => Promise<LifeStartGenerationResult>
+    /** 清空已生成事件并基于现有 manifest 从零重建 */
+    resetAndRegenerate: (avatarId: string, params: LifeStartGenerationParams) => Promise<LifeStartGenerationResult>
     /**
      * 订阅 'life:progress' 事件。
      * @returns unsubscribe 函数
@@ -1300,7 +1304,10 @@ interface LifeRelationship {
 /** 人生骨架 manifest.json 的完整 schema（与 plan 1.1 节一致） */
 interface LifeManifest {
   schemaVersion: number
+  displayName: string
   personaName: string
+  realNameConfirmed: boolean
+  nameSource: LifePersonaNameSource
   birthYear: number
   birthMonth: number
   birthDay: number
@@ -1322,6 +1329,21 @@ interface LifeManifest {
   generationStatus: LifeGenerationStatus
   lastConsolidatedAt: string
   consolidationCounter: number
+}
+
+type LifePersonaNameSource = 'avatarName' | 'user' | 'aiSuggested'
+
+interface LifeManifestUpdate {
+  displayName?: string
+  personaName?: string
+  realNameConfirmed?: boolean
+  nameSource?: LifePersonaNameSource
+  gender?: string
+  birthplace?: string
+  familyBackground?: string
+  personalityArc?: LifeArcItem[]
+  professionalSpine?: LifeArcItem[]
+  majorRelationships?: LifeRelationship[]
 }
 
 /** 时间轴单项 timeline.json[i] 的 schema（与 plan 1.2 节一致） */
@@ -1375,6 +1397,12 @@ interface LifeStartGenerationParams {
   extraHints?: string
   /** 分身展示名（用于 prompt） */
   avatarName: string
+  /** 用户确认的人生经历使用名；未提供时默认 avatarName */
+  personaName?: string
+  /** personaName 是否已经用户确认 */
+  personaNameConfirmed?: boolean
+  /** personaName 来源 */
+  nameSource?: LifePersonaNameSource
 }
 
 /**

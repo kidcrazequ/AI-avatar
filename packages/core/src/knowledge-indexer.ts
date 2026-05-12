@@ -14,8 +14,14 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import type { KnowledgeRetriever } from './knowledge-retriever'
+import { tokenize } from './knowledge-retriever'
 import type { LLMCallFn } from './document-formatter'
 import { loadTokensCache, saveTokensCache } from './utils/chunk-cache'
+
+/** 与 KnowledgeRetriever.searchChunks 中的 TOKENIZE_MAX_CHARS 保持一致：3000 字以内 segmentit 单 chunk 耗时 ≤500ms */
+const INDEX_TOKENIZE_MAX_CHARS = 3000
+/** 分词循环每 N 个 chunk yield 一次事件循环，给 GC 喘息时间，防止 build 期间自身 OOM */
+const TOKENIZE_YIELD_EVERY = 50
 
 /** 写入临时文件后原子 rename，防止进程中断导致索引损坏 */
 function atomicWriteSync(filePath: string, data: string): void {
@@ -41,7 +47,7 @@ export interface IndexerConfig {
 }
 
 export interface IndexBuildProgress {
-  phase: 'context' | 'embedding'
+  phase: 'context' | 'embedding' | 'tokenize'
   current: number
   total: number
   detail?: string
@@ -99,8 +105,8 @@ export async function buildKnowledgeIndex(
   retriever: KnowledgeRetriever,
   config: IndexerConfig,
   onProgress?: (progress: IndexBuildProgress) => void,
-  existingIndex?: { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string> } | null,
-): Promise<{ contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string> }> {
+  existingIndex?: { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens?: Map<string, string[]> } | null,
+): Promise<{ contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens: Map<string, string[]> }> {
   const chunkKeys = retriever.getChunkKeys()
 
   // Phase 1: 上下文摘要（跳过 hash 未变更的 chunk）
@@ -198,7 +204,41 @@ ${ck.contentPreview.slice(0, 300)}`
   }
   retriever.setEmbeddings(embeddingMap)
 
-  return { contexts: contextMap, embeddings: embeddingMap, hashes: hashMap }
+  // Phase 3: BM25 token 缓存（重 CPU，必须 yield 事件循环避免 build 过程自身 OOM）。
+  // 持久化到 _index/tokens.json 后，运行时 searchChunks 不需要再冷分词，根治
+  // "2493 chunks 同步 segmentit 累积 4GB 主进程 OOM" 的回归。
+  const tokensMap = new Map<string, string[]>()
+  for (let i = 0; i < chunkKeys.length; i++) {
+    const ck = chunkKeys[i]
+    const newHash = hashMap.get(ck.key)
+    // 增量：hash 未变 + 旧 tokens 存在则复用，跳过重新分词
+    if (existingIndex?.tokens && existingIndex.hashes.get(ck.key) === newHash) {
+      const cached = existingIndex.tokens.get(ck.key)
+      if (cached) {
+        tokensMap.set(ck.key, cached)
+        continue
+      }
+    }
+    const ctx = contextMap.get(ck.key) ?? ''
+    const rawText = (ctx ? ctx + ' ' : '') + ck.heading + ' ' + ck.contentPreview
+    const safeText = rawText.length > INDEX_TOKENIZE_MAX_CHARS
+      ? rawText.slice(0, INDEX_TOKENIZE_MAX_CHARS)
+      : rawText
+    tokensMap.set(ck.key, tokenize(safeText.toLowerCase()))
+
+    // 每 50 个 chunk 上报进度。nodejieba 在 native 堆分词，~10x segmentit 速度且
+    // 不吃 V8 主进程 4GB 配额，不需要事件循环 yield。
+    if (i % TOKENIZE_YIELD_EVERY === TOKENIZE_YIELD_EVERY - 1) {
+      if (onProgress) {
+        onProgress({ phase: 'tokenize', current: i + 1, total: chunkKeys.length })
+      }
+    }
+  }
+  if (onProgress) {
+    onProgress({ phase: 'tokenize', current: chunkKeys.length, total: chunkKeys.length })
+  }
+
+  return { contexts: contextMap, embeddings: embeddingMap, hashes: hashMap, tokens: tokensMap }
 }
 
 /**

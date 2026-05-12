@@ -702,6 +702,7 @@ app.whenReady().then(async () => {
     app.quit()
     return
   }
+
   createWindow()
   registerMediaPermissionHandler()
   if (mainWindow) {
@@ -782,6 +783,7 @@ app.whenReady().then(async () => {
   performDatabaseBackup().catch(err => {
     console.warn('[Main] 启动时备份失败:', err instanceof Error ? err.message : String(err))
   })
+
   backupIntervalId = setInterval(() => {
     performDatabaseBackup().catch(err => {
       console.warn('[Main] 定时备份失败:', err instanceof Error ? err.message : String(err))
@@ -3306,14 +3308,14 @@ wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string,
 
   // 加载已有索引用于增量更新，未存在时全量构建
   const existingIndex = loadIndex(knowledgePath)
-  const { contexts, embeddings, hashes } = await buildKnowledgeIndex(
+  const { contexts, embeddings, hashes, tokens } = await buildKnowledgeIndex(
     retriever,
     { callLLM, callEmbedding },
     undefined,
     existingIndex,
   )
 
-  saveIndex(knowledgePath, contexts, embeddings, hashes)
+  saveIndex(knowledgePath, contexts, embeddings, hashes, tokens)
   toolRouter.invalidateRetriever(avatarId)
 
   return { contextCount: contexts.size, embeddingCount: embeddings.size }
@@ -3901,7 +3903,7 @@ async function buildIndexAfterBatchImport(avatarId: string): Promise<void> {
       undefined,
       existingIndex,
     )
-    saveIndex(knowledgePath, idxResult.contexts, idxResult.embeddings, idxResult.hashes)
+    saveIndex(knowledgePath, idxResult.contexts, idxResult.embeddings, idxResult.hashes, idxResult.tokens)
     toolRouter.invalidateRetriever(avatarId)
   } catch (err) {
     if (logger) logger.error('batch-import-build-index', err instanceof Error ? err : new Error(String(err)))
@@ -4419,7 +4421,7 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
         undefined,
         existingIndex,
       )
-      saveIndex(knowledgePath, idxResult.contexts, idxResult.embeddings, idxResult.hashes)
+      saveIndex(knowledgePath, idxResult.contexts, idxResult.embeddings, idxResult.hashes, idxResult.tokens)
       toolRouter.invalidateRetriever(avatarId)
       indexBuilt = true
       contextCount = idxResult.contexts.size

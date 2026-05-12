@@ -185,7 +185,6 @@ export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './util
 export { loadTokensCache, saveTokensCache, TOKENS_FILE } from './utils/chunk-cache'
 export { loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, verifySnapshots, normalizeQueryForHash, hashQueryContent, CHART_CACHE_REL_PATH, DEFAULT_MAX_CHART_CACHE_ENTRIES } from './utils/chart-cache'
 export type { ChartCacheEntry, ChartCache, FileSnapshot } from './utils/chart-cache'
-export type { PersistedTokens } from './utils/chunk-cache'
 
 
 export { resolvePolicy, shouldEnableChartConsistencyMode, deriveSeedFromContent, CHART_CONSISTENCY_HINT, CHART_KEYWORDS, TIME_RANGE_KEYWORDS, DETERMINISTIC_TEMPERATURE } from './consistency-policy'

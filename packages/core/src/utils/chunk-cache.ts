@@ -24,26 +24,48 @@ import path from 'path'
 export const TOKENS_FILE = 'tokens.json'
 
 /**
- * 持久化序列化格式：{ "file::heading": ["token1", "token2", ...] }
- * key 和其他 _index/ 文件（contexts.json / embeddings.json / hashes.json）保持一致。
+ * 当前 tokenizer 标识。切换分词器（如 segmentit → nodejieba）时升 number 字段。
+ * loadTokensCache 看到不匹配会直接 null 返回，触发 caller 重新分词 + 落盘覆盖。
+ * 这是无 schema 迁移、无破坏性的失效策略。
  */
-export type PersistedTokens = Record<string, string[]>
+const TOKENS_FILE_VERSION = 2
+const TOKENS_FILE_TOKENIZER = 'nodejieba'
+
+/**
+ * 持久化序列化格式（v2，2026-05-12 起）：
+ *   { "v": 2, "tokenizer": "nodejieba", "tokens": { "file::heading": ["tok", ...] } }
+ * 旧版（v1，segmentit）是 flat map，无 `v` 字段，自动被 loadTokensCache 拒收。
+ */
+interface PersistedTokensFile {
+  v: number
+  tokenizer: string
+  tokens: Record<string, string[]>
+}
 
 /**
  * 从 `<knowledgePath>/_index/tokens.json` 加载 token 缓存。
  * - 文件不存在：返回 null（首次构建）
  * - 文件损坏：返回 null（fallback 到重新分词），并 console.warn
- * - 类型不合法（不是 string[][]):跳过该项，其他保留
+ * - 版本/tokenizer 不匹配：返回 null（旧 segmentit 缓存自动失效）
+ * - 类型不合法的条目跳过，其他保留
  */
 export function loadTokensCache(indexDir: string): Map<string, string[]> | null {
   const p = path.join(indexDir, TOKENS_FILE)
   if (!fs.existsSync(p)) return null
   try {
     const raw = fs.readFileSync(p, 'utf-8')
-    const obj = JSON.parse(raw) as unknown
-    if (typeof obj !== 'object' || obj === null) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (typeof parsed !== 'object' || parsed === null) return null
+
+    const file = parsed as Partial<PersistedTokensFile>
+    if (file.v !== TOKENS_FILE_VERSION || file.tokenizer !== TOKENS_FILE_TOKENIZER) {
+      console.warn(`[chunk-cache] tokens.json 版本不匹配（expected v=${TOKENS_FILE_VERSION} tokenizer=${TOKENS_FILE_TOKENIZER}，实际 v=${file.v ?? '?'} tokenizer=${file.tokenizer ?? '?'}），将重新分词`)
+      return null
+    }
+    if (!file.tokens || typeof file.tokens !== 'object') return null
+
     const map = new Map<string, string[]>()
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(file.tokens)) {
       if (Array.isArray(v) && v.every((t): t is string => typeof t === 'string')) {
         map.set(k, v)
       }
@@ -66,11 +88,16 @@ export function saveTokensCache(indexDir: string, tokens: Map<string, string[]>)
   if (!fs.existsSync(indexDir)) {
     fs.mkdirSync(indexDir, { recursive: true })
   }
-  const obj: PersistedTokens = {}
-  for (const [k, v] of tokens) obj[k] = v
+  const tokensObj: Record<string, string[]> = {}
+  for (const [k, v] of tokens) tokensObj[k] = v
+  const file: PersistedTokensFile = {
+    v: TOKENS_FILE_VERSION,
+    tokenizer: TOKENS_FILE_TOKENIZER,
+    tokens: tokensObj,
+  }
   const targetPath = path.join(indexDir, TOKENS_FILE)
   const tmpPath = targetPath + `.${Date.now()}.${process.pid}.tmp`
-  fs.writeFileSync(tmpPath, JSON.stringify(obj), 'utf-8')
+  fs.writeFileSync(tmpPath, JSON.stringify(file), 'utf-8')
   try {
     fs.renameSync(tmpPath, targetPath)
   } catch (err) {

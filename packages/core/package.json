@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "segmentit": "^2.0.3",
+    "nodejieba": "^3.5.8",
     "turndown": "^7.2.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }

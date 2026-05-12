@@ -51,6 +51,8 @@ export interface ConversationJsonlRecord {
   toolCallId?: string | null
   /** 消息附带的图片 URL 列表（可能为空） */
   imageUrls?: string[] | null
+  /** thinking 模型 reasoning_content（仅 assistant；NULL 表示该消息无思考过程） */
+  reasoningContent?: string | null
   /** 写入时间戳（毫秒） */
   ts: number
 }

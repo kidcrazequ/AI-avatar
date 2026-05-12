@@ -10,6 +10,7 @@
  */
 import { Children, type ReactNode } from 'react'
 import SourceCitation from './SourceCitation'
+import { splitTextWithEmojiIcons } from './emoji-icon-map'
 
 /**
  * 完整闭合的 `[来源: ...]` 文本块匹配（任何内容都接，不挑剔 knowledge/ 前缀）。
@@ -36,9 +37,14 @@ export function splitTextWithCitations(
   const parts: ReactNode[] = []
   let lastIdx = 0
   let occurrence = 0
+  const pushText = (slice: string, segKey: string): void => {
+    // 文本片段进入下一级拆分，把 emoji（🔴🟡🟢/✅❌/⚠️ 等）替换为项目风格 inline icon。
+    // 无命中 emoji 时 splitTextWithEmojiIcons 返回 [slice] 与原行为一致。
+    parts.push(...splitTextWithEmojiIcons(slice, segKey))
+  }
   for (const match of text.matchAll(SOURCE_CITATION_REGEX)) {
     const start = match.index ?? 0
-    if (start > lastIdx) parts.push(text.slice(lastIdx, start))
+    if (start > lastIdx) pushText(text.slice(lastIdx, start), `${keyPrefix}-pre-${occurrence}-${start}`)
     parts.push(
       <SourceCitation
         key={`${keyPrefix}-cite-${occurrence}-${start}`}
@@ -49,8 +55,8 @@ export function splitTextWithCitations(
     lastIdx = start + match[0].length
     occurrence += 1
   }
-  if (parts.length === 0) return [text]
-  if (lastIdx < text.length) parts.push(text.slice(lastIdx))
+  if (parts.length === 0) return splitTextWithEmojiIcons(text, keyPrefix)
+  if (lastIdx < text.length) pushText(text.slice(lastIdx), `${keyPrefix}-tail`)
   return parts
 }
 

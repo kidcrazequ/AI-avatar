@@ -245,6 +245,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 imageUrls,
                 attachments,
                 documentAttachments,
+                // thinking 模型的思考过程从 DB reasoning_content 列恢复（v13 schema 起持久化），
+                // 让切换回该会话时折叠区能复现；历史无此列的行返回 NULL，与 undefined 同行为
+                reasoning: m.reasoning_content || undefined,
               }
             })
         )

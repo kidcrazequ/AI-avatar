@@ -31,6 +31,8 @@ interface DbMessage {
   content: string
   tool_call_id?: string
   image_urls?: string
+  /** thinking 模型 reasoning_content；NULL/缺失表示该消息无思考过程（兼容历史无此列的行） */
+  reasoning_content?: string | null
   created_at: number
 }
 
@@ -462,7 +464,7 @@ interface ElectronAPI {
   searchMessages: (query: string, avatarId?: string) => Promise<MessageSearchResult[]>
 
   // 消息管理
-  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[]) => Promise<string>
+  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
 
   // Agent 任务列表持久化（Stage 三 P2 范围外 1）
@@ -582,6 +584,8 @@ interface ElectronAPI {
   resolveRawFile: (avatarId: string, mdRelativePath: string) => Promise<{ rawRelPath: string; displayName: string; ext: string; exists: boolean } | null>
   /** 用系统默认应用打开 knowledge/_raw/ 下的原始文件。详见 src/types/raw-file-anchor.ts */
   openRawFile: (avatarId: string, rawRelPath: string) => Promise<{ ok: boolean; error?: string }>
+  /** raw_file 缺失时的兜底：打开 knowledge 根下任意 .md 源文件（路径必须落在 knowledge 内） */
+  openMdFile: (avatarId: string, mdRelPath: string) => Promise<{ ok: boolean; error?: string }>
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => Promise<void>
   searchKnowledge: (avatarId: string, query: string) => Promise<SearchResult[]>
   // GAP7: 知识文件 CRUD

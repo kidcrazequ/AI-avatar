@@ -3462,7 +3462,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (isStale()) return
       try {
-        await window.electronAPI.saveMessage(conversationId, 'assistant', displayText)
+        // 把流式累积的 reasoningText 一并落盘，让切换会话回来仍能恢复 thinking 折叠区。
+        // 非 thinking 模型 reasoningText 是空串，saveMessage 内部按 trim 长度判定存 NULL。
+        await window.electronAPI.saveMessage(conversationId, 'assistant', displayText, undefined, undefined, reasoningText || undefined)
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
         console.error('[chatStore] 保存助手消息失败:', msg)

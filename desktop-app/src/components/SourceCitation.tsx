@@ -51,11 +51,13 @@ const CHIP_BUTTON_CLASS =
   'focus:outline-none focus:border-px-accent ' +
   'transition-none cursor-pointer'
 
-/** 已删除文件的灰色 chip className（不可点） */
+/** raw_file 缺失 / 已被删除的兜底 chip className：仍可点击，但视觉降级提示原始文件不在 */
 const CHIP_MISSING_CLASS =
   'inline-flex items-center gap-1 px-1.5 py-0.5 align-baseline ' +
   'border border-px-border bg-px-elevated text-px-text-dim text-[11px] font-mono ' +
-  'whitespace-nowrap'
+  'whitespace-nowrap hover:text-px-text hover:border-px-text-dim ' +
+  'focus:outline-none focus:border-px-text-dim ' +
+  'transition-none cursor-pointer'
 
 /** 加载中 / 全部解析失败时的占位 chip className */
 const CHIP_PLACEHOLDER_CLASS =
@@ -69,8 +71,12 @@ const CHIP_PLACEHOLDER_CLASS =
  * 状态机：
  *   1. mdPaths 为空           → 降级：直接吐回原 anchor 文本
  *   2. results === undefined  → 灰色「📎 加载中…」chip
- *   3. results 全部为 null    → 灰色「📎 N 个来源（原始文件未挂载）」chip
- *   4. results 有数据         → 按钮组：每个非空 result 渲染独立 chip
+ *   3. results 有数据         → 按钮组（每个 mdPath 一个 chip，全部可点）：
+ *      - result.exists       → 📎 文件名（打开 _raw/ 下原始文件）
+ *      - result === null     → 📄 .md（raw_file frontmatter 缺失，兜底打开 markdown 源）
+ *      - result.exists=false → ⚠️ 文件名（_raw/ 物理文件丢失，兜底打开 markdown 源）
+ *
+ * 设计原则：用户能点的 chip 永远 ≥ 用户能点的原始文件，让"溯源"路径**不消失**。
  */
 export default function SourceCitation({ anchor, avatarId }: Props) {
   // useMemo 避免每次渲染都重新跑全局正则扫描
@@ -122,6 +128,34 @@ export default function SourceCitation({ anchor, avatarId }: Props) {
     }
   }
 
+  /**
+   * 兜底打开 markdown 源（raw_file 缺失或对应 _raw/ 物理文件不存在时）。
+   * mdRelPath 从 anchor 解析出，已经是 `knowledge/<file>.md` 形式（含 `knowledge/` 前缀）；
+   * IPC 内部的 path.resolve 会按 avatar/knowledge 根重定位，所以传入原值即可。
+   */
+  const handleOpenMd = async (mdRelPath: string) => {
+    try {
+      const ret = await window.electronAPI.openMdFile(avatarId, mdRelPath)
+      if (!ret.ok) {
+        const reason = ret.error ?? '未知错误'
+        console.error('[SourceCitation] openMdFile 拒绝:', mdRelPath, reason)
+        safeLogEvent('error', 'source-citation-open-md-failed', `${mdRelPath} | ${reason}`)
+        window.alert(`打开「${mdRelPath}」失败：${reason}`)
+      }
+    } catch (err: unknown) {
+      const detail = describeError(err)
+      console.error('[SourceCitation] openMdFile 异常:', detail)
+      safeLogEvent('error', 'source-citation-open-md-exception', `${mdRelPath} | ${detail}`)
+      window.alert(`打开「${mdRelPath}」失败：${detail}`)
+    }
+  }
+
+  /** 从 knowledge/foo.md 提取展示用文件名 foo.md */
+  const mdDisplayName = (mdPath: string): string => {
+    const slash = mdPath.lastIndexOf('/')
+    return slash >= 0 ? mdPath.slice(slash + 1) : mdPath
+  }
+
   // —— 分支 1：降级（mdPaths 为空） —— //
   // 极端情况：LLM 写了 [来源: ...] 但里面没有任何合法的 knowledge/*.md 路径。
   // 直接回吐原文本，保证用户能看到 LLM 的引用提示，不让信息凭空消失。
@@ -145,39 +179,40 @@ export default function SourceCitation({ anchor, avatarId }: Props) {
     )
   }
 
-  // —— 分支 3：全部为 null（原始文件未挂载 / 全部解析失败） —— //
-  const allNull = results.every((r) => r === null)
-  if (allNull) {
-    return (
-      <span className={GROUP_CLASS}>
-        <span
-          className={CHIP_PLACEHOLDER_CLASS}
-          // tooltip 给排查用：把原 anchor 文本暴露出来，方便定位 LLM 引用了哪些路径
-          title={anchor}
-          aria-label={`${mdPaths.length} 个来源，但原始文件均未挂载`}
-        >
-          <span aria-hidden="true">📎</span>
-          <span>{mdPaths.length} 个来源（原始文件未挂载）</span>
-        </span>
-      </span>
-    )
-  }
-
-  // —— 分支 4：渲染按钮组 —— //
+  // —— 分支 3 + 4 合并：每个 result 各自渲染一个 chip —— //
+  // 旧实现把 "全部 null" 折叠成不可点 chip，且 result.exists=false 也只是灰色 span，丢失了
+  // 用户跳转到 markdown 源的机会。新实现：raw_file 缺失或物理文件丢失时仍渲染**可点击**的
+  // 兜底 chip，调用 openMdFile 让系统默认 app 打开 .md。
   return (
     <span className={GROUP_CLASS}>
       {results.map((result, idx) => {
-        // null → 该路径解析失败 / 无 raw_file，本契约下跳过不渲染
-        if (result === null) return null
+        const mdPath = mdPaths[idx]
+        const mdName = mdDisplayName(mdPath)
 
+        // raw_file 字段缺失 → 兜底打开 .md
+        if (result === null) {
+          return (
+            <button
+              key={`${idx}-md-${mdPath}`}
+              type="button"
+              onClick={() => { void handleOpenMd(mdPath) }}
+              title={`原始文件未挂载，点击打开 markdown 源：${mdName}`}
+              aria-label={`打开 markdown 源 ${mdName}`}
+              className={CHIP_MISSING_CLASS}
+            >
+              <span aria-hidden="true">📄</span>
+              <span>{mdName}</span>
+            </button>
+          )
+        }
+
+        // raw_file 存在且物理文件在 → 首选打开原始文件
         if (result.exists) {
           return (
             <button
-              key={`${idx}-${result.rawRelPath}`}
+              key={`${idx}-raw-${result.rawRelPath}`}
               type="button"
-              onClick={() => {
-                void handleOpen(result.rawRelPath, result.displayName)
-              }}
+              onClick={() => { void handleOpen(result.rawRelPath, result.displayName) }}
               title={`用系统默认应用打开：${result.displayName}`}
               aria-label={`打开原始文件 ${result.displayName}`}
               className={CHIP_BUTTON_CLASS}
@@ -188,16 +223,19 @@ export default function SourceCitation({ anchor, avatarId }: Props) {
           )
         }
 
+        // raw_file 写了路径但物理文件丢失（_raw/ 目录未挂载或单文件被删）→ 降级打开 .md
         return (
-          <span
-            key={`${idx}-${result.rawRelPath}`}
-            title={`原始文件已被删除或迁移：${result.rawRelPath}`}
-            aria-label={`原始文件已删除 ${result.displayName}`}
+          <button
+            key={`${idx}-fallback-${mdPath}`}
+            type="button"
+            onClick={() => { void handleOpenMd(mdPath) }}
+            title={`原始文件已被删除或迁移（${result.rawRelPath}），点击打开 markdown 源`}
+            aria-label={`原始文件丢失，打开 markdown 源 ${mdName}`}
             className={CHIP_MISSING_CLASS}
           >
             <span aria-hidden="true">⚠️</span>
             <span>{result.displayName}</span>
-          </span>
+          </button>
         )
       })}
     </span>

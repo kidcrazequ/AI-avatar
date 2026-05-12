@@ -75,6 +75,8 @@ export interface Message {
   content: string
   tool_call_id?: string
   image_urls?: string
+  /** thinking 模型输出的 reasoning_content（仅 assistant 流式产物会带；NULL 表示该消息无思考过程） */
+  reasoning_content?: string | null
   created_at: number
 }
 
@@ -188,7 +190,7 @@ export class DatabaseManager {
         `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
       ),
       insertMessage: this.db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateConversationTime: this.db.prepare(
         `UPDATE conversations SET updated_at = ? WHERE id = ?`
@@ -286,6 +288,7 @@ export class DatabaseManager {
         content TEXT NOT NULL,
         tool_call_id TEXT,
         image_urls TEXT,
+        reasoning_content TEXT,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
       )
@@ -786,6 +789,15 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 13) {
+      // v12 → v13：messages 增加 reasoning_content 列（持久化 thinking 模型的思考过程，
+      // 让"切换会话回来"也能恢复 reasoning 折叠区，避免内存里 reasoningText 丢失）。
+      this.db.transaction(() => {
+        this.safeAddColumn('messages', 'reasoning_content', 'TEXT')
+        version = 13
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -939,13 +951,22 @@ export class DatabaseManager {
   }
 
   // 消息操作
-  saveMessage(conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[]): string {
+  saveMessage(
+    conversationId: string,
+    role: 'user' | 'assistant' | 'tool',
+    content: string,
+    toolCallId?: string,
+    imageUrls?: string[],
+    /** thinking 模型流式产物。仅 assistant 角色会传；空串/undefined 统一存 NULL，避免空字段干扰检索。 */
+    reasoning?: string,
+  ): string {
     const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const now = Date.now()
+    const reasoningValue = reasoning && reasoning.trim().length > 0 ? reasoning : null
 
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
-      this.stmts.insertMessage.run(id, conversationId, role, content, toolCallId ?? null, imageUrls ? JSON.stringify(imageUrls) : null, now)
+      this.stmts.insertMessage.run(id, conversationId, role, content, toolCallId ?? null, imageUrls ? JSON.stringify(imageUrls) : null, reasoningValue, now)
       this.stmts.updateConversationTime.run(now, conversationId)
     })
     saveTx()
@@ -961,6 +982,7 @@ export class DatabaseManager {
       content,
       toolCallId: toolCallId ?? null,
       imageUrls: imageUrls ?? null,
+      reasoningContent: reasoningValue,
       ts: now,
     })
 

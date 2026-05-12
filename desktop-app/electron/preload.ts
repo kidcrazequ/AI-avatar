@@ -20,8 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchMessages: (query: string, avatarId?: string) => ipcRenderer.invoke('search-messages', query, avatarId),
 
   // 消息管理
-  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[]) =>
-    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls),
+  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) =>
+    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning),
   getMessages: (conversationId: string) => ipcRenderer.invoke('get-messages', conversationId),
 
   // Agent 任务列表持久化（Stage 三 P2 范围外 1）
@@ -224,6 +224,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** 原始源文件溯源：用系统默认应用打开 _raw/ 下的原始文件（路径越界由主进程拒绝） */
   openRawFile: (avatarId: string, rawRelPath: string) =>
     ipcRenderer.invoke('knowledge:open-raw-file', avatarId, rawRelPath),
+  /** markdown 源文件兜底：raw_file 缺失时让 source citation 仍能跳转到 .md（系统默认 app 打开） */
+  openMdFile: (avatarId: string, mdRelPath: string) =>
+    ipcRenderer.invoke('knowledge:open-md-file', avatarId, mdRelPath),
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => ipcRenderer.invoke('write-knowledge-file', avatarId, relativePath, content),
   searchKnowledge: (avatarId: string, query: string) => ipcRenderer.invoke('search-knowledge', avatarId, query),
   // GAP7: 知识文件 CRUD（之前缺失）

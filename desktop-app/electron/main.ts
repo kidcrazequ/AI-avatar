@@ -1196,8 +1196,8 @@ wrapHandler('workspace:grep', (_, conversationId: string, relPath: string, patte
 
 // ─── 消息管理 ────────────────────────────────────────────────────────────────
 
-wrapHandler('save-message', (_, conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[]) => {
-  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls)
+wrapHandler('save-message', (_, conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) => {
+  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning)
 })
 
 wrapHandler('get-messages', (_, conversationId: string) => {
@@ -1805,6 +1805,45 @@ wrapHandler('knowledge:open-raw-file', async (_, avatarId: string, rawRelPath: s
   const openErr = await shell.openPath(absPath)
   if (openErr) {
     if (logger) logger.error('knowledge:open-raw-file', new Error(`shell.openPath 失败：${openErr}`))
+    return { ok: false, error: openErr }
+  }
+  return { ok: true }
+})
+
+/**
+ * knowledge:open-md-file
+ *
+ * 用途：用系统默认应用打开 `<avatar>/knowledge/` 下任意 .md 源文件。
+ * 与 `open-raw-file` 的区别：
+ *   - open-raw-file 严格限制在 `_raw/` 子目录（原始 PDF/Excel/PPT）
+ *   - open-md-file 只要求落在 knowledge 根内（兜底场景：raw_file frontmatter 写了但
+ *     `_raw/` 实际缺失时，让 source citation chip 至少能跳到 markdown 源）
+ *
+ * 安全策略：
+ *   1. avatarId 经 `assertSafeSegment` 校验；
+ *   2. 解析后绝对路径必须以 `<knowledge>/` 为前缀；
+ *   3. 仅接受 .md 后缀，防止借此打开任意非 markdown 文件；
+ *   4. 文件不存在直接 ok:false，不调 shell.openPath。
+ */
+wrapHandler('knowledge:open-md-file', async (_, avatarId: string, mdRelPath: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const absPath = path.resolve(knowledgePath, mdRelPath)
+  const knowledgeRoot = knowledgePath + path.sep
+  if (!absPath.startsWith(knowledgeRoot)) {
+    const msg = `md 路径越界：${mdRelPath}`
+    if (logger) logger.error('knowledge:open-md-file', new Error(msg))
+    return { ok: false, error: msg }
+  }
+  if (!absPath.toLowerCase().endsWith('.md')) {
+    return { ok: false, error: `仅支持 .md 源文件：${mdRelPath}` }
+  }
+  if (!fs.existsSync(absPath)) {
+    return { ok: false, error: `markdown 源不存在：${mdRelPath}` }
+  }
+  const openErr = await shell.openPath(absPath)
+  if (openErr) {
+    if (logger) logger.error('knowledge:open-md-file', new Error(`shell.openPath 失败：${openErr}`))
     return { ok: false, error: openErr }
   }
   return { ok: true }

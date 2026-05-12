@@ -1653,8 +1653,12 @@ export class ToolRouter {
   }
 
   private readKnowledgeFile(avatarId: string, args: Record<string, unknown>): ToolCallResult {
-    const filePath = args.file_path as string
-    if (!filePath) return { content: '', error: '缺少 file_path 参数' }
+    const rawFilePath = args.file_path as string
+    if (!rawFilePath) return { content: '', error: '缺少 file_path 参数' }
+    // LLM 经常把 search_knowledge 返回的 [来源: knowledge/...] 锚点里的路径整段复制过来，
+    // 带 `knowledge/` 前缀。但 retriever.readFile 期望相对 knowledge/ 根的路径，多一层前缀
+    // 就会拼成 `<avatar>/knowledge/knowledge/foo.md`，文件确实不存在。两种形式都接受。
+    const filePath = rawFilePath.replace(/^(?:\.\/)?knowledge\//i, '')
     if (this.isKnowledgeBaseEmpty(avatarId)) {
       console.log(`[tool-router] read_knowledge_file 短路：知识库为空 avatarId=${avatarId} file=${filePath}`)
       return this.buildEmptyKnowledgeBaseHint()
@@ -1983,10 +1987,14 @@ ${content}` }
         : QUERY_EXCEL_DEFAULT_LIMIT,
     )
 
-    // 防 dump：没 filter 没 columns 时强制要求显式 limit，且 limit 必须很小
+    // 防 dump：没 filter 没 columns 时强制要求显式 limit，且 limit 必须很小。
+    // 例外：表本身就只有 ≤ SMALL_TABLE_ROW_THRESHOLD 行时直接放行（污染量可忽略，
+    // 让 LLM 不必为 9 行的小表再多绕一轮"加 limit" 重试）。
+    const SMALL_TABLE_ROW_THRESHOLD = 50
     const hasFilter = Object.keys(filter).length > 0
     const hasColumns = Array.isArray(columns) && columns.length > 0
-    if (!hasFilter && !hasColumns && typeof limitRaw !== 'number') {
+    const isSmallTable = sheet.rowCount <= SMALL_TABLE_ROW_THRESHOLD
+    if (!hasFilter && !hasColumns && typeof limitRaw !== 'number' && !isSmallTable) {
       return {
         content: '',
         error: `查询过宽：没有 filter、没有 columns、也没有 limit，会一次性返回整张表 ${sheet.rowCount} 行污染 context。请至少指定 filter（推荐）、columns 或显式 limit≤50。`,

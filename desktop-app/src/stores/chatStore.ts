@@ -2235,13 +2235,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   resetTransientState: () => {
-    activeChatRequest = null
-    if (activeAbortController) {
-      activeAbortController.abort()
-      activeAbortController = null
-    }
-    // tasks 也属于本次会话的瞬态：清内存态，但 DB 保持不动；
-    // bindConversation 会在切入新会话时重新拉取该会话的持久化任务。
+    // 注意：切换会话不再 abort 后台流式请求。
+    // 旧实现 abort() 会让 A 的流被中断且 assistantText 留在闭包里没人接 → saveMessage 永远
+    // 不跑 → 切回 A 时看不到答复（用户报"回答消失"）。新策略：让流继续跑完并落 DB，UI 层在
+    // sendMessage 内部按 currentConversationId === conversationId 决定是否实时回灌。
+    // 显式 abort 由两个路径负责：① sendMessage 入口处用户发新消息时（line ~2296）；
+    // ② 未来若加显式"停止"按钮时单独路径。视图切换不应该误杀流。
     set({ isLoading: false, toolCallStatus: '', skillProposals: [], tasks: [], toolCallTimeline: [] })
   },
 
@@ -2300,6 +2299,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       !activeChatRequest
       || activeChatRequest.id !== requestId
       || activeChatRequest.conversationId !== conversationId
+
+    // 用户当前是否还在看本次 sendMessage 所属的会话。切走时流式继续在闭包里累积
+    // assistantText / reasoningText，但不实时 setState（否则会污染当前正在看的别的会话的消息列表）。
+    // 切回来时下一帧 upsertLastAssistant 用累积后的全文一次性回灌；流式完成时 saveMessage 落 DB
+    // 与是否在视图无关，保证答复永不丢失。
+    const isViewedConv = (): boolean => get().currentConversationId === conversationId
 
     const { messages, systemPrompt, chatModel } = get()
 
@@ -2885,6 +2890,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 pendingChunkUpdate = requestAnimationFrame(() => {
                   pendingChunkUpdate = null
                   if (isStale()) return
+                  if (!isViewedConv()) return  // 切走时不实时刷 UI，避免污染目标会话；累积量已在闭包里
                   set((state) => ({
                     messages: upsertLastAssistant(state.messages, assistantMsgId, assistantText, reasoningText),
                   }))
@@ -2901,6 +2907,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               pendingChunkUpdate = requestAnimationFrame(() => {
                 pendingChunkUpdate = null
                 if (isStale()) return
+                if (!isViewedConv()) return
                 const text = assistantText
                 set((state) => ({
                   messages: upsertLastAssistant(state.messages, assistantMsgId, text, reasoningText),
@@ -2925,9 +2932,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             // 本轮没有 tool_calls → 最终轮，立即刷新显示最终文字
             if ((!toolCalls || toolCalls.length === 0) && !hasDsmlToolCallLeak(assistantText)) {
               const text = assistantText
-              set((state) => ({
-                messages: upsertLastAssistant(state.messages, assistantMsgId, text, reasoningText),
-              }))
+              if (isViewedConv()) {
+                set((state) => ({
+                  messages: upsertLastAssistant(state.messages, assistantMsgId, text, reasoningText),
+                }))
+              }
             }
             resolve()
           },
@@ -3240,15 +3249,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const attachment = tryExtractDocumentAttachment(tc.function.name, resultText)
             if (attachment) {
               collectedDocumentAttachments.push(attachment)
-            set((state) => ({
-              messages: upsertLastAssistant(
-                state.messages,
-                assistantMsgId,
-                assistantText,
-                reasoningText,
-                collectedDocumentAttachments,
-              ),
-            }))
+              if (isViewedConv()) {
+                set((state) => ({
+                  messages: upsertLastAssistant(
+                    state.messages,
+                    assistantMsgId,
+                    assistantText,
+                    reasoningText,
+                    collectedDocumentAttachments,
+                  ),
+                }))
+              }
             }
           }
 
@@ -3447,18 +3458,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
 
       if (isStale()) return
-      set((state) => ({
-        messages: upsertLastAssistant(
-          state.messages,
-          assistantMsgId,
-          displayText,
-          reasoningText,
-          collectedDocumentAttachments,
-        ),
-        isLoading: false,
-        toolCallStatus: '',
-        skillProposals,
-      }))
+      if (isViewedConv()) {
+        set((state) => ({
+          messages: upsertLastAssistant(
+            state.messages,
+            assistantMsgId,
+            displayText,
+            reasoningText,
+            collectedDocumentAttachments,
+          ),
+          isLoading: false,
+          toolCallStatus: '',
+          skillProposals,
+        }))
+      }
 
       if (isStale()) return
       try {
@@ -3493,11 +3506,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
       await invokeProxyComplete({ ok: false, error: errMsg })
       const errorMessage = `抱歉，发生了错误：${errMsg}`
-      set((state) => ({
-        messages: upsertLastAssistant(state.messages, nextMessageId(), errorMessage),
-        isLoading: false,
-        toolCallStatus: '',
-      }))
+      if (isViewedConv()) {
+        set((state) => ({
+          messages: upsertLastAssistant(state.messages, nextMessageId(), errorMessage),
+          isLoading: false,
+          toolCallStatus: '',
+        }))
+      }
       try {
         await window.electronAPI.saveMessage(conversationId, 'assistant', errorMessage)
       } catch (saveErr) {

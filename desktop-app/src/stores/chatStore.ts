@@ -854,9 +854,22 @@ const AVATAR_TOOLS: LLMTool[] = [
       description: [
         '在分身知识库中检索相关内容片段，或列出所有知识文件。',
         '',
-        '何时用：产品参数、政策文件、案例、跨文件概念检索、产品对比等非结构化知识场景。',
-        'mode="search"：按 query 检索知识片段；mode="list"：列出可读取的知识文件，不需要 query。',
-        'Excel / CSV 行级数值必须用 query_excel，不要用 search_knowledge 代替。',
+        '【必须调用 — 红线，禁止凭记忆作答】',
+        '- 涉及具体参数 / 数据 / 数值（电压、容量、价格、报价、KPI）',
+        '- 涉及政策 / 标准 / 规范 / 国标 / IEC / 电气规范 / 准则',
+        '- 涉及具体项目 / 案例 / 产品型号 / 报告',
+        '- 用户问"我们的 X 是什么 / 多少 / 怎么做"——必检索分身自有知识，不要泛泛回答',
+        '',
+        '【禁止调用 — 不浪费 token】',
+        '- 寒暄 / 确认 / 致谢（"好的"/"谢谢"/"收到"）',
+        '- 格式偏好 / 语气调整请求（"用表格"/"再短一点"）',
+        '- 上一轮回答的承接 / 改写（用户在重述或要总结）',
+        '- 纯逻辑 / 通用知识题（不需要分身私有资料）',
+        '',
+        '【路径选择】',
+        '- mode="search"：按 query 检索知识片段（默认）',
+        '- mode="list"：先列出有哪些知识文件再决定读哪个，query 可省略',
+        '- Excel / CSV 行级数值 → 用 query_excel，禁止用本工具代替',
       ].join('\n'),
       parameters: {
         type: 'object',
@@ -2285,6 +2298,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       proxyOpts?.proxyJobId !== undefined ? ({ trustTier: 'proxy' as const }) : undefined
 
     logPerf('sendMessage:start', `avatar=${avatarId} contentLen=${content.length} hasImages=${Boolean(images && images.length > 0)}`)
+    // Phase 0.5 埋点：跟踪 agentic-only 切换后 LLM 实际是否调用 search_knowledge
+    let phase05SearchKnowledgeCalls = 0
+    let phase05SearchKnowledgeResultLen = 0
+    let phase05FirstTokenAt = 0
     regressionTelemetry.emit({
       type: 'conversation-started',
       conversationId,
@@ -2451,48 +2468,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
 
-    // 程序化 RAG：纯文字消息且长度足够时，通过多跳检索 + 5 规则增强 user 消息
-    // 短消息（<4字符）如"好的""谢谢"等不含实质查询意图，跳过 RAG 避免浪费 API 调用
-    // C2 优化：图表一致性模式命中时跳过 RAG，图表类问题通过 query_excel 工具获取真实数据，
-    // RAG 注入的 PDF chunks 对绘图基本无帮助，且 RAG 全路径耗时 3-4s
-    const MIN_RAG_QUERY_LENGTH = 4
-    const skipRagForChart = shouldEnableChartConsistencyMode(content, Boolean(images && images.length > 0))
-    let enhancedContent = content
-    let ragEnhanced = false
-    if (!images || images.length === 0) {
-      if (content.trim().length >= MIN_RAG_QUERY_LENGTH && !skipRagForChart) {
-        try {
-          const ragStartedAt = Date.now()
-          logPerf('rag:start')
-          const [rawRagKey, rawRagUrl] = await Promise.all([
-            window.electronAPI.getSetting('ocr_api_key'),
-            window.electronAPI.getSetting('ocr_base_url'),
-          ])
-          const ragApiKey = rawRagKey || chatModel.apiKey
-          const ragBaseUrl = rawRagUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-          if (ragApiKey) {
-            enhancedContent = await window.electronAPI.ragRetrieve(avatarId, content, ragApiKey, ragBaseUrl)
-            ragEnhanced = enhancedContent !== content
-            logPerf('rag:done', `duration=${Date.now() - ragStartedAt}ms enhancedLen=${enhancedContent.length}`)
-          } else {
-            logPerf('rag:skip-no-key')
-          }
-        } catch (err) {
-          const ragErr = err instanceof Error ? err.message : String(err)
-          console.warn('RAG 检索失败，使用原始消息:', ragErr)
-          window.electronAPI.logEvent('warn', 'rag-retrieve-error', ragErr)
-          logPerf('rag:error', ragErr)
-        }
-      } else {
-        if (skipRagForChart) {
-          logPerf('rag:skip-chart-mode', `contentLen=${content.trim().length}`)
-        } else {
-          logPerf('rag:skip-short-query', `trimmedLen=${content.trim().length}`)
-        }
-      }
-    } else {
-      logPerf('rag:skip-images')
-    }
+    // Phase 1 (2026-05-13) agentic-only：删除 pre-message RAG 注入。
+    // 知识检索现在完全由 LLM 通过 search_knowledge tool 决定何时调用。
+    // 寒暄/确认消息（包括"好的"/"谢谢"）不再触发 BM25 检索，由 LLM 看上下文自己判断不 call。
+    // 下游 ragEnhanced 永远为 false → shouldUseRagDirectAnswerFastPath 永远不命中（符合预期：
+    // 没有 pre-injected chunks，LLM 必须走 tool 路径取知识）。
+    const enhancedContent = content
+    const ragEnhanced = false
 
     // 对话框附件扩展（2026-05-01）：构造附件相关的额外文本块。
     //   - 大文档：注入 <attachment id name pages outline summary /> 元信息（XML 标签便于解析）
@@ -2549,7 +2531,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       : contentWithAttachments
 
     const shouldForceChartSkill = shouldForceChartSkillFirst(content, Boolean(images && images.length > 0))
-    const chartConsistencyMode = skipRagForChart
+    const chartConsistencyMode = shouldEnableChartConsistencyMode(content, Boolean(images && images.length > 0))
     if (shouldForceChartSkill && !chartConsistencyMode) {
       logPerf('chart-skill:force-only')
     }
@@ -2883,6 +2865,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             if (roundFirstTokenAt === null) {
               roundFirstTokenAt = roundLastActivityAt
               logPerf('llm-round:first-token', `round=${round} ttft=${roundFirstTokenAt - roundStartedAt}ms`)
+              if (round === 0 && phase05FirstTokenAt === 0) {
+                phase05FirstTokenAt = roundFirstTokenAt
+              }
             }
             if (kind === 'reasoning') {
               reasoningText += chunk
@@ -3193,6 +3178,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
           resultText = truncatedResult.content
           const toolDurationMs = Date.now() - toolStartedAt
+          if (tc.function.name === 'search_knowledge') {
+            phase05SearchKnowledgeCalls += 1
+            phase05SearchKnowledgeResultLen += resultText.length
+          }
           logPerf(
             'tool-call:done',
             `round=${round} name=${tc.function.name} duration=${toolDurationMs}ms resultLen=${resultText.length}`,
@@ -3484,6 +3473,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         window.electronAPI.logEvent('error', 'save-assistant-message-error', msg)
       }
       logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms displayLen=${displayText.length}`)
+      // Phase 0.5 结构化埋点：写持久日志，2 周后聚合分析（按分身的 search_knowledge 触发率/命中率/TTFT）
+      window.electronAPI.logEvent(
+        'info',
+        'phase05-query-summary',
+        `avatar=${avatarId} status=ok queryLen=${content.length} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt}`,
+      )
       regressionTelemetry.emit({
         type: 'message-done',
         conversationId,
@@ -3498,6 +3493,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       console.error('对话失败:', errMsg)
       window.electronAPI.logEvent('error', 'chat-error', errMsg)
       logPerf('sendMessage:error', errMsg)
+      // Phase 0.5 结构化埋点（失败路径也记，方便分析"未触发 search 是因为出错"还是"LLM 没决定 call"）
+      window.electronAPI.logEvent(
+        'info',
+        'phase05-query-summary',
+        `avatar=${avatarId} status=error queryLen=${content.length} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt} err=${errMsg.slice(0, 80)}`,
+      )
       regressionTelemetry.emit({
         type: 'conversation-error',
         conversationId,

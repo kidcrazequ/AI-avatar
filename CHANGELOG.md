@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## v0.12.4 (2026-05-13)
+
+> RAG 改为纯 agentic 检索；修复切换会话导致答复消失；工具路径与小表 Excel 查询护栏；主进程分词 OOM 修复；Emoji / 思考过程持久化等对话体验修补。
+
+### RAG 与检索
+
+- **Agentic-only 检索** — 移除发消息前的 BM25 预注入；由 LLM 按需调用 `search_knowledge`（工具说明强化红线：专业事实须调用，寒暄与格式偏好等禁止调用）。新增 Phase 0.5 埋点（调用次数、结果体量、TTFT、总延迟）写入活动日志，供后续成本与行为回溯。
+- **主进程分词** — 以 `nodejieba` 替代 `segmentit`，消除主进程 OOM。
+
+### 对话与 UI
+
+- **切换会话不中断后台流** — `resetTransientState` 不再 `abort` 正在进行的 LLM 流；`sendMessage` 内以「当前查看的会话」闸门更新 UI，答复照常落库，避免切走再切回时「回答消失」。
+- **Emoji → 内联 SVG**、**`reasoning_content` 持久化**（DB schema v13）、**引用展示回退** 等聊天区小修复。
+
+### 工具路由
+
+- **`read_knowledge_file`** — 自动剥掉 `knowledge/`、`./knowledge/` 等前缀，与 `search_knowledge` 返回锚点路径对齐，避免拼出重复 `knowledge/knowledge/`。
+- **`query_excel`** — 对行数 ≤50 的小表放宽「必须 filter / columns / limit」护栏，减少无意义重试；大行数表行为不变。
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.12.3 → 0.12.4
+- **`desktop-app/package-lock.json`** — 同步根包版本字段
+
 ## v0.12.3 (2026-05-11)
 
 > 知识库回答规则细化（解决「所有回答必须基于知识库」过严问题）+ Windows 安装版「窗口直接消失」无日志可查的崩溃诊断兜底。

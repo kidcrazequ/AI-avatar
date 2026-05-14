@@ -676,6 +676,24 @@ interface ElectronAPI {
   installExpertPack: (packId: string) => Promise<ExpertPackInstallResult>
   isExpertPackInstalled: (packId: string) => Promise<boolean>
   getAvatarSoulIntro: (targetAvatarId: string) => Promise<string | null>
+  /**
+   * agent-runtime: Phase 1+5 观测接入。
+   * 返回 system prompt 拆成 4 段后的 cacheable 占比；
+   * 仅在 SOUL_USE_NEW_RUNTIME=true 时返回真实数据。
+   */
+  getAgentRuntimePromptCacheStats: (
+    avatarId: string,
+    parts: { stableSystemPrompt: string; dynamicSystemPrompt?: string },
+    knowledgeHits?: string[]
+  ) => Promise<{
+    enabled: boolean
+    avatarId: string
+    totalChars: number
+    cacheableChars: number
+    cacheableRatio: number
+    segmentCount: number
+    segments: Array<{ id: string; version: string; cacheable: boolean; chars: number }>
+  }>
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => Promise<void>
   writeSkillFile: (avatarId: string, fileName: string, content: string) => Promise<void>
   deleteAvatar: (id: string) => Promise<void>

@@ -303,6 +303,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installExpertPack: (packId: string) => ipcRenderer.invoke('expert-packs:install', packId),
   isExpertPackInstalled: (packId: string) => ipcRenderer.invoke('expert-packs:is-installed', packId),
   getAvatarSoulIntro: (targetAvatarId: string) => ipcRenderer.invoke('get-avatar-soul-intro', targetAvatarId),
+  /**
+   * agent-runtime: Phase 1+5 观测接入。返回当前 system prompt 拆成 4 段后的
+   * cacheable 占比；仅在 SOUL_USE_NEW_RUNTIME=true 时返回真实数据。
+   */
+  getAgentRuntimePromptCacheStats: (
+    avatarId: string,
+    parts: { stableSystemPrompt: string; dynamicSystemPrompt?: string },
+    knowledgeHits?: string[]
+  ) => ipcRenderer.invoke('agent-runtime:prompt-cache-stats', avatarId, parts, knowledgeHits),
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) =>
     ipcRenderer.invoke('create-avatar', id, soulContent, skills, knowledgeFiles),
   writeSkillFile: (avatarId: string, fileName: string, content: string) =>

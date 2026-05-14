@@ -56,6 +56,7 @@ import { CommunitySkillManager } from './community-skill-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
 import { DoubaoAsrSession } from './asr-session'
+import { getPromptCacheStats } from './agent-runtime-bridge'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -1077,6 +1078,21 @@ const getWikiCompiler = (avatarId: string): WikiCompiler => {
 // ─── IPC 处理器 ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('ping', () => 'pong')
+
+// agent-runtime 桥接：Phase 1 + Phase 5 观测接入。
+// flag off 时不工作；flag on 时计算分段 prompt 的 cacheable 占比，供 renderer 打 log。
+wrapHandler(
+  'agent-runtime:prompt-cache-stats',
+  (
+    _,
+    avatarId: string,
+    parts: { stableSystemPrompt: string; dynamicSystemPrompt?: string },
+    knowledgeHits?: string[]
+  ) => {
+    assertSafeSegment(avatarId, '分身ID')
+    return getPromptCacheStats(avatarId, avatarsPath, parts, knowledgeHits ?? [])
+  }
+)
 
 // 加载分身配置（GAP3/GAP6: 重新调用后 systemPrompt 会根据最新技能/知识/记忆重建）
 wrapHandler('load-avatar', (_, avatarId: string, projectId?: string) => {

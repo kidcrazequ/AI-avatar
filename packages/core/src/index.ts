@@ -333,3 +333,6 @@ export type { RenderHtmlOptions } from './document/renderers/html-renderer'
 export { loadTemplateCss, resolveTemplatePath } from './document/renderers/template-loader'
 
 export * from './sync/snapshot-manifest'
+
+// agent-runtime（feature-flagged 新治理层；默认旧路径不变）
+export * as AgentRuntime from './agent-runtime'

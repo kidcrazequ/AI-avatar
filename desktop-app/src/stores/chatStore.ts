@@ -2623,6 +2623,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       void snipErr
     }
 
+    // agent-runtime: Phase 1+5 理想版观测接入。把 system prompt 拆成 stable/dynamic：
+    //   stable = 分身基础 systemPrompt + HARD_RULES（cacheable）
+    //   dynamic = @mentions intro + attachmentGuide + snipNoticeBlock（uncached）
+    // SOUL_USE_NEW_RUNTIME=true 时输出真实分段统计；flag off 完全空操作。
+    try {
+      // effectiveSystemPrompt 此时已含 @mentions intro 和 attachmentGuide（见上方拼接）。
+      // 用减法分离动态部分：effectiveSystemPrompt - systemPrompt = 动态追加内容
+      const dynamicAppended = effectiveSystemPrompt.length > systemPrompt.length
+        ? effectiveSystemPrompt.slice(systemPrompt.length)
+        : ''
+      const dynamicTail = dynamicAppended + snipNoticeBlock
+      const stats = await window.electronAPI.getAgentRuntimePromptCacheStats(avatarId, {
+        stableSystemPrompt: systemPrompt + HARD_RULES,
+        dynamicSystemPrompt: dynamicTail,
+      })
+      if (stats.enabled) {
+        // eslint-disable-next-line no-console
+        console.info(
+          `[agent-runtime] prompt cache stats: ${stats.cacheableChars}/${stats.totalChars} cacheable (${(stats.cacheableRatio * 100).toFixed(1)}%), ${stats.segmentCount} segments`,
+          stats.segments
+        )
+      }
+    } catch (statsErr) {
+      // 观测失败不影响主流程
+      void statsErr
+    }
+
     // HARD_RULES 放在最末尾，确保最近原则下权重最高，覆盖 L4/L8/L9/L10 红线
     const apiMessages: LLMMessage[] = [
       { role: 'system', content: effectiveSystemPrompt + snipNoticeBlock + HARD_RULES },

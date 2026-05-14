@@ -34,9 +34,9 @@ desktop-app/playwright-report/
 desktop-app/test-results/
 **/*.tsbuildinfo
 
-# 图标生成产物（保留 PNG 源 + SVG，icns/ico 由 generate-icons.js 生成不入库）
-desktop-app/build/icon.icns
-desktop-app/build/icon.ico
+# 图标产物：保留 icon.png 源 + icon.icns + icon.ico 入库
+# 原因：generate-icons.js 用 mac 系统命令 sips，Windows runner 跑不通 → CI 拿不到 .ico；
+# 把生成产物也 commit 让 CI 兜底，本地 dist 跑 generate-icons 会覆盖更新（无副作用）。
 desktop-app/build/ios-icons/
 
 # 本地测试输出（视频、截图、临时报告，勿提交）

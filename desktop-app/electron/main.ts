@@ -2706,6 +2706,41 @@ wrapHandler(
     }
   }
 
+  // ─── read_tool_result: 读取 ToolResultSpool 落盘的工具结果文件 ──────────
+  // spool 路径在 userData/tool-results/<conv>/<tool>-<ts>.txt，不在 workspace 下，
+  // 用 read_lines 会被路径安全策略拒绝。本工具专门处理 spool 路径，仅允许 spool root 下。
+  if (name === 'read_tool_result') {
+    const rawPath = (args.path as string) ?? ''
+    const startLine = typeof args.start_line === 'number' && Number.isFinite(args.start_line)
+      ? Math.max(1, Math.floor(args.start_line))
+      : 1
+    const endLineArg = typeof args.end_line === 'number' && Number.isFinite(args.end_line)
+      ? Math.floor(args.end_line)
+      : undefined
+    if (!rawPath) return { content: '', error: '缺少 path 参数（应为 spool 文件绝对路径）' }
+    const spoolRoot = toolResultSpool.getRootDir()
+    const abs = path.resolve(rawPath)
+    if (!abs.startsWith(spoolRoot + path.sep) && abs !== spoolRoot) {
+      return { content: '', error: `路径不在 tool-results 目录下，请使用 spool 提示的完整路径：${rawPath}` }
+    }
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath}` }
+    }
+    const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
+    const totalLines = lines.length
+    if (startLine > totalLines) {
+      return { content: '', error: `start_line=${startLine} 超过总行数 ${totalLines}` }
+    }
+    const requestedEnd = endLineArg ?? startLine + 199
+    const cappedEnd = Math.min(totalLines, Math.min(requestedEnd, startLine + 3999))
+    const sliced = lines.slice(startLine - 1, cappedEnd)
+    const body = sliced.map((line, idx) => `${startLine + idx}|${line}`).join('\n')
+    if (requestedEnd > cappedEnd) {
+      return { content: `${body}\n[truncated: 返回 ${startLine}-${cappedEnd}/${totalLines}，受 4000 行硬上限或文件末尾限制]` }
+    }
+    return { content: body }
+  }
+
   // ─── L3 桌面能力工具：完整版实现 ───────────────────────────────────────
   // 预览：加载 HTML / 评估 JS / 抓日志 / 截图
   if (name === 'show_to_user' || name === 'show_html') {

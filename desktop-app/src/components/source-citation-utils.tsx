@@ -24,6 +24,22 @@ import { splitTextWithEmojiIcons } from './emoji-icon-map'
 const SOURCE_CITATION_REGEX = /\[来源[：:][^\]\n]+\]/g
 
 /**
+ * 把 anchor 内部的内部 JSON 中间产物路径映射回原文件路径：
+ *   knowledge/_excel/foo.json → knowledge/foo.xlsx
+ *
+ * `_excel/*.json` 是 Excel 导入时为 query_excel 预转的 structured cache，
+ * 不是用户认识的原文件。LLM 引用时偶尔写成这种路径；显示前 normalize
+ * 让用户看到的来源就是真实 .xlsx 路径。仅作用于 anchor 块内文本，不影响
+ * LLM 叙述里其它 `_excel/*.json` 出现的位置。
+ */
+function normalizeExcelAnchorPaths(anchor: string): string {
+  return anchor.replace(
+    /knowledge\/_excel\/([^,，、;；\s\]#]+)\.json/g,
+    'knowledge/$1.xlsx',
+  )
+}
+
+/**
  * 把字符串里所有完整闭合的 `[来源: knowledge/...]` 切成 [文本片段, <SourceCitation/>,
  * 文本片段, ...]。无匹配时原样返回单元素数组（保留语义不变）。
  *
@@ -48,7 +64,7 @@ export function splitTextWithCitations(
     parts.push(
       <SourceCitation
         key={`${keyPrefix}-cite-${occurrence}-${start}`}
-        anchor={match[0]}
+        anchor={normalizeExcelAnchorPaths(match[0])}
         avatarId={avatarId}
       />,
     )

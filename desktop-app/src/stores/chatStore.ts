@@ -354,6 +354,22 @@ const AVATAR_TOOLS: LLMTool[] = [
   {
     type: 'function',
     function: {
+      name: 'read_tool_result',
+      description: '读取上一次工具返回值被 spool 落盘的完整内容（当工具结果 > 12000 字符时，ToolResultSpool 会把完整内容写入 ~/Library/Application Support/soul-desktop/tool-results/<convId>/<toolName>-<ts>.txt，并在工具消息里告知绝对路径）。仅接受 tool-results 目录下的绝对路径，read_lines 对此类路径会失败。',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'spool 文件的完整绝对路径（必须以 .../soul-desktop/tool-results/ 开头）' },
+          start_line: { type: 'number', description: '起始行号（1-based，默认 1）' },
+          end_line: { type: 'number', description: '结束行号（1-based，包含；默认 start_line + 199）' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'glob',
       description: 'Glob 模式匹配工作区文件（升级版 list_files）。\n\n用法：\n- "**/*.ts" 递归找所有 .ts 文件\n- "src/**/*.tsx" 找 src 目录下所有 .tsx\n- "*.md" 找当前目录的 .md\n- "?.txt" 单字符匹配\n\n何时用：明确知道要找的文件类型/路径模式时（最常见场景）。\n何时不用：要按文件内容检索 → 用 exec_shell + grep / rg；要枚举一个目录所有文件 → 用 list_files。',
       parameters: {
@@ -1715,6 +1731,8 @@ const HARD_RULES = `
 5. 输出 \`\`\`chart 代码块前，必须先调用 load_skill('chart-from-knowledge') 或 load_skill('draw-chart')。即使你"已经知道"怎么画、即使数据可能不足，第一个工具调用必须是 load_skill。
 
 6. 材质对比题（问题同时包含两种材质名如铜/铝/钢/不锈钢/合金，和"哪个高/哪个低/对比/比较"等比较词时）：必须先调用 search_knowledge 或 query_excel 获取数据再回答，禁止凭记忆直接给数字。toolCallSequence 为空的材质对比回答会被自动判定为失败。
+
+7. 思考内容（reasoning_content / Chain-of-Thought）必须使用简体中文。用户面对的是中文交互，思考流也用英文会显得割裂；即使训练偏好倾向英文，每次输出 reasoning_content 时也要主动用中文思考。最终回答自然也是中文。
 
 ---`
 

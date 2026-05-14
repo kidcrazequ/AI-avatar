@@ -103,7 +103,7 @@ export class ToolResultSpool {
         '',
         `[系统提示] 工具 ${toolName} 返回过长，完整内容已落盘到：`,
         `  ${file}`,
-        `如需查看中段或完整结构，调用 read_file 工具按行号读取该文件。`,
+        `如需查看中段或完整结构，调用 read_tool_result 工具按行号读取该文件（不要用 read_lines / read_file，它们会因路径不在工作区而失败）。`,
         `否则请基于以上头/尾摘要直接收敛回答。`,
       ].join('\n')
 

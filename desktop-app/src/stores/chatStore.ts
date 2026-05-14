@@ -1923,22 +1923,50 @@ function fnvHash32(s: string): number {
 }
 
 /**
- * 生成答案缓存 key：avatarId + user content + 最近 8 条对话上下文哈希。
- * 同问 + 同上下文 → 同 key。空格归一防止"  你好"和"你好"分两条 cache。
+ * 生成答案缓存 key（v14.1，B+C 修订）：
+ *   `${avatarId}::${conversationId}::${userHash}::${ctxHash}`
+ *
+ * 设计：
+ *   - 加 conversationId（B）：不同 chat 独立 cache，互不干扰
+ *   - 剥掉 trailing 同问 Q-A 对（C）：用户立即再问同样问题（"X？" 紧接 "X？"），
+ *     UI 上 ctx 已含 [user X, asst Y]，会让 cache key 与首次的 key 不同导致 miss；
+ *     先把"最后一对（user 内容等于当前 userContent + 紧跟 assistant）"剥掉，再算 ctx，
+ *     这样同 chat 立即重问也能命中
+ *   - user content / ctx 各自空格归一化与 [id:mNNNN] 锚点剥离，防止细微差异生成不同 cache 行
  */
 function deriveAnswerCacheKey(
   avatarId: string,
+  conversationId: string,
   userContent: string,
   recentMessages: Array<{ role: string; content: string }>,
 ): string {
-  const normalizedUser = userContent.trim().replace(/\s+/g, ' ')
-  const ctx = recentMessages
+  const normalizeForCompare = (s: string): string =>
+    s.replace(/^\[id:m\d+\]\s*/, '').trim().replace(/\s+/g, ' ')
+  const normalizedUser = normalizeForCompare(userContent)
+
+  // 剥掉 trailing 同问 Q-A pair（C）
+  let effective = recentMessages
+  while (effective.length >= 2) {
+    const last = effective[effective.length - 1]
+    const secondLast = effective[effective.length - 2]
+    if (
+      last.role === 'assistant'
+      && secondLast.role === 'user'
+      && normalizeForCompare(secondLast.content) === normalizedUser
+    ) {
+      effective = effective.slice(0, -2)
+    } else {
+      break
+    }
+  }
+
+  const ctx = effective
     .slice(-8)
     .map((m) => `${m.role}:${m.content.slice(0, 200)}`)
     .join('|')
   const ctxHash = fnvHash32(ctx).toString(16)
   const userHash = fnvHash32(normalizedUser).toString(16)
-  return `${avatarId}::${userHash}::${ctxHash}`
+  return `${avatarId}::${conversationId}::${userHash}::${ctxHash}`
 }
 
 /**
@@ -2519,7 +2547,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       proxyOpts?.proxyJobId !== undefined
     if (!cacheBypassed) {
       try {
-        const cacheKey = deriveAnswerCacheKey(avatarId, content, messages)
+        const cacheKey = deriveAnswerCacheKey(avatarId, conversationId, content, messages)
         const cached = await window.electronAPI.getCachedAnswer(cacheKey)
         if (cached) {
           logPerf('answer-cache:hit', `key=${cacheKey.slice(0, 32)}... len=${cached.assistantContent.length}`)
@@ -3635,7 +3663,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 避免覆盖原稳定答案。
       if (!cacheBypassed && displayText.trim().length > 0) {
         try {
-          const cacheKey = deriveAnswerCacheKey(avatarId, content, messages)
+          const cacheKey = deriveAnswerCacheKey(avatarId, conversationId, content, messages)
           await window.electronAPI.saveCachedAnswer({
             cacheKey,
             avatarId,

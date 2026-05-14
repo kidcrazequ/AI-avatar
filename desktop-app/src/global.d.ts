@@ -467,6 +467,26 @@ interface ElectronAPI {
   saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
 
+  // 删除单条消息（v14，「重新生成」按钮专用）
+  deleteMessage: (messageId: string) => Promise<number>
+
+  // 答案缓存（v14，同问不同答修复）
+  getCachedAnswer: (cacheKey: string) => Promise<{
+    assistantContent: string
+    reasoningContent: string | null
+    model: string | null
+  } | null>
+  saveCachedAnswer: (params: {
+    cacheKey: string
+    avatarId: string
+    conversationId: string
+    userContent: string
+    assistantContent: string
+    reasoningContent?: string | null
+    model?: string | null
+  }) => Promise<void>
+  deleteCachedAnswer: (cacheKey: string) => Promise<number>
+
   // Agent 任务列表持久化（Stage 三 P2 范围外 1）
   saveAgentTasks: (conversationId: string, tasksJson: string) => Promise<void>
   getAgentTasks: (conversationId: string) => Promise<string | null>

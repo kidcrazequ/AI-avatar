@@ -1165,6 +1165,11 @@ wrapHandler('delete-conversation', (_, id: string) => {
   } catch (err) {
     if (logger) logger.error('delete-conversation:cleanup-attachments', err)
   }
+  try {
+    getDb().deleteCachedAnswersByConversation(id)
+  } catch (err) {
+    if (logger) logger.error('delete-conversation:cleanup-cache', err)
+  }
   getDb().deleteConversation(id)
 })
 
@@ -1218,6 +1223,36 @@ wrapHandler('save-message', (_, conversationId: string, role: 'user' | 'assistan
 
 wrapHandler('get-messages', (_, conversationId: string) => {
   return getDb().getMessages(conversationId)
+})
+
+// 删除单条消息（v14，「重新生成」按钮专用）
+wrapHandler('delete-message', (_, messageId: string) => {
+  return getDb().deleteMessage(messageId)
+})
+
+// ─── 答案缓存（v14，同问不同答修复）─────────────────────────────────────
+wrapHandler('answer-cache:get', (_, cacheKey: string) => {
+  return getDb().getCachedAnswer(cacheKey)
+})
+wrapHandler(
+  'answer-cache:save',
+  (
+    _,
+    params: {
+      cacheKey: string
+      avatarId: string
+      conversationId: string
+      userContent: string
+      assistantContent: string
+      reasoningContent?: string | null
+      model?: string | null
+    },
+  ) => {
+    getDb().saveCachedAnswer(params)
+  },
+)
+wrapHandler('answer-cache:delete', (_, cacheKey: string) => {
+  return getDb().deleteCachedAnswer(cacheKey)
 })
 
 // ─── Agent 任务列表持久化（Stage 三 P2 范围外 1）────────────────────────────

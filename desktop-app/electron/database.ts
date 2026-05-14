@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 12
+const CURRENT_SCHEMA_VERSION = 14
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -507,6 +507,27 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_sync_history_direction_status
       ON sync_history(direction, status)
     `)
+
+    // 答案缓存表（v14 引入，2026-05-13 同问不同答修复）。
+    // 同 user content + 同 conversation 上下文哈希 → 复用上次答案，绕过 LLM 调用。
+    // 用户可通过"重新生成"按钮 bypass cache 重跑一次。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS answer_cache (
+        cache_key TEXT PRIMARY KEY,
+        avatar_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        user_content TEXT NOT NULL,
+        assistant_content TEXT NOT NULL,
+        reasoning_content TEXT,
+        model TEXT,
+        created_at INTEGER NOT NULL,
+        hit_count INTEGER NOT NULL DEFAULT 0
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_answer_cache_avatar_conv
+      ON answer_cache(avatar_id, conversation_id, created_at DESC)
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -798,6 +819,32 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 14) {
+      // v13 → v14：答案缓存表（同问不同答修复）。
+      // 同 user content + 同 conversation 上下文哈希 → 复用上次答案，绕过 LLM 调用。
+      // 用户可通过"重新生成"按钮 bypass cache 重跑一次。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS answer_cache (
+            cache_key TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL,
+            conversation_id TEXT NOT NULL,
+            user_content TEXT NOT NULL,
+            assistant_content TEXT NOT NULL,
+            reasoning_content TEXT,
+            model TEXT,
+            created_at INTEGER NOT NULL,
+            hit_count INTEGER NOT NULL DEFAULT 0
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_answer_cache_avatar_conv
+          ON answer_cache(avatar_id, conversation_id, created_at DESC)
+        `)
+        version = 14
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -991,6 +1038,15 @@ export class DatabaseManager {
 
   getMessages(conversationId: string): Message[] {
     return this.stmts.getMessages.all(conversationId) as Message[]
+  }
+
+  /**
+   * 删除单条消息（v14，「重新生成」按钮专用）。
+   * 返回删除条数；不存在时返回 0，调用方据此判断是否需要刷新 UI。
+   */
+  deleteMessage(messageId: string): number {
+    const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId)
+    return result.changes
   }
 
   // 设置操作
@@ -1305,6 +1361,78 @@ export class DatabaseManager {
     const result = this.db.prepare(
       'DELETE FROM attachments WHERE conversation_id = ?',
     ).run(conversationId)
+    return result.changes
+  }
+
+  // ─── 答案缓存（v14 引入，同问不同答修复）────────────────────────────────
+  // 命中 cache → 跳过 LLM 调用直接返回上次答案，解决 DeepSeek temperature=0 + seed
+  // 仍非严格 deterministic 的问题。重新生成按钮可 bypass cache 重跑。
+
+  getCachedAnswer(cacheKey: string): {
+    assistantContent: string
+    reasoningContent: string | null
+    model: string | null
+  } | null {
+    const row = this.db
+      .prepare(
+        'SELECT assistant_content, reasoning_content, model FROM answer_cache WHERE cache_key = ?',
+      )
+      .get(cacheKey) as
+      | { assistant_content: string; reasoning_content: string | null; model: string | null }
+      | undefined
+    if (!row) return null
+    // 命中计数 + 1，方便后续诊断/UI 展示
+    this.db
+      .prepare('UPDATE answer_cache SET hit_count = hit_count + 1 WHERE cache_key = ?')
+      .run(cacheKey)
+    return {
+      assistantContent: row.assistant_content,
+      reasoningContent: row.reasoning_content,
+      model: row.model,
+    }
+  }
+
+  saveCachedAnswer(params: {
+    cacheKey: string
+    avatarId: string
+    conversationId: string
+    userContent: string
+    assistantContent: string
+    reasoningContent?: string | null
+    model?: string | null
+  }): void {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO answer_cache
+          (cache_key, avatar_id, conversation_id, user_content, assistant_content,
+           reasoning_content, model, created_at, hit_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      )
+      .run(
+        params.cacheKey,
+        params.avatarId,
+        params.conversationId,
+        params.userContent,
+        params.assistantContent,
+        params.reasoningContent ?? null,
+        params.model ?? null,
+        Date.now(),
+      )
+  }
+
+  /** 删除单个 cache（用户「重新生成」时清掉对应条目，下次写新答案） */
+  deleteCachedAnswer(cacheKey: string): number {
+    const result = this.db
+      .prepare('DELETE FROM answer_cache WHERE cache_key = ?')
+      .run(cacheKey)
+    return result.changes
+  }
+
+  /** 删除该会话所有 cache（会话清空 / 删除时调用） */
+  deleteCachedAnswersByConversation(conversationId: string): number {
+    const result = this.db
+      .prepare('DELETE FROM answer_cache WHERE conversation_id = ?')
+      .run(conversationId)
     return result.changes
   }
 }

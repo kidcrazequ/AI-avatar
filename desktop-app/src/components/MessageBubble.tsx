@@ -270,6 +270,9 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   // 用 selector 只订阅自己这条消息的折叠态，避免其他消息 toggle 时被无谓重渲染
   const collapsed = useChatStore((s) => s.collapsedMessageIds.has(message.id))
   const toggleMessageCollapsed = useChatStore((s) => s.toggleMessageCollapsed)
+  const regenerateAssistantMessage = useChatStore((s) => s.regenerateAssistantMessage)
+  const currentConversationId = useChatStore((s) => s.currentConversationId)
+  const isLoadingChat = useChatStore((s) => s.isLoading)
   const extractedThinking = isUser
     ? { thinking: '', clean: stripIdAnchor(message.content) }
     : extractThinking(message.content)
@@ -339,6 +342,27 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               title="沉淀到知识百科"
             >
               {saved ? 'SAVED' : 'SAVE'}
+            </button>
+          )}
+          {/* 助手消息的「重新生成」按钮（v14，bypass answer cache）。
+              仅 assistant 消息可点；isLoading 或缺 avatarId/conversationId 时禁用。 */}
+          {!isUser && previousUserMessage && currentConversationId && avatarId && (
+            <button
+              onClick={() => {
+                void regenerateAssistantMessage(message.id, currentConversationId, avatarId)
+              }}
+              disabled={isLoadingChat}
+              className="absolute top-2 right-[3.25rem] opacity-0 group-hover:opacity-100
+                font-game text-[10px] tracking-wider px-2 py-0.5
+                border border-px-border bg-px-elevated text-px-text-dim
+                hover:text-px-primary hover:border-px-primary
+                focus:opacity-100
+                disabled:opacity-40 disabled:cursor-not-allowed
+                transition-opacity"
+              aria-label="重新生成"
+              title="重新生成（跳过答案缓存，重新调用 LLM）"
+            >
+              ↻ AGAIN
             </button>
           )}
 

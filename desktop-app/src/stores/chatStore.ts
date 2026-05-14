@@ -277,7 +277,25 @@ interface ChatStore {
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
     proxyOpts?: SendMessageProxyOptions,
+    options?: { skipCache?: boolean },
   ) => Promise<void>
+  /**
+   * 重新生成指定 assistant 消息（v14）。
+   *
+   * 流程：
+   *   1. 找到 messageId 对应的 assistant 消息
+   *   2. 找到它前面的 user 消息（同一对话相邻）
+   *   3. 从 messages 中删除该 assistant 消息（含 DB）
+   *   4. 用 user 消息 content 调 sendMessage(..., { skipCache: true })
+   *      → 跳过缓存读 + 不写新缓存（保留原稳定答案）
+   *
+   * 失败兜底：找不到匹配的 user 消息时返回 false，UI 应禁用按钮。
+   */
+  regenerateAssistantMessage: (
+    messageId: string,
+    conversationId: string,
+    avatarId: string,
+  ) => Promise<boolean>
   clearMessages: () => void
   resetTransientState: () => void
   /** Feature 6: 清除技能创建建议 */
@@ -1881,6 +1899,49 @@ const DETERMINISTIC_TEMPERATURE = 0
 const ENABLE_NUDGE_SKIP_ON_CHART = true
 
 /**
+ * 答案缓存开关（v14，同问不同答修复）。
+ *
+ * 命中条件：同 avatarId + 同 conversation 上下文 + 同 user content。
+ * 命中时直接返回上次答案，跳过 LLM 调用；用户点"重新生成"可 bypass。
+ *
+ * 解决问题：DeepSeek temperature=0 + seed 在服务端是 best-effort 而非严格
+ * deterministic（实测 deepseek-reasoner 同 prompt 5 次 5 种不同输出）。
+ * 这一层 cache 在 chatStore 入口做，绕开模型层不稳定性。
+ *
+ * 回滚方式：将本常量改为 false，恢复无 cache 行为。
+ */
+const ENABLE_ANSWER_CACHE = true
+
+/** FNV-1a 32bit 内联实现，给 cache key 用 */
+function fnvHash32(s: string): number {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    hash ^= s.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return Math.abs(hash | 0)
+}
+
+/**
+ * 生成答案缓存 key：avatarId + user content + 最近 8 条对话上下文哈希。
+ * 同问 + 同上下文 → 同 key。空格归一防止"  你好"和"你好"分两条 cache。
+ */
+function deriveAnswerCacheKey(
+  avatarId: string,
+  userContent: string,
+  recentMessages: Array<{ role: string; content: string }>,
+): string {
+  const normalizedUser = userContent.trim().replace(/\s+/g, ' ')
+  const ctx = recentMessages
+    .slice(-8)
+    .map((m) => `${m.role}:${m.content.slice(0, 200)}`)
+    .join('|')
+  const ctxHash = fnvHash32(ctx).toString(16)
+  const userHash = fnvHash32(normalizedUser).toString(16)
+  return `${avatarId}::${userHash}::${ctxHash}`
+}
+
+/**
  * 基于字符串内容生成稳定 seed（FNV-1a 32bit 简化版）。
  * 同样的 user content 会得到同样的 seed，保证"同问"时 LLM 采样一致；
  * 不同问题得到不同 seed，避免人为强相关。
@@ -2284,6 +2345,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
     proxyOpts?: SendMessageProxyOptions,
+    options?: { skipCache?: boolean },
   ) => {
     const invokeProxyComplete = async (
       r: { ok: true; assistantText: string } | { ok: false; error: string },
@@ -2442,6 +2504,57 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         // 关联失败不阻塞主对话；记日志便于排查
         const linkMsg = linkErr instanceof Error ? linkErr.message : String(linkErr)
         window.electronAPI.logEvent('warn', 'link-attachment-to-message-error', linkMsg)
+      }
+    }
+
+    // ─── 答案缓存命中检查（v14，同问不同答修复）────────────────────────────
+    // 同 avatarId + 同上下文 + 同 user content → 复用上次答案，跳过 LLM。
+    // images / attachments / inlineFiles 场景跳过 cache（这些消息每次内容必变）。
+    const cacheBypassed =
+      options?.skipCache === true ||
+      !ENABLE_ANSWER_CACHE ||
+      (images && images.length > 0) ||
+      (attachments && attachments.length > 0) ||
+      (inlineFiles && inlineFiles.length > 0) ||
+      proxyOpts?.proxyJobId !== undefined
+    if (!cacheBypassed) {
+      try {
+        const cacheKey = deriveAnswerCacheKey(avatarId, content, messages)
+        const cached = await window.electronAPI.getCachedAnswer(cacheKey)
+        if (cached) {
+          logPerf('answer-cache:hit', `key=${cacheKey.slice(0, 32)}... len=${cached.assistantContent.length}`)
+          const assistantMsg: ChatMessage = {
+            id: nextMessageId(),
+            role: 'assistant',
+            content: cached.assistantContent,
+            reasoning: cached.reasoningContent ?? undefined,
+          }
+          set((state) => ({
+            messages: [...state.messages, assistantMsg],
+            isLoading: false,
+            toolCallStatus: '',
+          }))
+          try {
+            await window.electronAPI.saveMessage(
+              conversationId,
+              'assistant',
+              cached.assistantContent,
+              undefined,
+              undefined,
+              cached.reasoningContent ?? undefined,
+            )
+          } catch (saveErr) {
+            const m = saveErr instanceof Error ? saveErr.message : String(saveErr)
+            window.electronAPI.logEvent('warn', 'answer-cache-save-message-error', m)
+          }
+          logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms via-cache displayLen=${cached.assistantContent.length}`)
+          await invokeProxyComplete({ ok: true, assistantText: cached.assistantContent })
+          return
+        }
+      } catch (cacheErr) {
+        // cache 读取失败不阻断主流程，降级到正常 LLM 路径
+        const m = cacheErr instanceof Error ? cacheErr.message : String(cacheErr)
+        window.electronAPI.logEvent('warn', 'answer-cache-get-error', m)
       }
     }
 
@@ -3517,6 +3630,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         console.error('[chatStore] 保存助手消息失败:', msg)
         window.electronAPI.logEvent('error', 'save-assistant-message-error', msg)
       }
+      // ─── 写答案缓存（v14）─────────────────────────────────────────────
+      // 只在常规对话写：cacheBypassed 路径（含 skipCache=true 的"重新生成"）跳过，
+      // 避免覆盖原稳定答案。
+      if (!cacheBypassed && displayText.trim().length > 0) {
+        try {
+          const cacheKey = deriveAnswerCacheKey(avatarId, content, messages)
+          await window.electronAPI.saveCachedAnswer({
+            cacheKey,
+            avatarId,
+            conversationId,
+            userContent: content,
+            assistantContent: displayText,
+            reasoningContent: reasoningText || null,
+            model: activeModel.model,
+          })
+        } catch (cacheSaveErr) {
+          const m = cacheSaveErr instanceof Error ? cacheSaveErr.message : String(cacheSaveErr)
+          window.electronAPI.logEvent('warn', 'answer-cache-save-error', m)
+        }
+      }
       logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms displayLen=${displayText.length}`)
       // Phase 0.5 结构化埋点：写持久日志，2 周后聚合分析（按分身的 search_knowledge 触发率/命中率/TTFT）
       window.electronAPI.logEvent(
@@ -3573,5 +3706,48 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  /**
+   * 「重新生成」按钮入口（v14）。流程见 ChatStore.regenerateAssistantMessage 定义。
+   */
+  regenerateAssistantMessage: async (messageId, conversationId, avatarId) => {
+    if (get().isLoading) return false
+    const state = get()
+    const idx = state.messages.findIndex((m) => m.id === messageId && m.role === 'assistant')
+    if (idx < 0) return false
+    // 向上找最近的 user 消息
+    let userIdx = -1
+    for (let i = idx - 1; i >= 0; i--) {
+      if (state.messages[i].role === 'user') { userIdx = i; break }
+    }
+    if (userIdx < 0) return false
+    const userMsg = state.messages[userIdx]
+    // 还原带 anchor 的 content 为原始 user 输入（去掉 [id:mxxxx] 前缀）
+    const rawContent = userMsg.content.replace(/^\[id:m\d+\]\s*/, '')
+
+    // 从 UI 删除该 assistant 消息（及其后续 tool/follow-up 消息）。
+    // 保守起见仅删该条；多轮 tool 消息留给下次清理。
+    set({ messages: state.messages.filter((_, i) => i !== idx) })
+
+    try {
+      await window.electronAPI.deleteMessage(messageId)
+    } catch (delErr) {
+      const m = delErr instanceof Error ? delErr.message : String(delErr)
+      window.electronAPI.logEvent('warn', 'regenerate-delete-message-error', m)
+    }
+
+    // skipCache=true：跳过读 + 跳过写，原 cache 保留为"稳定档"
+    await get().sendMessage(
+      rawContent,
+      conversationId,
+      avatarId,
+      userMsg.imageUrls,
+      undefined,
+      userMsg.attachments,
+      undefined,
+      undefined,
+      { skipCache: true },
+    )
+    return true
+  },
   clearMessages: () => set({ messages: [], skillProposals: [], toolCallStatus: '', isLoading: false, toolCallTimeline: [] }),
 }))

@@ -14,6 +14,9 @@ on:
         description: '产物上传到哪个 release（如 v0.13.0）；代码来自当前 main HEAD'
         required: true
 
+permissions:
+  contents: write  # 需要 write 才能 gh release upload；默认 GITHUB_TOKEN 是 read
+
 jobs:
   build:
     strategy:

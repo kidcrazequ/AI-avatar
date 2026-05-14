@@ -44,10 +44,12 @@ desktop-app/build/ios-icons/
 test-output/
 desktop-app/test-output/
 
-# 分身运行时产物（缓存、工作区、动态报告，勿提交）
-avatars/*/_cache/
-avatars/*/workspaces/
-avatars/*/wiki/evolution-report.json
+# 分身运行时安装目录：expert-packs/ 是源（入库），avatars/ 是安装后副本（运行时数据），
+# 含用户对话、cache、记忆等本地状态，全部不入库
+avatars/
+
+# Claude Code worktree 与会话元数据（多 agent 工作时自动生成，本地存活即可）
+.claude/
 
 # 大文件资产与归档（超过 GitHub 100MB 硬限制，禁止入库）
 assets/*.mp4

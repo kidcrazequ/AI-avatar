@@ -1,11 +1,9 @@
 name: Release builds
 
 # 触发条件：
-#   - push 形如 v* 的 tag → 自动打三平台并上传到对应 GitHub Release
-#   - 手动触发（workflow_dispatch）→ 对已存在的 tag 重打
-#
-# 假设：用户先通过 `gh release create` / git tag push 把 Release 与 tag
-# 创建好。本 workflow 只负责把构建产物 upload 上去（用 --clobber 覆盖同名）。
+#   - push 形如 v* 的 tag → 自动 checkout 该 tag 构建并上传到对应 GitHub Release
+#   - 手动触发（workflow_dispatch）→ checkout main 构建并上传到指定 tag 的 Release
+#     （tag 历史不动；适合"基于当前 main 修补 + 重发产物"的场景）
 on:
   push:
     tags:
@@ -13,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要重打的已存在 tag（如 v0.13.0）'
+        description: '产物上传到哪个 release（如 v0.13.0）；代码来自当前 main HEAD'
         required: true
 
 jobs:
@@ -34,32 +32,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - name: Checkout (push tag → 用 tag ref; 手动 → 用 inputs.tag)
+      # push tag → 用 tag ref；手动触发 → 用 main（最新修补，tag 历史不动）
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
-      - name: Setup Node.js (cache disabled to avoid stale npm cache)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop-app/package-lock.json
+            packages/core/package-lock.json
 
       - name: Build @soul/core
         working-directory: packages/core
-        shell: bash
-        run: |
-          set -x
-          pwd
-          ls package*.json
-          echo "===== package.json dependencies ====="
-          cat package.json | grep -A20 '"dependencies"'
-          echo "===== npm cache clean & install ====="
-          npm cache clean --force
-          npm install
-          echo "===== node_modules/yaml after install ====="
-          ls -la node_modules/yaml 2>&1 || echo "yaml NOT INSTALLED"
-          npm ls yaml 2>&1 || true
-          npm run build
+        run: npm ci && npm run build
 
       - name: Install desktop-app + build ${{ matrix.target }}
         working-directory: desktop-app
@@ -74,14 +64,13 @@ jobs:
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           cd desktop-app/release
           shopt -s nullglob
-          # 把每种潜在产物模式分开 expand，再统一 upload
           files=()
           for pattern in ${{ matrix.artifact_glob }}; do
             for f in $pattern; do
               files+=("$f")
             done
           done
-          # 同步加上 electron-builder 生成的 latest*.yml（auto-updater 用）
+          # electron-builder 的 auto-updater manifest
           for f in latest*.yml; do
             files+=("$f")
           done

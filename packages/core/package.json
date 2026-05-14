@@ -49,6 +49,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "nodejieba": "^3.5.8",
     "turndown": "^7.2.4",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yaml": "^2.5.1"
   }
 }

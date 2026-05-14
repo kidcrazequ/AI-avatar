@@ -34,8 +34,7 @@ desktop-app/playwright-report/
 desktop-app/test-results/
 **/*.tsbuildinfo
 
-# 图标生成产物（保留 SVG 源文件）
-desktop-app/build/icon.png
+# 图标生成产物（保留 PNG 源 + SVG，icns/ico 由 generate-icons.js 生成不入库）
 desktop-app/build/icon.icns
 desktop-app/build/icon.ico
 desktop-app/build/ios-icons/

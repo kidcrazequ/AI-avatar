@@ -18,10 +18,10 @@
 
 import fs from 'fs'
 import path from 'path'
-// 直接 require worktree 的 packages/core（绕过 node_modules/@soul/core 符号链接到主仓库的问题）
-// 真实 runtime（Electron main）会通过 IPC 走 electron/agent-runtime-bridge.ts，不依赖此处导入。
+// 走 @soul/core 符号链接（主仓库 packages/core/dist），验证主仓库 desktop-app 解析链路。
+// 真实 runtime（Electron main）也是通过同一链路 import AgentRuntime。
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const AgentRuntime = require('../../packages/core/dist/agent-runtime') as typeof import('../../packages/core/src/agent-runtime')
+const { AgentRuntime } = require('@soul/core') as typeof import('@soul/core')
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
 const EXPERT_PACKS_DIR = path.join(REPO_ROOT, 'expert-packs')

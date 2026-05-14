@@ -50,7 +50,15 @@ jobs:
 
       - name: Build @soul/core
         working-directory: packages/core
-        run: npm ci && npm run build
+        run: |
+          npm ci
+          echo "===== package.json deps ====="
+          node -e "console.log(JSON.stringify(require('./package.json').dependencies, null, 2))"
+          echo "===== node_modules/yaml ====="
+          ls -la node_modules/yaml 2>&1 || echo "yaml NOT INSTALLED"
+          echo "===== npm ls yaml ====="
+          npm ls yaml 2>&1 || true
+          npm run build
 
       - name: Install desktop-app + build ${{ matrix.target }}
         working-directory: desktop-app

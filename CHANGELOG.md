@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## v0.13.0 (2026-05-14)
+
+> 引入 agent-runtime 治理层（Phase 0-10 借鉴 Claude Code + PAP）；答案缓存解决 DeepSeek 同问不同答；决策回溯技能（含工商储样例）；多项设置与提示词修订。
+
+### 新增
+
+- **答案缓存（cache_key 含 conversationId）** — SQLite schema v14 新增 `answer_cache` 表；同 user content + 同对话上下文命中即跳过 LLM 调用直接返回上次答案。`↻ AGAIN` 按钮可在 assistant 气泡 hover 时点击 bypass cache 重新生成（不写新 cache，保留稳定档）。`ENABLE_ANSWER_CACHE` 可关闭。
+- **决策回溯技能 decision-trace** — 公共版进 `shared/skills/`；工商储版作为 local 覆写保留在 `expert-packs/小堵/skills/` 含 262 ODM2.0 / L05Pack 案例样例；8 个 expert-pack 的 skill-index 统一注册 shared 引用。HARD_RULES 同步加规则 8（决策回溯必须含具体料号/人名/原文）、规则 9（spool 必须 read_tool_result）。
+- **read_tool_result 工具** — 专门读 ToolResultSpool 落盘的工具结果文件；解决 read_lines 因路径不在 workspace 被路径校验拒绝（"路径穿越"）导致中段证据丢失的问题。
+- **agent-runtime 治理层（feature-flagged）** — `packages/core/src/agent-runtime/` 28 个文件 + 84 单元测试，覆盖 Phase 0-10 共 11 个机制（AgentBlueprint / Hook 总线 / AuditTrail / 类型化 subagent + SpawnGuard / PermissionEnforcer 三态 + PlanMode / 分段 prompt + cache_control / Memory 3 层 / EvalHarness / A2A AgentCard / 上下文压缩 / Ingest pipeline）。默认 SOUL_USE_NEW_RUNTIME=false 不影响旧路径。
+- **agent-runtime 桥接观测** — 桌面端 `[agent-runtime] prompt cache stats`（理论 cacheable 占比）+ `[llm-cache] prompt_tokens=… cache_hit=…`（DeepSeek 真实 prefix cache 命中数）。实测小堵单条对话 cache_hit=99.8%，相比假想无缓存省 ~74% 输入 token。
+
+### 修订
+
+- **HARD_RULES 规则 7** — reasoning_content / Chain-of-Thought 必须用简体中文输出。
+- **HARD_RULES 规则 8** — 决策回溯类问题必须给具体料号 / 人名 / 项目阶段 / 原文片段；禁用"产品定位""侧重""兼顾"等泛词；至少 3 个考量点；来源用原文件名（禁 `_excel/*.json`）。
+- **HARD_RULES 规则 9** — spool 落盘的工具结果必须用 `read_tool_result` 读取，禁用 `read_lines / read_file`（会路径穿越失败）。
+- **来源 chip normalize** — `[来源: knowledge/_excel/X.json#sheet=…]` 在 SourceCitation 渲染前自动映射为 `knowledge/X.xlsx#sheet=…`，仅作用于 anchor 块内，不影响 LLM 叙述。
+- **设置面板模型 slot helpText** — "默认 XXX" → "建议使用公司提供的 GPT / Claude / 多模态 / OCR 模型；如需使用外部模型，请先报备，确保数据不外泄"。
+
+### 内部观测
+
+- LLM SSE 解析现在捕获 `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`，按 `[llm-cache]` 行输出到 DevTools console，方便长期观察 prompt 设计变化对 DeepSeek 自动 prefix cache 命中率的影响。
+- 端到端模拟脚本：`desktop-app/scripts/agent-runtime-simulate.ts`（9 expert-pack 批量算 cacheable 占比）、`agent-runtime-dev-trace.ts`（模拟桌面端 console 输出）、`anthropic-cache-pilot.ts`（备用，等未来切 Claude SDK 时启用）。
+
 ## v0.12.4 (2026-05-13)
 
 > RAG 改为纯 agentic 检索；修复切换会话导致答复消失；工具路径与小表 Excel 查询护栏；主进程分词 OOM 修复；Emoji / 思考过程持久化等对话体验修补。

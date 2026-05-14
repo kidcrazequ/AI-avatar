@@ -223,6 +223,21 @@ export class LLMService {
 
           try {
             const data = JSON.parse(event.data)
+
+            // DeepSeek / OpenAI 兼容协议：usage 在 stream 最后一条非 [DONE] chunk 里。
+            // prompt_cache_hit_tokens / prompt_cache_miss_tokens 是 DeepSeek 自动 prefix-cache 命中字段。
+            if (data.usage && (data.usage.prompt_cache_hit_tokens !== undefined || data.usage.prompt_tokens !== undefined)) {
+              const u = data.usage
+              const total = u.prompt_tokens ?? 0
+              const hit = u.prompt_cache_hit_tokens ?? 0
+              const miss = u.prompt_cache_miss_tokens ?? (total - hit)
+              const hitRatio = total > 0 ? hit / total : 0
+              // eslint-disable-next-line no-console
+              console.info(
+                `[llm-cache] prompt_tokens=${total} cache_hit=${hit} cache_miss=${miss} ratio=${(hitRatio * 100).toFixed(1)}% completion=${u.completion_tokens ?? '?'}`
+              )
+            }
+
             const delta = data.choices?.[0]?.delta
 
             if (!delta) return

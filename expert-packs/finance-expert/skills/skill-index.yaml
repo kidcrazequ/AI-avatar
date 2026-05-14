@@ -10,6 +10,33 @@
 version: "1.0"
 
 shared_skills:
+  # ── 决策回溯（v14，shared/skills/decision-trace.md） ──
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    source: shared
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 为什么取消
+      - 为什么沿用
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 谁讨论过
+      - 评估
+      - 变更点
+      - 评审
+      - 输入确认清单
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    priority: 1
+
   # ── Excel / 结构化数据场景的图表链路（先于 query_excel，遵守 G1）──
   - name: chart-from-knowledge
     path: shared/skills/chart-from-knowledge.md

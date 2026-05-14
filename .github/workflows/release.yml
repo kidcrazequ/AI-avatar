@@ -39,24 +39,25 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Setup Node.js
+      - name: Setup Node.js (cache disabled to avoid stale npm cache)
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: |
-            desktop-app/package-lock.json
-            packages/core/package-lock.json
 
       - name: Build @soul/core
         working-directory: packages/core
+        shell: bash
         run: |
-          npm ci
-          echo "===== package.json deps ====="
-          node -e "console.log(JSON.stringify(require('./package.json').dependencies, null, 2))"
-          echo "===== node_modules/yaml ====="
+          set -x
+          pwd
+          ls package*.json
+          echo "===== package.json dependencies ====="
+          cat package.json | grep -A20 '"dependencies"'
+          echo "===== npm cache clean & install ====="
+          npm cache clean --force
+          npm install
+          echo "===== node_modules/yaml after install ====="
           ls -la node_modules/yaml 2>&1 || echo "yaml NOT INSTALLED"
-          echo "===== npm ls yaml ====="
           npm ls yaml 2>&1 || true
           npm run build
 

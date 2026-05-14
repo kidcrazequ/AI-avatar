@@ -1,0 +1,86 @@
+name: Release builds
+
+# 触发条件：
+#   - push 形如 v* 的 tag → 自动打三平台并上传到对应 GitHub Release
+#   - 手动触发（workflow_dispatch）→ 对已存在的 tag 重打
+#
+# 假设：用户先通过 `gh release create` / git tag push 把 Release 与 tag
+# 创建好。本 workflow 只负责把构建产物 upload 上去（用 --clobber 覆盖同名）。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要重打的已存在 tag（如 v0.13.0）'
+        required: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest    # arm64 runner，dist:mac 跑双 arch（arm64 + x64 via Rosetta cross-build）
+            target: mac
+            artifact_glob: '*.dmg *.dmg.blockmap'
+          - os: windows-latest  # x64，原生支持 NSIS，不需要 wine
+            target: win
+            artifact_glob: '*.exe *.exe.blockmap'
+          - os: ubuntu-latest   # x64 AppImage（默认 target）
+            target: linux
+            artifact_glob: '*.AppImage *.AppImage.blockmap *.deb *.snap'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout (push tag → 用 tag ref; 手动 → 用 inputs.tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop-app/package-lock.json
+            packages/core/package-lock.json
+
+      - name: Build @soul/core
+        working-directory: packages/core
+        run: npm ci && npm run build
+
+      - name: Install desktop-app + build ${{ matrix.target }}
+        working-directory: desktop-app
+        run: npm ci && npm run dist:${{ matrix.target }}
+
+      - name: Upload artifacts to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          cd desktop-app/release
+          shopt -s nullglob
+          # 把每种潜在产物模式分开 expand，再统一 upload
+          files=()
+          for pattern in ${{ matrix.artifact_glob }}; do
+            for f in $pattern; do
+              files+=("$f")
+            done
+          done
+          # 同步加上 electron-builder 生成的 latest*.yml（auto-updater 用）
+          for f in latest*.yml; do
+            files+=("$f")
+          done
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "没找到任何 ${{ matrix.target }} 产物 — 上传步骤跳过"
+            ls -la
+            exit 1
+          fi
+          echo "Uploading ${#files[@]} files to release $TAG:"
+          printf '  %s\n' "${files[@]}"
+          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

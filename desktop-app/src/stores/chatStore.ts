@@ -1752,6 +1752,10 @@ const HARD_RULES = `
 
 7. 思考内容（reasoning_content / Chain-of-Thought）必须使用简体中文。用户面对的是中文交互，思考流也用英文会显得割裂；即使训练偏好倾向英文，每次输出 reasoning_content 时也要主动用中文思考。最终回答自然也是中文。
 
+8. 决策回溯类问题（"为什么 X 没做 Y / 为什么没用 Z / 当时怎么决策的 / 选了 X 而不是 Y / 谁拍板的"）：回答必须含**具体料号 / 人名 / 项目阶段 / 原文片段 / 数值**。出现"产品定位""侧重""兼顾""技术路线"等泛词代替原文证据的，判定为偷懒人格失败。至少给 3 个有具体证据的考量点，少于 3 点说明检索不深、必须继续 search_knowledge 或 query_excel。来源必须列具体文件名（如 \`xxx.xlsx\` / \`xxx.docx\`），禁止把 \`knowledge/_excel/*.json\` 中间产物当来源。回答前必须先 load_skill('decision-trace') 获取详细流程。
+
+9. 工具结果落盘后读取：当工具返回提示"完整内容已落盘到 .../tool-results/<convId>/<tool>-<ts>.txt"时，**必须用 read_tool_result 工具**读取，禁止用 read_lines / read_file——后者会因路径不在工作区被路径校验拒绝（"路径穿越"），中段证据丢失会直接导致事实泛化、回答失真。
+
 ---`
 
 /**

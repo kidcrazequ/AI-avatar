@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 工具
+
+- **`desktop-app/scripts/rebuild-raw-from-source.ts`** — 新增 `_raw/` 重建工具。`avatars|expert-packs/*/knowledge/_raw/` 因 .gitignore 排除（单文件常 >100MB 超 GitHub 限制），本地清理后无法从仓库恢复，需要按 .md frontmatter 的 `raw_file:` 引用从外部源材料目录精准回填。脚本四阶段 CLI：`scan`（扫 .md → 引用清单）→ `match`（源目录递归 basename 匹配）→ `copy`（拷贝到 expert-packs/_raw/ 主存储 + 硬链接到 avatars/_raw/ 镜像）→ `verify`（双边断链校验 + 整合 match-report 写 REBUILD_LOG.md）。首次用于小堵-工商储专家：376 引用 → 359 命中 / 17 未命中（dashboard / EM-EHS / TS-002xxxx / 消防类，已在 `_raw/BACKLOG-NOTES.md` 留指引）。
+
 ## v0.13.1 (2026-05-15)
 
 > 修复 v0.13.0 Windows 安装版「点开后窗口不出现」的启动崩溃。

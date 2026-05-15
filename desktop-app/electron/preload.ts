@@ -318,6 +318,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 分身管理
   listAvatars: () => ipcRenderer.invoke('list-avatars'),
+  /** 读取分身的 defaultModel（avatar.config.json#defaultModel）；用于 LLMService dispatcher 路由 */
+  getAvatarDefaultModel: (avatarId: string) => ipcRenderer.invoke('get-avatar-default-model', avatarId),
   listExpertPacks: () => ipcRenderer.invoke('expert-packs:list'),
   installExpertPack: (packId: string) => ipcRenderer.invoke('expert-packs:install', packId),
   isExpertPackInstalled: (packId: string) => ipcRenderer.invoke('expert-packs:is-installed', packId),

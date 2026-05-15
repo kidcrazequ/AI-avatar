@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "小堵-工商储专家",
   "redline": "提供方案与测算草案；不替代正式商务报价、合同条款或施工签证；友商比价禁止报任何数字。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

@@ -886,6 +886,11 @@ interface ExpertPackMeta {
   sourceAvatarId: string
   redline: string
   installable: boolean
+  /**
+   * 安装后写入 avatar.config.json#defaultModel，作为该分身在 LLMService dispatcher 的首选模型。
+   * 字段缺失时分身回落到全局 chat slot；字段以 claude-* 起始时需用户已在设置中配置 Anthropic key。
+   */
+  defaultModel?: string
 }
 
 interface ExpertPackView extends ExpertPackMeta {
@@ -926,6 +931,10 @@ function readExpertPackMeta(packDir: string): ExpertPackMeta | null {
     if (typeof raw[key] !== 'string' || raw[key].trim() === '') return null
   }
 
+  const defaultModel = typeof raw.defaultModel === 'string' && raw.defaultModel.trim().length > 0
+    ? raw.defaultModel.trim()
+    : undefined
+
   return {
     id: raw.id as string,
     name: raw.name as string,
@@ -936,6 +945,7 @@ function readExpertPackMeta(packDir: string): ExpertPackMeta | null {
     sourceAvatarId: raw.sourceAvatarId as string,
     redline: raw.redline as string,
     installable: raw.installable !== false,
+    defaultModel,
   }
 }
 
@@ -1020,6 +1030,8 @@ async function writeInstalledAvatarConfig(avatarId: string, pack: ExpertPackMeta
       version: pack.version,
       installedAt: localDateString(),
     },
+    // 仅在 pack 声明了 defaultModel 时写入；保留用户对已安装分身的人工覆盖
+    ...(pack.defaultModel && !existing.defaultModel ? { defaultModel: pack.defaultModel } : {}),
   }
   await atomicWriteFile(configPath, `${JSON.stringify(config, null, 2)}\n`)
 }
@@ -2413,6 +2425,23 @@ wrapHandler('write-soul', async (_, avatarId: string, content: string) => {
 
 wrapHandler('list-avatars', () => {
   return avatarManager.listAvatars()
+})
+
+/**
+ * 读取分身 `defaultModel` 字段（avatar.config.json）。
+ *
+ * 用于 LLMService dispatcher 路由：当字段以 `claude-` 起始时，chatStore
+ * 会改用 ClaudeProvider + Anthropic 凭据；否则继续走 OpenAI-compat slot。
+ *
+ * 字段缺失或文件不存在返回 null（chatStore 自动 fallback 到全局 chat slot）。
+ */
+wrapHandler('get-avatar-default-model', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身 ID')
+  const configPath = path.join(avatarsPath, avatarId, 'avatar.config.json')
+  const cfg = readJsonObject(configPath)
+  if (!cfg) return null
+  const model = cfg.defaultModel
+  return typeof model === 'string' && model.trim().length > 0 ? model.trim() : null
 })
 
 wrapHandler('expert-packs:list', () => {

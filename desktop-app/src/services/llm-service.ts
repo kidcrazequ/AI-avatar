@@ -1,9 +1,18 @@
-import { createParser } from 'eventsource-parser'
+import { ClaudeProvider } from './llm-providers/claude'
+import { OpenAICompatProvider } from './llm-providers/openai-compat'
+import type { LLMProvider, SystemBlock } from './llm-providers/types'
+
+// 重新导出，让调用方从 llm-service 一处取就行
+export type { SystemBlock }
 
 /**
  * 统一 LLM 服务（GAP5）
- * 基于 OpenAI 兼容接口，支持任意供应商（DeepSeek / Qwen / OpenAI / Ollama 等）。
- * 通过传入不同的 baseUrl + model + apiKey 实现多模型切换。
+ * 自 2026-05 起 LLMService 退化为薄 facade：内部委托给 LLMProvider 实现。
+ *
+ * - OpenAI-compat（DeepSeek / Qwen / OpenAI / Ollama 等）→ OpenAICompatProvider
+ * - Anthropic Claude（claude-*）→ ClaudeProvider（子任务 4 引入）
+ *
+ * 对外接口（chat / complete / 类型导出）保持不变，调用方无需感知 provider 切换。
  */
 
 export interface ModelConfig {
@@ -47,9 +56,6 @@ export interface LLMTool {
   }
 }
 
-/** 默认请求超时（5 分钟），防止慢网或挂死连接无限等待 */
-const DEFAULT_TIMEOUT_MS = 300_000
-
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
 /** 已知支持 thinking/reasoning 输出的模型名匹配 */
@@ -61,7 +67,8 @@ export function detectReasoning(modelName: string): { enabled: boolean; effort: 
     : { enabled: false, effort: 'low' }
 }
 
-function reasoningBudgetTokens(effort: ReasoningEffort): number {
+/** thinking budget token 预算（由 Provider 内部使用） */
+export function reasoningBudgetTokens(effort: ReasoningEffort): number {
   if (effort === 'high') return 16000
   if (effort === 'medium') return 8000
   return 2000
@@ -80,6 +87,15 @@ export interface ChatOptions {
   /** reasoning 模型可显式覆盖思考强度；未设置时按模型名自动检测 */
   reasoningEffort?: ReasoningEffort
   signal?: AbortSignal
+  /**
+   * 结构化 system prompt 分段（Phase 2）。
+   *
+   * 提供时**取代** messages 中 role=system 的消息；Claude 上会按 cacheable 标记插入
+   * cache_control；OpenAI-compat 拍平成单条 system message。
+   *
+   * 未提供时 provider 仍按 messages 中的 system 消息处理（兼容老调用方式）。
+   */
+  systemBlocks?: SystemBlock[]
 }
 
 /** 默认模型配置 */
@@ -120,238 +136,65 @@ export function resolveCreationModel(creationModel: ModelConfig, chatModel: Mode
   return chatModel
 }
 
+/**
+ * 模型名是否为 Anthropic Claude 系列。
+ * 用于 LLMService dispatcher 选择 Provider。
+ */
+export function isClaudeModel(model: string): boolean {
+  return /^claude-/i.test(model)
+}
+
+/**
+ * Anthropic 凭据（独立于 OpenAI-compat slot 的 sibling 设置）。
+ *
+ * 由调用方（chatStore 等）从 SQLite settings 读取 `anthropic_api_key` / `anthropic_base_url` 并注入。
+ * 仅在选用 Claude 模型时使用——OpenAI-compat 走 ModelConfig 中已有的 apiKey/baseUrl。
+ */
+export interface AnthropicCredentials {
+  apiKey: string
+  baseUrl: string
+}
+
 export class LLMService {
-  private config: ModelConfig
+  private provider: LLMProvider
 
-  constructor(config: ModelConfig) {
-    this.config = config
-  }
-
-  /** 统一 HTTP 错误处理，避免 chat/complete 中重复代码 */
-  private async throwOnHttpError(response: Response): Promise<void> {
-    if (response.ok) return
-    const errorText = await response.text().catch(() => response.statusText)
-    const { status } = response
-    if (status === 401 || status === 403) {
-      throw new Error(`API 密钥无效或已过期，请在设置中检查 (${status})`)
-    } else if (status === 429) {
-      throw new Error(`请求频率超限或额度用尽，请稍后重试 (429)`)
-    } else if (status >= 500) {
-      throw new Error(`服务端暂时不可用，请稍后重试 (${status})`)
-    } else if (status === 400 && /must be (passed back|provided|sent back)|reasoning_content/i.test(errorText)) {
-      // DeepSeek-Reasoner 等 thinking 模型要求多轮回传 reasoning_content；这是 client 实现 bug
-      throw new Error(`reasoning_content 未在多轮 round-trip 中回传，请检查 client 是否在 assistant 消息中保留了 thinking 模型的 reasoning_content 字段 (400): ${errorText}`)
-    } else if (status === 400 && /(unknown parameter|not supported|unsupported|invalid parameter).*?(reasoning_effort|thinking)/i.test(errorText)) {
-      // 真正不支持 thinking 参数的模型
-      throw new Error(`该模型或服务商不支持 thinking 参数，请切换普通模型或关闭 reasoning 配置 (400): ${errorText}`)
+  /**
+   * @param config OpenAI-compat 配置（baseUrl + model + apiKey）。
+   *               model 名匹配 `claude-*` 时此处的 apiKey/baseUrl 会被忽略，改用第 2 参数。
+   * @param anthropicCreds 选用 Claude 模型时必传；否则忽略。
+   *                       未提供而 model 是 claude-* 时构造抛错，避免静默走错路径。
+   */
+  constructor(config: ModelConfig, anthropicCreds?: AnthropicCredentials) {
+    if (isClaudeModel(config.model)) {
+      if (!anthropicCreds || !anthropicCreds.apiKey) {
+        throw new Error(`未配置 Anthropic API Key，无法使用模型 ${config.model}。请在设置 → 外部 API 凭据 → Anthropic Claude 填写 API Key`)
+      }
+      this.provider = new ClaudeProvider({
+        apiKey: anthropicCreds.apiKey,
+        baseUrl: anthropicCreds.baseUrl || 'https://api.anthropic.com',
+        model: config.model,
+      })
     } else {
-      throw new Error(`API 请求失败 (${status}): ${errorText}`)
+      this.provider = new OpenAICompatProvider(config)
     }
   }
 
   /**
    * 流式对话，支持工具调用。
-   * onChunk: 每收到文本片段时回调
-   * onToolCall: 收到工具调用时回调（非流式场景）
-   * onDone: 完成时回调，携带完整回复文本、可能的工具调用列表，以及 thinking 模型的 reasoning_content
-   *         （reasoning_content 必须在多轮 round-trip 时原样回传，否则 DeepSeek-Reasoner 等模型会 400）
-   * onError: 错误时回调
+   * 委托给 Provider，对外签名与历史完全一致。
    */
   async chat(
     messages: LLMMessage[],
     onChunk: (text: string, kind?: 'content' | 'reasoning') => void,
     onDone: (fullText: string, toolCalls?: ToolCall[], reasoningText?: string) => void,
     onError: (error: Error) => void,
-    options: ChatOptions = {}
+    options: ChatOptions = {},
   ): Promise<void> {
-    try {
-      const body: Record<string, unknown> = {
-        model: this.config.model,
-        messages: messages.map(this.serializeMessage),
-        stream: true,
-      }
-
-      if (options.tools && options.tools.length > 0) {
-        body.tools = options.tools
-        body.tool_choice = 'auto'
-      }
-      if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
-      if (options.temperature !== undefined) body.temperature = options.temperature
-      if (options.seed !== undefined) body.seed = options.seed
-      const reasoning = detectReasoning(this.config.model)
-      const reasoningEffort = options.reasoningEffort ?? reasoning.effort
-      if (reasoning.enabled || options.reasoningEffort !== undefined) {
-        body.reasoning_effort = reasoningEffort
-        body.thinking = {
-          type: 'enabled',
-          budget_tokens: reasoningBudgetTokens(reasoningEffort),
-        }
-      }
-
-      const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
-      const mergedSignal = options.signal
-        ? AbortSignal.any([options.signal, timeoutSignal])
-        : timeoutSignal
-
-      // 已显式通过 AbortSignal.timeout 做超时控制；throwOnHttpError 需要读取响应体
-      // 映射到友好错误信息，fetchWithTimeout 会在 !ok 时直接抛出无法保留正文，故此处保留原生 fetch。
-      // eslint-disable-next-line no-restricted-globals
-      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: mergedSignal,
-      })
-
-      await this.throwOnHttpError(response)
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('无法读取响应流')
-
-      const decoder = new TextDecoder()
-      let fullText = ''
-      // 累积 thinking 模型的思维链文本，用于多轮 round-trip 原样回传给服务端
-      let reasoningText = ''
-      const toolCallsMap = new Map<number, ToolCall>()
-
-      const parser = createParser({
-        onEvent: (event) => {
-          if (event.data === '[DONE]') return
-
-          try {
-            const data = JSON.parse(event.data)
-
-            // DeepSeek / OpenAI 兼容协议：usage 在 stream 最后一条非 [DONE] chunk 里。
-            // prompt_cache_hit_tokens / prompt_cache_miss_tokens 是 DeepSeek 自动 prefix-cache 命中字段。
-            if (data.usage && (data.usage.prompt_cache_hit_tokens !== undefined || data.usage.prompt_tokens !== undefined)) {
-              const u = data.usage
-              const total = u.prompt_tokens ?? 0
-              const hit = u.prompt_cache_hit_tokens ?? 0
-              const miss = u.prompt_cache_miss_tokens ?? (total - hit)
-              const hitRatio = total > 0 ? hit / total : 0
-              // eslint-disable-next-line no-console
-              console.info(
-                `[llm-cache] prompt_tokens=${total} cache_hit=${hit} cache_miss=${miss} ratio=${(hitRatio * 100).toFixed(1)}% completion=${u.completion_tokens ?? '?'}`
-              )
-            }
-
-            const delta = data.choices?.[0]?.delta
-
-            if (!delta) return
-
-            if (delta.reasoning_content) {
-              reasoningText += delta.reasoning_content
-              onChunk(delta.reasoning_content, 'reasoning')
-            }
-
-            if (delta.content) {
-              fullText += delta.content
-              onChunk(delta.content, 'content')
-            }
-
-            if (delta.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index ?? 0
-                if (!toolCallsMap.has(idx)) {
-                  toolCallsMap.set(idx, {
-                    id: tc.id ?? `call_${idx}`,
-                    type: 'function',
-                    function: { name: tc.function?.name ?? '', arguments: '' },
-                  })
-                }
-                const existing = toolCallsMap.get(idx)!
-                if (tc.function?.name) existing.function.name = tc.function.name
-                if (tc.function?.arguments) existing.function.arguments += tc.function.arguments
-              }
-            }
-          } catch (parseErr) {
-            console.warn('[LLMService] SSE 事件解析失败:', event.data?.slice(0, 100), parseErr instanceof Error ? parseErr.message : String(parseErr))
-          }
-        },
-      })
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          parser.feed(decoder.decode(value, { stream: true }))
-        }
-      } finally {
-        // eslint-disable-next-line @typescript-eslint/no-empty-function -- reader 可能已被取消或网络已断，忽略失败
-        reader.cancel().catch(() => {})
-      }
-
-      const toolCalls = toolCallsMap.size > 0
-        ? Array.from(toolCallsMap.entries())
-            .sort(([a], [b]) => a - b)
-            .map(([, v]) => v)
-        : undefined
-
-      onDone(fullText, toolCalls, reasoningText || undefined)
-    } catch (error) {
-      // 区分网络错误和其他错误，给出更友好的提示
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        onError(new Error('网络连接失败，请检查网络和 API 地址'))
-      } else if (error instanceof Error && error.name === 'AbortError') {
-        onError(error)
-      } else {
-        onError(error instanceof Error ? error : new Error(String(error)))
-      }
-    }
+    return this.provider.chat(messages, onChunk, onDone, onError, options)
   }
 
-  /**
-   * 非流式调用（用于 OCR/图片识别等单次请求场景）
-   */
+  /** 非流式调用（用于 OCR/图片识别等单次请求场景） */
   async complete(messages: LLMMessage[], options: ChatOptions = {}): Promise<string> {
-    const body: Record<string, unknown> = {
-      model: this.config.model,
-      messages: messages.map(this.serializeMessage),
-      stream: false,
-    }
-    if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens
-    if (options.temperature !== undefined) body.temperature = options.temperature
-
-    const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
-    const mergedSignal = options.signal
-      ? AbortSignal.any([options.signal, timeoutSignal])
-      : timeoutSignal
-
-    // 已显式通过 AbortSignal.timeout 做超时控制；throwOnHttpError 需要读取响应体
-    // 映射到友好错误信息，fetchWithTimeout 会在 !ok 时直接抛出无法保留正文，故此处保留原生 fetch。
-    // eslint-disable-next-line no-restricted-globals
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: mergedSignal,
-    })
-
-    await this.throwOnHttpError(response)
-
-    let data: { choices?: Array<{ message?: { content?: string } }> }
-    try {
-      data = await response.json()
-    } catch (jsonErr) {
-      throw new Error(`API 响应解析失败：${jsonErr instanceof Error ? jsonErr.message : String(jsonErr)}`)
-    }
-    return data.choices?.[0]?.message?.content ?? ''
-  }
-
-  /** 将内部消息格式序列化为 API 请求格式（箭头函数避免 .map 丢失 this） */
-  private serializeMessage = (msg: LLMMessage): Record<string, unknown> => {
-    const base: Record<string, unknown> = { role: msg.role, content: msg.content }
-    if (msg.tool_calls) base.tool_calls = msg.tool_calls
-    if (msg.tool_call_id) base.tool_call_id = msg.tool_call_id
-    if (msg.name) base.name = msg.name
-    // DeepSeek-Reasoner 等 thinking 模型多轮 round-trip 必须原样回传 reasoning_content，否则 API 直接 400
-    if (msg.reasoning_content != null) base.reasoning_content = msg.reasoning_content
-    return base
+    return this.provider.complete(messages, options)
   }
 }

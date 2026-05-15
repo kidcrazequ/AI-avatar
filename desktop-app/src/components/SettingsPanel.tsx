@@ -372,6 +372,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [doubaoAsrModel, setDoubaoAsrModel] = useState('bigmodel')
   const [showDoubaoAsrKey, setShowDoubaoAsrKey] = useState(false)
   const [doubaoAsrStatusMsg, setDoubaoAsrStatusMsg] = useState('')
+  /** Anthropic Claude 配置（独立 provider，与 OpenAI-compat 协议平行；模型按分身/对话级选择） */
+  const [anthropicApiKey, setAnthropicApiKey] = useState('')
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.anthropic.com')
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false)
   /** P0 ISS：工具 embedding 重排（依赖 OCR 槽位的 DashScope Key 作 embedding） */
   const [issRerankEnabled, setIssRerankEnabled] = useState(true)
   const [issTopNInput, setIssTopNInput] = useState(String(ISS_DEFAULT_TOP_N))
@@ -554,6 +558,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         proxEn,
         proxPort,
         proxTok,
+        anthroKey,
+        anthroBase,
       ] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
@@ -570,6 +576,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         window.electronAPI.getSetting('proxy_server_enabled'),
         window.electronAPI.getSetting('proxy_server_port'),
         window.electronAPI.getSetting('proxy_api_token'),
+        window.electronAPI.getSetting('anthropic_api_key'),
+        window.electronAPI.getSetting('anthropic_base_url'),
       ])
       if (loadSeqRef.current !== seq) return
       setWikiInjectRag(wikiInject === 'true')
@@ -590,6 +598,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setProxyEnabled(proxEn === 'true')
       setProxyPort(proxPort && proxPort.trim() !== '' ? proxPort.trim() : '18888')
       setProxyToken(proxTok ?? '')
+      setAnthropicApiKey(anthroKey ?? '')
+      setAnthropicBaseUrl(anthroBase && anthroBase.trim() !== '' ? anthroBase : 'https://api.anthropic.com')
 
       // MCP servers（独立 try，避免一个面板失败影响其他设置加载）
       try {
@@ -933,10 +943,13 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
 
   const handleSaveIntegrations = async () => {
     try {
+      const anthroBase = anthropicBaseUrl.trim() || 'https://api.anthropic.com'
       await Promise.all([
         window.electronAPI.setSetting('tavily_api_key', tavilyApiKey.trim()),
         // 九层重构 #16 generate_image：DashScope API Key
         window.electronAPI.setSetting('image_api_key', imageApiKey.trim()),
+        window.electronAPI.setSetting('anthropic_api_key', anthropicApiKey.trim()),
+        window.electronAPI.setSetting('anthropic_base_url', anthroBase),
       ])
       const endpoint = await persistDoubaoAsrSettings()
       setDoubaoAsrEndpoint(endpoint)
@@ -1853,8 +1866,52 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
               <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
                 <div className="max-w-lg space-y-6">
                   <div className="border-l-3 border-px-primary pl-4 py-1">
-                    <h3 className="font-game text-[16px] font-bold text-px-text mb-1">工具集成</h3>
-                    <p className="font-game text-[14px] text-px-text-sec">配置外部工具的 API Key，让 AI 能联网搜索、抓取网页</p>
+                    <h3 className="font-game text-[16px] font-bold text-px-text mb-1">外部 API 凭据</h3>
+                    <p className="font-game text-[14px] text-px-text-sec">配置外部模型 / 工具的 API Key，让 AI 能调用 Claude、联网搜索、生成图片等</p>
+                  </div>
+
+                  {/* Anthropic Claude（独立 provider；与 OpenAI-compat 协议并存） */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-game text-[14px] text-px-text">Anthropic Claude</span>
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider">CLAUDE</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      Claude Opus / Sonnet / Haiku 模型。具体模型按分身配置或对话内切换；
+                      <span className="text-px-primary ml-1 font-mono">https://console.anthropic.com</span>
+                    </p>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">API KEY</label>
+                      <div className="flex gap-2">
+                        <input
+                          type={showAnthropicKey ? 'text' : 'password'}
+                          value={anthropicApiKey}
+                          onChange={(e) => setAnthropicApiKey(e.target.value)}
+                          placeholder="sk-ant-..."
+                          className="pixel-input flex-1 font-mono text-[13px]"
+                        />
+                        <button
+                          onClick={() => setShowAnthropicKey(!showAnthropicKey)}
+                          className="pixel-btn-ghost px-3"
+                          title={showAnthropicKey ? '隐藏' : '显示'}
+                        >
+                          {showAnthropicKey ? '◉' : '○'}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block font-game text-[12px] text-px-text-sec mb-1.5 tracking-wider">BASE URL</label>
+                      <input
+                        type="text"
+                        value={anthropicBaseUrl}
+                        onChange={(e) => setAnthropicBaseUrl(e.target.value)}
+                        placeholder="https://api.anthropic.com"
+                        className="pixel-input w-full font-mono text-[13px]"
+                      />
+                      <div className="font-game text-[11px] text-px-text-dim mt-1.5">
+                        留空使用默认 https://api.anthropic.com；如需走 CF / Bedrock / 自建代理可填自定义地址
+                      </div>
+                    </div>
                   </div>
 
                   {/* Tavily Search API */}

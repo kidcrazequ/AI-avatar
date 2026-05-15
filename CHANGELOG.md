@@ -2,9 +2,43 @@
 
 ## Unreleased
 
+## v0.14.0 (2026-05-15)
+
+> 引入 LLM Provider 抽象层与 Anthropic Claude 路径；新增对话级模型切换器与 system prompt 结构化分段（cache_control 准备就绪），为大体积 system prompt 做 Anthropic prompt cache 命中铺路。
+
+### 新增
+
+- **LLM Provider 抽象层（`desktop-app/src/services/llm-providers/`）** — 把原 `LLMService` 拆出 `LLMProvider` 接口 + 两个实现：`OpenAICompatProvider`（保留 DeepSeek / Qwen / OpenAI / Ollama 等 OpenAI 兼容协议，逐行迁移现有逻辑）与 `ClaudeProvider`（基于 `@anthropic-ai/sdk` 0.96.0，处理消息/工具/图片协议转换、流式 SSE、错误归一化）。`LLMService` 退化为 dispatcher，按 model 名前缀 `claude-*` 路由；非 Claude 模型仍走 OpenAI 兼容路径，行为零变化。
+- **Anthropic API 凭据配置** — 设置面板「外部 API 凭据」tab（原「工具集成」）新增 Anthropic Claude 卡片，独立于 chat/creation/vision/ocr slot 体系；存为 sibling key `anthropic_api_key` / `anthropic_base_url`（默认 `https://api.anthropic.com`，支持改走 CF / Bedrock / 自建代理）。
+- **对话级模型切换器** — ChatWindow 顶栏新增循环按钮（默认 / Opus 4.7 / Sonnet 4.6 / Haiku 4.5 / DeepSeek），写入 chatStore 的 `conversationModelOverrides` map。优先级：会话覆盖 > chat slot（避免分身 `defaultModel` 静默绕过用户设置的意外路径）。
+- **结构化 system prompt 分段（`SystemBlock[]`）** — `ChatOptions.systemBlocks` 让上层声明哪些段落 `cacheable`。`ClaudeProvider.buildSystemBlocks()` 把 cacheable 段尾部插入 `cache_control: ephemeral`（最多 4 个 breakpoint，超出降级 + 警告）；`OpenAICompatProvider` 拍平成单条 system message，由 DeepSeek 自动 prefix cache 命中。
+- **chatStore system 分层** — `sendMessage` 把 system prompt 拆成 `stableSystemText`（HARD_RULES + 分身 systemPrompt，cacheable）和 `dynamicSystemText`（@mentions intro / attachment guide / snipNoticeBlock，每轮变化不进 cache），按 SystemBlock[] 发送。
+- **expert pack 推荐模型元数据** — 9 个 expert-pack.json 加 `defaultModel` 字段（电图 → claude-opus-4-7 推理重；其它 8 个 → claude-sonnet-4-6）。安装时通过 `writeInstalledAvatarConfig` 写入 `avatar.config.json#defaultModel`，与 `get-avatar-default-model` IPC 配套，为后续"推荐模型 hint" UI 留口。
+
+### 修订
+
+- **HARD_RULES XML 化 + 前置** — 9 条硬性应答规则用 `<critical_rules priority="highest" violation="人格失败">` 包裹，从 stable system 末尾挪到**最前面**。XML 标签语义保证权重不因位置变化丢失，且整块进入 prompt cache 前缀，Claude 路径上每轮节省同等 token。
+- **Cache 命中日志规范化** — `OpenAICompatProvider` 与 `ClaudeProvider` 的 `[llm-cache]` 行统一带 `provider=` 标签和 `hit_ratio=` 字段；Anthropic 的 `cache_creation_input_tokens` / `cache_read_input_tokens` 与 DeepSeek 的 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 在 console 端形成对比基线。
+
+### 修复
+
+- **LLMService 构造抛错不阻塞 UI** — 选用 claude-* 模型但未配 Anthropic key 时，原本会让 `isLoading` 卡在 true 致 UI 永远「思考中」。chatStore.sendMessage 现在用 try/catch 包住 `new LLMService(...)`，构造期错误转为可见的 assistant 消息（含「请在设置 → 外部 API 凭据 → Anthropic Claude 填写 API Key」指引）+ `isLoading: false` 解锁。
+
 ### 工具
 
 - **`desktop-app/scripts/rebuild-raw-from-source.ts`** — 新增 `_raw/` 重建工具。`avatars|expert-packs/*/knowledge/_raw/` 因 .gitignore 排除（单文件常 >100MB 超 GitHub 限制），本地清理后无法从仓库恢复，需要按 .md frontmatter 的 `raw_file:` 引用从外部源材料目录精准回填。脚本四阶段 CLI：`scan`（扫 .md → 引用清单）→ `match`（源目录递归 basename 匹配）→ `copy`（拷贝到 expert-packs/_raw/ 主存储 + 硬链接到 avatars/_raw/ 镜像）→ `verify`（双边断链校验 + 整合 match-report 写 REBUILD_LOG.md）。首次用于小堵-工商储专家：376 引用 → 359 命中 / 17 未命中（dashboard / EM-EHS / TS-002xxxx / 消防类，已在 `_raw/BACKLOG-NOTES.md` 留指引）。
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.13.1 → 0.14.0
+- **`desktop-app/package-lock.json`** — 同步根包版本字段
+- **`@anthropic-ai/sdk`** — 新增依赖 ^0.96.0
+
+### 已知限制 / 后续
+
+- ClaudeProvider 不支持 thinking 多轮 round-trip：thinking content block 需要服务端 signature，无法从纯字符串 `reasoning_content` 重建。当前 thinking 文本仅作为 reasoning 显示，下一轮不回传 API。建议先不要给 Claude 分身指定 `*-thinking` 系列模型。
+- avatar.defaultModel 字段已保留但不自动应用，作为推荐元数据等待未来 UI（如"推荐 Opus"badge）使用。
+- 创作 / 视觉 / OCR 模型仍走 OpenAI-compat 路径——若要把这些 slot 也切 Claude，需要在 `test-generator.ts` / `soul-step-generator.ts` 等 caller 注入 Anthropic 凭据。
 
 ## v0.13.1 (2026-05-15)
 

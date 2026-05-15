@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "design-master",
   "redline": "提供设计草案、规范与建议；不替代法务版权审定，不凭印象编造品牌 token；色彩对比/字号下限/点击区域是 hard constraint。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

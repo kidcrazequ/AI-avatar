@@ -2,9 +2,29 @@
 
 ## Unreleased
 
+## v0.13.1 (2026-05-15)
+
+> 修复 v0.13.0 Windows 安装版「点开后窗口不出现」的启动崩溃。
+
+### 修复
+
+- **Windows 启动崩溃（nodejieba 词典路径穿越 asar）** — `packages/core/src/knowledge-retriever.ts`：
+  - **根因**：生产环境 `require.resolve('nodejieba/package.json')` 返回 `…/resources/app.asar/node_modules/nodejieba/…`，词典文件 `jieba.dict.utf8` 等由 cppjieba C++ 用 `fopen` 读取，无法穿透 asar 虚拟路径；cppjieba 在文件缺失时走 native `FATAL` 直接 `abort()` 进程。崩溃发生在主进程顶层 `import` 阶段，早于 `registerProcessCrashHandlers()` 注册，所以 Windows 上表现为「点开 exe 后窗口不出现，无任何日志」。
+  - **修复**：新增 `resolveAsarUnpacked()`，把模块目录里的 `app.asar` 显式替换为 `app.asar.unpacked`（`electron-builder.yml` 的 `asarUnpack` 已经把 nodejieba 解出来）；同时在调 `jiebaBinary.load()` 之前用 `fs.existsSync` 预检 5 个词典文件，缺失即跳过 load 走降级，避免 native abort。
+  - **降级路径**：`tokenize()` 增加 `jiebaLoaded` 标志，false 时改走 CJK 2-gram 滑窗切分，BM25 仍有可用 token，检索质量降级但应用可启动。
+
+### 内部观测
+
+- **`desktop-app/scripts/after-pack.js`** — 注释纠偏：明确说明 nodejieba 3.5.8 是 N-API 模块（`napi_register_module_v1`），上游官方只发 `node-v127` win32 prebuild，N-API 跨 ABI 兼容，Electron 41（真实 ABI 145）可加载；避免后续维护者按旧注释「electron 41 内嵌 Node 22 → 127」的错误推理把 `nodeAbi` 改成 `node-v145` 导致 404。
+
+### 项目治理
+
+- **`desktop-app/package.json`** — 0.13.0 → 0.13.1
+- **`desktop-app/package-lock.json`** — 同步根包版本字段（v0.13.0 漏更新，本版顺带补齐 0.12.4 → 0.13.1）
+
 ## v0.13.0 (2026-05-14)
 
-> 引入 agent-runtime 治理层（Phase 0-10 借鉴 Claude Code + PAP）；答案缓存解决 DeepSeek 同问不同答；决策回溯技能（含工商储样例）；多项设置与提示词修订。
+> 答案缓存终结 DeepSeek 同问不同答，并落地 agent-runtime 治理层与 decision-trace 决策回溯技能。
 
 ### 新增
 

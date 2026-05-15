@@ -28,8 +28,9 @@ files:
 asarUnpack:
   - "node_modules/7zip-bin/**/*"
   - "node_modules/node-unrar-js/**/*"
-  # 原生模块必须 unpack；交叉编译 Windows/Linux 时 afterPack 依赖此路径替换 better_sqlite3.node
+  # 原生模块必须 unpack；交叉编译 Windows/Linux 时 afterPack 依赖此路径替换 .node 文件
   - "node_modules/better-sqlite3/**/*"
+  - "node_modules/nodejieba/**/*"
 
 # 打包模板和共享知识库为只读资源（分身由用户在应用内创建，不预置）
 extraResources:

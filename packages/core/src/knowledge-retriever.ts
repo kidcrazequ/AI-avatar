@@ -22,24 +22,71 @@ function isExcelStructuredRagOnlyMd(content: string): boolean {
 // 抛 `ReferenceError: dict is not defined`，因为它在 load() 内对未声明变量赋值（已知 upstream bug，
 // 见 nodejieba/index.js 的 `dict = dictJson.dict || ...` 行，缺 var）。
 // 直接 require 编译产物 .node + 手动指定字典路径即可。
+//
+// Electron 打包路径修正（2026-05-15 修复 Windows 安装版「程序打不开」）：
+// 生产环境 require.resolve 返回 `…/resources/app.asar/node_modules/nodejieba/package.json`，
+// 但词典文件由 cppjieba C++ 用 fopen 读取，不能穿透 asar 虚拟路径。
+// electron-builder.yml 已经在 asarUnpack 里包含 nodejieba/**/*，词典实际落在
+// `app.asar.unpacked` 下，因此需要把路径里的 `app.asar` 显式替换为 `app.asar.unpacked`。
+// 不替换时 cppjieba 直接 FATAL，且发生在主进程顶层 import 阶段，
+// 在 registerProcessCrashHandlers 注册之前，所以 Windows 表现为「点开后窗口不出现」。
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const jiebaModuleDir = require('path').dirname(require.resolve('nodejieba/package.json'))
+const _nodePath = require('path') as typeof import('path')
+const _rawJiebaModuleDir = _nodePath.dirname(require.resolve('nodejieba/package.json'))
+function resolveAsarUnpacked(p: string): string {
+  // 同时兼容 POSIX(/) 与 Windows(\) 分隔符；非 asar 场景（开发环境）replace 是 no-op。
+  return p.replace(/([\\/])app\.asar([\\/])/g, '$1app.asar.unpacked$2')
+}
+const jiebaModuleDir = resolveAsarUnpacked(_rawJiebaModuleDir)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const jiebaBinary = require(require('path').join(jiebaModuleDir, 'build/Release/nodejieba.node')) as {
+const jiebaBinary = require(_nodePath.join(jiebaModuleDir, 'build/Release/nodejieba.node')) as {
   cut: (text: string) => string[]
   load: (dict: string, hmmDict: string, userDict: string, idfDict: string, stopWordDict: string) => unknown
 }
+/**
+ * jieba 字典是否成功加载。false 时 tokenize 走 2-gram 兜底分词，避免检索完全失效。
+ * 仅在 Electron 资源缺失等异常路径会为 false；正常路径恒为 true。
+ */
+let jiebaLoaded = false
 {
+  const _dictDir = _nodePath.join(jiebaModuleDir, 'submodules/cppjieba/dict')
+  const _dictFiles = {
+    jieba: _nodePath.join(_dictDir, 'jieba.dict.utf8'),
+    hmm: _nodePath.join(_dictDir, 'hmm_model.utf8'),
+    user: _nodePath.join(_dictDir, 'user.dict.utf8'),
+    idf: _nodePath.join(_dictDir, 'idf.utf8'),
+    stop: _nodePath.join(_dictDir, 'stop_words.utf8'),
+  }
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const _path = require('path') as typeof import('path')
-  const _dictDir = _path.join(jiebaModuleDir, 'submodules/cppjieba/dict')
-  jiebaBinary.load(
-    _path.join(_dictDir, 'jieba.dict.utf8'),
-    _path.join(_dictDir, 'hmm_model.utf8'),
-    _path.join(_dictDir, 'user.dict.utf8'),
-    _path.join(_dictDir, 'idf.utf8'),
-    _path.join(_dictDir, 'stop_words.utf8'),
-  )
+  const _fs = require('fs') as typeof import('fs')
+  // 必须先用 existsSync 预检：cppjieba 在文件缺失时走 C++ FATAL → abort 进程，
+  // JS try/catch 完全抓不住，会让 Electron 主进程在顶层 import 阶段直接退出，
+  // 表现为「Windows 程序打不开」。预检通过后才允许调 load。
+  const missing = Object.entries(_dictFiles)
+    .filter(([, p]) => !_fs.existsSync(p))
+    .map(([k]) => k)
+  if (missing.length === 0) {
+    try {
+      jiebaBinary.load(_dictFiles.jieba, _dictFiles.hmm, _dictFiles.user, _dictFiles.idf, _dictFiles.stop)
+      jiebaLoaded = true
+    } catch (err) {
+      // load 在文件齐全时通常不抛 JS 异常（错误走 native FATAL），
+      // 但保留 try/catch 兜底 N-API 风格的异常路径，行为统一为降级。
+      console.error(
+        '[knowledge-retriever] nodejieba.load 抛出异常，已降级为 2-gram 兜底；dictDir=',
+        _dictDir,
+        'error=',
+        err instanceof Error ? err.message : String(err),
+      )
+    }
+  } else {
+    console.error(
+      '[knowledge-retriever] nodejieba 字典文件缺失，已降级为 2-gram 兜底；dictDir=',
+      _dictDir,
+      'missing=',
+      missing.join(','),
+    )
+  }
 }
 
 /**
@@ -93,9 +140,18 @@ export function tokenize(text: string): string[] {
   const tokens: string[] = []
   for (const part of parts) {
     if (/[\u4e00-\u9fa5]/.test(part)) {
-      const words = jiebaBinary.cut(part)
-      for (const w of words) {
-        if (w.length >= 2) tokens.push(w)
+      if (jiebaLoaded) {
+        const words = jiebaBinary.cut(part)
+        for (const w of words) {
+          if (w.length >= 2) tokens.push(w)
+        }
+      } else {
+        // 字典加载失败时的兜底：按 2-gram 滑窗切分 CJK 文本。
+        // 召回质量不如 jieba 分词，但足以保证 BM25 仍有可用 token，
+        // 不至于因为字典缺失让整个检索器返回空结果。
+        for (let i = 0; i < part.length - 1; i++) {
+          tokens.push(part.slice(i, i + 2))
+        }
       }
     } else {
       const cleaned = part.replace(/^[-\s]+|[-\s]+$/g, '')

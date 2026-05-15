@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "project-manager-expert",
   "redline": "不虚假承诺工期与资源，计划输出需标注假设、风险与依赖。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

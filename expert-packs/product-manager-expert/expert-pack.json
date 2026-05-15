@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "product-manager-expert",
   "redline": "产品决策输出需标注 AI 草案属性，不替代真实用户研究与业务负责人决策。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

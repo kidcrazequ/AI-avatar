@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "electrical-engineer-expert",
   "redline": "工程结论必须可追溯到图纸、标准或知识库依据，不替代注册工程师签审。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-opus-4-7"
 }

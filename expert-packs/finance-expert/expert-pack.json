@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "finance-expert",
   "redline": "提供财务分析草案与经营建议，不替代审计、税务申报或注册会计师意见。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

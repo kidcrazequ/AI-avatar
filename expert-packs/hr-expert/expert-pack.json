@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "hr-expert",
   "redline": "避免歧视性建议与未经确认的候选人隐私处理，不替代当地劳动法专业意见。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

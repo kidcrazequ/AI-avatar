@@ -7,5 +7,6 @@
   "author": "zhi.qu",
   "sourceAvatarId": "market-analyst-expert",
   "redline": "关键市场数据必须标注来源与日期，缺数据时不得编造。",
-  "installable": true
+  "installable": true,
+  "defaultModel": "claude-sonnet-4-6"
 }

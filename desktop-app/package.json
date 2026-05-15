@@ -52,6 +52,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@antv/infographic": "^0.2.17",
     "@monaco-editor/react": "^4.7.0",
     "@octokit/rest": "^22.0.1",

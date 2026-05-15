@@ -62,7 +62,7 @@ interface Props {
 }
 
 export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName }: Props) {
-  const { messages, isLoading, toolCallTimeline, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, bindConversation, mode, setMode } = useChatStore(
+  const { messages, isLoading, toolCallTimeline, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, bindConversation, mode, setMode, conversationModelOverride, setConversationModel } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
       isLoading: s.isLoading,
@@ -76,8 +76,25 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       bindConversation: s.bindConversation,
       mode: s.mode,
       setMode: s.setMode,
+      conversationModelOverride: s.conversationModelOverrides[conversationId] ?? null,
+      setConversationModel: s.setConversationModel,
     }))
   )
+
+  /** 会话内可临时切换的模型循环菜单（与子任务 7 配套；默认 = 走分身 defaultModel） */
+  const MODEL_CYCLE: Array<{ value: string | null; label: string }> = [
+    { value: null, label: '默认' },
+    { value: 'claude-opus-4-7', label: 'Opus 4.7' },
+    { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+    { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
+    { value: 'deepseek-chat', label: 'DeepSeek' },
+  ]
+  const modelIdx = Math.max(0, MODEL_CYCLE.findIndex(m => m.value === conversationModelOverride))
+  const currentModelLabel = MODEL_CYCLE[modelIdx].label
+  const cycleModel = (): void => {
+    const next = MODEL_CYCLE[(modelIdx + 1) % MODEL_CYCLE.length]
+    setConversationModel(conversationId, next.value)
+  }
   /** 九层重构 #12 ask_question：当前等待用户回答的问题 */
   const [pendingAsk, setPendingAsk] = useState<PendingAskQuestion | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -366,6 +383,15 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     <div className="flex flex-col h-full bg-px-bg">
       {/* 顶栏：模式徽章 + 工具按钮（九层重构 #17） */}
       <div className="flex items-center justify-end px-4 py-1.5 border-b border-px-border-dim bg-px-surface gap-2">
+        {/* 模型切换：点击循环 默认/Opus/Sonnet/Haiku/DeepSeek，会话级生效 */}
+        <button
+          onClick={cycleModel}
+          className="font-game text-[11px] px-2 py-0.5 border tracking-widest text-px-text-sec border-px-border hover:opacity-80"
+          title={`当前模型：${currentModelLabel}（点击循环切换；"默认"使用分身 defaultModel 或 chat slot）`}
+          aria-label="切换会话模型"
+        >
+          {currentModelLabel}
+        </button>
         {/* 模式徽章：点击循环 agent → plan → ask → agent，方便快速切换 */}
         <button
           onClick={() => {

@@ -692,6 +692,8 @@ interface ElectronAPI {
 
   // 分身管理
   listAvatars: () => Promise<Avatar[]>
+  /** 读取分身的 defaultModel（avatar.config.json#defaultModel）；用于 LLMService dispatcher 路由 */
+  getAvatarDefaultModel: (avatarId: string) => Promise<string | null>
   listExpertPacks: () => Promise<ExpertPack[]>
   installExpertPack: (packId: string) => Promise<ExpertPackInstallResult>
   isExpertPackInstalled: (packId: string) => Promise<boolean>

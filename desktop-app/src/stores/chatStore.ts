@@ -11,6 +11,7 @@ import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
 import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
+import { extractUncertain, extractReconsider } from './deliberation-extractors'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
@@ -20,6 +21,9 @@ const USER_UPDATE_REGEX = /\[USER_UPDATE\]([\s\S]*?)\[\/USER_UPDATE\]/g
 
 /** Feature 6: 从 AI 回复中提取技能创建建议的正则 */
 const SKILL_CREATE_REGEX = /\[SKILL_CREATE\]([\s\S]*?)\[\/SKILL_CREATE\]/g
+
+// v17 deliberation 抽取器抽到独立文件便于单测，见 ./deliberation-extractors.ts。
+// 在 extractMemoryUpdates 调用之后串行使用，从 cleanText 上抽出 chip 展示用的标记。
 
 /** 从回复文本中提取并移除 memory 更新标记 */
 function extractMemoryUpdates(text: string): { cleanText: string; updates: string[] } {
@@ -126,6 +130,16 @@ export interface ChatMessage {
    * @date 2026-05-08
    */
   documentAttachments?: DocumentAttachment[]
+  /**
+   * v17 deliberation 表达（Phase 1 of human-cognition extension）：
+   *   - uncertainMarkers: 分身用 [UNCERTAIN]...[/UNCERTAIN] 标注的认知不确定点
+   *   - reconsiderMarkers: 分身用 [RECONSIDER]...[/RECONSIDER] 标注的立场更新
+   *
+   * 仅 assistant 消息会有；UI 渲染为消息泡下方的 chip。
+   * 缺省 undefined 即可（与空数组等价；不要存空数组浪费持久化字节）。
+   */
+  uncertainMarkers?: string[]
+  reconsiderMarkers?: string[]
 }
 
 /**
@@ -1767,6 +1781,30 @@ const HARD_RULES = `<critical_rules priority="highest" violation="人格失败">
 </critical_rules>`
 
 /**
+ * v17 deliberation 表达（Phase 1 of human-cognition extension）：
+ *
+ * 这是软行为指引——不是 critical rule（不会让人格失败）。鼓励分身在以下两种情境
+ * 显式用标签暴露"内心活动"，让对话更像人：
+ *   - 真正认知不确定时（数据来源不明、推理薄弱、领域边界外）→ [UNCERTAIN]
+ *   - 同轮或跨轮明显改主意时（之前判断 X，现在意识到 Y）→ [RECONSIDER]
+ *
+ * 渲染层把这两类标签的内容**抽出**正文，单独以 chip 形式展示在消息泡下方；
+ * 因此**不需要**在标签外面再用"我不太确定 / 我改主意了"重复一遍——直接放在
+ * 标签内即可，标签外的正文保持简洁。
+ *
+ * 反例：滥用本标签弱化每个判断的确信度。只有真实犹豫/真实立场更新才用。
+ */
+const DELIBERATION_GUIDE = `<deliberation_guide>
+你可以在回复中使用以下两种标签暴露内心活动（仅在真实情境下使用，禁止滥用稀释确信度）：
+
+- \`[UNCERTAIN]具体哪里不确定，最多 200 字[/UNCERTAIN]\` —— 当数据存疑、推理薄弱、超出领域时使用。
+- \`[RECONSIDER]从 X 改到 Y，原因是 Z，最多 200 字[/RECONSIDER]\` —— 当你在同次回复内或跨轮立场发生明显更新时使用。
+
+标签内容会被渲染层抽出正文，单独以 chip 形式展示在消息泡下方；**不要**在标签外再用"我不太确定 / 我改主意"重复一遍。
+正文保持简洁，标签承载犹豫/改主意的细节。
+</deliberation_guide>`
+
+/**
  * 工具循环采用"软警告 + 硬兜底"两段式：
  * 8 轮时提醒模型收敛或说明继续原因，25 轮时强制禁用工具跑最终回答。
  */
@@ -2097,6 +2135,8 @@ function upsertLastAssistant(
   content: string,
   reasoning?: string,
   documentAttachments?: DocumentAttachment[],
+  uncertainMarkers?: string[],
+  reconsiderMarkers?: string[],
 ): ChatMessage[] {
   const withoutLast = messages.at(-1)?.role === 'assistant'
     ? messages.slice(0, -1)
@@ -2109,6 +2149,10 @@ function upsertLastAssistant(
     content,
     reasoning: trimmedReasoning ? trimmedReasoning : undefined,
     documentAttachments: attachments,
+    // v17 deliberation：流式期间 markers 不会变（标记只在最终回复出现），但收尾 setState
+    // 时把抽出的 markers 一并塞进 message，让 chip 立刻渲染，不必等下一次 loadMessages。
+    uncertainMarkers: uncertainMarkers && uncertainMarkers.length > 0 ? uncertainMarkers : undefined,
+    reconsiderMarkers: reconsiderMarkers && reconsiderMarkers.length > 0 ? reconsiderMarkers : undefined,
   }]
 }
 
@@ -2822,7 +2866,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       : ''
     // Phase 3：HARD_RULES 用 <critical_rules> XML 包裹后挪到 stable 段最前，
     // 享受 prompt cache 的同时由 XML 标签语义保证权重不下降
-    const stableSystemText = HARD_RULES + '\n\n' + systemPrompt
+    // v17：HARD_RULES（critical）+ DELIBERATION_GUIDE（软指引，鼓励 [UNCERTAIN]/[RECONSIDER]）+ 分身 system prompt。
+    // 两段都进 stable 段享受 prompt cache；guide 放在 HARD_RULES 之后、systemPrompt 之前，
+    // 保持"先红线，再行为指引，再人格"的语义序。
+    const stableSystemText = HARD_RULES + '\n\n' + DELIBERATION_GUIDE + '\n\n' + systemPrompt
     const dynamicSystemText = dynamicAppended + snipNoticeBlock
 
     // agent-runtime 观测接入：保留原有 stats 上报，flag off 时无副作用
@@ -3634,7 +3681,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 所有工具调用结束，处理最终回复
       const { cleanText: memCleanText, updates: memUpdates } = extractMemoryUpdates(assistantText)
       const { cleanText: userCleanText, updates: userUpdates } = extractUserUpdates(memCleanText)
-      const { cleanText, proposals: skillProposals } = extractSkillCreate(userCleanText)
+      // v17 deliberation：抽 UNCERTAIN/RECONSIDER 标记。放在 skillCreate 之前——
+      // 这两个 marker 不删原文做卡片，是直接从展示文里抽掉只留 chip。
+      const { cleanText: uncCleanText, markers: uncertainMarkers } = extractUncertain(userCleanText)
+      const { cleanText: recCleanText, markers: reconsiderMarkers } = extractReconsider(uncCleanText)
+      const { cleanText, proposals: skillProposals } = extractSkillCreate(recCleanText)
       const hasUpdates = memUpdates.length > 0 || userUpdates.length > 0 || skillProposals.length > 0
       const displayText = cleanText || assistantText || (hasUpdates ? '（已更新记忆/画像/技能）' : '')
 
@@ -3743,6 +3794,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             displayText,
             reasoningText,
             collectedDocumentAttachments,
+            uncertainMarkers,
+            reconsiderMarkers,
           ),
           isLoading: false,
           toolCallStatus: '',
@@ -3754,7 +3807,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       try {
         // 把流式累积的 reasoningText 一并落盘，让切换会话回来仍能恢复 thinking 折叠区。
         // 非 thinking 模型 reasoningText 是空串，saveMessage 内部按 trim 长度判定存 NULL。
-        await window.electronAPI.saveMessage(conversationId, 'assistant', displayText, undefined, undefined, reasoningText || undefined)
+        // v17：连带把 [UNCERTAIN]/[RECONSIDER] 抽出的标记数组一起落盘。
+        await window.electronAPI.saveMessage(
+          conversationId,
+          'assistant',
+          displayText,
+          undefined,
+          undefined,
+          reasoningText || undefined,
+          uncertainMarkers.length > 0 ? uncertainMarkers : undefined,
+          reconsiderMarkers.length > 0 ? reconsiderMarkers : undefined,
+        )
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
         console.error('[chatStore] 保存助手消息失败:', msg)

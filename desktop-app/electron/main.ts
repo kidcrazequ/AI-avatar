@@ -1300,8 +1300,18 @@ wrapHandler('workspace:grep', (_, conversationId: string, relPath: string, patte
 
 // ─── 消息管理 ────────────────────────────────────────────────────────────────
 
-wrapHandler('save-message', (_, conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) => {
-  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning)
+wrapHandler('save-message', (
+  _,
+  conversationId: string,
+  role: 'user' | 'assistant' | 'tool',
+  content: string,
+  toolCallId?: string,
+  imageUrls?: string[],
+  reasoning?: string,
+  uncertainMarkers?: string[],
+  reconsiderMarkers?: string[],
+) => {
+  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers)
 })
 
 wrapHandler('get-messages', (_, conversationId: string) => {

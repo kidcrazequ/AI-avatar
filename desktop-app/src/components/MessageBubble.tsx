@@ -470,6 +470,37 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   ))}
                 </div>
               )}
+              {/*
+                v17 deliberation 表达（Phase 1 of human-cognition extension）：
+                  - 🤔 [UNCERTAIN] → 认知不确定（数据存疑、推理薄弱）
+                  - ↻  [RECONSIDER] → 立场更新（之前认为 X，现在认为 Y）
+                文本超过 60 字截断显示，title 给完整原文，鼠标悬停可见。
+              */}
+              {(message.uncertainMarkers && message.uncertainMarkers.length > 0) ||
+              (message.reconsiderMarkers && message.reconsiderMarkers.length > 0) ? (
+                <div className="not-prose flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-px-border/40">
+                  {message.uncertainMarkers?.map((m, i) => (
+                    <span
+                      key={`unc-${message.id}-${i}`}
+                      title={m}
+                      className="font-game text-[10px] tracking-wider px-1.5 py-0.5
+                        border border-px-warning/60 text-px-warning bg-px-warning/5"
+                    >
+                      🤔 {m.length > 60 ? m.slice(0, 60) + '…' : m}
+                    </span>
+                  ))}
+                  {message.reconsiderMarkers?.map((m, i) => (
+                    <span
+                      key={`rec-${message.id}-${i}`}
+                      title={m}
+                      className="font-game text-[10px] tracking-wider px-1.5 py-0.5
+                        border border-px-accent/60 text-px-accent bg-px-accent/5"
+                    >
+                      ↻ {m.length > 60 ? m.slice(0, 60) + '…' : m}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </div>

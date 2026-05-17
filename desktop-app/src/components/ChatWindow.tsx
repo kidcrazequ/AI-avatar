@@ -257,6 +257,18 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
               const documentAttachments = role === 'assistant'
                 ? documentAttachmentsByAssistantId.get(m.id)
                 : undefined
+              // v17：从 DB 的 uncertain_markers / reconsider_markers 列恢复 chip。
+              // 列存 JSON 数组字符串；NULL/损坏/非数组都退化为 undefined（与无 chip 等价）。
+              const parseMarkers = (raw: string | null | undefined): string[] | undefined => {
+                if (!raw) return undefined
+                try {
+                  const parsed = JSON.parse(raw)
+                  if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') && parsed.length > 0) {
+                    return parsed as string[]
+                  }
+                } catch { /* swallow: 损坏列等价于无 chip */ }
+                return undefined
+              }
               return {
                 // 用 DB 的真实 messageId，便于后续 attachments 用 message_id 精确关联
                 id: `db-${conversationId}-${m.id || i}`,
@@ -268,6 +280,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 // thinking 模型的思考过程从 DB reasoning_content 列恢复（v13 schema 起持久化），
                 // 让切换回该会话时折叠区能复现；历史无此列的行返回 NULL，与 undefined 同行为
                 reasoning: m.reasoning_content || undefined,
+                uncertainMarkers: parseMarkers(m.uncertain_markers),
+                reconsiderMarkers: parseMarkers(m.reconsider_markers),
               }
             })
         )

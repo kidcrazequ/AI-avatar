@@ -53,6 +53,13 @@ export interface ConversationJsonlRecord {
   imageUrls?: string[] | null
   /** thinking 模型 reasoning_content（仅 assistant；NULL 表示该消息无思考过程） */
   reasoningContent?: string | null
+  /**
+   * v17：[UNCERTAIN] 标记内容数组（仅 assistant；NULL 表示该消息无犹豫标注）。
+   * 离线分析"分身在哪些回答里表达不确定"——配合 reconsiderMarkers 反映 deliberation 行为。
+   */
+  uncertainMarkers?: string[] | null
+  /** v17：[RECONSIDER] 标记内容数组（仅 assistant；NULL 表示该消息无改主意标注） */
+  reconsiderMarkers?: string[] | null
   /** 写入时间戳（毫秒） */
   ts: number
 }

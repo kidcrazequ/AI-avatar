@@ -20,8 +20,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchMessages: (query: string, avatarId?: string) => ipcRenderer.invoke('search-messages', query, avatarId),
 
   // 消息管理
-  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) =>
-    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning),
+  saveMessage: (
+    conversationId: string,
+    role: 'user' | 'assistant' | 'tool',
+    content: string,
+    toolCallId?: string,
+    imageUrls?: string[],
+    reasoning?: string,
+    uncertainMarkers?: string[],
+    reconsiderMarkers?: string[],
+  ) =>
+    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers),
   getMessages: (conversationId: string) => ipcRenderer.invoke('get-messages', conversationId),
 
   // 删除单条消息（v14，「重新生成」按钮专用）

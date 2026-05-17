@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 16
+const CURRENT_SCHEMA_VERSION = 17
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -124,6 +124,21 @@ export interface Message {
   image_urls?: string
   /** thinking 模型输出的 reasoning_content（仅 assistant 流式产物会带；NULL 表示该消息无思考过程） */
   reasoning_content?: string | null
+  /**
+   * Deliberation 表达（v17 引入，2026-05-17）。
+   *
+   * 仅 assistant 角色可能携带——分身在不确信时用 [UNCERTAIN]...[/UNCERTAIN] 标记。
+   * sqlite 存 JSON 数组字符串（如 `["这条数据来源不明", "我不太肯定 X"]`）；NULL 等价空。
+   * 渲染侧把这些 marker 拆成 chip 显示在消息泡下方，体现"像人一样有犹豫"。
+   */
+  uncertain_markers?: string | null
+  /**
+   * Deliberation 表达（v17 引入）：改主意 / 重新考虑。
+   *
+   * 同上，[RECONSIDER]...[/RECONSIDER] 标记内容；JSON 数组字符串。
+   * 与 uncertain 分开存便于按类型过滤；语义不同：uncertain=认知不确定，reconsider=立场更新。
+   */
+  reconsider_markers?: string | null
   created_at: number
 }
 
@@ -237,7 +252,7 @@ export class DatabaseManager {
         `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
       ),
       insertMessage: this.db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateConversationTime: this.db.prepare(
         `UPDATE conversations SET updated_at = ? WHERE id = ?`
@@ -336,6 +351,8 @@ export class DatabaseManager {
         tool_call_id TEXT,
         image_urls TEXT,
         reasoning_content TEXT,
+        uncertain_markers TEXT,
+        reconsider_markers TEXT,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
       )
@@ -961,6 +978,17 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 17) {
+      // v16 → v17：messages 增加 uncertain_markers + reconsider_markers 列，
+      // 承载分身 [UNCERTAIN]/[RECONSIDER] 标记（"像人一样表达犹豫"，Phase 1 of
+      // human-cognition extension）。两列存 JSON 数组字符串，NULL 等价空。
+      this.db.transaction(() => {
+        this.safeAddColumn('messages', 'uncertain_markers', 'TEXT')
+        this.safeAddColumn('messages', 'reconsider_markers', 'TEXT')
+        version = 17
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -1197,14 +1225,28 @@ export class DatabaseManager {
     imageUrls?: string[],
     /** thinking 模型流式产物。仅 assistant 角色会传；空串/undefined 统一存 NULL，避免空字段干扰检索。 */
     reasoning?: string,
+    /** v17：assistant 的 [UNCERTAIN] 标记内容数组（已去重 + 截断由 chatStore 负责）；空数组等价 NULL */
+    uncertainMarkers?: string[],
+    /** v17：assistant 的 [RECONSIDER] 标记内容数组；空数组等价 NULL */
+    reconsiderMarkers?: string[],
   ): string {
     const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const now = Date.now()
     const reasoningValue = reasoning && reasoning.trim().length > 0 ? reasoning : null
+    const uncertainValue = uncertainMarkers && uncertainMarkers.length > 0 ? JSON.stringify(uncertainMarkers) : null
+    const reconsiderValue = reconsiderMarkers && reconsiderMarkers.length > 0 ? JSON.stringify(reconsiderMarkers) : null
 
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
-      this.stmts.insertMessage.run(id, conversationId, role, content, toolCallId ?? null, imageUrls ? JSON.stringify(imageUrls) : null, reasoningValue, now)
+      this.stmts.insertMessage.run(
+        id, conversationId, role, content,
+        toolCallId ?? null,
+        imageUrls ? JSON.stringify(imageUrls) : null,
+        reasoningValue,
+        uncertainValue,
+        reconsiderValue,
+        now,
+      )
       this.stmts.updateConversationTime.run(now, conversationId)
     })
     saveTx()
@@ -1221,6 +1263,8 @@ export class DatabaseManager {
       toolCallId: toolCallId ?? null,
       imageUrls: imageUrls ?? null,
       reasoningContent: reasoningValue,
+      uncertainMarkers: uncertainMarkers && uncertainMarkers.length > 0 ? uncertainMarkers : null,
+      reconsiderMarkers: reconsiderMarkers && reconsiderMarkers.length > 0 ? reconsiderMarkers : null,
       ts: now,
     })
 

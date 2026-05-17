@@ -100,6 +100,10 @@ interface DbMessage {
   image_urls?: string
   /** thinking 模型 reasoning_content；NULL/缺失表示该消息无思考过程（兼容历史无此列的行） */
   reasoning_content?: string | null
+  /** v17：[UNCERTAIN] 标记内容 JSON 数组字符串；NULL/缺失 = 无 chip */
+  uncertain_markers?: string | null
+  /** v17：[RECONSIDER] 标记内容 JSON 数组字符串；NULL/缺失 = 无 chip */
+  reconsider_markers?: string | null
   created_at: number
 }
 
@@ -531,7 +535,16 @@ interface ElectronAPI {
   searchMessages: (query: string, avatarId?: string) => Promise<MessageSearchResult[]>
 
   // 消息管理
-  saveMessage: (conversationId: string, role: 'user' | 'assistant' | 'tool', content: string, toolCallId?: string, imageUrls?: string[], reasoning?: string) => Promise<string>
+  saveMessage: (
+    conversationId: string,
+    role: 'user' | 'assistant' | 'tool',
+    content: string,
+    toolCallId?: string,
+    imageUrls?: string[],
+    reasoning?: string,
+    uncertainMarkers?: string[],
+    reconsiderMarkers?: string[],
+  ) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
 
   // 删除单条消息（v14，「重新生成」按钮专用）

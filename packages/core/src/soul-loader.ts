@@ -12,6 +12,10 @@ import {
   formatStructuredMemoryEntriesForPrompt,
   buildLongTermMemoryInjectionBody,
 } from './structured-memory'
+import {
+  computeSalience,
+  computeWallClockRecencyFactor,
+} from './memory/salience'
 
 export interface AvatarConfig {
   id: string
@@ -325,19 +329,44 @@ export class SoulLoader {
       ].join('\n'))
     }
 
-    // v17 Phase 2b：注入「我和你的过去」（对话情景记忆，flat 注入版）。
-    // 仅取 importance ≥ 4 且 status !== 'forgotten' 的前 5 条，每条只渲染 title + theme 一行。
-    // 完整 summary / keyQuotes 留给 recall_conversation 工具按需取——避免 system prompt 膨胀。
-    // Phase 2c/2d 会用 salience 评分 + 二段式（focus/storage）替换本段。
-    const significantEpisodes = conversationEpisodes
-      .filter((e) => e.consolidationStatus !== 'forgotten' && e.importance >= 4)
-      .slice(0, 5)
+    // v17 Phase 2b/2d：注入「我和你的过去」（对话情景记忆，salience 排序）。
+    //
+    // 默认模式（flat）：取 salience > 0 的前 5 条，每条 title + theme 一行。
+    // SOUL_TWO_TIER_INJECTION=true 时切到二段式：
+    //   - 当前焦点（top 3，渲染 title + theme + summary 截断）
+    //   - 长期仓库（剩余条目压缩到 1 行只剩 title，给 LLM 知道还有什么可 recall）
+    //
+    // 设计原则：完整 summary / keyQuotes 永远不进 system prompt，由 recall_conversation 工具按需取。
+    // forgotten 状态在 readConversationEpisodesSafe 已剔除，到这里都是 remembered/blurred。
+    const twoTierEnabled = (process.env.SOUL_TWO_TIER_INJECTION ?? '').toLowerCase() === 'true'
+    const significantEpisodes = conversationEpisodes.filter((e) => e.salience > 0)
     if (significantEpisodes.length > 0) {
       stableParts.push('\n\n---\n\n# 我和你的过去\n\n')
-      stableParts.push('以下是你和当前用户过去几次对话里值得记得的内容（按重要性排序）。被问起"上次/之前/那次聊过"时，可调用 `recall_conversation({query})` 取该条完整 summary + key_quotes。\n\n')
-      for (const ep of significantEpisodes) {
-        const themeFragment = ep.theme.trim() ? ` — ${ep.theme.trim()}` : ''
-        stableParts.push(`- **${ep.title}**${themeFragment}（importance=${ep.importance}, valence=${ep.valence}）\n`)
+      stableParts.push('以下是你和当前用户过去对话里值得记得的内容（按 salience = 重要性 × 情感 × 时间近因 排序）。被问起"上次/之前/那次聊过"时，调用 `recall_conversation({query})` 取该条完整 summary + key_quotes。\n\n')
+      if (twoTierEnabled) {
+        const focusN = 3
+        const focus = significantEpisodes.slice(0, focusN)
+        const storage = significantEpisodes.slice(focusN)
+        stableParts.push('## 当前焦点（高 salience，可直接引用）\n\n')
+        for (const ep of focus) {
+          const themeFragment = ep.theme.trim() ? ` — ${ep.theme.trim()}` : ''
+          const summaryClip = ep.summary.length > 200 ? ep.summary.slice(0, 200) + '…' : ep.summary
+          stableParts.push(`- **${ep.title}**${themeFragment}（importance=${ep.importance}, valence=${ep.valence}, salience=${ep.salience.toFixed(2)}）\n`)
+          stableParts.push(`  - ${summaryClip}\n`)
+        }
+        if (storage.length > 0) {
+          stableParts.push('\n## 长期仓库（次级 salience，按需用 recall_conversation 取细节）\n\n')
+          for (const ep of storage) {
+            stableParts.push(`- ${ep.title}（salience=${ep.salience.toFixed(2)}）\n`)
+          }
+        }
+      } else {
+        // 旧 flat 注入：保留为默认，等到 SOUL_TWO_TIER_INJECTION 验证稳定后翻默认
+        const top = significantEpisodes.slice(0, 5)
+        for (const ep of top) {
+          const themeFragment = ep.theme.trim() ? ` — ${ep.theme.trim()}` : ''
+          stableParts.push(`- **${ep.title}**${themeFragment}（importance=${ep.importance}, valence=${ep.valence}, salience=${ep.salience.toFixed(2)}）\n`)
+        }
       }
       stableParts.push('\n## 对话回忆使用守则\n\n')
       stableParts.push([
@@ -462,13 +491,15 @@ export class SoulLoader {
 
   /**
    * v17 Phase 2b：同步读取 avatars/<id>/memory/episodes/*.json。
+   * v17 Phase 2c/2d：用 salience 评分排序（importance + |valence| 加权 + wall-clock 半衰期衰减），
+   *                  把"新且重要"的 episode 排在前面——比纯 importance 排序更像人脑的"想到什么"。
    *
    * 同步而非异步——soul-loader 整条拼装链路是同步的，引入 async 会污染所有调用点。
    * 单分身 episode 数预期 <50、单文件 <5KB，全部 readSync 完全可接受。
    * 损坏 / 不是合法 JSON 的文件被跳过（仅 console.warn），不阻塞整体注入。
    *
-   * 返回的数组按 importance desc + conversationLastMessageAt desc 排序，
-   * 调用方直接取前 N 项做注入。
+   * 返回的数组按 salience desc 排序，附带 score 便于注入侧调试 / 阈值过滤。
+   * Forgotten 状态在此就被剔除（salience=0），不进列表。
    */
   private readConversationEpisodesSafe(avatarPath: string): Array<{
     title: string
@@ -478,7 +509,9 @@ export class SoulLoader {
     valence: number
     importance: number
     conversationLastMessageAt: number
-    consolidationStatus: 'remembered' | 'blurred' | 'forgotten'
+    consolidationStatus: 'remembered' | 'blurred'
+    /** v17 Phase 2c：salience 综合得分，调用方直接拿来排序/阈值过滤 */
+    salience: number
   }> {
     const dir = path.join(avatarPath, 'memory', 'episodes')
     let entries: string[]
@@ -501,27 +534,36 @@ export class SoulLoader {
           || typeof obj.title !== 'string'
           || typeof obj.summary !== 'string'
         ) continue
+        const importance = typeof obj.importance === 'number' ? obj.importance : 3
+        const valence = typeof obj.valence === 'number' ? obj.valence : 0
+        const lastMessageAt = typeof obj.conversationLastMessageAt === 'number' ? obj.conversationLastMessageAt : 0
+        const rawStatus = obj.consolidationStatus
+        const status: 'remembered' | 'blurred' | 'forgotten' =
+          rawStatus === 'forgotten' || rawStatus === 'blurred' ? rawStatus : 'remembered'
+        if (status === 'forgotten') continue // 直接跳过，不进列表
+
+        const score = computeSalience({
+          importance,
+          emotionMagnitude: Math.abs(valence),
+          recencyFactor: computeWallClockRecencyFactor(lastMessageAt),
+          status,
+        })
         out.push({
           title: obj.title,
           theme: typeof obj.theme === 'string' ? obj.theme : '',
           summary: obj.summary,
           keyQuotes: Array.isArray(obj.keyQuotes) ? obj.keyQuotes.filter((x: unknown) => typeof x === 'string') : [],
-          valence: typeof obj.valence === 'number' ? obj.valence : 0,
-          importance: typeof obj.importance === 'number' ? obj.importance : 3,
-          conversationLastMessageAt: typeof obj.conversationLastMessageAt === 'number' ? obj.conversationLastMessageAt : 0,
-          consolidationStatus: obj.consolidationStatus === 'forgotten' || obj.consolidationStatus === 'blurred'
-            ? obj.consolidationStatus
-            : 'remembered',
+          valence,
+          importance,
+          conversationLastMessageAt: lastMessageAt,
+          consolidationStatus: status,
+          salience: score,
         })
       } catch (err) {
         console.warn(`[SoulLoader] 解析 episode 失败 (${name}):`, err instanceof Error ? err.message : String(err))
       }
     }
-    // 排序：importance desc，同重要性按最近一次消息时间 desc
-    out.sort((a, b) => {
-      if (b.importance !== a.importance) return b.importance - a.importance
-      return b.conversationLastMessageAt - a.conversationLastMessageAt
-    })
+    out.sort((a, b) => b.salience - a.salience)
     return out
   }
 

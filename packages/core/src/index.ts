@@ -351,6 +351,17 @@ export {
   shouldExtractEpisode,
 } from './memory/episode-store'
 export { extractConversationEpisode } from './memory/episode-extractor'
+export {
+  computeSalience,
+  computeWallClockRecencyFactor,
+  computeAgeGapRecencyFactor,
+  DEFAULT_SALIENCE_WEIGHTS,
+} from './memory/salience'
+export type {
+  SalienceInput,
+  SalienceWeights,
+  SalienceStatus,
+} from './memory/salience'
 
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

@@ -267,6 +267,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>
     ipcRenderer.invoke('consolidate-memory', avatarId, content, apiKey, baseUrl),
+
+  // v17 Phase 2a：对话情景记忆
+  extractConversationEpisode: (avatarId: string, conversationId: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('extract-conversation-episode', avatarId, conversationId, apiKey, baseUrl),
+  listConversationEpisodes: (avatarId: string) =>
+    ipcRenderer.invoke('list-conversation-episodes', avatarId),
+  readConversationEpisode: (avatarId: string, conversationId: string) =>
+    ipcRenderer.invoke('read-conversation-episode', avatarId, conversationId),
+  deleteConversationEpisode: (avatarId: string, conversationId: string) =>
+    ipcRenderer.invoke('delete-conversation-episode', avatarId, conversationId),
   readMemoryStore: (avatarId: string) => ipcRenderer.invoke('read-memory-store', avatarId),
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) =>
     ipcRenderer.invoke('write-memory-store', avatarId, doc),

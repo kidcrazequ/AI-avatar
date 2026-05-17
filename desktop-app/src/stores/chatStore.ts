@@ -956,6 +956,22 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // v17 Phase 2b：对话情景记忆检索
+    type: 'function',
+    function: {
+      name: 'recall_conversation',
+      description: '在自己和当前用户的过去对话情景记忆中按关键词检索 top-k。仅在用户问起"上次/之前/那次聊过 X"时调用——日常对话不要主动调用。返回命中 episode 的 title / summary / key_quotes，让你能回忆起过去对话的细节。无命中时直接承认遗忘，不要编造。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '检索关键词或用户问句中的核心名词，如"那次工商储方案" / "之前说的政策"' },
+          top_k: { type: 'number', description: '返回前 K 条；默认 3，最大 5' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
     type: 'function',
     function: {
       name: 'list_design_systems',
@@ -3823,6 +3839,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         console.error('[chatStore] 保存助手消息失败:', msg)
         window.electronAPI.logEvent('error', 'save-assistant-message-error', msg)
       }
+      // v17 Phase 2a：对话情景记忆 lazy 抽取触发（fire-and-forget）。
+      // 时机：每次成功完成一轮 assistant 回复后。如果消息条数 > 已有 episode.messageCount，
+      // 主进程会自动重抽，否则幂等跳过。避免阻塞 UI——所有失败仅 warn 不抛。
+      void (async () => {
+        try {
+          const [apiKey, baseUrl] = await Promise.all([
+            window.electronAPI.getSetting('chat_api_key').then(v => v ?? ''),
+            window.electronAPI.getSetting('chat_base_url').then(v => v ?? ''),
+          ])
+          if (!apiKey || !baseUrl) return // 用户没配 LLM 凭据，跳过
+          const r = await window.electronAPI.extractConversationEpisode(avatarId, conversationId, apiKey, baseUrl)
+          if (!r.ok && r.reason && !r.reason.includes('未变化')) {
+            // 真实失败才记 warn——"消息条数未变化"是正常跳过
+            window.electronAPI.logEvent('warn', 'extract-conversation-episode', r.reason)
+          }
+        } catch (extractErr) {
+          // 抽取失败绝不影响用户体验
+          const m = extractErr instanceof Error ? extractErr.message : String(extractErr)
+          window.electronAPI.logEvent('warn', 'extract-conversation-episode-throw', m)
+        }
+      })()
+
       // ─── 写答案缓存（v14）─────────────────────────────────────────────
       // 只在常规对话写：cacheBypassed 路径（含 skipCache=true 的"重新生成"）跳过，
       // 避免覆盖原稳定答案。

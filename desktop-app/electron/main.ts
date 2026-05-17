@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -2200,6 +2200,86 @@ wrapHandler('consolidate-memory', async (_, avatarId: string, content: string, a
   const consolidated = await consolidateMemory(content, callLLM)
   if (logger) logger.activity('consolidate-memory', `chars: ${content.length} → ${consolidated.length}`)
   return consolidated
+})
+
+/**
+ * v17 Phase 2a：对话情景记忆 IPC（extract / list / read / delete）。
+ *
+ * 抽取流程：拿 DB 里 user/assistant 消息（不含 tool）→ 调注入的 LLM 抽出 episode →
+ * 写到 avatars/<id>/memory/episodes/<conv>.json。
+ *
+ * 触发时机由 chatStore 决定（lazy on next message-save），主进程不主动调度。
+ * api_key / base_url 由调用方传入（与 consolidate-memory 同模式）。
+ *
+ * shouldExtractEpisode 在 chatStore 已先判过；这里再判一次防御重复抽取（幂等）。
+ */
+wrapHandler('extract-conversation-episode', async (
+  _,
+  avatarId: string,
+  conversationId: string,
+  apiKey: string,
+  baseUrl: string,
+): Promise<{ ok: boolean; reason?: string; messageCount?: number }> => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(conversationId, 'conversationId')
+
+  const dbMessages = getDb().getMessages(conversationId)
+  const transcript = dbMessages
+    .filter((m): m is typeof m & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      ts: m.created_at,
+    }))
+  if (transcript.length === 0) {
+    return { ok: false, reason: '会话无 user/assistant 消息，跳过抽取' }
+  }
+
+  const existing = await readConversationEpisode(avatarsPath, avatarId, conversationId)
+  if (!shouldExtractEpisode(existing, transcript.length)) {
+    return { ok: false, reason: '消息条数未变化，跳过抽取', messageCount: transcript.length }
+  }
+
+  const conversation = getDb().getConversation(conversationId)
+  const conversationTitle = conversation?.title ?? `对话 ${conversationId.slice(0, 8)}`
+
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  const callLLM = createLLMFn(apiKey, baseUrl, chatModel)
+
+  const result = await extractConversationEpisode(
+    { conversationId, avatarId, conversationTitle, transcript },
+    callLLM,
+  )
+  if (!result.ok) {
+    if (logger) logger.activity('extract-conversation-episode', `failed: ${result.errorReason}`)
+    return { ok: false, reason: result.errorReason }
+  }
+
+  await writeConversationEpisode(avatarsPath, result.episode)
+  if (logger) {
+    logger.activity(
+      'extract-conversation-episode',
+      `avatar=${avatarId} conv=${conversationId} title="${result.episode.title}" importance=${result.episode.importance}`,
+    )
+  }
+  return { ok: true, messageCount: transcript.length }
+})
+
+wrapHandler('list-conversation-episodes', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return listConversationEpisodes(avatarsPath, avatarId)
+})
+
+wrapHandler('read-conversation-episode', async (_, avatarId: string, conversationId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(conversationId, 'conversationId')
+  return readConversationEpisode(avatarsPath, avatarId, conversationId)
+})
+
+wrapHandler('delete-conversation-episode', async (_, avatarId: string, conversationId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(conversationId, 'conversationId')
+  await deleteConversationEpisode(avatarsPath, avatarId, conversationId)
 })
 
 // ─── 人生经历（Avatar Life Experience，Phase 0）──────────────────────────────

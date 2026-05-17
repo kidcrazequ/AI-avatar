@@ -147,6 +147,11 @@ export class SoulLoader {
     // 不论是分身没启用人生还是后台尚未生成完，都不应阻塞 system prompt 拼装。
     const lifeConsolidated = this.readFileSafe(path.join(avatarPath, 'life', 'consolidated.md'))
 
+    // v17 Phase 2b: 读取对话情景记忆（"我和你的过去"）。
+    // 同步读避免拼装链路异步化——每个分身 episode 数量预期 <50（被遗忘的不进 episodes/），
+    // 单文件 <5KB，全部读完不阻塞。Phase 2c/2d 会引入 salience 排序 + 二段式注入控制 token。
+    const conversationEpisodes = this.readConversationEpisodesSafe(avatarPath)
+
     // 递归读取 knowledge/ 目录下所有知识文件（含子目录如 imports/）注入 system prompt
     const knowledgeRootFiles = this.readDirectory(path.join(avatarPath, 'knowledge'))
 
@@ -320,6 +325,28 @@ export class SoulLoader {
       ].join('\n'))
     }
 
+    // v17 Phase 2b：注入「我和你的过去」（对话情景记忆，flat 注入版）。
+    // 仅取 importance ≥ 4 且 status !== 'forgotten' 的前 5 条，每条只渲染 title + theme 一行。
+    // 完整 summary / keyQuotes 留给 recall_conversation 工具按需取——避免 system prompt 膨胀。
+    // Phase 2c/2d 会用 salience 评分 + 二段式（focus/storage）替换本段。
+    const significantEpisodes = conversationEpisodes
+      .filter((e) => e.consolidationStatus !== 'forgotten' && e.importance >= 4)
+      .slice(0, 5)
+    if (significantEpisodes.length > 0) {
+      stableParts.push('\n\n---\n\n# 我和你的过去\n\n')
+      stableParts.push('以下是你和当前用户过去几次对话里值得记得的内容（按重要性排序）。被问起"上次/之前/那次聊过"时，可调用 `recall_conversation({query})` 取该条完整 summary + key_quotes。\n\n')
+      for (const ep of significantEpisodes) {
+        const themeFragment = ep.theme.trim() ? ` — ${ep.theme.trim()}` : ''
+        stableParts.push(`- **${ep.title}**${themeFragment}（importance=${ep.importance}, valence=${ep.valence}）\n`)
+      }
+      stableParts.push('\n## 对话回忆使用守则\n\n')
+      stableParts.push([
+        '1. **不主动展开过去对话**：除非用户问起"之前我们聊过什么 / 上次说的 X"，否则不要在日常回答里主动引用过去会话——避免"上次我说过..."这种喧宾夺主。',
+        '2. **被问起时调工具**：调 `recall_conversation({query: "用户提到的关键词"})` 取最匹配的 1-3 条 episode 的 summary + key_quotes 再展开。',
+        '3. **承认遗忘**：如果工具没返回相关 episode，直接说"这个我记不太清了"——不要编造从未发生的对话。',
+      ].join('\n'))
+    }
+
     // 文档输出工作流（PDF / Word / Markdown）— 不依赖 Excel/知识库，所有分身通用
     // @date 2026-05-08
     stableParts.push('\n\n---\n\n## 文档输出工作流（PDF / Word / Markdown）\n\n')
@@ -431,6 +458,71 @@ export class SoulLoader {
       }
       return ''
     }
+  }
+
+  /**
+   * v17 Phase 2b：同步读取 avatars/<id>/memory/episodes/*.json。
+   *
+   * 同步而非异步——soul-loader 整条拼装链路是同步的，引入 async 会污染所有调用点。
+   * 单分身 episode 数预期 <50、单文件 <5KB，全部 readSync 完全可接受。
+   * 损坏 / 不是合法 JSON 的文件被跳过（仅 console.warn），不阻塞整体注入。
+   *
+   * 返回的数组按 importance desc + conversationLastMessageAt desc 排序，
+   * 调用方直接取前 N 项做注入。
+   */
+  private readConversationEpisodesSafe(avatarPath: string): Array<{
+    title: string
+    theme: string
+    summary: string
+    keyQuotes: string[]
+    valence: number
+    importance: number
+    conversationLastMessageAt: number
+    consolidationStatus: 'remembered' | 'blurred' | 'forgotten'
+  }> {
+    const dir = path.join(avatarPath, 'memory', 'episodes')
+    let entries: string[]
+    try {
+      entries = fs.readdirSync(dir)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn(`[SoulLoader] readConversationEpisodesSafe readdir 失败 (${dir}):`, err instanceof Error ? err.message : String(err))
+      }
+      return []
+    }
+    const out: ReturnType<typeof this.readConversationEpisodesSafe> = []
+    for (const name of entries) {
+      if (!name.endsWith('.json')) continue
+      try {
+        const raw = fs.readFileSync(path.join(dir, name), 'utf-8')
+        const obj = JSON.parse(raw)
+        if (
+          !obj || typeof obj !== 'object'
+          || typeof obj.title !== 'string'
+          || typeof obj.summary !== 'string'
+        ) continue
+        out.push({
+          title: obj.title,
+          theme: typeof obj.theme === 'string' ? obj.theme : '',
+          summary: obj.summary,
+          keyQuotes: Array.isArray(obj.keyQuotes) ? obj.keyQuotes.filter((x: unknown) => typeof x === 'string') : [],
+          valence: typeof obj.valence === 'number' ? obj.valence : 0,
+          importance: typeof obj.importance === 'number' ? obj.importance : 3,
+          conversationLastMessageAt: typeof obj.conversationLastMessageAt === 'number' ? obj.conversationLastMessageAt : 0,
+          consolidationStatus: obj.consolidationStatus === 'forgotten' || obj.consolidationStatus === 'blurred'
+            ? obj.consolidationStatus
+            : 'remembered',
+        })
+      } catch (err) {
+        console.warn(`[SoulLoader] 解析 episode 失败 (${name}):`, err instanceof Error ? err.message : String(err))
+      }
+    }
+    // 排序：importance desc，同重要性按最近一次消息时间 desc
+    out.sort((a, b) => {
+      if (b.importance !== a.importance) return b.importance - a.importance
+      return b.conversationLastMessageAt - a.conversationLastMessageAt
+    })
+    return out
   }
 
   /** 知识目录最大递归深度（使用共享常量，与其他模块保持一致） */

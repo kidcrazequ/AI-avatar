@@ -334,5 +334,23 @@ export { loadTemplateCss, resolveTemplatePath } from './document/renderers/templ
 
 export * from './sync/snapshot-manifest'
 
+// v17 对话情景记忆（Phase 2a/2b of human-cognition extension）
+export {
+  CONVERSATION_EPISODE_SCHEMA_VERSION,
+} from './memory/episode-types'
+export type {
+  ConversationEpisode,
+  ExtractEpisodeInput,
+  ExtractEpisodeResult,
+} from './memory/episode-types'
+export {
+  writeConversationEpisode,
+  readConversationEpisode,
+  listConversationEpisodes,
+  deleteConversationEpisode,
+  shouldExtractEpisode,
+} from './memory/episode-store'
+export { extractConversationEpisode } from './memory/episode-extractor'
+
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

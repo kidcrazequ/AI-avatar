@@ -10,6 +10,7 @@ import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
 import { CompositeKnowledgeRetriever } from './composite-knowledge-retriever'
 import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
+import { listConversationEpisodes } from './memory/episode-store'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -922,6 +923,8 @@ export class ToolRouter {
           result = this.listKnowledgeFiles(avatarId); break
         case 'read_life_episode':
           result = await this.readLifeEpisode(avatarId, args); break
+        case 'recall_conversation':
+          result = await this.recallConversation(avatarId, args); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -1731,6 +1734,94 @@ ${content}` }
         return { content: '', error: `事件不存在: ${episodeId}（请先用 system prompt 中「我的人生」章节出现的 id）` }
       }
       return { content: `[来源: life/episodes/${episodeId}.md]\n${text}` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * recall_conversation：在过去对话情景记忆中按关键词检索 top-k（v17 Phase 2b）。
+   *
+   * 与 read_life_episode 的对偶——读"和用户的过去"而不是"想象人生"。
+   * v1 评分简单：query 拆词后按 title/theme/keyQuotes/summary 命中次数排序。
+   * 跳过 forgotten 状态的 episode（被遗忘机制筛掉的不该再被翻出来）。
+   *
+   * 入参：
+   *   - query (string): 必填，关键词或自然语言查询
+   *   - top_k (number): 可选，默认 3，最多 5
+   *
+   * 返回：每条 episode 的 title / theme / summary / keyQuotes / valence / importance。
+   * 无命中时直说"无相关记忆"，让分身按 prompt 守则承认遗忘。
+   *
+   * @author zhi.qu
+   * @date 2026-05-17
+   */
+  private async recallConversation(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return { content: '', error: '缺少 query 参数' }
+    const rawTopK = typeof args.top_k === 'number' ? args.top_k : 3
+    const topK = Math.max(1, Math.min(5, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const episodes = await listConversationEpisodes(this.avatarsPath, avatarId)
+      const candidates = episodes.filter((e) => e.consolidationStatus !== 'forgotten')
+
+      if (candidates.length === 0) {
+        return { content: '[recall_conversation] 当前分身还没有对话情景记忆——可能是第一次和你聊，或所有过去会话都没产生显著记忆。' }
+      }
+
+      // 简单评分：query 拆词后在 title/theme/keyQuotes/summary 里的命中次数。
+      // 中文不分词：把 query 按空白切（覆盖英文/数字），同时取 2-3 字 n-gram 覆盖中文。
+      // 1 字 token 噪声太大（"我"/"的"/"了"几乎所有 episode 都命中），跳过。
+      const tokens: string[] = (() => {
+        const out = new Set<string>()
+        // 空白切分
+        for (const w of query.split(/\s+/).filter(s => s.length > 0)) {
+          if (w.length >= 2) out.add(w)
+        }
+        // 2-3 字 n-gram（处理无空白中文）
+        const noSpace = query.replace(/\s+/g, '')
+        for (let n = 2; n <= 3; n++) {
+          for (let i = 0; i + n <= noSpace.length; i++) {
+            out.add(noSpace.slice(i, i + n))
+          }
+        }
+        return Array.from(out)
+      })()
+      const scored = candidates.map((ep) => {
+        const haystack = [ep.title, ep.theme, ep.summary, ep.keyQuotes.join(' ')].join(' ').toLowerCase()
+        let score = 0
+        for (const t of tokens) {
+          // 短 token 用全字符串匹配——简单但够用
+          const occ = haystack.split(t.toLowerCase()).length - 1
+          score += occ * (t.length >= 2 ? 2 : 1) // 2+ 字 token 权重略高
+        }
+        // 重要性 + 情感强度作为次级排序加成（命中 0 时不算回忆）
+        const importanceBoost = ep.importance * 0.1
+        return { ep, score: score + (score > 0 ? importanceBoost : 0) }
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+
+      if (scored.length === 0) {
+        return { content: `[recall_conversation] 关键词 "${query}" 在我和你的过去对话里没找到相关记忆——这个我记不太清了。` }
+      }
+
+      const lines: string[] = [
+        `[recall_conversation] 关键词 "${query}" 命中 ${scored.length} 条记忆：\n`,
+      ]
+      for (const { ep, score } of scored) {
+        lines.push(`---\n## ${ep.title}（importance=${ep.importance}, valence=${ep.valence}, score=${score.toFixed(1)}）`)
+        if (ep.theme.trim()) lines.push(`**主题**：${ep.theme}`)
+        lines.push(`**summary**：${ep.summary}`)
+        if (ep.keyQuotes.length > 0) {
+          lines.push(`**关键引用**：\n${ep.keyQuotes.map((q) => `  - ${q}`).join('\n')}`)
+        }
+        lines.push('')
+      }
+      return { content: lines.join('\n') }
     } catch (err) {
       return { content: '', error: err instanceof Error ? err.message : String(err) }
     }

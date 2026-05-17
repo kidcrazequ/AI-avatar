@@ -91,6 +91,31 @@ interface Conversation {
   updated_at: number
 }
 
+/**
+ * v17 Phase 2a：对话情景记忆 DTO（renderer 侧镜像）。
+ * 真源在 packages/core/src/memory/episode-types.ts ConversationEpisode；
+ * renderer 不能 import packages/core 的 sub-paths，这里 ambient 复刻。
+ */
+interface ConversationEpisodeDTO {
+  schemaVersion: number
+  conversationId: string
+  avatarId: string
+  title: string
+  theme: string
+  summary: string
+  keyQuotes: string[]
+  themes: string[]
+  valence: number
+  emotionType: 'joy' | 'sorrow' | 'anger' | 'fear' | 'wonder' | 'shame' | 'love'
+  importance: number
+  consolidationStatus: 'remembered' | 'blurred' | 'forgotten'
+  consolidationNote: string
+  conversationStartedAt: number
+  conversationLastMessageAt: number
+  extractedAt: number
+  messageCount: number
+}
+
 interface DbMessage {
   id: string
   conversation_id: string
@@ -697,6 +722,29 @@ interface ElectronAPI {
   writeMemory: (avatarId: string, content: string) => Promise<void>
   getMemoryStats: (avatarId: string) => Promise<{ chars: number; ratio: number; entries: number }>
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>
+
+  /**
+   * v17 Phase 2a：触发一次对话情景记忆抽取。
+   *
+   * 主进程读 DB 拿 transcript，调注入的 LLM 生成 episode，写到
+   * avatars/<id>/memory/episodes/<conv>.json。
+   * 如果消息条数和已存在 episode 一致，跳过抽取（幂等）。
+   */
+  extractConversationEpisode: (
+    avatarId: string,
+    conversationId: string,
+    apiKey: string,
+    baseUrl: string,
+  ) => Promise<{ ok: boolean; reason?: string; messageCount?: number }>
+
+  /** v17 Phase 2a：列出某分身所有对话情景记忆（按 importance desc）。 */
+  listConversationEpisodes: (avatarId: string) => Promise<ConversationEpisodeDTO[]>
+
+  /** v17 Phase 2a：读取单条 episode，不存在返回 null。 */
+  readConversationEpisode: (avatarId: string, conversationId: string) => Promise<ConversationEpisodeDTO | null>
+
+  /** v17 Phase 2a：删除单条 episode（幂等）。 */
+  deleteConversationEpisode: (avatarId: string, conversationId: string) => Promise<void>
   readMemoryStore: (avatarId: string) => Promise<StructuredMemoryDocumentDTO>
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) => Promise<void>
 

@@ -19,9 +19,10 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier } from '@soul/core'
-import { DatabaseManager, type McpServerRow } from './database'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext } from '@soul/core'
+import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
+import { readConversationEvents } from './conversation-event-reader'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
 import { EmbedStore, type NewEmbedInput, type UpdateEmbedInput } from './db-embeds'
 import { SyncHistoryStore, type SyncDirection, type SyncStatus as SyncRunStatus } from './db-sync-history'
@@ -111,6 +112,8 @@ let templatesPath: string
 let expertPacksPath: string
 let soulLoader: SoulLoader
 let db: DatabaseManager
+/** 对话 JSONL 双写器单例，init 后赋值；IPC 处理器据此追加 v17 事件 */
+let jsonlAppender: ConversationJsonlAppender
 let avatarManager: AvatarManager
 let testManager: TestManager
 let skillManager: SkillManager
@@ -611,10 +614,22 @@ function initManagers() {
   // 对话消息 JSONL 双写器（2026-05-09 #2 SQLite + JSONL 双写）：
   // 在 SQLite 主存储成功提交后异步追加 JSONL 备份文件，写入失败仅 warn 不阻塞。
   // logger 适配器：Logger 没有 warn() 方法，统一通过 logEvent('warn', ...) 走活动日志。
-  const jsonlAppender = ConversationJsonlAppender.getInstance(app.getPath('userData'), {
+  jsonlAppender = ConversationJsonlAppender.getInstance(app.getPath('userData'), {
     warn: (msg, err) => logger.logEvent('warn', msg, err instanceof Error ? err.message : err === undefined ? undefined : String(err)),
   })
   db = new DatabaseManager(undefined, jsonlAppender)
+
+  // v15 子分身派发持久化：把上次运行残留的 running 任务标记为 lost。
+  // LLM 调用不可恢复，仅做状态修正，让 UI 不再展示"永远 running"的僵尸行。
+  try {
+    const lost = db.markOrphanRunningAsLost()
+    if (lost > 0) {
+      logger.activity('sub-agent', `应用启动时标记 ${lost} 条孤儿 running → lost`)
+    }
+  } catch (e) {
+    logger.logEvent('warn', '[sub-agent] markOrphanRunningAsLost 失败', e instanceof Error ? e.message : String(e))
+  }
+
   avatarManager = new AvatarManager(avatarsPath, templatesPath)
   testManager = new TestManager(avatarsPath)
   skillManager = new SkillManager(avatarsPath)
@@ -639,9 +654,51 @@ function initManagers() {
     return p
   }
 
+  // v15 子分身派发 sink（Managed-Agents 借鉴第 1 步）：
+  // SubAgentManager 在 running/done/error 各触发一次本闭包，sink 把任务镜像到
+  // sqlite + JSONL。sink 内部所有异常都吞掉，确保子分身派发链路不被备份失败打断。
+  const subAgentTaskSink = (task: SubAgentTask, ctx: SubAgentDispatchContext) => {
+    try {
+      const row: SubAgentTaskRow = {
+        id: task.id,
+        conversation_id: ctx.conversationId,
+        parent_avatar_id: ctx.parentAvatarId,
+        target_avatar: ctx.targetAvatar,
+        task: task.task,
+        // SubAgentManager 仅会传 'running' | 'done' | 'error'，与表约束一致；'lost' 由 markOrphan 单独写
+        status: task.status as 'running' | 'done' | 'error',
+        result: task.result ?? null,
+        error: task.error ?? null,
+        started_at: task.startedAt ?? Date.now(),
+        finished_at: task.finishedAt ?? null,
+        // 旧 SubAgentManager 没有类型，TypedSubAgentManager sink 才会填这列
+        agent_type: null,
+      }
+      db.upsertSubAgentTask(row)
+    } catch (e) {
+      logger.logEvent('warn', '[sub-agent] sqlite sink 写失败', e instanceof Error ? e.message : String(e))
+    }
+    // JSONL 事件：fire-and-forget，jsonlAppender 内部已 warn 兜底
+    void jsonlAppender.appendSubAgentEvent(ctx.conversationId, {
+      type: 'sub_agent_task',
+      taskId: task.id,
+      conversationId: ctx.conversationId,
+      status: task.status as 'running' | 'done' | 'error',
+      parentAvatarId: ctx.parentAvatarId,
+      targetAvatar: ctx.targetAvatar,
+      // task 描述截断到 ~500 字符防止单行过大；完整 task 在 sqlite
+      taskPreview: task.task.length > 500 ? task.task.slice(0, 500) + '…' : task.task,
+      error: task.error ?? null,
+      // 旧 SubAgentManager 无类型；TypedSubAgentManager sink 才填这两个字段
+      agentType: null,
+      ts: Date.now(),
+    })
+  }
+
   // 注入跨分身委派依赖：让 delegate_task({ target_avatar }) 能现场加载目标分身的 systemPrompt
   // 同时注入 getSetting：让 web_search 等需要外部凭据的工具能读到 settings 表中的 API Key
   // 同时注入 mcpManager：让 list_mcp_tools / call_mcp_tool 工具能路由到 MCP server
+  // 同时注入 subAgentTaskSink：让子分身派发任务镜像到 sqlite + JSONL（v15）
   toolRouter = new ToolRouter(avatarsPath, {
     loadAvatarSystemPrompt: (id: string) => {
       const dir = path.join(avatarsPath, id)
@@ -671,6 +728,7 @@ function initManagers() {
       renderDocx: (ir, outputPath) => renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined }),
     },
     resolveConversationProjectId: resolveConversationProjectIdFromDb,
+    subAgentTaskSink,
   })
   workspaceManager = new WorkspaceManager(avatarsPath, resolveConversationProjectIdFromDb)
   templateLoader = new TemplateLoader(templatesPath)
@@ -1140,7 +1198,20 @@ wrapHandler('create-conversation', (_, title: string, avatarId: string, projectI
       ? projectId.trim()
       : DEFAULT_AVATAR_PROJECT_ID
   if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
-  return getDb().createConversation(title, avatarId, pid)
+  const conversationId = getDb().createConversation(title, avatarId, pid)
+  // v17 事件：会话创建。让 JSONL 自身能定位"这个文件最初什么时候、谁创建的"——
+  // 不依赖 sqlite 也能从 JSONL 重建基础元信息。
+  if (jsonlAppender) {
+    void jsonlAppender.appendConversationStartedEvent(conversationId, {
+      type: 'conversation_started',
+      conversationId,
+      avatarId,
+      projectId: pid,
+      title,
+      ts: Date.now(),
+    })
+  }
+  return conversationId
 })
 
 wrapHandler('list-project-ids', (_, avatarId: string) => {
@@ -1954,6 +2025,101 @@ wrapHandler('write-memory', async (_, avatarId: string, content: string) => {
   await fs.promises.mkdir(memoryDir, { recursive: true })
   await atomicWriteFile(memoryPath, content)
   if (logger) logger.recordGenerated('memory', avatarId, memoryPath)
+})
+
+/**
+ * v17 事件：记忆更新（chat-driven 路径，[MEMORY_UPDATE] 标签触发的写入）。
+ *
+ * 调用时机：chatStore 写完 MEMORY.md 之后；用户在 MemoryPanel 手动编辑不会触发本事件。
+ * summaryPreview 由 chatStore 截断后传入（500 字符上限）。
+ */
+wrapHandler('record-memory-update-event', async (
+  _,
+  conversationId: string,
+  avatarId: string,
+  payload: { updateCount: number; summaryPreview: string; totalByteSize: number; consolidated: boolean },
+) => {
+  assertSafeSegment(conversationId, 'conversationId')
+  assertSafeSegment(avatarId, '分身ID')
+  if (!jsonlAppender) return
+  // fire-and-forget：appender 内部已 warn 兜底
+  void jsonlAppender.appendMemoryUpdateEvent(conversationId, {
+    type: 'memory_update',
+    conversationId,
+    avatarId,
+    updateCount: payload.updateCount,
+    summaryPreview: payload.summaryPreview,
+    totalByteSize: payload.totalByteSize,
+    consolidated: payload.consolidated,
+    ts: Date.now(),
+  })
+})
+
+/**
+ * v17 事件：会话模型切换（用户在 ChatWindow 顶栏循环切换 conversationModelOverride）。
+ *
+ * fromModel/toModel 为 null 表示"使用分身 default"。两者相等时仍写一行，
+ * 调试场景能看到"用户点了切换但实际值没变"的操作意图。
+ */
+wrapHandler('record-model-switch-event', async (
+  _,
+  conversationId: string,
+  fromModel: string | null,
+  toModel: string | null,
+) => {
+  assertSafeSegment(conversationId, 'conversationId')
+  if (!jsonlAppender) return
+  void jsonlAppender.appendModelSwitchEvent(conversationId, {
+    type: 'model_switch',
+    conversationId,
+    fromModel,
+    toModel,
+    ts: Date.now(),
+  })
+})
+
+/**
+ * v17 事件 viewer：读取会话 JSONL 事件流。
+ *
+ * 渲染进程通过本 IPC 拿到已归一化的 ConversationJsonlAnyEvent[]——
+ * 旧消息行自动补 type='message'，损坏行计入 parseErrors 不污染主数据。
+ * 单纯只读，不修改任何文件。
+ */
+wrapHandler('read-conversation-events', async (_, conversationId: string) => {
+  assertSafeSegment(conversationId, 'conversationId')
+  return readConversationEvents(app.getPath('userData'), conversationId, {
+    warn: (msg, err) =>
+      logger?.logEvent('warn', msg, err instanceof Error ? err.message : err === undefined ? undefined : String(err)),
+  })
+})
+
+/**
+ * v17 事件：会话工具模式切换（Ask / Plan / Agent）。
+ *
+ * 与 conversation:sync-tool-mode（影响主进程工具门禁）不同——本 IPC 只写日志，不改门禁。
+ * chatStore.setMode 在同档变化时已经短路，所以本 IPC 收到的请求一定是真实切换。
+ * 非法 mode 仅 warn 后忽略，不写非法事件。
+ */
+wrapHandler('record-mode-switch-event', async (
+  _,
+  conversationId: string,
+  fromMode: string,
+  toMode: string,
+) => {
+  assertSafeSegment(conversationId, 'conversationId')
+  const valid = (m: string): m is 'agent' | 'plan' | 'ask' => m === 'agent' || m === 'plan' || m === 'ask'
+  if (!valid(fromMode) || !valid(toMode)) {
+    if (logger) logger.logEvent('warn', 'record-mode-switch-event', `非法 mode 已忽略 from=${fromMode} to=${toMode}`)
+    return
+  }
+  if (!jsonlAppender) return
+  void jsonlAppender.appendModeSwitchEvent(conversationId, {
+    type: 'mode_switch',
+    conversationId,
+    fromMode,
+    toMode,
+    ts: Date.now(),
+  })
 })
 
 wrapHandler('read-memory-store', async (_, avatarId: string) => {

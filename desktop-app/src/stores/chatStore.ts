@@ -2230,10 +2230,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   mode: 'agent',
 
   setMode: (mode) => {
-    if (get().mode === mode) return
+    const prev = get().mode
+    if (prev === mode) return
     set({ mode })
     const cid = get().currentConversationId
-    if (cid) pushConversationToolModeToMain(cid, mode)
+    if (cid) {
+      pushConversationToolModeToMain(cid, mode)
+      // v17 事件日志：模式真实切换才会到这里（同档已在上面 return），无需再判等
+      void window.electronAPI.recordModeSwitchEvent(cid, prev, mode)
+    }
   },
 
   setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
@@ -2243,9 +2248,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   conversationModelOverrides: {},
 
   setConversationModel: (conversationId, model) => set(state => {
+    const prev = state.conversationModelOverrides[conversationId] ?? null
     const next = { ...state.conversationModelOverrides }
     if (model === null) delete next[conversationId]
     else next[conversationId] = model
+    // v17 事件日志：只在实际变化时记录——用户重复点回到同一档不刷事件
+    if (prev !== model) {
+      void window.electronAPI.recordModelSwitchEvent(conversationId, prev, model)
+    }
     return { conversationModelOverrides: next }
   }),
 
@@ -3638,6 +3648,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           // 容量管理：超过上限时先备份再调用 LLM 整理
           let finalContent = merged
+          let consolidatedRan = false
           if (merged.length >= MEMORY_CHAR_LIMIT) {
             try {
               // 备份当前记忆，防止 LLM 整理结果异常导致数据丢失
@@ -3649,6 +3660,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               const consolidated = await window.electronAPI.consolidateMemory(avatarId, merged, apiKey, baseUrl)
               if (consolidated && consolidated.length > 50) {
                 finalContent = consolidated
+                consolidatedRan = true
               } else {
                 window.electronAPI.logEvent('warn', 'memory-consolidate-too-short', `整理结果过短(${consolidated?.length ?? 0}字)，保留原内容`)
               }
@@ -3659,6 +3671,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             }
           }
           await window.electronAPI.writeMemory(avatarId, finalContent)
+          // v17 事件日志：写入成功后记录元信息（不含正文）。
+          // summaryPreview 截断到 500 字符——逐条 update 取前 N 字符拼起来再裁，避免单行过大。
+          const summaryPreview = memUpdates.join(' · ').slice(0, 500)
+          void window.electronAPI.recordMemoryUpdateEvent(conversationId, avatarId, {
+            updateCount: memUpdates.length,
+            summaryPreview,
+            totalByteSize: finalContent.length,
+            consolidated: consolidatedRan,
+          })
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error('写入记忆失败:', msg)

@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 14
+const CURRENT_SCHEMA_VERSION = 16
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -31,6 +31,53 @@ export interface AgentTaskRow {
   tasks: string
   /** 最后更新时间（毫秒） */
   updated_at: number
+}
+
+/**
+ * 子分身派发任务记录（v15 引入，2026-05-17）。
+ *
+ * 一行 = SubAgentManager 派发的一次子任务全生命周期。
+ * 与 AgentTaskRow（JSON blob）不同，本表 row-per-task：
+ *   - 派发方（调枢等）能枚举"今天派出去了什么"
+ *   - 状态机（running → done/error/lost）按行查询有意义
+ *   - 应用崩溃后 running 行被 markOrphanRunningAsLost 改为 lost
+ *
+ * 不持久化 LLM 调用本身（不可恢复执行），仅持久化派发记录用于审计 + UI 展示。
+ */
+export interface SubAgentTaskRow {
+  /** SubAgentManager 生成的 sub-* id（PK） */
+  id: string
+  /** 派发发生的会话 ID */
+  conversation_id: string
+  /** 派发方分身 ID（通常是 orchestrator/调枢） */
+  parent_avatar_id: string
+  /** 跨分身派发的目标分身 ID；同分身派发为 NULL */
+  target_avatar: string | null
+  /** 任务描述（task() 工具调用时的 task 参数） */
+  task: string
+  /**
+   * 状态机：
+   *   - running / done / error 由 SubAgentManager + TypedSubAgentManager 写入
+   *   - lost 由 markOrphanRunningAsLost 写入（应用重启时孤儿恢复）
+   *   - denied 由 TypedSubAgentManager 写入（SpawnGuard 或 Hook 拒绝 spawn）
+   */
+  status: 'running' | 'done' | 'error' | 'lost' | 'denied'
+  /** done 状态的 LLM 输出；其他状态为 NULL */
+  result: string | null
+  /** error/lost/denied 状态的描述（denied 时存 denyReason）；其他状态为 NULL */
+  error: string | null
+  /** 派发开始时间（毫秒） */
+  started_at: number
+  /** 终态时间（毫秒）；running 状态为 NULL */
+  finished_at: number | null
+  /**
+   * 子代理类型（v16 引入，2026-05-17）。
+   *
+   * 仅 TypedSubAgentManager 写入：'explore' | 'plan' | 'worker'。
+   * 旧 SubAgentManager 派发为 NULL（向后兼容）。未来如果有更多类型，
+   * 在 SubAgentType 联合类型上加，sqlite 列本身无 CHECK 约束。
+   */
+  agent_type: string | null
 }
 
 /**
@@ -528,6 +575,35 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_answer_cache_avatar_conv
       ON answer_cache(avatar_id, conversation_id, created_at DESC)
     `)
+
+    // 子分身派发任务表（v15 引入，2026-05-17：Managed-Agents 借鉴第 1 步——
+    // 把 SubAgentManager 内存任务表镜像到 sqlite，使应用重启后能看到派发过的任务及结果）。
+    // v16（2026-05-17）：补 agent_type 列，承载 TypedSubAgentManager 的 explore/plan/worker。
+    // 不可在崩溃后 resume LLM 调用，仅做审计 + UI 展示。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sub_agent_tasks (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        parent_avatar_id TEXT NOT NULL,
+        target_avatar TEXT,
+        task TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result TEXT,
+        error TEXT,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        agent_type TEXT,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      )
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_conv
+      ON sub_agent_tasks(conversation_id, started_at)
+    `)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_running
+      ON sub_agent_tasks(status) WHERE status = 'running'
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -845,6 +921,46 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 15) {
+      // v14 → v15：子分身派发任务持久化（Managed-Agents 借鉴第 1 步）。
+      // SubAgentManager 内存任务表镜像到 sqlite，应用重启后可枚举/展示历史派发。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS sub_agent_tasks (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            parent_avatar_id TEXT NOT NULL,
+            target_avatar TEXT,
+            task TEXT NOT NULL,
+            status TEXT NOT NULL,
+            result TEXT,
+            error TEXT,
+            started_at INTEGER NOT NULL,
+            finished_at INTEGER,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+          )
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_conv
+          ON sub_agent_tasks(conversation_id, started_at)
+        `)
+        this.db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_running
+          ON sub_agent_tasks(status) WHERE status = 'running'
+        `)
+        version = 15
+      })()
+    }
+
+    if (version < 16) {
+      // v15 → v16：sub_agent_tasks 增加 agent_type 列，承载 TypedSubAgentManager
+      // 的 explore/plan/worker。旧 SubAgentManager 派发行 NULL 即可，无需回填。
+      this.db.transaction(() => {
+        this.safeAddColumn('sub_agent_tasks', 'agent_type', 'TEXT')
+        version = 16
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -882,6 +998,74 @@ export class DatabaseManager {
   /** 清空某会话的任务列表（删除整行） */
   clearAgentTasks(conversationId: string): void {
     this.db.prepare(`DELETE FROM agent_tasks WHERE conversation_id = ?`).run(conversationId)
+  }
+
+  // ─── 子分身派发任务持久化（v15 引入，Managed-Agents 借鉴第 1 步）───────────
+
+  /**
+   * UPSERT 一条派发记录。
+   *
+   * SubAgentManager.onChange 在 running/done/error 三个时刻各调一次：
+   *   - 首次调用（running）插入新行
+   *   - 后续调用（done/error）按主键覆盖
+   * 任何失败都不应阻塞 LLM 主链（调用方负责 try/catch）。
+   */
+  upsertSubAgentTask(row: SubAgentTaskRow): void {
+    this.db.prepare(`
+      INSERT INTO sub_agent_tasks (
+        id, conversation_id, parent_avatar_id, target_avatar, task,
+        status, result, error, started_at, finished_at, agent_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        result = excluded.result,
+        error = excluded.error,
+        finished_at = excluded.finished_at,
+        agent_type = excluded.agent_type
+    `).run(
+      row.id,
+      row.conversation_id,
+      row.parent_avatar_id,
+      row.target_avatar,
+      row.task,
+      row.status,
+      row.result,
+      row.error,
+      row.started_at,
+      row.finished_at,
+      row.agent_type,
+    )
+  }
+
+  /** 列出某会话内的所有派发任务（按发起时间升序）。 */
+  listSubAgentTasksByConversation(conversationId: string): SubAgentTaskRow[] {
+    return this.db.prepare(`
+      SELECT id, conversation_id, parent_avatar_id, target_avatar, task,
+             status, result, error, started_at, finished_at, agent_type
+      FROM sub_agent_tasks
+      WHERE conversation_id = ?
+      ORDER BY started_at ASC
+    `).all(conversationId) as SubAgentTaskRow[]
+  }
+
+  /**
+   * 把上次运行残留的 running 行全部置为 lost。
+   *
+   * 调用时机：Database 构造完成后立刻调一次（main.ts 装配点）。
+   * 语义：应用崩溃时正在跑的 LLM 调用无法恢复——我们不再 resume，只把状态改为 lost
+   * 让 UI 能展示"曾经派出去但下落不明"。
+   *
+   * @returns 被标记的行数
+   */
+  markOrphanRunningAsLost(): number {
+    const r = this.db.prepare(`
+      UPDATE sub_agent_tasks
+      SET status = 'lost',
+          error = '应用重启时任务丢失',
+          finished_at = ?
+      WHERE status = 'running'
+    `).run(Date.now())
+    return r.changes
   }
 
   createConversation(title: string, avatarId: string, projectId = 'default'): string {
@@ -931,6 +1115,7 @@ export class DatabaseManager {
       for (const row of ids) {
         this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.id)
         this.db.prepare('DELETE FROM agent_tasks WHERE conversation_id = ?').run(row.id)
+        this.db.prepare('DELETE FROM sub_agent_tasks WHERE conversation_id = ?').run(row.id)
         this.db.prepare('DELETE FROM conversations WHERE id = ?').run(row.id)
         deleted++
       }
@@ -965,17 +1150,18 @@ export class DatabaseManager {
     `).run(title, Date.now(), id)
   }
 
-  /** 先显式删除消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks 与附件元信息 */
+  /** 先显式删除消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks/sub_agent_tasks 与附件元信息 */
   deleteConversation(id: string) {
     this.db.transaction(() => {
       this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM agent_tasks WHERE conversation_id = ?').run(id)
+      this.db.prepare('DELETE FROM sub_agent_tasks WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM attachments WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
     })()
   }
 
-  /** 先显式删除所有关联消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks 与附件元信息 */
+  /** 先显式删除所有关联消息（触发 FTS 同步触发器），再删除会话；同时清空 agent_tasks/sub_agent_tasks 与附件元信息 */
   deleteConversationsByAvatar(avatarId: string) {
     this.db.transaction(() => {
       this.db.prepare(`
@@ -985,6 +1171,11 @@ export class DatabaseManager {
       `).run(avatarId)
       this.db.prepare(`
         DELETE FROM agent_tasks WHERE conversation_id IN (
+          SELECT id FROM conversations WHERE avatar_id = ?
+        )
+      `).run(avatarId)
+      this.db.prepare(`
+        DELETE FROM sub_agent_tasks WHERE conversation_id IN (
           SELECT id FROM conversations WHERE avatar_id = ?
         )
       `).run(avatarId)

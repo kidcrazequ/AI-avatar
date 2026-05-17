@@ -29,6 +29,10 @@ import {
   ConversationJsonlAppender,
   type ConversationJsonlRecord,
   type JsonlAppenderLogger,
+  type MemoryUpdateJsonlEvent,
+  type ModelSwitchJsonlEvent,
+  type ModeSwitchJsonlEvent,
+  type ConversationStartedJsonlEvent,
 } from './conversation-jsonl-appender'
 
 /**
@@ -251,5 +255,123 @@ describe('ConversationJsonlAppender', () => {
 
     assert.deepEqual(parsed, records, '从 JSONL 重建的数组应与原始等价')
     assert.equal(logger.warnCalls.length, 0)
+  })
+
+  // v17 事件日志（JSONL 升 event 日志方案 B）：memory_update + model_switch
+
+  test('appendMemoryUpdateEvent：写入合法 JSONL 行且能回读', async () => {
+    const root = makeTmp()
+    const logger = new FakeLogger()
+    const appender = ConversationJsonlAppender.getInstance(root, logger)
+    const ev: MemoryUpdateJsonlEvent = {
+      type: 'memory_update',
+      conversationId: 'conv-mem',
+      avatarId: 'avatar-x',
+      updateCount: 2,
+      summaryPreview: '记住 A · 记住 B',
+      totalByteSize: 1234,
+      consolidated: false,
+      ts: 1700000000010,
+    }
+
+    await appender.appendMemoryUpdateEvent('conv-mem', ev)
+
+    const file = path.join(root, 'conversations', 'conv-mem.jsonl')
+    assert.equal(fs.existsSync(file), true)
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8').trimEnd()) as MemoryUpdateJsonlEvent
+    assert.deepEqual(parsed, ev)
+    assert.equal(logger.warnCalls.length, 0)
+  })
+
+  test('appendModelSwitchEvent：写入合法 JSONL 行且能回读 null 边界', async () => {
+    const root = makeTmp()
+    const logger = new FakeLogger()
+    const appender = ConversationJsonlAppender.getInstance(root, logger)
+    const ev: ModelSwitchJsonlEvent = {
+      type: 'model_switch',
+      conversationId: 'conv-ms',
+      fromModel: null,
+      toModel: 'claude-opus-4-7',
+      ts: 1700000000020,
+    }
+
+    await appender.appendModelSwitchEvent('conv-ms', ev)
+
+    const file = path.join(root, 'conversations', 'conv-ms.jsonl')
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8').trimEnd()) as ModelSwitchJsonlEvent
+    assert.deepEqual(parsed, ev, 'null fromModel 应原样保留')
+    assert.equal(logger.warnCalls.length, 0)
+  })
+
+  test('appendModeSwitchEvent：写入合法 JSONL 行且能回读', async () => {
+    const root = makeTmp()
+    const logger = new FakeLogger()
+    const appender = ConversationJsonlAppender.getInstance(root, logger)
+    const ev: ModeSwitchJsonlEvent = {
+      type: 'mode_switch',
+      conversationId: 'conv-mode',
+      fromMode: 'agent',
+      toMode: 'ask',
+      ts: 1700000000030,
+    }
+
+    await appender.appendModeSwitchEvent('conv-mode', ev)
+
+    const file = path.join(root, 'conversations', 'conv-mode.jsonl')
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8').trimEnd()) as ModeSwitchJsonlEvent
+    assert.deepEqual(parsed, ev)
+    assert.equal(logger.warnCalls.length, 0)
+  })
+
+  test('appendConversationStartedEvent：写入合法 JSONL 行且能回读', async () => {
+    const root = makeTmp()
+    const logger = new FakeLogger()
+    const appender = ConversationJsonlAppender.getInstance(root, logger)
+    const ev: ConversationStartedJsonlEvent = {
+      type: 'conversation_started',
+      conversationId: 'conv-new',
+      avatarId: 'avatar-x',
+      projectId: 'default',
+      title: '新会话',
+      ts: 1700000000040,
+    }
+
+    await appender.appendConversationStartedEvent('conv-new', ev)
+
+    const file = path.join(root, 'conversations', 'conv-new.jsonl')
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8').trimEnd()) as ConversationStartedJsonlEvent
+    assert.deepEqual(parsed, ev)
+    assert.equal(logger.warnCalls.length, 0)
+  })
+
+  test('混合事件流：5 类事件写到同一文件，按 type 可分流', async () => {
+    const root = makeTmp()
+    const logger = new FakeLogger()
+    const appender = ConversationJsonlAppender.getInstance(root, logger)
+
+    await appender.appendConversationStartedEvent('conv-mix', {
+      type: 'conversation_started', conversationId: 'conv-mix', avatarId: 'a',
+      projectId: 'default', title: 't', ts: 0,
+    })
+    await appender.append('conv-mix', makeRecord({ id: 'm-1', conversationId: 'conv-mix', ts: 1 }))
+    await appender.appendMemoryUpdateEvent('conv-mix', {
+      type: 'memory_update', conversationId: 'conv-mix', avatarId: 'a',
+      updateCount: 1, summaryPreview: 'x', totalByteSize: 10, consolidated: false, ts: 2,
+    })
+    await appender.appendModelSwitchEvent('conv-mix', {
+      type: 'model_switch', conversationId: 'conv-mix', fromModel: 'a', toModel: 'b', ts: 3,
+    })
+    await appender.appendModeSwitchEvent('conv-mix', {
+      type: 'mode_switch', conversationId: 'conv-mix', fromMode: 'agent', toMode: 'plan', ts: 4,
+    })
+
+    const text = fs.readFileSync(path.join(root, 'conversations', 'conv-mix.jsonl'), 'utf-8')
+    const lines = text.split('\n').filter((l) => l.length > 0).map((l) => JSON.parse(l) as Record<string, unknown>)
+    assert.equal(lines.length, 5, '五条事件各占一行')
+    assert.equal(lines[0].type, 'conversation_started')
+    assert.equal(lines[1].type, undefined, 'message 行无 type（向后兼容）')
+    assert.equal(lines[2].type, 'memory_update')
+    assert.equal(lines[3].type, 'model_switch')
+    assert.equal(lines[4].type, 'mode_switch')
   })
 })

@@ -27,6 +27,15 @@ export interface SubAgentTask {
 type LLMCallFn = (systemPrompt: string, userPrompt: string, maxTokens?: number) => Promise<string>
 
 /**
+ * 任务状态变更通知回调（v15 引入，Managed-Agents 借鉴第 1 步：派发状态持久化）。
+ *
+ * 在 running/done/error 三个时刻各被调用一次，接收任务的最新快照。
+ * 实现方（如 desktop-app sqlite sink）必须 fire-and-forget 且自行兜底异常；
+ * SubAgentManager 内部已用 try/catch 包住调用，sink 抛错不会污染 LLM 主链。
+ */
+export type SubAgentChangeFn = (task: SubAgentTask) => void
+
+/**
  * SubAgentManager 管理子代理任务的生命周期。
  * 每次 delegate 调用启动一个独立的 LLM 会话，结果异步返回。
  */
@@ -43,12 +52,15 @@ export class SubAgentManager {
    * @param task - 任务描述
    * @param systemPrompt - 子代理的 system prompt（通常共享主代理的知识和 soul）
    * @param callLLM - LLM 调用函数
+   * @param onChange - 可选：任务状态变更回调（running/done/error 各触发一次）。
+   *                   失败由调用方负责；SubAgentManager 内部已 try/catch 兜底。
    * @returns 子代理任务，含 id 供后续查询
    */
   async delegate(
     task: string,
     systemPrompt: string,
-    callLLM: LLMCallFn
+    callLLM: LLMCallFn,
+    onChange?: SubAgentChangeFn
   ): Promise<SubAgentTask> {
     if (this.destroyed) {
       throw new Error('SubAgentManager 已销毁，无法委派新任务')
@@ -61,12 +73,26 @@ export class SubAgentManager {
       startedAt: Date.now(),
     }
     this.tasks.set(id, agentTask)
+    this.fireChange(onChange, agentTask)
 
-    this.runTask(id, task, systemPrompt, callLLM).catch((err) => {
+    this.runTask(id, task, systemPrompt, callLLM, onChange).catch((err) => {
       console.error(`[SubAgentManager] 子代理任务异常退出 (${id}):`, err instanceof Error ? err.message : String(err))
     })
 
     return { ...agentTask }
+  }
+
+  /**
+   * 安全触发 onChange：sink 抛错只 warn，不污染主链。
+   * 传入的 task 已是最新快照引用，向 sink 投递时再 spread 一次防止下游意外修改。
+   */
+  private fireChange(onChange: SubAgentChangeFn | undefined, task: SubAgentTask): void {
+    if (!onChange) return
+    try {
+      onChange({ ...task })
+    } catch (err) {
+      console.warn(`[SubAgentManager] onChange sink 抛错 (${task.id}):`, err instanceof Error ? err.message : String(err))
+    }
   }
 
   /** 获取任务状态（供轮询），返回副本防止外部篡改 */
@@ -155,7 +181,8 @@ export class SubAgentManager {
     id: string,
     task: string,
     systemPrompt: string,
-    callLLM: LLMCallFn
+    callLLM: LLMCallFn,
+    onChange?: SubAgentChangeFn
   ): Promise<void> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     try {
@@ -174,6 +201,7 @@ export class SubAgentManager {
         agentTask.result = result
         agentTask.finishedAt = Date.now()
         this.notifyCompletion(id, agentTask)
+        this.fireChange(onChange, agentTask)
       }
     } catch (error) {
       const agentTask = this.tasks.get(id)
@@ -182,6 +210,7 @@ export class SubAgentManager {
         agentTask.error = error instanceof Error ? error.message : String(error)
         agentTask.finishedAt = Date.now()
         this.notifyCompletion(id, agentTask)
+        this.fireChange(onChange, agentTask)
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle)

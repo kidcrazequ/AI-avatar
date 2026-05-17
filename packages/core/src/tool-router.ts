@@ -3,7 +3,7 @@ import fs from 'fs'
 import { KnowledgeRetriever } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
-import { SubAgentManager } from './sub-agent-manager'
+import { SubAgentManager, type SubAgentTask } from './sub-agent-manager'
 import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
 import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
@@ -371,6 +371,30 @@ interface CachedExcelSource {
   }
 }
 
+/**
+ * 子分身派发上下文（v15 引入，Managed-Agents 借鉴第 1 步）。
+ *
+ * SubAgentManager 内部不知道"派发发生在哪个会话、派发方是谁、目标是谁"，
+ * 这些都是 ToolRouter.delegateTask 才有的上下文。通过 sink 闭包带下去，
+ * 让 desktop-app 适配器组装 SubAgentTaskRow 时不必反向依赖 core。
+ */
+export interface SubAgentDispatchContext {
+  /** 派发发生的会话 ID */
+  conversationId: string
+  /** 派发方分身 ID（即 task() 工具调用所在的分身） */
+  parentAvatarId: string
+  /** 跨分身派发的目标分身 ID；同分身派发为 null */
+  targetAvatar: string | null
+}
+
+/**
+ * 子分身派发 sink 类型。
+ *
+ * SubAgentManager 不知道 sqlite 行的字段名，ToolRouter 不依赖 desktop-app；
+ * 用 ctx 闭包带上下文 + task 快照，desktop-app 装配点把两者拼成 row 落库。
+ */
+export type SubAgentTaskSink = (task: SubAgentTask, ctx: SubAgentDispatchContext) => void
+
 export class ToolRouter {
   private avatarsPath: string
   private designSystemsPath: string
@@ -442,6 +466,17 @@ export class ToolRouter {
   private documentRenderers?: DocumentRendererHook
 
   /**
+   * 可选注入：子分身派发任务 sink（v15 引入，Managed-Agents 借鉴第 1 步）。
+   *
+   * 在 running/done/error 三个时刻被 SubAgentManager 触发。
+   * desktop-app 注入的 sink 会把任务镜像到 sqlite + JSONL；
+   * 不注入时不影响 LLM 主链路，只是没有持久化记录（如纯核心单测场景）。
+   *
+   * sink 内部失败由调用方兜底；SubAgentManager.fireChange 已 try/catch 兜底。
+   */
+  private subAgentTaskSink?: SubAgentTaskSink
+
+  /**
    * @param avatarsPath 仓库 avatars/ 目录绝对路径
    * @param options 可选依赖注入：
    *   - loadAvatarSystemPrompt: 用于 delegate_task target_avatar 跨分身委派
@@ -460,6 +495,7 @@ export class ToolRouter {
       mcpManager?: McpClientManager
       documentRenderers?: DocumentRendererHook
       resolveConversationProjectId?: (conversationId: string) => string
+      subAgentTaskSink?: SubAgentTaskSink
     },
   ) {
     this.avatarsPath = avatarsPath
@@ -470,6 +506,7 @@ export class ToolRouter {
     this.mcpManager = options?.mcpManager
     this.documentRenderers = options?.documentRenderers
     this.resolveConversationProjectId = options?.resolveConversationProjectId
+    this.subAgentTaskSink = options?.subAgentTaskSink
   }
 
   /** 允许在 ToolRouter 创建后再注入（如渲染进程在 ToolRouter 之后才完成 IPC 桥接） */
@@ -904,7 +941,7 @@ export class ToolRouter {
         case 'delegate_task':
         case 'task':
           // task 是 delegate_task 的升级别名（九层重构 2026-04-30），保留 delegate_task 兼容旧 skill
-          result = await this.delegateTask(avatarId, args, callLLM); break
+          result = await this.delegateTask(avatarId, args, callLLM, conversationId); break
         case 'glob':
           // glob 是 list_files 的语义别名：把 pattern 映射到 list_files 的 glob 参数
           result = this.listFiles(avatarId, conversationId, {
@@ -3770,7 +3807,8 @@ ${content}` }
   private async delegateTask(
     avatarId: string,
     args: Record<string, unknown>,
-    callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>
+    callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>,
+    conversationId?: string,
   ): Promise<ToolCallResult> {
     const task = args.task as string
     if (!task) return { content: '', error: '缺少 task 参数' }
@@ -3831,7 +3869,23 @@ ${content}` }
       systemPrompt = this.systemPromptCache.get(avatarId) || `你是一个专业 AI 助手，请独立完成分配的任务。`
     }
 
-    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM)
+    /**
+     * 构造派发上下文 + sink 闭包。
+     *
+     * 仅在同时具备 sink + conversationId 时才落库——纯核心单测/无 conversation 上下文
+     * 场景下 sink 直接 no-op，不报错也不写垃圾数据。
+     */
+    const onChange = this.subAgentTaskSink && conversationId
+      ? (t: SubAgentTask) => {
+          this.subAgentTaskSink!(t, {
+            conversationId,
+            parentAvatarId: avatarId,
+            targetAvatar: targetAvatar || null,
+          })
+        }
+      : undefined
+
+    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM, onChange)
 
     // 基于事件通知等待完成，无轮询
     const TIMEOUT_MS = 30000

@@ -262,6 +262,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) =>
     ipcRenderer.invoke('write-memory-store', avatarId, doc),
 
+  // v17 事件日志（JSONL 升 event 日志方案 B）：记忆更新 + 模型切换
+  recordMemoryUpdateEvent: (
+    conversationId: string,
+    avatarId: string,
+    payload: { updateCount: number; summaryPreview: string; totalByteSize: number; consolidated: boolean },
+  ) => ipcRenderer.invoke('record-memory-update-event', conversationId, avatarId, payload),
+  recordModelSwitchEvent: (
+    conversationId: string,
+    fromModel: string | null,
+    toModel: string | null,
+  ) => ipcRenderer.invoke('record-model-switch-event', conversationId, fromModel, toModel),
+  recordModeSwitchEvent: (
+    conversationId: string,
+    fromMode: 'agent' | 'plan' | 'ask',
+    toMode: 'agent' | 'plan' | 'ask',
+  ) => ipcRenderer.invoke('record-mode-switch-event', conversationId, fromMode, toMode),
+  readConversationEvents: (conversationId: string) =>
+    ipcRenderer.invoke('read-conversation-events', conversationId),
+
   // 用户画像管理（Feature 3）
   readUserProfile: (avatarId: string) => ipcRenderer.invoke('read-user-profile', avatarId),
   writeUserProfile: (avatarId: string, content: string) => ipcRenderer.invoke('write-user-profile', avatarId, content),

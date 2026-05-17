@@ -11,6 +11,7 @@ import { ModelConfig } from '../services/llm-service'
 import type { DocumentAttachment } from '../services/chat-types'
 import { localDateString } from '@soul/core/browser'
 import ToolCallTimeline from './ToolCallTimeline'
+import EventViewer from './EventViewer'
 
 /** 九层重构 #12 ask_question：当前等待用户回答的问题 payload（null = 无问题） */
 interface PendingAskQuestion {
@@ -101,6 +102,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const [isRunningTests, setIsRunningTests] = useState(false)
   const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // v17 事件 viewer：调试 JSONL 事件流（记忆/模型/模式/子分身派发的真相）
+  const [eventViewerOpen, setEventViewerOpen] = useState(false)
   const conversationIdRef = useRef(conversationId)
   conversationIdRef.current = conversationId
   /** L3 桌面工具事件触发的临时输入填充（来自 inspector / form / canva 等卡片） */
@@ -409,6 +412,16 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
             {exportStatus.msg}
           </span>
         )}
+        {/* v17 事件 viewer：查看会话 JSONL 事件流（调试用） */}
+        <button
+          onClick={() => setEventViewerOpen(true)}
+          title="查看会话事件流（v17：记忆/模型/模式/子分身派发的事件日志）"
+          className="font-game text-[11px] text-px-text-dim hover:text-px-primary px-2 py-0.5
+            border border-transparent hover:border-px-primary/50 transition-none"
+          aria-label="查看会话事件流"
+        >
+          ◊ 事件
+        </button>
         <button
           onClick={async () => {
             try {
@@ -511,6 +524,13 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           conversationId={conversationId}
         />
       </div>
+
+      {/* v17 事件 viewer：查看会话 JSONL 事件流 */}
+      <EventViewer
+        conversationId={conversationId}
+        isOpen={eventViewerOpen}
+        onClose={() => setEventViewerOpen(false)}
+      />
     </div>
   )
 }

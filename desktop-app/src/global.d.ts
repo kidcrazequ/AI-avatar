@@ -14,6 +14,73 @@ interface AvatarConfig {
   systemPrompt: string
 }
 
+/**
+ * v17 会话 JSONL 事件联合类型（renderer 侧镜像）。
+ *
+ * 真源在 desktop-app/electron/conversation-jsonl-appender.ts；
+ * 渲染进程不能 import electron/，所以这里 ambient 复刻，便于 EventViewer 强类型 switch。
+ * 如果上游 schema 改动需要同步两侧。
+ */
+interface JsonlEventBase {
+  conversationId: string
+  ts: number
+}
+interface JsonlEventMessage extends JsonlEventBase {
+  type: 'message'
+  id: string
+  role: 'user' | 'assistant' | 'tool'
+  content: string
+  toolCallId?: string | null
+  imageUrls?: string[] | null
+  reasoningContent?: string | null
+}
+interface JsonlEventConversationStarted extends JsonlEventBase {
+  type: 'conversation_started'
+  avatarId: string
+  projectId: string
+  title: string
+}
+interface JsonlEventMemoryUpdate extends JsonlEventBase {
+  type: 'memory_update'
+  avatarId: string
+  updateCount: number
+  summaryPreview: string
+  totalByteSize: number
+  consolidated: boolean
+}
+interface JsonlEventModelSwitch extends JsonlEventBase {
+  type: 'model_switch'
+  fromModel: string | null
+  toModel: string | null
+}
+interface JsonlEventModeSwitch extends JsonlEventBase {
+  type: 'mode_switch'
+  fromMode: 'agent' | 'plan' | 'ask'
+  toMode: 'agent' | 'plan' | 'ask'
+}
+interface JsonlEventSubAgentTask extends JsonlEventBase {
+  type: 'sub_agent_task'
+  taskId: string
+  status: 'running' | 'done' | 'error' | 'lost' | 'denied'
+  parentAvatarId: string
+  targetAvatar?: string | null
+  taskPreview: string
+  error?: string | null
+  agentType?: string | null
+  denyReason?: string | null
+}
+type ConversationJsonlAnyEvent =
+  | JsonlEventMessage
+  | JsonlEventConversationStarted
+  | JsonlEventMemoryUpdate
+  | JsonlEventModelSwitch
+  | JsonlEventModeSwitch
+  | JsonlEventSubAgentTask
+interface ReadEventsResult {
+  events: ConversationJsonlAnyEvent[]
+  parseErrors: number
+}
+
 interface Conversation {
   id: string
   title: string
@@ -619,6 +686,49 @@ interface ElectronAPI {
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>
   readMemoryStore: (avatarId: string) => Promise<StructuredMemoryDocumentDTO>
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) => Promise<void>
+
+  /**
+   * v17 事件日志：记忆更新（JSONL 升 event 日志方案 B）。
+   *
+   * chatStore 在 writeMemory 成功后调用本方法记录元信息（不含正文，避免单行过大；
+   * 正文在 MEMORY.md）。用户手动 MemoryPanel 编辑不会调用本方法。
+   */
+  recordMemoryUpdateEvent: (
+    conversationId: string,
+    avatarId: string,
+    payload: { updateCount: number; summaryPreview: string; totalByteSize: number; consolidated: boolean },
+  ) => Promise<void>
+
+  /**
+   * v17 事件日志：会话模型切换。
+   *
+   * fromModel/toModel 为 null 表示"使用分身 default"。
+   */
+  recordModelSwitchEvent: (
+    conversationId: string,
+    fromModel: string | null,
+    toModel: string | null,
+  ) => Promise<void>
+
+  /**
+   * v17 事件日志：会话工具模式切换（Ask / Plan / Agent）。
+   *
+   * 与 syncConversationToolMode（门禁同步）不同，本 IPC 仅做日志，不改门禁状态。
+   * chatStore.setMode 已对同档短路，调用本方法时一定是真实切换。
+   */
+  recordModeSwitchEvent: (
+    conversationId: string,
+    fromMode: 'agent' | 'plan' | 'ask',
+    toMode: 'agent' | 'plan' | 'ask',
+  ) => Promise<void>
+
+  /**
+   * v17 事件 viewer：读取会话 JSONL 事件流。
+   *
+   * 旧消息行（无 type）由 reader 归一化为 type='message'；
+   * 损坏行计入 parseErrors，不污染 events 数组。文件不存在返回空。
+   */
+  readConversationEvents: (conversationId: string) => Promise<ReadEventsResult>
 
   // 用户画像管理（Feature 3）
   readUserProfile: (avatarId: string) => Promise<string>

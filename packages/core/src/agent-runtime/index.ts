@@ -63,6 +63,7 @@ export {
   type TypedSubAgentStatus,
   type DelegateTypedOptions,
   type LLMCallFn,
+  type TypedSubAgentChangeFn,
 } from './typed-sub-agent-manager'
 
 // ── Phase 4: PermissionEnforcer 三态 + Plan Mode ─────────────────────────

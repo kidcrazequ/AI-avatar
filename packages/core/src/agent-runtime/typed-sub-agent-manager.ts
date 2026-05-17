@@ -41,6 +41,23 @@ export type LLMCallFn = (
   maxTokens?: number
 ) => Promise<string>
 
+/**
+ * 状态变更通知回调（v16 引入，Managed-Agents 借鉴第 1 步 · 拓展到 typed runtime）。
+ *
+ * 与 SubAgentManager 的 SubAgentChangeFn 形态一致，差别仅在 task 类型：
+ * 这里传 TypedSubAgentTask，多出 agentType / parentAgentId / denyReason 等字段。
+ *
+ * 在以下时刻各被调用一次：
+ *   - SpawnGuard 拒绝 → status='denied'
+ *   - Hook 拒绝       → status='denied'
+ *   - spawn 成功     → status='running'
+ *   - LLM 完成       → status='done'
+ *   - LLM 失败       → status='error'
+ *
+ * 实现方必须 fire-and-forget 自行兜底异常；TypedSubAgentManager 内部已 try/catch 兜底。
+ */
+export type TypedSubAgentChangeFn = (task: TypedSubAgentTask) => void
+
 export interface DelegateTypedOptions {
   task: string
   parentBlueprint: AgentBlueprint
@@ -50,6 +67,8 @@ export interface DelegateTypedOptions {
   buildSystemPrompt?: (child: AgentBlueprint) => string
   hooks?: HookRegistry
   audit?: AuditTrail
+  /** 任务状态变更回调（denied/running/done/error 各触发一次） */
+  onChange?: TypedSubAgentChangeFn
 }
 
 const DEFAULT_AGENT_TYPE_HINTS: Record<SubAgentType, string> = {
@@ -68,7 +87,7 @@ export class TypedSubAgentManager {
   async delegateTyped(opts: DelegateTypedOptions): Promise<TypedSubAgentTask> {
     if (this.destroyed) throw new Error('TypedSubAgentManager 已销毁')
 
-    const { task, parentBlueprint, agentType, callLLM, hooks, audit } = opts
+    const { task, parentBlueprint, agentType, callLLM, hooks, audit, onChange } = opts
     const id = `sub-${agentType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const child = deriveChildBlueprint(parentBlueprint, agentType, id, task)
     const guard = checkSpawn(parentBlueprint, child, agentType)
@@ -95,6 +114,7 @@ export class TypedSubAgentManager {
         agentId: parentBlueprint.identity.id,
         payload: { id, agentType, task, denied: true, reason: guard.reason },
       })
+      this.fireChange(onChange, denied)
       return denied
     }
 
@@ -115,12 +135,14 @@ export class TypedSubAgentManager {
           finishedAt: Date.now(),
         }
         this.tasks.set(id, denied)
+        this.fireChange(onChange, denied)
         return denied
       }
     }
 
     const running: TypedSubAgentTask = { ...baseTask, status: 'running', startedAt: Date.now() }
     this.tasks.set(id, running)
+    this.fireChange(onChange, running)
 
     audit?.record({
       point: HookPoint.ON_SPAWN,
@@ -141,6 +163,7 @@ export class TypedSubAgentManager {
         finishedAt: Date.now(),
       }
       this.tasks.set(id, done)
+      this.fireChange(onChange, done)
       return done
     } catch (err) {
       const errored: TypedSubAgentTask = {
@@ -150,7 +173,21 @@ export class TypedSubAgentManager {
         finishedAt: Date.now(),
       }
       this.tasks.set(id, errored)
+      this.fireChange(onChange, errored)
       return errored
+    }
+  }
+
+  /**
+   * 安全触发 onChange：sink 抛错只 warn，不污染主链。
+   * 与 SubAgentManager.fireChange 同型——两边的 sink 失败行为对外一致。
+   */
+  private fireChange(onChange: TypedSubAgentChangeFn | undefined, task: TypedSubAgentTask): void {
+    if (!onChange) return
+    try {
+      onChange({ ...task })
+    } catch (err) {
+      console.warn(`[TypedSubAgentManager] onChange sink 抛错 (${task.id}):`, err instanceof Error ? err.message : String(err))
     }
   }
 

@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -836,6 +836,19 @@ app.whenReady().then(async () => {
     if (logger) logger.activity('life-advance-all', '已注册 daily 0:30 cron')
   } catch (err) {
     console.error('[Main] 注册 life-advance-all cron 失败:', err)
+  }
+
+  // v17 Phase 2c+：对话情景记忆"渐进遗忘"每日 0:35 跑一次（让 life-advance-all 先跑完）。
+  // 不需要 LLM——纯算法层，sigmoid 重算 status，无成本。任何分身没 episodes 就空转跳过。
+  try {
+    cronScheduler.scheduleDailyCallback('episode-forgetting-all', 0, 35, async () => {
+      await runEpisodeForgettingAllAvatars().catch((err) => {
+        if (logger) logger.error('episode-forgetting-all', err instanceof Error ? err : new Error(String(err)))
+      })
+    })
+    if (logger) logger.activity('episode-forgetting-all', '已注册 daily 0:35 cron')
+  } catch (err) {
+    console.error('[Main] 注册 episode-forgetting-all cron 失败:', err)
   }
 
   // 每日自动备份（每 24 小时一次，启动时立即执行一次）
@@ -2634,6 +2647,93 @@ async function runLifeAdvanceAllAvatars(): Promise<AdvanceAllAvatarsResult> {
   }
   return summary
 }
+
+/**
+ * v17 Phase 2c+：对话情景记忆遗忘 cron 实现 + 单分身可单测的 helper。
+ *
+ * 对每个分身：
+ *   1. 列出所有 episodes（store 已经在解析失败时跳过损坏文件）
+ *   2. applyEpisodeAlgorithmicForgetting 纯算法重算 status
+ *   3. 只把 status 变化的条目写回（changedIds），减少磁盘写
+ *
+ * 任何一个分身处理失败都不阻塞其他分身——cron 视角"尽力做完一轮"。
+ */
+async function applyEpisodeForgettingForAvatar(avatarId: string): Promise<{
+  total: number
+  changed: number
+  byStatus: { remembered: number; blurred: number; forgotten: number }
+}> {
+  const episodes = await listConversationEpisodes(avatarsPath, avatarId)
+  if (episodes.length === 0) {
+    return { total: 0, changed: 0, byStatus: { remembered: 0, blurred: 0, forgotten: 0 } }
+  }
+  const { episodes: updated, changedIds } = applyEpisodeAlgorithmicForgetting(episodes)
+  // 仅写回 status 变化的 episode
+  const changedSet = new Set(changedIds)
+  for (const ep of updated) {
+    if (changedSet.has(ep.conversationId)) {
+      try {
+        await writeConversationEpisode(avatarsPath, ep)
+      } catch (err) {
+        if (logger) {
+          logger.activity(
+            'episode-forgetting',
+            `avatar=${avatarId} conv=${ep.conversationId} 写回失败: ${err instanceof Error ? err.message : String(err)}`,
+          )
+        }
+      }
+    }
+  }
+  const byStatus = { remembered: 0, blurred: 0, forgotten: 0 }
+  for (const ep of updated) byStatus[ep.consolidationStatus] += 1
+  return { total: updated.length, changed: changedIds.length, byStatus }
+}
+
+/**
+ * cron 内部：遍历所有分身，逐个跑遗忘算法。
+ * 每个分身独立 try/catch，单分身失败不影响其他分身。
+ */
+async function runEpisodeForgettingAllAvatars(): Promise<{
+  totalAvatars: number
+  totalEpisodes: number
+  totalChanged: number
+}> {
+  const avatars = avatarManager.listAvatars()
+  let totalEpisodes = 0
+  let totalChanged = 0
+  for (const a of avatars) {
+    try {
+      const r = await applyEpisodeForgettingForAvatar(a.id)
+      totalEpisodes += r.total
+      totalChanged += r.changed
+      if (r.total > 0 && logger) {
+        logger.activity(
+          'episode-forgetting',
+          `avatar=${a.id} total=${r.total} changed=${r.changed} R=${r.byStatus.remembered} B=${r.byStatus.blurred} F=${r.byStatus.forgotten}`,
+        )
+      }
+    } catch (err) {
+      if (logger) logger.error('episode-forgetting', new Error(`avatar=${a.id} ${err instanceof Error ? err.message : String(err)}`))
+    }
+  }
+  if (logger) {
+    logger.activity(
+      'episode-forgetting-all',
+      `avatars=${avatars.length} episodes=${totalEpisodes} changed=${totalChanged}`,
+    )
+  }
+  return { totalAvatars: avatars.length, totalEpisodes, totalChanged }
+}
+
+/**
+ * v17 IPC：手动触发单分身的对话记忆遗忘计算（调试/UI 用）。
+ *
+ * 用户可在 UI 里"立即整理记忆"看到 status 变化数；和 cron 跑的是同一个 helper。
+ */
+wrapHandler('apply-episode-forgetting', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return applyEpisodeForgettingForAvatar(avatarId)
+})
 
 // ─── 用户画像管理（Feature 3）────────────────────────────────────────────────
 

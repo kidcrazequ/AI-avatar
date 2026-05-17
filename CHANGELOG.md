@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+> 第一波"人类认知层"扩展（Phase 1 + 2 全套）：让分身**表达犹豫 / 记住过往对话 / 按 salience 调用回忆 / 渐进式遗忘**。借鉴 Anthropic Managed Agents 的 session-as-event-log + Life Experience 已有的 sigmoid 遗忘曲线；不引入额外服务，全部在主进程纯函数 + cron。
+
+### 新增
+
+- **Deliberation 表达（Phase 1）** — 分身可在真实犹豫 / 改主意时用 `[UNCERTAIN]...[/UNCERTAIN]` 或 `[RECONSIDER]...[/RECONSIDER]` 标记。`DELIBERATION_GUIDE` 软指引注入 `stableSystemText`（HARD_RULES 之后、人格之前）告诉分身只在真实情境用，禁止稀释每个判断的确信度。`chatStore` 在 `extractMemoryUpdates` 之后串行抽取，从展示文里抽掉，原话进 chip。`MessageBubble` 在消息泡下方渲染 🤔 / ↻ 颜色徽章（border + 软色 + title 完整文本提示），含截断 60 字 + 鼠标悬停展开。
+- **对话情景记忆 / Episodic Memory（Phase 2a）** — 每次成功 assistant 回复后，chatStore 触发 fire-and-forget 抽取：把整段对话浓缩成一条 `ConversationEpisode`（title / theme / 200-500 字第一人称 summary / 3-5 条 keyQuotes / themes / valence -10~+10 / emotionType / importance 0-10 / consolidationStatus）。落盘到 `avatars/<id>/memory/episodes/<conv-id>.json`，一会话一文件。`shouldExtractEpisode` 做幂等：消息条数没变就跳过，避免每轮都重抽。
+- **`recall_conversation` 工具（Phase 2b）** — 与 `read_life_episode` 对偶，分身在被问"上次/之前/那次聊过 X"时调用。query 拆 2-3 字 n-gram + 空白切，命中 title/theme/keyQuotes/summary 后按命中次数 + importance 加成排序，返回 top 1-3 条的完整 summary + keyQuotes。无命中时直接承认遗忘，prompt 守则禁止编造。注册到 `AVATAR_TOOLS`，在 plan/ask 模式按 read-only 默认放行（不在 `PLAN_MODE_BLOCKED_TOOL_NAMES`）。
+- **「我和你的过去」system prompt 章节（Phase 2b）** — `soul-loader` 同步读 `memory/episodes/*.json`，按 salience desc 排序，注入 system prompt（在「我的人生」之后）。配 prompt 守则三条："不主动展开过去对话 / 被问起时调 `recall_conversation` 工具取细节 / 工具空返回时承认遗忘"。
+- **Salience 评分引擎（Phase 2c）** — `packages/core/src/memory/salience.ts`：`computeSalience(importance, emotionMagnitude, recencyFactor, status, weights)`。Forgotten → 0；blurred 乘 0.6 penalty。Recency 由调用方按系统类型预计算：`computeWallClockRecencyFactor`（对话用 wall-clock 半衰期，默认 30 天）+ `computeAgeGapRecencyFactor`（人生事件用 age_gap 年级衰减）。配 17 个单测覆盖加权、forgotten 归零、NaN/clamp、半衰期数学、排序不变量。
+- **二段式注入（Phase 2d，`SOUL_TWO_TIER_INJECTION` flag-gated）** — 启用后 system prompt「我和你的过去」改成：「## 当前焦点」3 条带 200 字 summary clip + 「## 长期仓库」剩余条目压缩为标题列表。flag OFF（默认）保留 flat 注入避免破坏现有行为；OFF 也已用 salience 排序，比之前的 importance-only 排序更贴近"想起什么"。
+- **对话情景记忆遗忘 / Episode Forgetter（本期新增）** — `packages/core/src/memory/episode-forgetter.ts`：复用 Life sigmoid 算法但用月单位（α=0.10/月 vs life α=0.05/年），默认权重让"普通重要性的对话 12 月 → blurred / 24 月 → forgotten"，重要 + 高情感的 12 月内仍 remembered。每日 0:35 cron（life-advance-all 0:30 之后 5 分钟）跑 `runEpisodeForgettingAllAvatars`，逐分身重算 status，**仅写回变化的条目**（changedIds）减少磁盘写。`apply-episode-forgetting` IPC 提供手动触发，返回 R/B/F 计数便于调试。
+- **Soul system prompt 引用 + recall 守则** — 详见上述章节注入。
+- **会话 JSONL 事件流升级 / Event Viewer（前置基础设施）** — `<userData>/conversations/<conv>.jsonl` 现含 6 类事件：legacy message（无 type）、`conversation_started`、`memory_update`、`model_switch`、`mode_switch`、`sub_agent_task`。`ChatWindow` 顶栏 `◊ 事件` 按钮打开 EventViewer 模态，按类型过滤 chip + 时间线展示。
+- **子分身派发持久化 / Managed-Agents Inspiration**（前置基础设施）— `SubAgentManager` + `TypedSubAgentManager` 都 fire `onChange` 回调；desktop sink 镜像到 sqlite `sub_agent_tasks` 表（v15 + v16 `agent_type` 列）+ JSONL。`markOrphanRunningAsLost` 在应用启动时清理上次崩溃留下的孤儿 running 任务。
+
+### 修订
+
+- **system prompt 装配主链路**（`packages/core/src/soul-loader.ts`）— 在「我的人生（出厂记忆）」之后新增「我和你的过去」章节。`readConversationEpisodesSafe` 同步读 episodes 目录（单 avatar 预期 <50 文件 × <5KB，全部 readSync 可接受）。损坏 / 不合法 JSON 文件被跳过仅 console.warn，不阻塞整体拼装。Forgotten 状态在本层就剔除，不进 system prompt。
+- **`stableSystemText` 拼装**（`chatStore.ts`）— 现在是 `HARD_RULES + '\n\n' + DELIBERATION_GUIDE + '\n\n' + systemPrompt`，三段全部 cacheable。
+- **chatStore 在 assistant 回复后**（chatStore.ts）— 增加 lazy episode 抽取触发（fire-and-forget，凭据缺失时静默跳过）；增加事件流写入（model_switch / mode_switch / memory_update / conversation_started）。
+
+### 修复
+
+- **`recall_conversation` 工具的 `top_k` 参数 NaN 边界** — 当 LLM 传 NaN 时之前会让 `Math.floor(NaN)` 一路传播到 `slice(0, NaN)` 返回空数组，静默失败。现在用 `Number.isFinite` 守卫，NaN 时回退到默认 `top_k=3`。
+
+### 测试
+
+- 新增 4 个独立单测文件，全部 node:test：
+  - `salience.test.ts`：17 用例，覆盖加权 / forgotten 归零 / blurred penalty / NaN/clamp / 半衰期数学 / 年龄差衰减窗口 + 保底 / 排序不变量
+  - `conversation-episode.test.ts`：15 用例，覆盖 store CRUD + 路径安全 + 解析容错 + 抽取 schema 校验 + 越界 clamp + emotionType 白名单 + code-fence 剥离 + 空 transcript 拒绝 + LLM 失败传播
+  - `episode-forgetter.test.ts`：10 用例，覆盖 1 月内 remembered / 12 月 blurred / 24 月 forgotten / 高重要性高情感的 12 月仍 remembered / `|valence|` 等同性 / 异常未来时间 clamp / changedIds 增量 / 幂等回归 / 纯函数不变形 / 默认权重稳定点
+  - `deliberation-extractors.test.ts`：8 用例，覆盖单/多/跨行 marker、空 marker、过长截断、两类不串扰、无 marker 正交、cleanText 移除
+- 既有 `tool-router-delegate` / `sub-agent-manager` / `typed-sub-agent-manager-sink` / `spawn-guard` / `soul-loader` 测试零回归（241/241 core test + 25 desktop electron test 通过）。
+
+### 工具 / 维护
+
+- **每日 0:35 cron `episode-forgetting-all`** — 在 `life-advance-all`（0:30）之后 5 分钟跑。空分身列表 / 无 episodes 目录 / 单分身写盘失败 都不阻塞其他分身。
+- **新增 IPC** — `extract-conversation-episode` / `list-conversation-episodes` / `read-conversation-episode` / `delete-conversation-episode` / `apply-episode-forgetting` / `record-memory-update-event` / `record-model-switch-event` / `record-mode-switch-event` / `read-conversation-events`。
+
+### 项目治理
+
+- **sqlite schema v15 → v16 → v17**：
+  - v15：新增 `sub_agent_tasks` 表（子分身派发持久化）
+  - v16：`sub_agent_tasks` 加 `agent_type` 列（承载 TypedSubAgentManager 的 explore/plan/worker）
+  - v17：`messages` 表加 `uncertain_markers` + `reconsider_markers` 列（JSON 数组，承载 Deliberation 标记）
+- **新增持久化目录** — `avatars/<id>/memory/episodes/` 每会话一 .json 文件
+- **`@soul/core` 新增模块** — `memory/{episode-types,episode-store,episode-prompts,episode-extractor,salience,episode-forgetter}.ts`
+- **依赖** — 零外部新依赖（全部在现有依赖里）
+
+### 已知限制 / 后续
+
+- **Life Experience 注入未做二段式** — `consolidated.md` 是 8K-cap curated 叙事，结构和 episodes 异质；本期 Salience + 两段式只覆盖 conversation episodes。若 Life timeline.json 想走同一 salience pool，留给后续 iteration。
+- **`SOUL_TWO_TIER_INJECTION` 默认关闭** — 灰度策略：先用 flat 注入跑稳，观察 token 增长后再翻默认。环境变量 `SOUL_TWO_TIER_INJECTION=true` 启用。
+- **Episode 浏览 UI 未做** — v1 让分身能自己用就够；UI 类似 LifePanel 留作后续。
+- **抽取 latency**：每次回复后异步调一次 LLM 抽取 episode；用 chat slot 凭据，不会阻塞主回复。无凭据时静默跳过。
+- **chat slot 没配时 episode 不会自动抽**：用户用 Claude（anthropic_api_key）但没配 chat_api_key（DeepSeek）时，每日 cron 仍会跑（不需要 LLM）但抽取永远不触发。可手动改 `extract-conversation-episode` IPC 走 anthropic 凭据。
+- **Recall 的命中算法是简单 keyword + n-gram**：足够日常的"我们聊过 X"召回；如果将来要做语义召回，是嵌入 + ANN 的另一条路径。
+- **Forgetter 默认权重 30-天月**：精度足够 conversation 衰减但不精确到日历月长度差异；权重对外暴露在 `DEFAULT_EPISODE_FORGETTING_WEIGHTS`，可单独调。
+
 ## v0.14.0 (2026-05-15)
 
 > 引入 LLM Provider 抽象层与 Anthropic Claude 路径；新增对话级模型切换器与 system prompt 结构化分段（cache_control 准备就绪），为大体积 system prompt 做 Anthropic prompt cache 命中铺路。

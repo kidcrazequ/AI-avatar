@@ -745,6 +745,17 @@ interface ElectronAPI {
 
   /** v17 Phase 2a：删除单条 episode（幂等）。 */
   deleteConversationEpisode: (avatarId: string, conversationId: string) => Promise<void>
+
+  /**
+   * v17 Phase 2c+：手动触发单分身的对话情景记忆遗忘计算。
+   *
+   * 与每日 0:35 cron 同一算法；返回更新统计（哪些条目 status 变化、各状态数量）。
+   */
+  applyEpisodeForgetting: (avatarId: string) => Promise<{
+    total: number
+    changed: number
+    byStatus: { remembered: number; blurred: number; forgotten: number }
+  }>
   readMemoryStore: (avatarId: string) => Promise<StructuredMemoryDocumentDTO>
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) => Promise<void>
 

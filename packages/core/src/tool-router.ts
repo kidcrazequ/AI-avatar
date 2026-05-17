@@ -1759,7 +1759,7 @@ ${content}` }
   private async recallConversation(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
     const query = typeof args.query === 'string' ? args.query.trim() : ''
     if (!query) return { content: '', error: '缺少 query 参数' }
-    const rawTopK = typeof args.top_k === 'number' ? args.top_k : 3
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 3
     const topK = Math.max(1, Math.min(5, Math.floor(rawTopK)))
 
     try {

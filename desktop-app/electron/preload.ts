@@ -277,6 +277,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('read-conversation-episode', avatarId, conversationId),
   deleteConversationEpisode: (avatarId: string, conversationId: string) =>
     ipcRenderer.invoke('delete-conversation-episode', avatarId, conversationId),
+  applyEpisodeForgetting: (avatarId: string) =>
+    ipcRenderer.invoke('apply-episode-forgetting', avatarId),
   readMemoryStore: (avatarId: string) => ipcRenderer.invoke('read-memory-store', avatarId),
   writeMemoryStore: (avatarId: string, doc: StructuredMemoryDocumentDTO) =>
     ipcRenderer.invoke('write-memory-store', avatarId, doc),

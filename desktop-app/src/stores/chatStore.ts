@@ -1131,6 +1131,36 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // v18 OpenHuman 借鉴：按日期定位 daily summary（时间维度对偶 recall_conversation）
+    type: 'function',
+    function: {
+      name: 'list_daily_summaries',
+      description: '列出已生成的 daily summary 日期（每日 cron 自动按当天 episode 合并生成）。仅在用户问"今天 / 昨天 / 上周聊了什么 / 上周二我们讨论的 X" 等时间锚定的回忆需求时调用——日常对话不要主动调。返回日期列表（降序），后续用 read_daily_summary(date) 取该日全文。',
+      parameters: {
+        type: 'object',
+        properties: {
+          start: { type: 'string', description: '可选。起始日期 YYYY-MM-DD（含）' },
+          end: { type: 'string', description: '可选。结束日期 YYYY-MM-DD（含）' },
+          limit: { type: 'number', description: '可选。最大返回条数；默认 14，上限 60' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_daily_summary',
+      description: '读取单日 daily summary 全文。返回 markdown：当天 N 次对话的 title + theme + importance + 截断 summary。配合 list_daily_summaries 一起用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: 'YYYY-MM-DD 格式日期，如 2026-05-18' },
+        },
+        required: ['date'],
+      },
+    },
+  },
+  {
     // v18 OpenClaw 借鉴：写入"以后所有 X 都要 Y"类长期规则，注入 system prompt 永久生效
     type: 'function',
     function: {

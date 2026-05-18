@@ -16,6 +16,7 @@ import {
   appendConversationEpisodeNote,
 } from './memory/episode-store'
 import { appendStandingOrder } from './memory/standing-orders'
+import { listDailySummaries, readDailySummary } from './memory/daily-summary'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -972,6 +973,10 @@ export class ToolRouter {
           result = await this.addEpisodeNoteTool(avatarId, args); break
         case 'add_standing_order':
           result = this.addStandingOrderTool(avatarId, args, conversationId); break
+        case 'list_daily_summaries':
+          result = this.listDailySummariesTool(avatarId, args); break
+        case 'read_daily_summary':
+          result = this.readDailySummaryTool(avatarId, args); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -1997,6 +2002,47 @@ ${content}` }
       const res = appendStandingOrder(this.avatarsPath, avatarId, order, source)
       if (!res.ok) return { content: '', error: res.error ?? '写入 standing order 失败' }
       return { content: `[add_standing_order] 已写入永久规则。当前共 ${res.total} 条 standing orders。规则在下次会话装配 system prompt 时生效。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * list_daily_summaries：列出已生成的 daily summary 日期（OpenHuman 借鉴）。
+   * 时间维度对偶 recall_conversation：后者按 query 召回 episode，前者按日期定位。
+   *
+   * 入参：start? / end? (YYYY-MM-DD)，limit? (默认 14)
+   */
+  private listDailySummariesTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const start = typeof args.start === 'string' ? args.start.trim() : undefined
+    const end = typeof args.end === 'string' ? args.end.trim() : undefined
+    const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 14
+    const limit = Math.max(1, Math.min(60, Math.floor(rawLimit)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const dates = listDailySummaries(this.avatarsPath, avatarId, { start, end, limit })
+      if (dates.length === 0) {
+        return { content: '[list_daily_summaries] 当前分身没有 daily summary——可能未到首次 cron 触发时间，或当时段没有显著对话。' }
+      }
+      return { content: `[list_daily_summaries] 命中 ${dates.length} 天：\n${dates.map(d => `- ${d}`).join('\n')}` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** read_daily_summary：读单日 summary 全文。入参 date (YYYY-MM-DD) */
+  private readDailySummaryTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const date = typeof args.date === 'string' ? args.date.trim() : ''
+    if (!date) return { content: '', error: '缺少 date 参数（格式 YYYY-MM-DD）' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const content = readDailySummary(this.avatarsPath, avatarId, date)
+      if (!content) {
+        return { content: `[read_daily_summary] ${date} 的 daily summary 不存在或当天无显著对话。可先调 list_daily_summaries 看哪些日期有数据。` }
+      }
+      return { content }
     } catch (err) {
       return { content: '', error: err instanceof Error ? err.message : String(err) }
     }

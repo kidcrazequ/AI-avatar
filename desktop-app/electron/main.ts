@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -850,6 +850,19 @@ app.whenReady().then(async () => {
     if (logger) logger.activity('episode-forgetting-all', '已注册 daily 0:35 cron')
   } catch (err) {
     console.error('[Main] 注册 episode-forgetting-all cron 失败:', err)
+  }
+
+  // v18 OpenHuman 借鉴：每日 0:40 跑 daily summary（在 forgetting 0:35 之后 5 分钟，
+  // 确保用最新 status 的 episode 集合合并）。机械合并零 LLM 成本；forgotten 自动剔除。
+  try {
+    cronScheduler.scheduleDailyCallback('daily-summary-all', 0, 40, async () => {
+      await runDailySummaryAllAvatars().catch((err) => {
+        if (logger) logger.error('daily-summary-all', err instanceof Error ? err : new Error(String(err)))
+      })
+    })
+    if (logger) logger.activity('daily-summary-all', '已注册 daily 0:40 cron')
+  } catch (err) {
+    console.error('[Main] 注册 daily-summary-all cron 失败:', err)
   }
 
   // 每日自动备份（每 24 小时一次，启动时立即执行一次）
@@ -2753,6 +2766,41 @@ async function runEpisodeForgettingAllAvatars(): Promise<{
     )
   }
   return { totalAvatars: avatars.length, totalEpisodes, totalChanged }
+}
+
+/**
+ * v18 OpenHuman 借鉴：每分身扫 episode → 按日期分组 → 机械合并写 daily summary。
+ * 零 LLM 调用；纯函数级开销可忽略，单分身 50 episodes 实测 < 20ms。
+ *
+ * 设计：每次 cron 重写所有日期的 summary——因为 forgetter 可能把昨天的 episode
+ * 改成 blurred，需要让 summary 同步。避免遗留过期 markdown。
+ */
+async function runDailySummaryAllAvatars(): Promise<{
+  totalAvatars: number
+  totalDates: number
+}> {
+  const avatars = avatarManager.listAvatars()
+  let totalDates = 0
+  for (const a of avatars) {
+    try {
+      const episodes = await listConversationEpisodes(avatarsPath, a.id)
+      if (episodes.length === 0) continue
+      const r = applyDailySummaryAllDates(avatarsPath, a.id, episodes)
+      totalDates += r.written.length
+      if (r.written.length > 0 && logger) {
+        logger.activity(
+          'daily-summary',
+          `avatar=${a.id} dates_written=${r.written.length} skipped=${r.skipped.length}`,
+        )
+      }
+    } catch (err) {
+      if (logger) logger.error('daily-summary', new Error(`avatar=${a.id} ${err instanceof Error ? err.message : String(err)}`))
+    }
+  }
+  if (logger) {
+    logger.activity('daily-summary-all', `avatars=${avatars.length} dates=${totalDates}`)
+  }
+  return { totalAvatars: avatars.length, totalDates }
 }
 
 /**

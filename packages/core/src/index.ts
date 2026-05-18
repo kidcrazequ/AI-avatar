@@ -397,5 +397,17 @@ export {
 } from './memory/standing-orders'
 export type { AppendStandingOrderResult } from './memory/standing-orders'
 
+// Daily Summary Memory Tree（OpenHuman 借鉴）：每日 cron 把当天 episode 按时间维度
+// 合并成 daily-<YYYY-MM-DD>.md，补 WikiCompiler 实体维度之外的时间锚定
+export {
+  localDateStringFromMs,
+  groupEpisodesByDate,
+  compileDailySummary,
+  writeDailySummary,
+  readDailySummary,
+  listDailySummaries,
+  applyDailySummaryAllDates,
+} from './memory/daily-summary'
+
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

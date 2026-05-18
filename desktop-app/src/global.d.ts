@@ -925,6 +925,16 @@ interface ElectronAPI {
   createSkill: (avatarId: string, skillId: string, content: string) => Promise<Skill>
   deleteSkill: (avatarId: string, skillId: string) => Promise<void>
   generateSkillDraft: (description: string) => Promise<{ draft: string; suggestedId: string }>
+  /** 列出 shared/skills/*.md，标注是否已在当前分身 skill-index.yaml 中引用 */
+  getAvailableSharedSkills: (avatarId: string) => Promise<Array<{
+    name: string
+    filename: string
+    description: string
+    domain: string
+    enabled: boolean
+  }>>
+  /** 启用 / 禁用公共技能：写入或删除分身 skill-index.yaml 中的 shared_skills 条目 */
+  toggleSharedSkill: (avatarId: string, skillName: string, enable: boolean) => Promise<void>
 
   // ─── 社区技能管理 ─────────────────────────────────────────────
   /** 读取 sources.yaml 返回源列表 */

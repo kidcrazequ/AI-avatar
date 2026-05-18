@@ -956,6 +956,137 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    /**
+     * knowledge_grep: 在知识库 .md / .txt 等文本文件里按正则精确搜索。
+     * 与 search_knowledge（BM25 + vector）互补：grep 适合精确关键词 / 编号 / 政策条款号。
+     */
+    type: 'function',
+    function: {
+      name: 'knowledge_grep',
+      description: [
+        '在分身知识库文件里按正则精确搜索，返回命中的文件路径 + 行号 + 行文本。',
+        '',
+        '何时使用（与 search_knowledge 互补）：',
+        '- 你知道精确关键词 / 型号编号 / 政策条款号（如 "ENS-L262" / "262KWh" / "第 8.3 条"）',
+        '- search_knowledge 召回不全或证据弱，需要兜底确认某关键词在哪些文件出现',
+        '- 想列出某术语在知识库的所有出现位置（如统计"峰谷"被提及的所有章节）',
+        '',
+        '何时不用：',
+        '- 模糊语义查询（"上海最近的电价政策" → 用 search_knowledge）',
+        '- 表格数值（→ query_excel）',
+        '- 需要看完整章节上下文（grep 仅返回单行，要看上下文用 read_knowledge_file）',
+        '',
+        '搜索范围：分身自己的 knowledge/ + 当前 project 的 projects/<pid>/knowledge/（共享 shared/knowledge/ 不在内）。',
+        '只扫文本文件：.md / .markdown / .txt / .json / .yaml / .yml。',
+        '',
+        '硬上限：单文件 50 条，总计 200 条（可调，最大 500）。超限时 truncated=true，请缩窄 pattern 或加 scope。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: '正则表达式（JavaScript 语法，大小写不敏感）。如 "262KWh" / "峰谷.{0,5}差" / "^##\\s+电价"' },
+          scope: { type: 'string', description: '可选：相对 knowledge/ 的子目录限定搜索范围，如 "imports/2025"' },
+          max_per_file: { type: 'number', description: '单文件命中上限，默认 50，硬上限 200' },
+          max_total: { type: 'number', description: '总命中上限，默认 200，硬上限 500' },
+        },
+        required: ['pattern'],
+      },
+    },
+  },
+  {
+    /**
+     * list_wiki_concepts: 列出 LLM 自动编译的实体概念页（wiki/concepts/*.md）。
+     * 适合"X 是什么 / 有哪些参数 / 出现在哪些文件"类实体查询的快速入口。
+     */
+    type: 'function',
+    function: {
+      name: 'list_wiki_concepts',
+      description: [
+        '列出当前分身已编译的实体概念页（wiki/concepts/），支持按 query 做关键词匹配。',
+        '',
+        '概念页是 WikiCompiler 调 LLM 把同一实体（如 "ENS-L262" / "BMS" / "PCS"）在多个知识文件的出现聚合成的独立 .md，含 LLM 摘要 + 属性表 + 来源依据 + 相关实体。',
+        '',
+        '【强烈建议传 query】：某些分身 WikiCompiler 把"明确"/"数值"/"图片"等高频词识别成实体，name 字段无意义。传 query 会扫**正文**做关键词匹配，绕开 name 命名问题；不传 query 仅适合探索浏览。',
+        '',
+        '何时使用：',
+        '- 用户问"X 是什么 / X 有哪些参数 / X 跟 Y 什么关系" → 用 query=X 调本工具',
+        '- 想看某实体跨多个文件的聚合视图（比 search_knowledge 拼 chunk 更省 token + 更准）',
+        '',
+        '何时不用：',
+        '- 时效性问题（→ web_search）',
+        '- 要看具体某文件某行（→ read_knowledge_file / knowledge_grep）',
+        '',
+        '返回 JSON：',
+        '- 有 query：matches[]（每条 name/entity/score/preview），拿 name 调 read_wiki_concept 读全文',
+        '- 无 query：pages[]（仅元数据，name 可能无意义）',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '关键词（如 "ENS-L262" / "262KWh" / "BMS"），按正文模糊匹配。**推荐传**。' },
+          top_n: { type: 'number', description: '返回 top N 匹配项，默认 10，上限 20', default: 10 },
+        },
+      },
+    },
+  },
+  {
+    /**
+     * read_wiki_concept: 读取指定实体概念页全文。
+     */
+    type: 'function',
+    function: {
+      name: 'read_wiki_concept',
+      description: [
+        '读取指定实体概念页的 markdown 全文（含 LLM 摘要 + 属性表 + 来源依据 + 相关实体链）。',
+        '',
+        '何时使用：',
+        '- list_wiki_concepts 拿到 name 后调本工具看具体内容',
+        '- 用户问"X 的所有属性 / X 出现在哪几份文档"',
+        '',
+        '失败模式：',
+        '- name 不存在 → 错误，引导先调 list_wiki_concepts',
+        '- wiki/concepts/ 未编译 → list_wiki_concepts 会先告诉你',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '概念页名（不含 .md 后缀，从 list_wiki_concepts 返回的 pages[].name 取）' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    /**
+     * knowledge_glob: 按 glob 模式列出知识库文件路径。
+     */
+    type: 'function',
+    function: {
+      name: 'knowledge_glob',
+      description: [
+        '按 glob 模式（`*` / `**` / `?`）匹配知识库文件路径，返回相对路径列表。',
+        '',
+        '何时使用：',
+        '- 想列出名字含某关键词的所有文件（如 "**/*电价*.md" 列出所有名字含电价的 md）',
+        '- 想知道某子目录有哪些文件（如 "imports/2025/**" 列出 2025 导入目录全部）',
+        '- 比 list_knowledge_files 精准（不用扫完所有再 LLM 过滤）',
+        '',
+        '何时不用：',
+        '- 想搜文件内容里的关键词（→ knowledge_grep）',
+        '- 模糊主题召回（→ search_knowledge）',
+        '',
+        '模式语法（与 list_files 一致）：`**` 跨目录通配；`*` 单段通配；`?` 单字符通配。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string', description: 'glob 模式。如 "**/*电价*.md" / "imports/**" / "*.md"' },
+        },
+        required: ['pattern'],
+      },
+    },
+  },
+  {
     // v17 Phase 2b：对话情景记忆检索
     type: 'function',
     function: {
@@ -1631,6 +1762,53 @@ IR 语法（markdown + 扩展）：
           },
         },
         required: ['url'],
+      },
+    },
+  },
+  {
+    /**
+     * read_tool_ref: 取回长工具输出的离线正文。
+     *
+     * 当 `web_fetch` 等返回 ≥ 4000 字符 且 启用 lazy-store（设置 / env `SOUL_TOOL_LAZY_RETRIEVAL=on`）时，
+     * Soul 会把正文落到会话 workspace 的 tool-refs/，prompt 里只保留 `body_lazy_ref` 标记。
+     * LLM 看到 lazy_ref 后用此工具按需取正文，支持 offset/limit 分页（单次 ≤ 8000 字符）。
+     */
+    type: 'function',
+    function: {
+      name: 'read_tool_ref',
+      description: [
+        '取回离线存储的工具调用正文（用于 web_fetch 等大体积返回的 lazy 模式）。',
+        '',
+        '何时使用：',
+        '- 工具结果 JSON 里出现 `body_lazy_ref: { call_id, char_count, hint, source_url }` 字段时',
+        '- 你需要读取被 lazy 化的正文细节（如 web_fetch 抓回的长 markdown 内容）',
+        '',
+        '何时不用：',
+        '- 工具结果直接含完整 `body` 字段（说明未启用 lazy），直接用现成内容',
+        '- 仅根据元数据（url/status/char_count）即可回答，不必拉正文',
+        '',
+        '失败模式：',
+        '- 文件不存在（会话切换 / 文件被清）→ 返回错误，引导你重新调原工具',
+        '',
+        '返回 JSON：call_id / total_chars / offset / limit / truncated / content / hint（下一段调用参数）',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          call_id: {
+            type: 'string',
+            description: '工具调用 id，从 lazy_ref 标记里取（形如 "tool-a8f2c4e9b1c2"）',
+          },
+          offset: {
+            type: 'number',
+            description: '起始字符位置；默认 0',
+          },
+          limit: {
+            type: 'number',
+            description: '取多少字符；默认 8000，硬上限 8000',
+          },
+        },
+        required: ['call_id'],
       },
     },
   },
@@ -2995,6 +3173,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 不保留 search_knowledge / query_excel 等"知识层"工具，避免与 RAG 注入内容重复检索。
      */
     const RAG_FAST_PATH_NETWORK_TOOLS = new Set(['web_search', 'web_fetch'])
+    /**
+     * 联网工具白名单：由「设置 → 工具集成 → 启用联网功能」总开关控制。
+     * 关闭时从所有分支的 tools 数组里剔除，连 LLM 都看不到这两个工具——
+     * 配合 tool-router 的 webSearch / webFetch 入口闸门双层保护。
+     */
+    const NETWORK_TOOL_NAMES = new Set(['web_search', 'web_fetch'])
+    const webSearchEnabledRaw = await window.electronAPI.getSetting('web_search_enabled')
+    const webSearchEnabled = webSearchEnabledRaw === 'true'
     let tools: LLMTool[]
     const ragDirectAnswerFastPath = shouldUseRagDirectAnswerFastPath(
       content,
@@ -3021,6 +3207,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       tools = AVATAR_TOOLS.filter(t => !PLAN_MODE_BLOCKED_TOOL_NAMES.has(t.function.name))
     } else {
       tools = AVATAR_TOOLS
+    }
+
+    // 总开关关闭 → 剔除联网工具（覆盖所有分支，含 ragDirectAnswerFastPath 兜底分支）
+    if (!webSearchEnabled) {
+      tools = tools.filter(t => !NETWORK_TOOL_NAMES.has(t.function.name))
     }
 
     tools = await maybeRerankToolsWithIss(content, tools)

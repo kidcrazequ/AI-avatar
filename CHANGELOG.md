@@ -2,6 +2,62 @@
 
 ## Unreleased
 
+> 第二波「Context Engineering」扩展（2026-05-18，并入 Phase 1+2 之后）：借鉴 OpenHuman / TDAI / PAP / Anthropic Claude Skills 四个外部项目的核心思想，给分身加**联网开关 + 引用铁律 / 工具结果压缩 + 离线 lazy / 知识库精确 grep + glob / wiki 概念页 LLM 直读 / emoji → inline icon**。完整方案与决议见 `.cursor/plans/openhuman-借鉴_2026-05-18.plan.md`。
+
+### 新增（第二波 Context Engineering）
+
+- **联网功能总开关（默认关）** — 「设置 → 工具集成」加 `WEB_ENABLED` toggle，控制 `web_search` / `web_fetch` 是否对 LLM 可见。**三层防御**：(1) `soul-loader.ts` 不在 toolsNote 列工具；(2) `chatStore.ts` 从 LLMTool[] 数组过滤；(3) `tool-router.ts` 入口闸门拒绝调用。关闭时强制提示分身「答复事实根基只能来自知识库 + soul + 人生 + 附件，禁止编造时效性数据」。
+- **联网引用铁律（联网开启时）** — 任何来自 `web_search` / `web_fetch` 的事实必须挂可点击 URL + 访问日期（`[来源: https://... · 访问 2026-05-18 · web_search]`），描述性出处（`[来源: 国网上海电力公司电价表]`）一律视为伪造。强制「联网搜索摘要」开篇可见：调过 web_search 的回答必须以 `## 联网搜索摘要` 子章节列 query + 命中 URL + 未命中说明。堵推断漏洞：「我预期 / 推测 / 估计」配具体数字时必须同句标注推断基础。
+- **公共技能浏览 + 一键启用 UI（PAP 借鉴）** — `SharedSkillTab` 从"仅显示已引用"重写为"列出 `shared/skills/*.md` 全部公共技能 + checkbox 切换启用"。新增 IPC `get-available-shared-skills` + `toggle-shared-skill`：扫文件 frontmatter（name / description / domain）+ 读 `skill-index.yaml` 标 enabled 状态；切换时按 `name` 增删 `shared_skills` 段（保留注释与其他段）。
+- **emoji → inline SVG icon 扩展** — `emoji-icon-map.tsx` 新增 9 个 SVG（📊 chart-bar / 📈 trend-up / 📉 trend-down / 🎯 target / 🔥 fire / ⭐🌟 star / 📝 note / 🚀 rocket）。配 prompt #5「段落标题不要用装饰 emoji 当章节前缀，用 markdown heading / **加粗**；有语义的（⚠️✅❌🔴🟢🔵🟡）可用，桌面端自动渲染为项目风格 inline icon；禁止堆叠装饰 emoji 让回答花哨」。
+- **Tool Result 压缩层 / P1 v1（TokenJuice 启发）** — 新建 `packages/core/src/tool-result-compressor.ts`：在 ToolRouter.execute 出口对工具返回的 `content` 应用**无损 + 可还原**压缩。操作：(a) 通用无损（strip ANSI / 去尾空白 / ≥3 连续空行折叠为 2）；(b) `search_knowledge` 风格章节去重（sha256 严格相同，≥100 字符才参与）。**严格透传白名单**（红线）：`query_excel` / `read_knowledge_file` / `read_attachment` / `read_file` / `eval_js` / `exec_shell` / `exec_code` / `git_status` / `git_diff` 等事实根基类工具 byte-for-byte 透传。env `SOUL_TOOL_COMPRESSION=off` 一键回退。
+- **Tool Result Lazy Store / P1.5（TDAI symbolic memory 启发）** — 新建 `packages/core/src/tool-result-lazy-store.ts` + tool-router 集成 + 新工具 `read_tool_ref(call_id, offset?, limit?)`。`web_fetch` 返回 body ≥ 4000 字符时**离线落盘**到 `workspaces/<convId>/tool-refs/<call_id>.md`，prompt 里只保留元数据（url/status/char_count）+ `body_lazy_ref: {call_id, char_count, hint, source_url}` 标记。LLM 看 lazy_ref 后用 `read_tool_ref` 按需取正文，单次硬上限 8000 字符，支持 offset 分页。env `SOUL_TOOL_LAZY_RETRIEVAL=on` 启用（默认关）。**v1 严格只对 web_fetch 启用**。实测：fgw.sh.gov.cn 政策列表页 5393 → 454 chars，节省 91%；LLM 主动调 `read_tool_ref` 取回正文后生成完整答复。
+- **knowledge_grep + knowledge_glob 工具（PAP 借鉴）** — 与 `search_knowledge`（BM25 + 向量）互补：(a) `knowledge_grep(pattern, scope?, max_per_file?, max_total?)` 在 `knowledge/*.md|.txt|.json|.yaml` 文件按正则精确匹配，返回 `{file, line, text}[]`，纯 JS（无 ripgrep 依赖），跨平台稳定。硬上限：单文件 50 / 总 200（可调 max=200/500），scope 经 `assertSafeSegment` 校验防穿越；(b) `knowledge_glob(pattern)` 用既有 `globToRegExp` 列文件路径。**search_knowledge 召回不全时的兜底**：prompt #7 引导分身在精确关键词场景主动改用 grep——直接消除小堵"铜铝对比 / 土壤密实度"类漏召回回归风险。
+- **list_wiki_concepts + read_wiki_concept 工具（PAP 学习笔记借鉴）** — Soul 已有 `WikiCompiler` 编译实体聚合页（`wiki/concepts/*.md`），但 SoulLoader 不读 wiki/，LLM 不知道有这层。本期把 wiki 路径暴露为 LLM 工具：`list_wiki_concepts(query?, top_n?)` 有 query 时扫所有概念页正文做关键词模糊匹配（entity 命中 +10 / name 命中 +5 / 正文每次命中 +1 上限 20），返回 top_n + 200 字符预览，绕开 WikiCompiler 实体提取阶段 name 字段污染问题。`read_wiki_concept(name)` 读全文 + **fallback 反查**：name 直读失败时遍历 `getConceptPages()` 按 entity 字段反查，找到对应文件后透明返回 + hint 告知 LLM 正确字段。
+- **wiki/concepts 自动重编译开关** — 「设置 → 知识库」加 toggle「导入知识后自动重编译概念页」（默认关，标 LLM 调用约 100K tokens/次成本提示）。开启时 `buildIndexAfterBatchImport` 末尾 fire-and-forget 调 `WikiCompiler.compileConceptPages`；失败仅 warn 不阻塞 import。
+
+### 修订（第二波）
+
+- **`soul-loader.ts` 「回答规则」段大幅扩展** — 在原有 1-4 条后追加：(#5) 段落标题与排版（emoji 限制）；(#6) 文件类型与引用优先级（实体类查询优先 list_wiki_concepts；数字 / 政策来自 knowledge 原文 + query_excel；图像识别只看意图禁取精确数字；跨章节关系来自 wiki + memory + recall_conversation）；(#7) search_knowledge 召回不全的 grep 兜底策略。
+- **联网未启用 / 启用两套指引互斥注入** — `soul-loader.ts` 按 `webEnabled` 参数走分支：启用时注入「3 维度判断 + 融合答复 + 引用铁律」；未启用时注入「答复事实根基只在知识库 / soul / 人生 / 当前上下文，禁止从训练数据推时效性事实」。`loadAvatar(avatarId, projectId, webEnabled)` 新增第三个参数，main.ts 调前从 settings 读 `web_search_enabled` 注入。
+
+### 修复（第二波）
+
+- **Web search 推断漏洞** — DeepSeek 把 prompt 解读为「事实要标来源 → 推断/预测不是事实，所以不用标」，导致带数字的预测裸奔。补「关于推断 / 预测 / 分析的特别约束」段：出现"我预期/预计/推测"+具体数字时必须同句标注推断基础。
+- **WikiCompiler 概念页 name / entity 字段错配的工具层兜底** — `read_wiki_concept` 加 fallback：name 直读失败时按 entity 反查，让 LLM 即使传错（小堵 wiki name=`__` / entity=`**` 这类污染）也能拿到内容，并附 hint 引导下次正确调用。
+
+### 测试（第二波）
+
+- **3 个新单测文件 / 46 个用例**，全部 `node:test`：
+  - `tool-result-compressor.test.ts`：17 用例，覆盖透传白名单（红线）/ env 关闭 identity / ANSI 剥离 / 空行折叠 / 短内容短路 / 章节去重正确 + 不去重不同 header / 异常容错不抛 / 统计字段。
+  - `tool-result-lazy-store.test.ts`：18 用例，覆盖 env 开关红线（默认 off）/ 工具白名单（仅 web_fetch）/ web_fetch JSON 结构识别 / body 字段替换 / 落盘文件 / call_id 格式严格校验（防路径穿越）/ readToolRef 分页 + 硬上限 / 文件不存在错误 / 端到端 lazy → readToolRef 取回完整内容。
+  - `tool-router-knowledge-grep.test.ts`：11 用例，覆盖 grep 命中 .md / 跳过二进制后缀 / 缺 pattern 报错 / 非法正则降级 / scope 路径穿越拒绝 / max_per_file + max_total 硬上限触发 truncated / 空知识库优雅返回 / glob `**` 跨目录 / 文件名匹配 `*.md`。
+- 既有 109/109 core 测试零回归（含 soul-loader 10 / tool-router 各类 91 / skill-reranker 8）。
+
+### 工具 / 维护（第二波）
+
+- **新增 IPC（2 个）** — `get-available-shared-skills` / `toggle-shared-skill`；新工具不暴露 IPC（LLM 直接通过 tool dispatch 调用）。
+- **新增 setting key（2 个）** — `web_search_enabled`（默认 `false`）、`wiki_auto_compile_on_import`（默认 `false`）。
+- **新增 env vars（2 个）** — `SOUL_TOOL_COMPRESSION`（默认 `on`，设 `off` 一键禁用压缩层）、`SOUL_TOOL_LAZY_RETRIEVAL`（默认 `off`，设 `on` 启用 lazy-store）。
+- **新增工具调用 schema（5 个）注册到 `AVATAR_TOOLS`** — `read_tool_ref`（lazy-store 取回正文）、`knowledge_grep` / `knowledge_glob`、`list_wiki_concepts` / `read_wiki_concept`。
+- **新增持久化目录** — `avatars/<id>/workspaces/<convId>/tool-refs/`（lazy-store 离线 body 落盘点；conversation 删除时整目录一起清）。
+
+### 项目治理（第二波）
+
+- **`@soul/core` 新增模块** — `tool-result-compressor.ts`、`tool-result-lazy-store.ts`。
+- **`SkillManager` 扩展** — 新增 `AvailableSharedSkill` 接口 + `getAvailableSharedSkills` + `toggleSharedSkill` + 私有 `readSharedSkillNamesFromIndex` + `removeSharedSkillEntry`（yaml 文本剪枝，保留注释与其他段）。
+- **`ToolRouter` 扩展** — `listKnowledgeRoots` / `knowledgeGrep` / `knowledgeGlob` / `listWikiConcepts` / `readWikiConcept` / `readToolRefTool` 五个新私有方法 + `compressConfig` / `lazyStoreConfig` 两个 env-derived 类属性。
+- **依赖** — 零外部新依赖（OpenDataLoader PDF 评估后明确不引入：硬依赖 JRE 11+ 与 Soul 单一 Electron 运行时定位严重冲突；详见 plan §6 决策档案）。
+
+### 已知限制 / 后续（第二波）
+
+- **WikiCompiler 实体提取质量低** — 把 markdown 加粗符号 `**` / 高频通用词「明确」/「数值」识别成实体，导致小堵 `wiki/concepts/` 文件名 `__.md` / `明确.md`。本期工具层加 fallback 反查容错，未修底层；治本需在实体提取阶段加 stop-words 过滤（1-2 天工程，触发条件：用户实战中明显感觉 wiki 路径价值受限再做）。
+- **lazy-store 不是"自动省 token 神器"** — 实测单次 fetch + LLM 读页面场景：LLM 看到 lazy_ref 后立即 read_tool_ref 取回，反而多 1 轮工具调用（+token）。真正价值场景是「LLM 仅看 metadata 即可回答」（验证 URL 可访问 / 批量比对标题 / 状态码查询）+ 「多轮对话历史里旧 web_fetch 永远以 lazy_ref 形式驻留 history」。建议跑 1-2 周收数据决定是否调高阈值或加 LLM-side 提示。
+- **OpenHuman 系列其他借鉴点暂缓**（详见 plan §3 + §6 + §7）：118 OAuth 连接器、桌面吉祥物 + lip-sync TTS、加入 Google Meet 当真人参与者、20 分钟全局 auto-fetch loop。
+- **TDAI L1 Atom 严格摘要暂缓** — 跟 P2 Memory Tree 的「不 LLM 二次摘要 episode」红线冲突；触发重审条件：用户实战反馈"分身记不住关键事实" + P2 Memory Tree v1 机械合并版无法解决。
+
+---
+
 > 第一波"人类认知层"扩展（Phase 1 + 2 全套）：让分身**表达犹豫 / 记住过往对话 / 按 salience 调用回忆 / 渐进式遗忘**。借鉴 Anthropic Managed Agents 的 session-as-event-log + Life Experience 已有的 sigmoid 遗忘曲线；不引入额外服务，全部在主进程纯函数 + cron。
 
 ### 新增

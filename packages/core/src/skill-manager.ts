@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { extractTitle, extractMetadata } from './utils/markdown-parser'
+import { extractTitle, extractMetadata, extractFrontmatter } from './utils/markdown-parser'
 import { assertSafeSegment } from './utils/path-security'
 
 export interface Skill {
@@ -14,6 +14,24 @@ export interface Skill {
   content: string
   /** 系统自带技能（来自 templates/skills/），不允许通过 UI 删除 */
   isBuiltin: boolean
+}
+
+/**
+ * 公共技能可用条目（用于 SkillsPanel「公共技能」tab）。
+ * 与本地 Skill 不同：这是 `shared/skills/<name>.md` 的物理文件 + 分身 `skill-index.yaml`
+ * 引用状态的合并视图——分身未引用时 enabled=false，UI 上提供一键启用。
+ */
+export interface AvailableSharedSkill {
+  /** 技能 name（== 文件名去 .md，frontmatter 的 name 字段优先） */
+  name: string
+  /** 文件名（含扩展名），便于 UI 路径展示 */
+  filename: string
+  /** frontmatter description（截断渲染） */
+  description: string
+  /** frontmatter domain（可选） */
+  domain: string
+  /** 当前分身的 skill-index.yaml 是否已引用此技能 */
+  enabled: boolean
 }
 
 export interface SkillConfig {
@@ -188,6 +206,183 @@ export class SkillManager {
     } catch (err) {
       console.warn('[SkillManager] 清理 disabledSkills 失败（不影响主流程）:', err instanceof Error ? err.message : String(err))
     }
+  }
+
+  /**
+   * 列出 `shared/skills/*.md` 下所有公共技能，并标注当前分身是否已在 skill-index.yaml 中引用。
+   * 不下钻 community/ 子目录（社区技能走独立的 CommunitySkillTab）。
+   *
+   * @param avatarId 分身 ID
+   * @returns 按 name 排序的列表
+   */
+  getAvailableSharedSkills(avatarId: string): AvailableSharedSkill[] {
+    assertSafeSegment(avatarId, '分身ID')
+    const sharedSkillsDir = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    if (!fs.existsSync(sharedSkillsDir)) return []
+
+    const enabledNames = this.readSharedSkillNamesFromIndex(avatarId)
+    const result: AvailableSharedSkill[] = []
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(sharedSkillsDir, { withFileTypes: true })
+    } catch (err) {
+      console.warn('[SkillManager] 读 shared/skills/ 失败:', err instanceof Error ? err.message : String(err))
+      return []
+    }
+    for (const entry of entries) {
+      // 仅文件、仅 .md，跳过 sources.yaml / skill-index.yaml / community 子目录
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+      const filePath = path.join(sharedSkillsDir, entry.name)
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const fm = extractFrontmatter(content)
+        const name = (fm.name && fm.name.trim()) || entry.name.replace(/\.md$/, '')
+        result.push({
+          name,
+          filename: entry.name,
+          description: fm.description || '',
+          domain: fm.domain || '',
+          enabled: enabledNames.has(name),
+        })
+      } catch (err) {
+        console.warn(`[SkillManager] 解析 shared skill 失败 ${entry.name}:`, err instanceof Error ? err.message : String(err))
+      }
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /**
+   * 在分身 skill-index.yaml 中启用 / 禁用某个公共技能。
+   *
+   * 启用：追加一段 entry block 到 `shared_skills:` 段下；段不存在时新建段在文件末尾。
+   * 禁用：按 `name:` 匹配定位到 entry block 起点，删到下一个 entry 或下一个顶层段或文件结尾。
+   *
+   * 保留文件其余部分（含注释、缩进、本地技能段）。
+   */
+  toggleSharedSkill(avatarId: string, skillName: string, enable: boolean): void {
+    assertSafeSegment(avatarId, '分身ID')
+    if (!/^[A-Za-z0-9_-]+$/.test(skillName)) {
+      throw new Error(`公共技能名非法（只允许英文/数字/连字符/下划线）: ${skillName}`)
+    }
+
+    const sharedSkillPath = path.join(this.avatarsPath, '..', 'shared', 'skills', `${skillName}.md`)
+    if (enable && !fs.existsSync(sharedSkillPath)) {
+      throw new Error(`公共技能不存在: shared/skills/${skillName}.md`)
+    }
+
+    const indexDir = path.join(this.avatarsPath, avatarId, 'skills')
+    const indexPath = path.join(indexDir, 'skill-index.yaml')
+    if (!fs.existsSync(indexDir)) {
+      fs.mkdirSync(indexDir, { recursive: true })
+    }
+    let raw = fs.existsSync(indexPath)
+      ? fs.readFileSync(indexPath, 'utf-8')
+      : 'version: "1.0"\n'
+
+    if (enable) {
+      // 已存在 → 幂等返回（不重复追加）
+      if (this.readSharedSkillNamesFromIndex(avatarId).has(skillName)) return
+
+      // 派生 entry 元数据：domain / 简短 description 从 shared skill frontmatter 拿
+      let domain = ''
+      let description = ''
+      try {
+        const fm = extractFrontmatter(fs.readFileSync(sharedSkillPath, 'utf-8'))
+        domain = (fm.domain || '').trim()
+        description = (fm.description || '').trim()
+      } catch {/* 文件读不到时退回默认 */}
+      const domainLine = domain || description.slice(0, 30).replace(/\s+/g, ' ')
+
+      const entryBlock = [
+        `  - name: ${skillName}`,
+        `    path: shared/skills/${skillName}.md`,
+        `    source: shared`,
+        `    domain: ${domainLine}`,
+        `    keywords: []  # 自动启用，如需精确路由请手动补充关键词`,
+        `    priority: 5`,
+        '',
+      ].join('\n')
+
+      if (/^shared_skills:\s*$/m.test(raw)) {
+        // 段已存在：在段标题行紧跟其后插入新 entry
+        raw = raw.replace(/^(shared_skills:\s*\n)/m, `$1${entryBlock}`)
+      } else {
+        // 段不存在：在文件末尾新建一段
+        if (!raw.endsWith('\n')) raw += '\n'
+        raw +=
+          '\n# ═══════════════════════════════════════\n' +
+          '# 公共技能（来自 shared/skills/，由桌面端 SkillsPanel 维护）\n' +
+          '# ═══════════════════════════════════════\n' +
+          'shared_skills:\n' +
+          entryBlock
+      }
+    } else {
+      // 删除：按行扫描，匹配到 `- name: skillName` 后跳过整段
+      raw = this.removeSharedSkillEntry(raw, skillName)
+    }
+
+    fs.writeFileSync(indexPath, raw, 'utf-8')
+  }
+
+  /** 从 skill-index.yaml 解析出所有 source: shared 的 entry name（仅扫文本，不依赖 yaml 库） */
+  private readSharedSkillNamesFromIndex(avatarId: string): Set<string> {
+    const indexPath = path.join(this.avatarsPath, avatarId, 'skills', 'skill-index.yaml')
+    const names = new Set<string>()
+    if (!fs.existsSync(indexPath)) return names
+    let raw: string
+    try {
+      raw = fs.readFileSync(indexPath, 'utf-8')
+    } catch {
+      return names
+    }
+    // 按 `- name:` 行切成 block，每个 block 看是否含 source: shared
+    const lines = raw.split('\n')
+    let currentName: string | null = null
+    let currentBlock: string[] = []
+    const flush = () => {
+      if (!currentName) return
+      const blockText = currentBlock.join('\n')
+      if (/^\s+source:\s*shared\s*$/m.test(blockText)) {
+        names.add(currentName)
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m) {
+        flush()
+        currentName = m[1].replace(/['"]/g, '').trim()
+        currentBlock = [line]
+      } else {
+        currentBlock.push(line)
+      }
+    }
+    flush()
+    return names
+  }
+
+  /** 按 name 删除一段 entry block（保留前后内容 + 注释 + 段标题） */
+  private removeSharedSkillEntry(raw: string, skillName: string): string {
+    const lines = raw.split('\n')
+    const out: string[] = []
+    let skipping = false
+    for (const line of lines) {
+      if (skipping) {
+        // 终止 skip：下一个 entry（- name:）或下一个顶层段（xxx:）或空行后跟非缩进内容
+        if (/^\s*-\s*name:/.test(line) || /^[A-Za-z_]\w*:/.test(line)) {
+          skipping = false
+          out.push(line)
+        }
+        // 否则继续 skip
+        continue
+      }
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m && m[1].replace(/['"]/g, '').trim() === skillName) {
+        skipping = true
+        continue
+      }
+      out.push(line)
+    }
+    return out.join('\n')
   }
 
   toggleSkill(avatarId: string, skillId: string, enabled: boolean): void {

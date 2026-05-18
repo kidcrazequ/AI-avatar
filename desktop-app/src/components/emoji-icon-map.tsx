@@ -71,6 +71,56 @@ const renderThinking = (): ReactNode => (
   </svg>
 )
 
+const renderChartBar = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-blue-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="图表">
+    <path strokeWidth="2" strokeLinecap="round" d="M3 21h18M7 16v-5M12 16V8M17 16v-3" />
+  </svg>
+)
+
+const renderTrendUp = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-green-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="增长">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 17l6-6 4 4 8-8M14 7h7v7" />
+  </svg>
+)
+
+const renderTrendDown = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-red-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="下降">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 7l6 6 4-4 8 8M14 17h7v-7" />
+  </svg>
+)
+
+const renderTarget = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-red-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="目标">
+    <circle cx="12" cy="12" r="9" strokeWidth="2" />
+    <circle cx="12" cy="12" r="5" strokeWidth="2" />
+    <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+  </svg>
+)
+
+const renderFire = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-orange-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="热点">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M12 2s4 5 4 9a4 4 0 11-8 0c0-2 1.5-3 1.5-3S8 11 8 13a4 4 0 008 0c0-3.5-4-7-4-11z" />
+  </svg>
+)
+
+const renderStar = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-yellow-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="重点">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z" />
+  </svg>
+)
+
+const renderNote = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-gray-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="备注">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 4h12l4 4v12H4zM16 4v4h4M8 12h8M8 16h6" />
+  </svg>
+)
+
+const renderRocket = (): ReactNode => (
+  <svg className={`${ICON_CLASS} text-purple-500`} viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-label="启动">
+    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M5 13l-2 4 4-2M19 5l-7 7-4-4 7-7zM12 12l4 4M14 10l-3-3" />
+  </svg>
+)
+
 /**
  * Emoji → inline icon 映射表。命中即替换；其余 emoji 不动。
  * 颜色与 Tailwind palette 对齐（red-500 / amber-500 等），随主题暗色背景视觉不变。
@@ -98,6 +148,16 @@ const EMOJI_ICON_MAP: Record<string, () => ReactNode> = {
   '📌': renderPin,
   '📍': renderPin,
   '🤔': renderThinking,
+  // 段落标题前缀类（LLM 高频使用，2026-05-18 补全）
+  '📊': renderChartBar,
+  '📈': renderTrendUp,
+  '📉': renderTrendDown,
+  '🎯': renderTarget,
+  '🔥': renderFire,
+  '⭐': renderStar,
+  '🌟': renderStar,
+  '📝': renderNote,
+  '🚀': renderRocket,
 }
 
 /**

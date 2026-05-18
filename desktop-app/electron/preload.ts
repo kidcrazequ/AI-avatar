@@ -402,6 +402,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createSkill: (avatarId: string, skillId: string, content: string) => ipcRenderer.invoke('create-skill', avatarId, skillId, content),
   deleteSkill: (avatarId: string, skillId: string) => ipcRenderer.invoke('delete-skill', avatarId, skillId),
   generateSkillDraft: (description: string) => ipcRenderer.invoke('generate-skill-draft', description),
+  // 公共技能浏览 + 一键启用（shared/skills/*.md ↔ skill-index.yaml）
+  getAvailableSharedSkills: (avatarId: string) => ipcRenderer.invoke('get-available-shared-skills', avatarId),
+  toggleSharedSkill: (avatarId: string, skillName: string, enable: boolean) => ipcRenderer.invoke('toggle-shared-skill', avatarId, skillName, enable),
 
   // ─── 社区技能管理 ─────────────────────────────────────────────
   communityListSources: () => ipcRenderer.invoke('community:list-sources'),

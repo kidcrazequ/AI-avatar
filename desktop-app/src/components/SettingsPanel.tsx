@@ -351,6 +351,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   // Wiki 设置状态
   const [wikiInjectRag, setWikiInjectRag] = useState(false)
   const [wikiAutoSediment, setWikiAutoSediment] = useState(false)
+  // 知识库 import 完成后自动重编译实体概念页（PAP 学习笔记借鉴，默认关，避免静默烧 LLM token）
+  const [wikiAutoCompileOnImport, setWikiAutoCompileOnImport] = useState(false)
   const [wikiStatusMsg, setWikiStatusMsg] = useState('')
   // 记忆设置状态
   const [nudgeInterval, setNudgeInterval] = useState('5')
@@ -360,6 +362,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [cronKnowledgeInterval, setCronKnowledgeInterval] = useState('0')
   const [cronStatusMsg, setCronStatusMsg] = useState('')
   // 工具集成状态（Tavily 搜索 API 等外部工具凭据）
+  // 联网功能总开关：默认关闭。关闭时分身回答仅基于知识库，不会调用 web_search / web_fetch。
+  // 配合 chatStore（剔除联网工具）+ tool-router（入口闸门）+ soul-loader（system prompt 分支）三层保护。
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [tavilyApiKey, setTavilyApiKey] = useState('')
   /** 九层重构 #16 generate_image：DashScope 通义万相 API Key */
   const [imageApiKey, setImageApiKey] = useState('')
@@ -545,8 +550,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       const [
         wikiInject,
         wikiSediment,
+        wikiAutoCompileRaw,
         nudge,
         cronConfigs,
+        webEnabledRaw,
         tavilyKey,
         imageKey,
         doubaoKey,
@@ -563,8 +570,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       ] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
+        window.electronAPI.getSetting('wiki_auto_compile_on_import'),
         window.electronAPI.getSetting('memory_nudge_interval'),
         window.electronAPI.getCronConfig(),
+        window.electronAPI.getSetting('web_search_enabled'),
         window.electronAPI.getSetting('tavily_api_key'),
         window.electronAPI.getSetting('image_api_key'),
         window.electronAPI.getSetting('doubao_asr_api_key'),
@@ -582,11 +591,13 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       if (loadSeqRef.current !== seq) return
       setWikiInjectRag(wikiInject === 'true')
       setWikiAutoSediment(wikiSediment === 'true')
+      setWikiAutoCompileOnImport(wikiAutoCompileRaw === 'true')
       setNudgeInterval(nudge ?? '5')
       for (const cfg of cronConfigs) {
         if (cfg.type === 'memory-consolidate') setCronMemoryInterval(String(cfg.intervalHours))
         if (cfg.type === 'knowledge-check') setCronKnowledgeInterval(String(cfg.intervalHours))
       }
+      setWebSearchEnabled(webEnabledRaw === 'true')
       setTavilyApiKey(tavilyKey ?? '')
       setImageApiKey(imageKey ?? '')
       setDoubaoAsrApiKey(doubaoKey ?? '')
@@ -817,6 +828,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       await Promise.all([
         window.electronAPI.setSetting('wiki_inject_rag', wikiInjectRag ? 'true' : 'false'),
         window.electronAPI.setSetting('wiki_auto_sediment', wikiAutoSediment ? 'true' : 'false'),
+        window.electronAPI.setSetting('wiki_auto_compile_on_import', wikiAutoCompileOnImport ? 'true' : 'false'),
       ])
       setWikiStatusMsg('SAVED')
       window.dispatchEvent(new CustomEvent('settings-updated'))
@@ -945,6 +957,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     try {
       const anthroBase = anthropicBaseUrl.trim() || 'https://api.anthropic.com'
       await Promise.all([
+        window.electronAPI.setSetting('web_search_enabled', webSearchEnabled ? 'true' : 'false'),
         window.electronAPI.setSetting('tavily_api_key', tavilyApiKey.trim()),
         // 九层重构 #16 generate_image：DashScope API Key
         window.electronAPI.setSetting('image_api_key', imageApiKey.trim()),
@@ -1662,6 +1675,24 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         </div>
                       </div>
                     </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer mt-3">
+                      <span
+                        className="pixel-checkbox"
+                        role="checkbox"
+                        aria-checked={wikiAutoCompileOnImport}
+                        data-checked={wikiAutoCompileOnImport || undefined}
+                        onClick={() => setWikiAutoCompileOnImport(!wikiAutoCompileOnImport)}
+                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setWikiAutoCompileOnImport(!wikiAutoCompileOnImport) } }}
+                        tabIndex={0}
+                      />
+                      <div>
+                        <div className="font-game text-[14px] text-px-text">导入知识后自动重编译概念页</div>
+                        <div className="font-game text-[12px] text-px-text-dim mt-0.5">
+                          每次导入文件夹/归档完成后，自动调 LLM 重新生成 wiki/concepts/ 实体聚合页。开启需注意 LLM 调用成本（单分身约 100K tokens / 次）。关闭时仍可在「百科」面板手动触发。
+                        </div>
+                      </div>
+                    </label>
                   </div>
 
                   {/* 说明 */}
@@ -1912,6 +1943,43 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         留空使用默认 https://api.anthropic.com；如需走 CF / Bedrock / 自建代理可填自定义地址
                       </div>
                     </div>
+                  </div>
+
+                  {/* 联网总开关：默认关闭。关闭时分身回答仅基于知识库，不会调用 web_search / web_fetch。
+                      开启后还需要在下方 Tavily Search 配置 API Key 才能真正使用。 */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-game text-[14px] text-px-text">启用联网功能</span>
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider">WEB_ENABLED</span>
+                    </div>
+                    <p className="font-game text-[12px] text-px-text-dim">
+                      <span className={webSearchEnabled ? 'text-px-success' : 'text-px-warning'}>
+                        {webSearchEnabled ? '已开启' : '已关闭（默认）'}
+                      </span>
+                      <span className="ml-2">
+                        {webSearchEnabled
+                          ? '分身可在知识库缺位 / 时效性问题 / 外部参照场景下主动联网检索（需配置下方 Tavily API Key）'
+                          : '分身回答严格基于知识库 + 灵魂文档 + 人生记忆，不会调用联网工具'}
+                      </span>
+                    </p>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={webSearchEnabled}
+                        onChange={(e) => setWebSearchEnabled(e.target.checked)}
+                        className="pixel-checkbox"
+                      />
+                      <span className="font-game text-[13px] text-px-text-sec">
+                        允许分身在需要时调用 web_search / web_fetch
+                      </span>
+                    </label>
+                    {webSearchEnabled && !tavilyApiKey.trim() && (
+                      <div className="border border-px-warning bg-px-warning/10 p-2">
+                        <p className="font-game text-[11px] text-px-warning">
+                          ⚠ 已开启联网，但下方 Tavily API Key 为空。请填写 Key 后联网搜索才能真正生效。
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Tavily Search API */}

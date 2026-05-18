@@ -704,7 +704,8 @@ function initManagers() {
       const dir = path.join(avatarsPath, id)
       if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return undefined
       try {
-        return soulLoader.loadAvatar(id).systemPrompt
+        const webEnabled = getDb().getSetting('web_search_enabled') === 'true'
+        return soulLoader.loadAvatar(id, undefined, webEnabled).systemPrompt
       } catch (e) {
         if (logger) logger.activity('delegate', `loadAvatarSystemPrompt(${id}) 失败: ${e instanceof Error ? e.message : String(e)}`)
         return undefined
@@ -1187,7 +1188,8 @@ wrapHandler('load-avatar', (_, avatarId: string, projectId?: string) => {
   if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
     assertSafeSegment(pid, 'projectId')
   }
-  const config = soulLoader.loadAvatar(avatarId, pid === DEFAULT_AVATAR_PROJECT_ID ? undefined : pid)
+  const webEnabled = getDb().getSetting('web_search_enabled') === 'true'
+  const config = soulLoader.loadAvatar(avatarId, pid === DEFAULT_AVATAR_PROJECT_ID ? undefined : pid, webEnabled)
   // Feature 7: 缓存 system prompt 供子代理委派使用
   toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
 
@@ -2967,6 +2969,18 @@ wrapHandler('toggle-skill', (_, avatarId: string, skillId: string, enabled: bool
   skillManager.toggleSkill(avatarId, skillId, enabled)
 })
 
+// 公共技能（shared/skills/）浏览 + 一键启用 ────────────────────────────────────
+wrapHandler('get-available-shared-skills', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return skillManager.getAvailableSharedSkills(avatarId)
+})
+
+wrapHandler('toggle-shared-skill', (_, avatarId: string, skillName: string, enable: boolean) => {
+  assertSafeSegment(avatarId, '分身ID')
+  skillManager.toggleSharedSkill(avatarId, skillName, enable)
+  if (logger) logger.activity('toggle-shared-skill', `avatarId=${avatarId}, skillName=${skillName}, enable=${enable}`)
+})
+
 wrapHandler('create-skill', (_, avatarId: string, skillId: string, content: string) => {
   assertSafeSegment(avatarId, '分身ID')
   const created = skillManager.createSkill(avatarId, skillId, content)
@@ -4417,6 +4431,33 @@ async function buildIndexAfterBatchImport(avatarId: string): Promise<void> {
     toolRouter.invalidateRetriever(avatarId)
   } catch (err) {
     if (logger) logger.error('batch-import-build-index', err instanceof Error ? err : new Error(String(err)))
+  }
+
+  // 2026-05-18: wiki/concepts/ 自动重编译（PAP 学习笔记借鉴）。
+  // 用户主动 import 后顺便更新实体概念页；fire-and-forget，失败仅 warn 不影响 import 流程。
+  // 默认 off（compileConceptPages 调 LLM 单分身约 100K tokens，避免静默烧钱）；
+  // 用户在「设置 → 知识库」开启 wiki_auto_compile_on_import 后才跑。
+  // 手动触发仍走 compile-wiki IPC。
+  const autoCompile = getDb().getSetting('wiki_auto_compile_on_import') === 'true'
+  if (autoCompile) {
+    const apiKey = getDb().getSetting('chat_api_key') || ''
+    const baseUrl = getDb().getSetting('chat_base_url') || 'https://api.deepseek.com/v1'
+    if (apiKey) {
+      mainWindow?.webContents.send('knowledge-import-progress', {
+        current: 0, total: 0, fileName: '', phase: '编译实体概念页（wiki）...',
+      })
+      const avatarPath = path.join(avatarsPath, avatarId)
+      const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-plus')
+      const wiki = new WikiCompiler(avatarPath)
+      const chunks = toolRouter.getRetriever(avatarId).getFullChunks()
+      wiki.compileConceptPages(chunks, callLLM)
+        .then((pages) => {
+          if (logger) logger.activity('wiki-auto-compile', `avatarId=${avatarId}, pages=${pages.length} (after import)`)
+        })
+        .catch((err) => {
+          if (logger) logger.error('wiki-auto-compile', err instanceof Error ? err : new Error(String(err)))
+        })
+    }
   }
 }
 

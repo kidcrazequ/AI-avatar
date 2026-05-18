@@ -15,6 +15,15 @@ import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
 import { fetchWithTimeout, HttpError } from './utils/http'
+import { WikiCompiler } from './wiki-compiler'
+import { buildDefaultCompressConfig, compressToolResult, type CompressConfig } from './tool-result-compressor'
+import {
+  buildDefaultLazyStoreConfig,
+  maybeStoreLazyRef,
+  readToolRef,
+  isValidCallId,
+  type LazyStoreConfig,
+} from './tool-result-lazy-store'
 import TurndownService from 'turndown'
 import * as XLSX from 'xlsx'
 import type { McpClientManager } from './mcp-client-manager'
@@ -478,6 +487,25 @@ export class ToolRouter {
   private subAgentTaskSink?: SubAgentTaskSink
 
   /**
+   * Tool Result 压缩配置（TokenJuice 启发，2026-05-18 引入）。
+   * 构造时从 `SOUL_TOOL_COMPRESSION` env 读取启停；默认开启。
+   * 红线见 `tool-result-compressor.ts` 顶部注释——只做无损操作，绝不调 LLM 二次总结。
+   */
+  private compressConfig: CompressConfig = buildDefaultCompressConfig(process.env.SOUL_TOOL_COMPRESSION)
+
+  /**
+   * Tool Result Lazy Store 配置（TDAI symbolic memory 启发，2026-05-18 引入）。
+   * 从 `SOUL_TOOL_LAZY_RETRIEVAL` env 读取，**默认 off**。
+   * 仅对 white-list 工具（v1: web_fetch）触发；事实根基类工具绝不 lazy。
+   * 红线见 `tool-result-lazy-store.ts` 顶部注释。
+   */
+  private lazyStoreConfig: LazyStoreConfig = (() => {
+    const cfg = buildDefaultLazyStoreConfig(process.env.SOUL_TOOL_LAZY_RETRIEVAL)
+    console.log(`[tool-router] lazy-store config: enabled=${cfg.enabled} (env SOUL_TOOL_LAZY_RETRIEVAL=${JSON.stringify(process.env.SOUL_TOOL_LAZY_RETRIEVAL)}) threshold=${cfg.thresholdChars} allowed=[${[...cfg.allowedTools].join(',')}]`)
+    return cfg
+  })()
+
+  /**
    * @param avatarsPath 仓库 avatars/ 目录绝对路径
    * @param options 可选依赖注入：
    *   - loadAvatarSystemPrompt: 用于 delegate_task target_avatar 跨分身委派
@@ -921,6 +949,14 @@ export class ToolRouter {
           result = this.searchKnowledge(avatarId, args); break
         case 'list_knowledge_files':
           result = this.listKnowledgeFiles(avatarId); break
+        case 'knowledge_grep':
+          result = this.knowledgeGrep(avatarId, args); break
+        case 'knowledge_glob':
+          result = this.knowledgeGlob(avatarId, args); break
+        case 'list_wiki_concepts':
+          result = await this.listWikiConcepts(avatarId, args); break
+        case 'read_wiki_concept':
+          result = await this.readWikiConcept(avatarId, args); break
         case 'read_life_episode':
           result = await this.readLifeEpisode(avatarId, args); break
         case 'recall_conversation':
@@ -969,6 +1005,8 @@ export class ToolRouter {
           result = await this.webSearch(args); break
         case 'web_fetch':
           result = await this.webFetch(args); break
+        case 'read_tool_ref':
+          result = this.readToolRefTool(avatarId, conversationId, args); break
         case 'list_mcp_tools':
           result = this.listMcpTools(args); break
         case 'call_mcp_tool':
@@ -981,6 +1019,43 @@ export class ToolRouter {
       // 覆盖所有可能调 retriever.searchChunks 的工具（search_knowledge、内部 wiki 注入等），
       // 不只是显式 search_knowledge。
       this.saveRetrieverTokens(avatarId)
+      // 2026-05-18: Tool Result 压缩层（TokenJuice 启发）。
+      // 仅压缩 content；error 字段不动。透传白名单 + env 短路在 compressToolResult 内部处理。
+      // 任何异常自动降级为原文（compressor 内 try/catch 兜底），绝不破坏工具输出。
+      if (result.content && !result.error) {
+        const before = result.content.length
+        const compressed = compressToolResult(name, result.content, this.compressConfig)
+        if (compressed.finalChars < before) {
+          console.log(`[tool-router] compress ${name}: ${before} → ${compressed.finalChars} chars (-${before - compressed.finalChars}, droppedSections=${compressed.droppedSections})`)
+          result = { ...result, content: compressed.content }
+        }
+      }
+      // 2026-05-18: Tool Result Lazy Store（TDAI symbolic memory 启发）。
+      // 长 web_fetch 等输出落盘到 workspaces/<conv>/tool-refs/，prompt 只留 body_lazy_ref 标记。
+      // 默认 off（SOUL_TOOL_LAZY_RETRIEVAL=on 启用）；仅对 lazyStoreConfig.allowedTools 触发。
+      // 需要 conversationId 才能拿 workspace 路径；无 convId 时跳过 lazy（如 delegate_task 内部调用）。
+      if (
+        result.content && !result.error
+        && this.lazyStoreConfig.enabled
+        && this.lazyStoreConfig.allowedTools.has(name)
+        && conversationId
+      ) {
+        try {
+          const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+          const lazied = maybeStoreLazyRef(result.content, this.lazyStoreConfig, {
+            workspaceRoot,
+            toolName: name,
+            toolArgs: args,
+          })
+          if (lazied.stored) {
+            console.log(`[tool-router] lazy-store ${name}: stored as ${lazied.callId}, prompt content ${result.content.length} → ${lazied.content.length} chars`)
+            result = { ...result, content: lazied.content }
+          }
+        } catch (err) {
+          // 失败不影响原结果——lazy 是优化层，不是核心路径
+          console.warn(`[tool-router] lazy-store ${name} 失败（降级为原文）:`, err instanceof Error ? err.message : String(err))
+        }
+      }
       return result
     } catch (error) {
       return { content: '', error: error instanceof Error ? error.message : String(error) }
@@ -1865,6 +1940,326 @@ ${content}` }
       return this.buildEmptyKnowledgeBaseHint()
     }
     return { content: files.join('\n') }
+  }
+
+  /**
+   * 收集当前分身 + 当前 project context 下的知识库 root 列表。
+   * v1 不下钻 `shared/knowledge/`（共享知识量小，已直接注入 system prompt）。
+   *
+   * 返回数组每项 `{ relPrefix, absRoot }`：
+   *   - relPrefix：返回结果里展示给 LLM 的相对路径前缀，如 `knowledge/` 或 `projects/<pid>/knowledge/`
+   *   - absRoot：磁盘上的绝对路径根
+   */
+  private listKnowledgeRoots(avatarId: string): Array<{ relPrefix: string; absRoot: string }> {
+    const roots: Array<{ relPrefix: string; absRoot: string }> = []
+    const avatarKnowledge = path.join(this.avatarsPath, avatarId, 'knowledge')
+    if (fs.existsSync(avatarKnowledge)) {
+      roots.push({ relPrefix: 'knowledge/', absRoot: avatarKnowledge })
+    }
+    if (this.knowledgeProjectContext !== DEFAULT_AVATAR_PROJECT_ID) {
+      const projKnowledge = path.join(
+        this.avatarsPath, avatarId, 'projects', this.knowledgeProjectContext, 'knowledge',
+      )
+      if (fs.existsSync(projKnowledge)) {
+        roots.push({
+          relPrefix: `projects/${this.knowledgeProjectContext}/knowledge/`,
+          absRoot: projKnowledge,
+        })
+      }
+    }
+    return roots
+  }
+
+  /**
+   * knowledge_grep: 在知识库 .md/.txt/.markdown/.json/.yaml 文件里按正则精确搜索。
+   *
+   * 与 `search_knowledge`（BM25 + vector + RRF）互补：grep 适合精确关键词（型号编号、政策条款号、专有名词）。
+   * search_knowledge 漏召回时用 grep 兜底。
+   *
+   * 红线：
+   *   - 仅搜分身自己的 knowledge/（含当前 project knowledge），不下钻 shared/
+   *   - scope 必须在 knowledge root 内（防路径穿越）
+   *   - 硬上限：单文件 50 条 / 总计 200 条命中（防 LLM 误传过宽 pattern 撑爆 context）
+   */
+  private knowledgeGrep(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const pattern = typeof args.pattern === 'string' ? args.pattern : ''
+    if (!pattern.trim()) return { content: '', error: '缺少 pattern 参数（正则表达式）' }
+
+    let regex: RegExp
+    try {
+      regex = new RegExp(pattern, 'i')
+    } catch (e) {
+      return { content: '', error: `非法正则: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const scopeRaw = typeof args.scope === 'string' ? args.scope.trim() : ''
+    const maxPerFile = typeof args.max_per_file === 'number' && args.max_per_file > 0
+      ? Math.min(200, Math.floor(args.max_per_file))
+      : 50
+    const maxTotal = typeof args.max_total === 'number' && args.max_total > 0
+      ? Math.min(500, Math.floor(args.max_total))
+      : 200
+
+    let roots = this.listKnowledgeRoots(avatarId)
+    if (roots.length === 0) {
+      return { content: JSON.stringify({ pattern, count: 0, matches: [], note: '知识库目录不存在' }, null, 2) }
+    }
+
+    // 应用 scope（如果有）—— 限定到子目录，scope 段会按 path-security 校验
+    if (scopeRaw) {
+      try {
+        // scope 可能含多段（如 `imports/2025/`），逐段验
+        for (const seg of scopeRaw.split('/').filter(Boolean)) {
+          assertSafeSegment(seg, 'scope segment')
+        }
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+      roots = roots
+        .map((r) => {
+          const sub = path.join(r.absRoot, scopeRaw)
+          // resolveUnderRoot 确保 scope 解析后仍在 absRoot 内
+          let resolved: string
+          try {
+            resolved = resolveUnderRoot(r.absRoot, scopeRaw)
+          } catch {
+            return null
+          }
+          if (!fs.existsSync(resolved)) return null
+          return { relPrefix: r.relPrefix + scopeRaw.replace(/\/?$/, '/'), absRoot: resolved }
+        })
+        .filter((r): r is { relPrefix: string; absRoot: string } => r !== null)
+      if (roots.length === 0) {
+        return { content: '', error: `scope 路径不存在于任何知识库 root: ${scopeRaw}` }
+      }
+    }
+
+    const matches: Array<{ file: string; line: number; text: string }> = []
+    let totalCount = 0
+    let truncated = false
+    outer:
+    for (const root of roots) {
+      const files = collectFilesRecursive(root.absRoot, '', DEFAULT_MAX_DIR_DEPTH)
+        .filter((f) => /\.(md|markdown|txt|json|yaml|yml)$/i.test(f))
+      for (const file of files) {
+        let perFile = 0
+        try {
+          const text = fs.readFileSync(file, 'utf-8')
+          const lines = text.split(/\r?\n/)
+          for (let i = 0; i < lines.length; i++) {
+            if (regex.test(lines[i])) {
+              // 先判 total 上限，避免跨文件时多 push 一条（per-file 重置导致的 off-by-one）
+              if (totalCount >= maxTotal) { truncated = true; break outer }
+              const rel = path.relative(root.absRoot, file).replace(/\\/g, '/')
+              matches.push({
+                file: root.relPrefix + rel,
+                line: i + 1,
+                text: lines[i].length > 300 ? lines[i].slice(0, 300) + '…' : lines[i],
+              })
+              perFile++
+              totalCount++
+              if (perFile >= maxPerFile) break
+            }
+          }
+        } catch {/* 读文件失败跳过 */}
+      }
+    }
+
+    return { content: JSON.stringify({
+      pattern,
+      scope: scopeRaw || undefined,
+      count: matches.length,
+      truncated,
+      matches,
+      hint: truncated ? '已达硬上限，请缩窄 pattern 或加 scope' : undefined,
+    }, null, 2) }
+  }
+
+  /**
+   * list_wiki_concepts: 列出分身 wiki/concepts/ 下所有 LLM 自动编译的实体概念页。
+   *
+   * 概念页是 WikiCompiler.compileConceptPages 调 LLM 把同一实体（如 "ENS-L262"）
+   * 在不同知识文件的出现聚合成的独立 .md，含 LLM 摘要 + 属性表 + 来源依据 + 相关实体。
+   *
+   * 两种模式：
+   *   - 无 query：返回所有概念页元数据列表（仅 name + entity + generated_at）。仅适合探索式浏览。
+   *   - 有 query：读所有概念页正文做关键词匹配，返回 top_n 个最相关项 + 200 字符预览。**强烈推荐**：
+   *     某些分身的 WikiCompiler 实体提取阶段会把"明确"/"数值"/"图片"等高频词识别成实体导致 name 字段
+   *     无意义，无 query 时 LLM 无法从 name 列表识别目标实体；query 模式会扫正文匹配，绕开 name 命名问题。
+   */
+  private async listWikiConcepts(avatarId: string, args: Record<string, unknown> = {}): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    const topN = typeof args.top_n === 'number' && Number.isFinite(args.top_n) && args.top_n > 0
+      ? Math.min(20, Math.floor(args.top_n)) : 10
+
+    try {
+      const wiki = new WikiCompiler(path.join(this.avatarsPath, avatarId))
+      const meta = await wiki.getMeta()
+      const pages = await wiki.getConceptPages()
+      if (pages.length === 0) {
+        return { content: JSON.stringify({
+          count: 0,
+          last_compiled: meta?.lastCompiled ?? null,
+          note: '当前分身尚未编译实体概念页（wiki/concepts/ 为空）。请在「设置 → 知识库 → 编译 wiki」手动触发，或开启「导入后自动编译」。',
+        }, null, 2) }
+      }
+
+      // 无 query 模式：返回元数据列表（向后兼容）
+      if (!query) {
+        return { content: JSON.stringify({
+          count: pages.length,
+          last_compiled: meta?.lastCompiled ?? null,
+          pages: pages.map(p => ({ name: p.name, entity: p.entity, generated_at: p.generatedAt })),
+          hint: '**建议加 query 参数**按关键词匹配概念页正文——某些分身 name 字段是通用高频词无法直接匹配实体（如想找 "ENS-L262" 但 name 列表里只有 "明确"/"数值" 等）。无 query 仅适合探索式浏览。',
+        }, null, 2) }
+      }
+
+      // 有 query 模式：扫正文做关键词模糊匹配 + 评分
+      const queryLower = query.toLowerCase()
+      const scored: Array<{ name: string; entity: string; score: number; preview: string }> = []
+      for (const p of pages) {
+        try {
+          const content = await wiki.readConceptPage(p.name)
+          if (!content || !content.trim()) continue
+          const contentLower = content.toLowerCase()
+          // 简单评分：entity 名命中 +10，name 字段命中 +5，正文每次命中 +1（上限 20）
+          let score = 0
+          if (p.entity && p.entity.toLowerCase().includes(queryLower)) score += 10
+          if (p.name.toLowerCase().includes(queryLower)) score += 5
+          if (contentLower.includes(queryLower)) {
+            const matches = contentLower.split(queryLower).length - 1
+            score += Math.min(matches, 20)
+          }
+          if (score > 0) {
+            // 预览：找第一段非标题非引用的实际内容（200 字符）
+            const previewLine = content.split('\n').find(
+              line => line.trim().length > 20 && !line.startsWith('#') && !line.startsWith('>') && !line.startsWith('---') && !line.startsWith('|'),
+            )
+            const preview = ((previewLine ?? '').trim()).slice(0, 200)
+            scored.push({ name: p.name, entity: p.entity, score, preview })
+          }
+        } catch {/* 单页读取失败跳过 */}
+      }
+      scored.sort((a, b) => b.score - a.score)
+      const top = scored.slice(0, topN)
+
+      return { content: JSON.stringify({
+        query,
+        count: top.length,
+        total_pages: pages.length,
+        last_compiled: meta?.lastCompiled ?? null,
+        matches: top,
+        hint: top.length === 0
+          ? `query="${query}" 在 ${pages.length} 个概念页里都没匹配。可能该实体未被编译进 wiki，建议改用 search_knowledge / knowledge_grep。`
+          : `按相关度排序。拿 matches[i].name 后调 read_wiki_concept(name) 看完整聚合页。`,
+      }, null, 2) }
+    } catch (err) {
+      return { content: '', error: `读取 wiki/concepts/ 失败: ${err instanceof Error ? err.message : String(err)}` }
+    }
+  }
+
+  /**
+   * read_wiki_concept: 读取指定的实体概念页 markdown 全文。
+   *
+   * 入参 name 来自 list_wiki_concepts 返回的 matches[].name 或 pages[].name。
+   *
+   * 容错（2026-05-18 补丁）：WikiCompiler 编译质量问题导致概念页文件名（`__`）
+   * 与 entity 字段（`**`）不一致，LLM 易混淆。本工具会先尝试 name 直读，失败时
+   * 在概念页元数据里**按 entity 反查**，找到对应文件后透明取回，附 hint 告知 LLM 正确字段。
+   */
+  private async readWikiConcept(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const name = typeof args.name === 'string' ? args.name.trim() : ''
+    if (!name) return { content: '', error: '缺少 name 参数（从 list_wiki_concepts 返回的 matches[i].name 取）' }
+
+    try {
+      const wiki = new WikiCompiler(path.join(this.avatarsPath, avatarId))
+
+      // 路径 1：name 通过 path-security + 文件直读
+      let segmentSafe = false
+      try {
+        assertSafeSegment(name, '概念页名')
+        segmentSafe = true
+      } catch {/* fall through to fallback lookup */}
+
+      if (segmentSafe) {
+        try {
+          const content = await wiki.readConceptPage(name)
+          if (content && content.trim()) return { content }
+        } catch {/* file not found, fall through */}
+      }
+
+      // 路径 2：name 直读失败 → 在 getConceptPages 元数据里反查 entity 字段
+      // 适用于 LLM 把 entity 当 name 传的常见错误（WikiCompiler 实体提取污染导致）
+      const pages = await wiki.getConceptPages()
+      const fallback = pages.find(p => p.entity === name || p.name === name)
+      if (fallback) {
+        try {
+          const content = await wiki.readConceptPage(fallback.name)
+          if (content && content.trim()) {
+            const hint = fallback.entity === name && fallback.name !== name
+              ? `\n\n<!-- soul 提示：你传的 name="${name}" 是 entity 字段，正确 name 应是 "${fallback.name}"。下次请用 list_wiki_concepts 返回的 matches[i].name 字段。 -->`
+              : ''
+            return { content: content + hint }
+          }
+        } catch {/* still fail, fall through */}
+      }
+
+      return {
+        content: '',
+        error: `概念页不存在: ${name}。已尝试按 name 直读和按 entity 反查均失败。请先调 list_wiki_concepts(query="关键词")，从返回的 matches[i].name 字段取真正的 name 再传给本工具。`,
+      }
+    } catch (err) {
+      return { content: '', error: `读取概念页失败: ${err instanceof Error ? err.message : String(err)}` }
+    }
+  }
+
+  /**
+   * knowledge_glob: 按 glob 模式匹配知识库文件路径，返回相对路径列表。
+   *
+   * 用法：`knowledge_glob({pattern: "**\/*电价*.md"})` 列出所有名字含"电价"的 md 文件。
+   * 比 list_knowledge_files 精准（不用扫所有再 LLM 过滤）。
+   *
+   * 复用模块级 globToRegExp（与 list_files 一致），支持 `*` `**` `?`。
+   */
+  private knowledgeGlob(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const pattern = typeof args.pattern === 'string' ? args.pattern : ''
+    if (!pattern.trim()) return { content: '', error: '缺少 pattern 参数（glob 模式，如 "**/*电价*.md"）' }
+
+    let regex: RegExp
+    try {
+      regex = globToRegExp(pattern)
+    } catch (e) {
+      return { content: '', error: `非法 glob 模式: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const roots = this.listKnowledgeRoots(avatarId)
+    if (roots.length === 0) {
+      return { content: JSON.stringify({ pattern, count: 0, files: [] }, null, 2) }
+    }
+
+    const files: string[] = []
+    const MAX_FILES = 500
+    let truncated = false
+    outer:
+    for (const root of roots) {
+      const all = collectFilesRecursive(root.absRoot, '', DEFAULT_MAX_DIR_DEPTH)
+      for (const f of all) {
+        const rel = path.relative(root.absRoot, f).replace(/\\/g, '/')
+        // 同时匹配 "完整相对路径" 和 "纯文件名"，让 `*.md` 这种 LLM 习惯写法也能命中
+        if (regex.test(rel) || regex.test(path.basename(f))) {
+          files.push(root.relPrefix + rel)
+          if (files.length >= MAX_FILES) { truncated = true; break outer }
+        }
+      }
+    }
+
+    return { content: JSON.stringify({
+      pattern,
+      count: files.length,
+      truncated,
+      files,
+      hint: truncated ? '已达硬上限 500，请缩窄 pattern' : undefined,
+    }, null, 2) }
   }
 
   private listDesignSystems(args: Record<string, unknown>): ToolCallResult {
@@ -3013,6 +3408,55 @@ ${content}` }
    * @author zhi.qu
    * @date 2026-04-29
    */
+  /**
+   * read_tool_ref: 取回 lazy-store 落盘的工具结果正文（分页）。
+   *
+   * 用于 lazy_store 化的长输出（v1：web_fetch ≥ 4000 字符触发）。
+   * LLM 看到 `body_lazy_ref` 标记后调此工具取正文。
+   *
+   * 红线：
+   *   - call_id 必须通过 isValidCallId 格式校验（防路径穿越）
+   *   - 单次返回硬上限 READ_TOOL_REF_HARD_LIMIT (8000 字符)，分页用 offset
+   *   - 文件不存在时返回明确错误 + 引导 LLM 重新调原工具
+   */
+  private readToolRefTool(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    if (!conversationId) {
+      return { content: '', error: 'read_tool_ref 需要 conversationId（当前调用上下文缺失，无法定位会话工作区）' }
+    }
+    const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
+    if (!callId) {
+      return { content: '', error: '缺少 call_id 参数（形如 "tool-a8f2c4e9b1c2"）' }
+    }
+    if (!isValidCallId(callId)) {
+      return { content: '', error: `非法 call_id 格式: ${callId}（必须为 tool-{12hex}）` }
+    }
+    const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.floor(args.offset) : 0
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : undefined
+    try {
+      const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+      const out = readToolRef(workspaceRoot, callId, offset, limit)
+      return {
+        content: JSON.stringify({
+          call_id: callId,
+          total_chars: out.total_chars,
+          offset: out.offset,
+          limit: out.limit,
+          truncated: out.truncated,
+          content: out.content,
+          ...(out.truncated ? {
+            hint: `已截断；下一段调用 read_tool_ref(call_id="${callId}", offset=${out.offset + out.limit}, limit=${out.limit})`,
+          } : {}),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
   private async webSearch(args: Record<string, unknown>): Promise<ToolCallResult> {
     const query = typeof args.query === 'string' ? args.query.trim() : ''
     if (!query) return { content: '', error: '缺少 query 参数（搜索关键词）' }
@@ -3022,6 +3466,13 @@ ${content}` }
 
     if (!this.getSetting) {
       return { content: '', error: 'web_search 未注入设置读取器（这是部署配置问题，请联系开发）' }
+    }
+    // 防御性闸门：联网总开关未开启则直接拒绝（即使 system prompt / tools 数组上层过滤被绕过也兜底）
+    if (this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
     }
     const apiKey = (this.getSetting('tavily_api_key') ?? '').trim()
     if (!apiKey) {
@@ -3124,6 +3575,13 @@ ${content}` }
    * @date 2026-04-29
    */
   private async webFetch(args: Record<string, unknown>): Promise<ToolCallResult> {
+    // 防御性闸门：联网总开关未开启则直接拒绝（与 webSearch 同款兜底）
+    if (this.getSetting && this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
+    }
     const rawUrl = typeof args.url === 'string' ? args.url.trim() : ''
     if (!rawUrl) return { content: '', error: '缺少 url 参数' }
 

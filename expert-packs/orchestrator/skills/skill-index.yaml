@@ -1,0 +1,13 @@
+# Skill 路由索引 v1.0 — 总控调度员（调枢）
+#
+# 路径约定：
+#   source: shared → path 相对仓库根目录
+#   source: local  → path 相对本分身目录
+#
+# 调枢不做领域工作，因此不挂任何领域 skill；
+# 跨分身派发由内置的 `task` 工具直接承担，无需额外 skill。
+
+version: "1.0"
+
+shared_skills: []
+local_skills: []

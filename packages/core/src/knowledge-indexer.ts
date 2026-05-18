@@ -145,7 +145,7 @@ ${ck.contentPreview.slice(0, 300)}`
 
     try {
       const ctx = await config.callLLM(CONTEXT_PROMPT, userPrompt, 100)
-      const cleaned = ctx.replace(/^["'「【\[（(]|["'」】\]）)]$/g, '').trim()
+      const cleaned = ctx.replace(/^["'「【[（(]|["'」】\]）)]$/g, '').trim()
       contextMap.set(ck.key, cleaned)
     } catch (err) {
       console.warn(`[knowledge-indexer] chunk "${ck.heading}" 上下文生成失败：${err instanceof Error ? err.message : String(err)}`)

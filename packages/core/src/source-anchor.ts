@@ -248,7 +248,7 @@ export function splitTextBySourceAnchors(text: string): SourceAnchorSegment[] {
 
 
 function isIgnorableAnchorSeparator(text: string): boolean {
-  return /^[\s，,、；;：:（）()【】\[\]<>《》“”"'‘’·\-–—]*$/.test(text)
+  return /^[\s，,、；;：:（）()【】[\]<>《》“”"'‘’·\-–—]*$/.test(text)
 }
 
 function pushUniqueAnchor(out: string[], anchor: string): void {

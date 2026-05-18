@@ -24,7 +24,7 @@ export function assertSafeSegment(value: string, label: string): void {
   if (!value || !value.trim()) {
     throw new Error(`${label}不能为空`)
   }
-  if (/[\/\\]|\.\.|\0/.test(value)) {
+  if (/[/\\]|\.\.|\0/.test(value)) {
     throw new Error(`非法${label}，不能包含路径分隔符或 ..: ${value}`)
   }
 }

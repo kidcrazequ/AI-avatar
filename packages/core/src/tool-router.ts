@@ -795,7 +795,7 @@ export class ToolRouter {
     const results: KnowledgeSearchResult[] = []
 
     for (const linked of linkedFiles) {
-      let markdown = ''
+      let markdown: string
       try {
         markdown = retriever.readFile(linked.file)
       } catch {
@@ -1363,7 +1363,7 @@ export class ToolRouter {
           error: `edits[${idx}] 失败：old_string 未在文件中找到（截断预览: "${edit.old_string.slice(0, 60)}${edit.old_string.length > 60 ? '...' : ''}"）。事务回滚，文件未改动。`,
         }
       }
-      let hits = 0
+      let hits: number
       if (edit.replace_all) {
         // 用 split/join 实现安全的全量替换（避免正则元字符问题）
         const parts = working.split(edit.old_string)

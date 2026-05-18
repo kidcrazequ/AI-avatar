@@ -58,7 +58,7 @@ function isNumericOrIdToken(token: string): boolean {
 
 function countNumericTokens(query: string): number {
   // 用空白和常见标点切分，简单粗暴，不依赖中文分词（中文分词时数字本身就是独立 token）
-  const tokens = query.split(/[\s,，。、；：！？\(\)（）\[\]【】"""'']+/).filter(t => t.length > 0)
+  const tokens = query.split(/[\s,，。、；：！？()（）[\]【】"""'']+/).filter(t => t.length > 0)
   let count = 0
   for (const t of tokens) {
     if (isNumericOrIdToken(t)) count++

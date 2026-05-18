@@ -909,15 +909,14 @@ function sanitizeAvatarBrief(raw: string): string {
 
 async function readSoulExcerpt(avatarsRoot: string, avatarId: string, maxChars: number): Promise<string> {
   const p = resolveUnderRoot(avatarsRoot, path.join(avatarId, 'soul.md'))
-  let raw = ''
   try {
-    raw = await fs.promises.readFile(p, 'utf-8')
+    const raw = await fs.promises.readFile(p, 'utf-8')
+    return raw.length <= maxChars ? raw : raw.slice(0, maxChars)
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     if (code === 'ENOENT') return ''
     throw err
   }
-  return raw.length <= maxChars ? raw : raw.slice(0, maxChars)
 }
 
 // ─── Phase 2 grower 复用：单事件追加 ───────────────────────────────────────

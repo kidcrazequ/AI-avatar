@@ -103,7 +103,7 @@ export function splitIntoChapters(text: string): Chapter[] {
   const sentenceEndPattern = /[。！？.!?]\s*$/
   // 英文独立标题：3-40 字符，首字母大写，含空格或混合大小写（排除纯编号 ID 如 UL-US-12345）。
   // 触发条件是严格的：必须是独占一行且前后为空行，避免把 UL 证书里的人名 / 职位误判成标题。
-  const englishHeadingPattern = /^[A-Z][A-Za-z0-9&()\/\-]*(?:[\s][A-Za-z0-9&()\/\-]+){0,6}$/
+  const englishHeadingPattern = /^[A-Z][A-Za-z0-9&()/-]*(?:[\s][A-Za-z0-9&()/-]+){0,6}$/
   // 孤立中文标题：首字符 CJK，2-30 字符，可混少量 ASCII/符号，不带末尾标点或冒号。
   // 典型：「系统运行模式」「离网模式」「电池充放电模式（并网电流源模式）」这类无编号短标题。
   const cjkHeadingPattern = /^[\u4E00-\u9FFF][\u4E00-\u9FFFA-Za-z0-9（）()·\-/]{1,29}$/
@@ -129,7 +129,7 @@ export function splitIntoChapters(text: string): Chapter[] {
     // 英文标题分支：必须满足长度、格式、且前后孤立
     if (line.length >= 3 && line.length <= 40 && englishHeadingPattern.test(line) && isIsolated(i)) {
       // 排除纯代码/ID 行（无空格 + 含数字或短横）和日期行
-      const looksLikeCodeOrId = !/\s/.test(line) && /[0-9\-]/.test(line)
+      const looksLikeCodeOrId = !/\s/.test(line) && /[0-9-]/.test(line)
       if (!looksLikeCodeOrId) {
         chapterBreaks.push({ lineIndex: i, title: line })
         continue

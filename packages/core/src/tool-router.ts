@@ -877,7 +877,7 @@ export class ToolRouter {
     try {
       parsed = JSON.parse(raw) as CachedExcelSource['parsed']
     } catch (e) {
-      throw new Error(`Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`)
+      throw new Error(`Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
     }
 
     this.excelSourceCache.set(cacheKey, {

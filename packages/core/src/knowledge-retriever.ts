@@ -634,9 +634,9 @@ export class KnowledgeRetriever {
         return km.readFile(relativePath)
       }
       if (code === 'ENOENT') {
-        throw new Error(`文件不存在: ${relativePath}`)
+        throw new Error(`文件不存在: ${relativePath}`, { cause: error })
       }
-      throw new Error(`读取文件失败 (${code ?? 'UNKNOWN'}): ${relativePath}`)
+      throw new Error(`读取文件失败 (${code ?? 'UNKNOWN'}): ${relativePath}`, { cause: error })
     }
   }
 

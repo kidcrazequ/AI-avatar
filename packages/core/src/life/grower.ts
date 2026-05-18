@@ -810,6 +810,7 @@ function parseOutlineArray(raw: string): OutlineItemShape[] {
   } catch (err) {
     throw new Error(
       `grower outline JSON.parse 失败：${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     )
   }
 }

@@ -87,6 +87,7 @@ async function readJsonSafe<T>(filePath: string): Promise<T | null> {
   } catch (err) {
     throw new Error(
       `life-store: 解析 JSON 失败 ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     )
   }
 }

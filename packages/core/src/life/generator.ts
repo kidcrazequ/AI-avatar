@@ -751,6 +751,7 @@ function parseJsonRobust<T>(raw: string, source: string): T {
   } catch (err) {
     throw new Error(
       `${source}: JSON 解析失败 ${err instanceof Error ? err.message : String(err)}\n原文片段: ${json.slice(0, 200)}`,
+      { cause: err },
     )
   }
 }

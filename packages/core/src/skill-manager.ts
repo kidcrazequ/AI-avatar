@@ -434,7 +434,7 @@ export class SkillManager {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('[SkillManager] 保存技能配置失败:', msg)
-      throw new Error(`保存技能配置失败: ${msg}`)
+      throw new Error(`保存技能配置失败: ${msg}`, { cause: error })
     }
   }
 

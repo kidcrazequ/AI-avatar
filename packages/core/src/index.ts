@@ -409,5 +409,28 @@ export {
   applyDailySummaryAllDates,
 } from './memory/daily-summary'
 
+// soul-pack（Letta .af 借鉴）：分身可移植打包，单 JSON 文件含所有文本 inline +
+// 二进制 sha256 ref + 外部技能引用。跨用户分发 / 备份回滚 / 版本管理。
+export {
+  SOUL_PACK_SCHEMA_VERSION,
+  INLINE_MAX_BYTES,
+  INLINE_EXTENSIONS,
+  computeManifestSha256,
+  serializeSoulPack,
+  parseSoulPack,
+  exportSoulPack,
+  importSoulPack,
+} from './soul-pack'
+export type {
+  SoulPack,
+  SoulPackFile,
+  SoulPackBinaryRef,
+  SoulPackSkillsRef,
+  SoulPackMemory,
+  ExportSoulPackOptions,
+  ImportSoulPackOptions,
+  ImportSoulPackResult,
+} from './soul-pack'
+
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

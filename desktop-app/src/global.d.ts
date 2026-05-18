@@ -727,6 +727,60 @@ interface ElectronAPI {
   }>
   readStandingOrders: (avatarId: string) => Promise<string>
   countStandingOrders: (avatarId: string) => Promise<number>
+  // v18 Letta .af 借鉴：soul-pack 可移植打包格式
+  soulPackExportToFile: (
+    avatarId: string,
+    outputFilePath: string,
+    options?: {
+      includeMemory?: boolean
+      includeLife?: boolean
+      includeWiki?: boolean
+      displayName?: string
+      description?: string
+      domain?: string
+      createdBy?: string
+    },
+  ) => Promise<{
+    outputFilePath: string
+    size: number
+    filesCount: number
+    binaryRefsCount: number
+    memoryIncluded: boolean
+  }>
+  soulPackImportFromFile: (
+    inputFilePath: string,
+    options?: {
+      targetAvatarId?: string
+      force?: boolean
+      restoreMemory?: boolean
+    },
+  ) => Promise<{
+    avatarId: string
+    filesWritten: string[]
+    binaryRefsMissing: Array<{ path: string; sha256: string; size: number; mime?: string }>
+    externalSkillsRequired: {
+      shared: string[]
+      community: Array<{ name: string; repo: string; ref: string; skills: string[] }>
+    }
+    memoryRestored: boolean
+    warnings: string[]
+  }>
+  soulPackPreview: (inputFilePath: string) => Promise<{
+    name: string
+    display_name: string
+    description: string
+    domain?: string
+    created_at: string
+    created_by?: string
+    pack_version: string
+    schema_version: number
+    filesCount: number
+    binaryRefsCount: number
+    memoryIncluded: boolean
+    externalSkillsShared: number
+    externalSkillsCommunity: number
+    manifestSha256: string
+  }>
   // GAP7: 知识文件 CRUD
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => Promise<void>
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => Promise<void>

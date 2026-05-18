@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -2032,6 +2032,59 @@ wrapHandler('write-knowledge-file', (_, avatarId: string, relativePath: string, 
 
 wrapHandler('search-knowledge', (_, avatarId: string, query: string) => {
   return getKnowledgeManager(avatarId).searchFiles(query)
+})
+
+// v18 Letta .af 借鉴：soul-pack 可移植打包格式
+// export-to-file：把分身打包并写到指定路径（renderer 通过 showSaveDialog 拿路径）
+// import-from-file：从指定路径读 JSON 解析并写回 avatars/
+wrapHandler('soul-pack:export-to-file', (_, avatarId: string, outputFilePath: string, options?: ExportSoulPackOptions) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (typeof outputFilePath !== 'string' || !outputFilePath) {
+    throw new Error('outputFilePath 不能为空')
+  }
+  const pack = exportSoulPack(avatarsPath, avatarId, options ?? {})
+  const json = serializeSoulPack(pack)
+  fs.mkdirSync(path.dirname(outputFilePath), { recursive: true })
+  fs.writeFileSync(outputFilePath, json, 'utf-8')
+  return {
+    outputFilePath,
+    size: Buffer.byteLength(json, 'utf-8'),
+    filesCount: pack.files.length,
+    binaryRefsCount: pack.binary_refs.length,
+    memoryIncluded: pack.memory_included,
+  }
+})
+wrapHandler('soul-pack:import-from-file', (_, inputFilePath: string, options?: ImportSoulPackOptions): ImportSoulPackResult => {
+  if (typeof inputFilePath !== 'string' || !inputFilePath) {
+    throw new Error('inputFilePath 不能为空')
+  }
+  const json = fs.readFileSync(inputFilePath, 'utf-8')
+  const pack = parseSoulPack(json)
+  return importSoulPack(avatarsPath, pack, options ?? {})
+})
+/** 预览 pack 元数据（不实际 import），让 UI 给用户确认 */
+wrapHandler('soul-pack:preview', (_, inputFilePath: string) => {
+  if (typeof inputFilePath !== 'string' || !inputFilePath) {
+    throw new Error('inputFilePath 不能为空')
+  }
+  const json = fs.readFileSync(inputFilePath, 'utf-8')
+  const pack = parseSoulPack(json)
+  return {
+    name: pack.name,
+    display_name: pack.display_name,
+    description: pack.description,
+    domain: pack.domain,
+    created_at: pack.created_at,
+    created_by: pack.created_by,
+    pack_version: pack.pack_version,
+    schema_version: pack.schema_version,
+    filesCount: pack.files.length,
+    binaryRefsCount: pack.binary_refs.length,
+    memoryIncluded: pack.memory_included,
+    externalSkillsShared: pack.external_skills.shared.length,
+    externalSkillsCommunity: pack.external_skills.community.length,
+    manifestSha256: pack.manifest_sha256,
+  }
 })
 
 // v18 OpenClaw 借鉴：Standing Orders 永久规则 CRUD（只读 + append，不提供 remove）

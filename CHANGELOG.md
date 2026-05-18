@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+> 2026-05-19 起累积，Letta `.af` 借鉴落地：分身可移植打包格式 **soul-pack**。
+
+### 新增
+
+- **soul-pack：分身可移植打包格式（Letta `.af` 借鉴）** — 单 JSON 文件含分身所有文本类资产 inline + 二进制 sha256 ref + 外部技能引用，支持跨用户分发 / 备份回滚 / 版本管理（git diff 直观）。补 Soul 长期没有「分身一键 export / import」的明确短板。
+  - **新模块** `packages/core/src/soul-pack/`（manifest.ts / export.ts / import.ts / index.ts）
+  - **格式**：`SOUL_PACK_SCHEMA_VERSION=1`；inline 文本类（.md/.yaml/.yml/.json/.txt/.csv/.html/.css/.svg），单文件 ≤ `INLINE_MAX_BYTES=256KB`；二进制（.xlsx/.pdf/.png 等）只列 path + sha256 + size + mime，不内联防 JSON 膨胀。
+  - **完整性**：`manifest_sha256` 是除自身字段外稳定序列化（键名按字母序）的 sha256；每个 file 的 sha256 单独校验。parse 时双重校验，篡改 / 损坏拒绝。
+  - **默认安全**：memory（含对话历史 / standing orders）/ life（想象人生）/ wiki/concepts（derived）默认**不打包**；显式 `--include-memory` / `--include-life` / `--include-wiki` 才纳入。_index/ 和 workspaces/ 永远跳过。
+  - **import 安全**：targetAvatarId 走 `assertSafeSegment` 校验；每个 file path 校验不含 `..` / 绝对路径；目标 avatar 已存在默认拒绝，`force=true` 才覆盖（先清空原目录）。
+  - **外部技能引用**：解析 `skills/skill-index.yaml` 提取 `shared_skills` + `community_skills`，pack 里只列 name/repo/ref（不打包本体）；import 端 shared 走自动 fallback，community 提示跑 `scripts/soul-sync.sh`。
+
+- **soul-pack CLI** `scripts/soul-pack-cli.ts` — 不进桌面端也能跑：
+  - `npx tsx scripts/soul-pack-cli.ts export <avatar-id> <output.json> [--include-memory]`
+  - `npx tsx scripts/soul-pack-cli.ts import <input.json> [--target <id>] [--force] [--no-memory]`
+  - `npx tsx scripts/soul-pack-cli.ts preview <input.json>` — 看 manifest 元数据不实际导入
+
+- **新 IPC（3 个）** — `soul-pack:export-to-file` / `soul-pack:import-from-file` / `soul-pack:preview`。preload 暴露 `soulPackExportToFile` / `soulPackImportFromFile` / `soulPackPreview`，global.d.ts 加完整类型。UI 接入留 follow-up（当前 CLI + IPC 已可用）。
+
+### 测试
+
+`packages/core/src/tests/soul-pack.test.ts`：20 个新单测覆盖
+- manifest serialize-parse roundtrip / sha256 完整性校验 / file content 篡改拒绝 / schema 版本不匹配拒绝 / 损坏 JSON 抛错 / 缺必填字段抛错
+- export 默认跳过敏感目录 / includeMemory 完整打包 5 类记忆 / 二进制 ref 含 mime / external_skills 解析 / avatarId 路径穿越拒绝 / 按 path UTF-16 字节序排序（与 git diff 一致）
+- import 不覆盖默认 / force 清空再写 / file path 含 `..` 拒绝 / memory restore on/off / binary_refs + warnings 报告
+- 端到端 export → serialize → parse → import 在另一目录还原
+
+689/689 core 单测通过（669 既有 + 20 新增）；desktop typecheck 通过。
+
+### 已知限制 / 后续
+
+- **UI 接入留待 follow-up**：当前 export/import 需走 CLI 或前端代码手动调 IPC；桌面端 SettingsPanel / AvatarPanel 加一对按钮（带 dialog 选路径）是 v1 之后的事。
+- **soulpack-pack-and-go**：如果未来需要"打包 + 二进制内嵌"全功能版（一文件包括 xlsx），可加 base64 inline 模式，但 JSON 会膨胀 33%，目前不做。
+
 ## v0.15.0 (2026-05-19)
 
 > 第三波「2026 GitHub trending 借鉴 + 工程治理」：基于 v0.14.1 之上的近 1-3 个月开源主流 top 50 调研，挑出 6 个真正补 Soul 短板的借鉴点落地——SillyTavern Lorebook / Letta 自编辑记忆 / anthropics-skills SKILL.md 标准 / CrewAI Task 输出契约 / OpenClaw Standing Orders / OpenHuman Memory Tree。同步治理 lint / 测试基础设施，让 `npm run quality` 可用 + 测试默认覆盖。

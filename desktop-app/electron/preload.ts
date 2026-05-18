@@ -261,6 +261,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 命中 _triggers.yaml 配置的关键词后返回注入文本；未配置/未命中返回 null
   lorebookMatchAndBuild: (avatarId: string, userMessage: string) =>
     ipcRenderer.invoke('lorebook:match-and-build', avatarId, userMessage),
+  // v18 Letta .af 借鉴：soul-pack 可移植打包
+  soulPackExportToFile: (avatarId: string, outputFilePath: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }) =>
+    ipcRenderer.invoke('soul-pack:export-to-file', avatarId, outputFilePath, options),
+  soulPackImportFromFile: (inputFilePath: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean }) =>
+    ipcRenderer.invoke('soul-pack:import-from-file', inputFilePath, options),
+  soulPackPreview: (inputFilePath: string) =>
+    ipcRenderer.invoke('soul-pack:preview', inputFilePath),
+
   // v18 OpenClaw 借鉴：Standing Orders 永久规则
   appendStandingOrder: (avatarId: string, order: string, source?: string) =>
     ipcRenderer.invoke('standing-orders:append', avatarId, order, source),

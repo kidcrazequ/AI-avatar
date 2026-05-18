@@ -261,6 +261,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 命中 _triggers.yaml 配置的关键词后返回注入文本；未配置/未命中返回 null
   lorebookMatchAndBuild: (avatarId: string, userMessage: string) =>
     ipcRenderer.invoke('lorebook:match-and-build', avatarId, userMessage),
+  // v18 OpenClaw 借鉴：Standing Orders 永久规则
+  appendStandingOrder: (avatarId: string, order: string, source?: string) =>
+    ipcRenderer.invoke('standing-orders:append', avatarId, order, source),
+  readStandingOrders: (avatarId: string) =>
+    ipcRenderer.invoke('standing-orders:read', avatarId),
+  countStandingOrders: (avatarId: string) =>
+    ipcRenderer.invoke('standing-orders:count', avatarId),
   // GAP7: 知识文件 CRUD（之前缺失）
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => ipcRenderer.invoke('create-knowledge-file', avatarId, relativePath, content),
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => ipcRenderer.invoke('delete-knowledge-file', avatarId, relativePath),

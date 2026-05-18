@@ -386,5 +386,16 @@ export type {
   TriggerInjection,
 } from './lorebook-trigger'
 
+// Standing Orders（OpenClaw + ReMeV2 借鉴）：LLM 抽 [STANDING_ORDER] 标签后落盘到
+// memory/standing-orders.md，soul-loader 注入紧挨 soul.md，作为运行时永久规则
+export {
+  readStandingOrders,
+  countStandingOrders,
+  appendStandingOrder,
+  MAX_STANDING_ORDERS,
+  MAX_ORDER_LENGTH,
+} from './memory/standing-orders'
+export type { AppendStandingOrderResult } from './memory/standing-orders'
+
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

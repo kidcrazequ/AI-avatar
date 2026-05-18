@@ -15,6 +15,8 @@ import { extractUncertain, extractReconsider } from './deliberation-extractors'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
+// v18 OpenClaw 借鉴：长期工作流约定（"以后所有方案先算 IRR"类）单独走 channel
+const STANDING_ORDER_REGEX = /\[STANDING_ORDER\]([\s\S]*?)\[\/STANDING_ORDER\]/g
 
 /** Feature 3: 从 AI 回复中提取用户画像更新标记的正则 */
 const USER_UPDATE_REGEX = /\[USER_UPDATE\]([\s\S]*?)\[\/USER_UPDATE\]/g
@@ -43,6 +45,16 @@ function extractUserUpdates(text: string): { cleanText: string; updates: string[
     return ''
   }).trim()
   return { cleanText, updates }
+}
+
+/** v18 OpenClaw 借鉴：从回复中提取并移除 [STANDING_ORDER] 标签 */
+function extractStandingOrders(text: string): { cleanText: string; orders: string[] } {
+  const orders: string[] = []
+  const cleanText = text.replace(STANDING_ORDER_REGEX, (_, content) => {
+    orders.push(content.trim())
+    return ''
+  }).trim()
+  return { cleanText, orders }
 }
 
 /** 从回复文本中提取并移除技能创建建议，保留原文不删除（用于展示确认卡片） */
@@ -1119,6 +1131,21 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // v18 OpenClaw 借鉴：写入"以后所有 X 都要 Y"类长期规则，注入 system prompt 永久生效
+    type: 'function',
+    function: {
+      name: 'add_standing_order',
+      description: '把一条"以后所有 X 都要 Y"类长期工作流规则永久落盘到 memory/standing-orders.md。规则会注入到 system prompt 紧挨 soul.md 之后，永久生效。仅在用户明确说"以后" / "今后" / "今后所有方案" / "一直用这种格式" 等长期约定时调用，普通偏好（"今天我想要简短回答"）走 [MEMORY_UPDATE] 标签。**本框架不提供 remove 工具**——添加前必须确认是真的"长期约定"而不是这次的特例。每个分身上限 50 条，达上限拒绝。返回 ok / 已达上限错误。',
+      parameters: {
+        type: 'object',
+        properties: {
+          order: { type: 'string', description: '一条规则的完整文本，≤ 500 字符，单条内不要换行。例："工商储方案必须先算 IRR 再算 NPV" / "回答都用简洁中文不超过 200 字"。' },
+        },
+        required: ['order'],
+      },
+    },
+  },
+  {
     // v18 Letta-style：agent 主动给已有 episode 追加笔记（不覆盖 LLM 抽取的 summary/quotes）
     type: 'function',
     function: {
@@ -1964,11 +1991,17 @@ IR 语法（markdown + 扩展）：
 ]
 
 /** 周期性记忆 Nudge 提示文本 */
-const MEMORY_NUDGE_TEXT = `[系统提示] 请回顾本次对话，如果有以下信息值得长期记住，请在回复末尾用 [MEMORY_UPDATE]...[/MEMORY_UPDATE] 标签记录：
+const MEMORY_NUDGE_TEXT = `[系统提示] 请回顾本次对话，如果有以下信息值得长期记住，请在回复末尾用对应标签记录：
+
+[MEMORY_UPDATE]...[/MEMORY_UPDATE]：
 1. 用户纠正过的错误理解
 2. 用户明确表达的偏好
 3. 项目相关的关键决策
-如果没有需要记忆的内容，不需要添加标签，正常回答即可。`
+
+[STANDING_ORDER]...[/STANDING_ORDER]（v18 新增，独立通道，不要混入 MEMORY_UPDATE）：
+4. 用户明确表达的"以后所有 X 都要 Y"类长期工作流约定（例："以后工商储方案必须先算 IRR" / "回答都用简洁中文不超过 200 字"）。每个 [STANDING_ORDER] 标签内只写一条规则。规则会注入 system prompt 永久生效；本框架不提供工具层删除，添加前确认是真的"以后都要"，而不是这次特例。
+
+如果没有需要记忆的内容，不需要添加任何标签，正常回答即可。`
 
 /**
  * 硬性应答规则（最高优先级）。
@@ -3940,12 +3973,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 所有工具调用结束，处理最终回复
       const { cleanText: memCleanText, updates: memUpdates } = extractMemoryUpdates(assistantText)
       const { cleanText: userCleanText, updates: userUpdates } = extractUserUpdates(memCleanText)
+      // v18 OpenClaw 借鉴：抽 [STANDING_ORDER] 长期工作流规则（独立 channel，不进 MEMORY.md）
+      const { cleanText: soCleanText, orders: standingOrders } = extractStandingOrders(userCleanText)
       // v17 deliberation：抽 UNCERTAIN/RECONSIDER 标记。放在 skillCreate 之前——
       // 这两个 marker 不删原文做卡片，是直接从展示文里抽掉只留 chip。
-      const { cleanText: uncCleanText, markers: uncertainMarkers } = extractUncertain(userCleanText)
+      const { cleanText: uncCleanText, markers: uncertainMarkers } = extractUncertain(soCleanText)
       const { cleanText: recCleanText, markers: reconsiderMarkers } = extractReconsider(uncCleanText)
       const { cleanText, proposals: skillProposals } = extractSkillCreate(recCleanText)
-      const hasUpdates = memUpdates.length > 0 || userUpdates.length > 0 || skillProposals.length > 0
+      const hasUpdates = memUpdates.length > 0 || userUpdates.length > 0 || skillProposals.length > 0 || standingOrders.length > 0
       const displayText = cleanText || assistantText || (hasUpdates ? '（已更新记忆/画像/技能）' : '')
 
       // GAP2: 如果有 memory 更新，追加写入记忆文件（含容量管理）
@@ -4024,6 +4059,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const msg = err instanceof Error ? err.message : String(err)
           console.error('写入用户画像失败:', msg)
           window.electronAPI.logEvent('error', 'user-profile-write-error', msg)
+        }
+      }
+
+      // v18 OpenClaw 借鉴：standing orders 落盘到 memory/standing-orders.md
+      // 不做容量整理（上限拒绝写而不是 consolidate），不允许 LLM 删除规则
+      if (standingOrders.length > 0) {
+        for (const order of standingOrders) {
+          try {
+            const res = await window.electronAPI.appendStandingOrder(avatarId, order, conversationId)
+            if (!res.ok) {
+              // 写入失败（如达上限）— 静默 warn，主流程继续
+              window.electronAPI.logEvent('warn', 'standing-order-append-failed', `${res.error ?? 'unknown'}: ${order.slice(0, 100)}`)
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            window.electronAPI.logEvent('error', 'standing-order-write-error', msg)
+          }
         }
       }
 

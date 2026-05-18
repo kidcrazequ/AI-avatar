@@ -15,6 +15,7 @@ import {
   pinConversationEpisode,
   appendConversationEpisodeNote,
 } from './memory/episode-store'
+import { appendStandingOrder } from './memory/standing-orders'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -969,6 +970,8 @@ export class ToolRouter {
           result = await this.pinEpisodeTool(avatarId, args); break
         case 'add_episode_note':
           result = await this.addEpisodeNoteTool(avatarId, args); break
+        case 'add_standing_order':
+          result = this.addStandingOrderTool(avatarId, args, conversationId); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -1964,6 +1967,36 @@ ${content}` }
       const res = await appendConversationEpisodeNote(this.avatarsPath, avatarId, conversationId, note)
       if (!res.ok) return { content: '', error: res.error }
       return { content: `[add_episode_note] 已为 episode ${conversationId} 追加笔记。当前共 ${res.totalNotes} 条 notes。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_standing_order：写入一条永久工作流规则（v18 OpenClaw 借鉴）。
+   *
+   * 与 chatStore 的 [STANDING_ORDER] tag 抽取互为补充——tag 是被动抽取，工具是主动写入。
+   * 写到 memory/standing-orders.md，soul-loader 装配 system prompt 时整段注入紧挨 soul.md。
+   *
+   * 设计原则：
+   *   - **不提供 remove 工具**：防 LLM 自我审查删规则，需人工编辑文件
+   *   - 上限 MAX_STANDING_ORDERS=50 后拒绝
+   *   - 单条 ≤ MAX_ORDER_LENGTH=500 字符
+   */
+  private addStandingOrderTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+    conversationId?: string,
+  ): ToolCallResult {
+    const order = typeof args.order === 'string' ? args.order : ''
+    if (!order.trim()) return { content: '', error: '缺少 order 参数' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const source = conversationId || 'tool-call'
+      const res = appendStandingOrder(this.avatarsPath, avatarId, order, source)
+      if (!res.ok) return { content: '', error: res.error ?? '写入 standing order 失败' }
+      return { content: `[add_standing_order] 已写入永久规则。当前共 ${res.total} 条 standing orders。规则在下次会话装配 system prompt 时生效。` }
     } catch (err) {
       return { content: '', error: err instanceof Error ? err.message : String(err) }
     }

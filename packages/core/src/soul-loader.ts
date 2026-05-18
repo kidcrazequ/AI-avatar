@@ -16,6 +16,7 @@ import {
   computeSalience,
   computeWallClockRecencyFactor,
 } from './memory/salience'
+import { readStandingOrders } from './memory/standing-orders'
 
 export interface AvatarConfig {
   id: string
@@ -316,6 +317,17 @@ export class SoulLoader {
       stableParts.push(basePrompt, '\n\n---\n\n')
     }
     stableParts.push(claudeMd, '\n\n---\n\n', soulMd)
+
+    // v18 Standing Orders（OpenClaw 借鉴）：紧挨 soul.md 注入「永久规则」段。
+    // 由 LLM 在对话中通过 [STANDING_ORDER] tag 或 add_standing_order 工具写入；
+    // 优先级介于 HARD_RULES（红线）与 MEMORY.md（偏好）之间。
+    const standingOrdersContent = readStandingOrders(this.avatarsPath, avatarId)
+    if (standingOrdersContent.trim()) {
+      stableParts.push('\n\n---\n\n')
+      stableParts.push(standingOrdersContent.trim())
+      stableParts.push('\n\n> 上述 standing orders 是用户在过往对话中明确表达的长期工作流约定，必须始终遵守。如认为某条规则与当前任务冲突，先按规则执行 + 用 [UNCERTAIN] 提示用户，而不是自行忽略。')
+    }
+
     const dynamicParts: string[] = []
 
     // 共享知识（所有分身通用）

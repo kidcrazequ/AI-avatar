@@ -719,6 +719,14 @@ interface ElectronAPI {
     charCount: number
     entries: Array<{ knowledge: string; hits: string[]; chars: number; truncated: boolean }>
   } | null>
+  // v18 OpenClaw 借鉴：Standing Orders 永久工作流规则
+  appendStandingOrder: (avatarId: string, order: string, source?: string) => Promise<{
+    ok: boolean
+    error?: string
+    total?: number
+  }>
+  readStandingOrders: (avatarId: string) => Promise<string>
+  countStandingOrders: (avatarId: string) => Promise<number>
   // GAP7: 知识文件 CRUD
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => Promise<void>
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => Promise<void>

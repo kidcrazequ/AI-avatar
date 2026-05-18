@@ -24,8 +24,9 @@ import {
   generateEpisode,
   generateLife,
   partitionAgeStages,
+  type LifeLLMConfig,
+  type LifeUserParams,
 } from '../life/generator'
-import type { LifeLLMConfig, LifeUserParams } from '../life/generator'
 import {
   listLifeEpisodeIds,
   readLifeConsolidated,

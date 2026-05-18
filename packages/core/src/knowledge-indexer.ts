@@ -13,8 +13,7 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import type { KnowledgeRetriever } from './knowledge-retriever'
-import { tokenize } from './knowledge-retriever'
+import { tokenize, type KnowledgeRetriever } from './knowledge-retriever'
 import type { LLMCallFn } from './document-formatter'
 import { loadTokensCache, saveTokensCache } from './utils/chunk-cache'
 

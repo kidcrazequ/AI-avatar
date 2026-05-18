@@ -15,8 +15,7 @@
  * @date 2026-04-03
  */
 
-import type { KnowledgeRetriever } from './knowledge-retriever'
-import { tokenize } from './knowledge-retriever'
+import { tokenize, type KnowledgeRetriever } from './knowledge-retriever'
 import type { LLMCallFn } from './document-formatter'
 import type { EmbeddingCallFn } from './knowledge-indexer'
 

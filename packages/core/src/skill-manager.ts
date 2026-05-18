@@ -83,21 +83,39 @@ export class SkillManager {
       return []
     }
 
-    const files = fs.readdirSync(skillsPath).filter(f => f.endsWith('.md'))
     const skills: Skill[] = []
     const config = this.getSkillConfig(avatarId)
 
-    for (const file of files) {
-      const filePath = path.join(skillsPath, file)
+    // 两种格式并存（v18 起兼容 anthropics/skills SKILL.md 标准）：
+    //   1) 单文件 <skill-id>.md（Soul 原生格式，frontmatter 极简：name + description）
+    //   2) 目录形式 <skill-id>/SKILL.md（anthropic spec）
+    //      允许同时含 scripts/ / references/ / assets/ 子目录（不进 prompt，按需让 LLM 读）
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(skillsPath, { withFileTypes: true })
+    } catch {
+      return []
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(skillsPath, entry.name)
       try {
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const parsed = this.parseSkill(content, filePath, file)
-        if (parsed) {
-          parsed.enabled = !config.disabledSkills.includes(parsed.id)
-          skills.push(parsed)
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const content = fs.readFileSync(entryPath, 'utf-8')
+          const parsed = this.parseSkill(content, entryPath, entry.name)
+          if (parsed) {
+            parsed.enabled = !config.disabledSkills.includes(parsed.id)
+            skills.push(parsed)
+          }
+        } else if (entry.isDirectory()) {
+          const parsed = this.loadSkillFromDir(entryPath, entry.name)
+          if (parsed) {
+            parsed.enabled = !config.disabledSkills.includes(parsed.id)
+            skills.push(parsed)
+          }
         }
       } catch (error) {
-        console.error(`解析技能失败: ${filePath}`, error)
+        console.error(`解析技能失败: ${entryPath}`, error)
       }
     }
 
@@ -108,22 +126,32 @@ export class SkillManager {
     assertSafeSegment(avatarId, '分身ID')
     assertSafeSegment(skillId, '技能ID')
     const skillsPath = path.join(this.avatarsPath, avatarId, 'skills')
-    const filePath = path.join(skillsPath, `${skillId}.md`)
 
-    if (!fs.existsSync(filePath)) {
-      return undefined
+    // 单文件优先：<skillId>.md（Soul 原生格式）
+    const filePath = path.join(skillsPath, `${skillId}.md`)
+    if (fs.existsSync(filePath)) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const parsed = this.parseSkill(content, filePath, `${skillId}.md`)
+        if (parsed) {
+          const config = this.getSkillConfig(avatarId)
+          parsed.enabled = !config.disabledSkills.includes(parsed.id)
+          return parsed
+        }
+      } catch (error) {
+        console.error(`解析技能失败: ${filePath}`, error)
+      }
     }
 
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8')
-      const parsed = this.parseSkill(content, filePath, `${skillId}.md`)
+    // fallback：目录形式 <skillId>/SKILL.md（anthropics/skills 标准）
+    const dirPath = path.join(skillsPath, skillId)
+    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+      const parsed = this.loadSkillFromDir(dirPath, skillId)
       if (parsed) {
         const config = this.getSkillConfig(avatarId)
         parsed.enabled = !config.disabledSkills.includes(parsed.id)
         return parsed
       }
-    } catch (error) {
-      console.error(`解析技能失败: ${filePath}`, error)
     }
 
     return undefined
@@ -230,20 +258,40 @@ export class SkillManager {
       return []
     }
     for (const entry of entries) {
-      // 仅文件、仅 .md，跳过 sources.yaml / skill-index.yaml / community 子目录
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
-      const filePath = path.join(sharedSkillsDir, entry.name)
+      const entryPath = path.join(sharedSkillsDir, entry.name)
       try {
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const fm = extractFrontmatter(content)
-        const name = (fm.name && fm.name.trim()) || entry.name.replace(/\.md$/, '')
-        result.push({
-          name,
-          filename: entry.name,
-          description: fm.description || '',
-          domain: fm.domain || '',
-          enabled: enabledNames.has(name),
-        })
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          // 单文件形式（Soul 原生）：shared/skills/<name>.md
+          const content = fs.readFileSync(entryPath, 'utf-8')
+          const fm = extractFrontmatter(content)
+          const name = (fm.name && fm.name.trim()) || entry.name.replace(/\.md$/, '')
+          result.push({
+            name,
+            filename: entry.name,
+            description: fm.description || '',
+            domain: fm.domain || '',
+            enabled: enabledNames.has(name),
+          })
+        } else if (entry.isDirectory() && entry.name !== 'community') {
+          // v18：anthropics/skills SKILL.md 标准的目录形式
+          //   shared/skills/<name>/SKILL.md（+ scripts/ / references/ / assets/）
+          // community/ 子目录仍保留给 soul-sync.sh 拉取的外部包（独立加载链路）
+          const skillMdPath = path.join(entryPath, 'SKILL.md')
+          if (!fs.existsSync(skillMdPath)) continue
+          const content = fs.readFileSync(skillMdPath, 'utf-8')
+          const fm = extractFrontmatter(content)
+          const fmName = (fm.name && fm.name.trim()) || ''
+          if (fmName && fmName !== entry.name) {
+            console.warn(`[SkillManager] shared/skills/${entry.name}/SKILL.md frontmatter name="${fmName}" 不匹配目录名`)
+          }
+          result.push({
+            name: entry.name, // SKILL.md spec：以目录名为准
+            filename: `${entry.name}/SKILL.md`,
+            description: fm.description || '',
+            domain: fm.domain || '',
+            enabled: enabledNames.has(entry.name),
+          })
+        }
       } catch (err) {
         console.warn(`[SkillManager] 解析 shared skill 失败 ${entry.name}:`, err instanceof Error ? err.message : String(err))
       }
@@ -461,6 +509,43 @@ export class SkillManager {
       content,
       isBuiltin: this.isBuiltinSkill(id),
     }
+  }
+
+  /**
+   * v18：加载 anthropics/skills SKILL.md 标准格式的目录形式技能。
+   *
+   * 约定（来自 https://agentskills.io/specification）：
+   *   <skill-id>/
+   *     ├── SKILL.md          # 必需：frontmatter (name + description) + markdown body
+   *     ├── scripts/          # 可选：可执行脚本
+   *     ├── references/       # 可选：技术参考文档
+   *     └── assets/           # 可选：模板 / 资源
+   *
+   * - SKILL.md frontmatter 的 `name` 字段**必须**匹配目录名（spec 强制）；
+   *   不一致时记录警告但仍按目录名加载（容错）
+   * - id 用目录名（dirName），保持与单文件 .md 的命名一致性
+   * - scripts/ / references/ / assets/ 不进 prompt；只暴露 SKILL.md body 给 LLM
+   *   后续 LLM 调用 `read_knowledge_file` / `exec_shell` 等工具可按需访问
+   */
+  private loadSkillFromDir(skillDir: string, dirName: string): Skill | null {
+    const skillMdPath = path.join(skillDir, 'SKILL.md')
+    if (!fs.existsSync(skillMdPath)) return null
+    let content: string
+    try {
+      content = fs.readFileSync(skillMdPath, 'utf-8')
+    } catch (err) {
+      console.error(`[SkillManager] 读 SKILL.md 失败 ${skillMdPath}:`, err instanceof Error ? err.message : String(err))
+      return null
+    }
+    const fm = extractFrontmatter(content)
+    const frontmatterName = (fm.name || '').trim()
+    if (frontmatterName && frontmatterName !== dirName) {
+      console.warn(
+        `[SkillManager] SKILL.md frontmatter name="${frontmatterName}" 不匹配目录名 "${dirName}"，按 spec 应严格一致；仍按目录名 "${dirName}" 加载`,
+      )
+    }
+    // 复用 parseSkill：把 dirName 当 fileName 传入，让 id = dirName
+    return this.parseSkill(content, skillMdPath, `${dirName}.md`)
   }
 
   // 获取启用的技能内容（用于生成 systemPrompt）

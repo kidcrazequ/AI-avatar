@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['dist', 'dist-electron', 'node_modules', '*.js', '*.cjs', '*.mjs'] },
+  { ignores: ['dist', 'dist-electron', 'node_modules', '**/*.js', '**/*.cjs', '**/*.mjs', 'electron/widget-static/**'] },
 
   // ─── 基础推荐规则 ───
   js.configs.recommended,

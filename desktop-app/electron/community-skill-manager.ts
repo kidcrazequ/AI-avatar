@@ -16,8 +16,14 @@
 import path from 'path'
 import fs from 'fs'
 import { spawn } from 'child_process'
-import { assertSafeSegment, localDateString } from '@soul/core'
-import type { CommunitySkillSource, InstalledCommunityPack, CommunitySkillInfo, CommunitySkillSyncProgress } from '@soul/core'
+import {
+  assertSafeSegment,
+  localDateString,
+  type CommunitySkillSource,
+  type InstalledCommunityPack,
+  type CommunitySkillInfo,
+  type CommunitySkillSyncProgress,
+} from '@soul/core'
 import { Logger } from './logger'
 
 // ─── Types ──────────────────────────────────────────────────────

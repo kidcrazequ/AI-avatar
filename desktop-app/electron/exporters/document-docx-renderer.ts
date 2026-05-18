@@ -47,14 +47,14 @@ import {
   TextRun,
   WidthType,
 } from 'docx'
-import type {
-  CalloutLevel,
-  DocumentBlock,
-  DocumentIR,
-  DocumentHeadingLevel,
-  TableCellValue,
+import {
+  resolveUnderRoot,
+  type CalloutLevel,
+  type DocumentBlock,
+  type DocumentIR,
+  type DocumentHeadingLevel,
+  type TableCellValue,
 } from '@soul/core'
-import { resolveUnderRoot } from '@soul/core'
 import type { Logger } from '../logger'
 
 /** docx ImageRun 支持的 type 字段（与 IImageOptions 严格对齐） */

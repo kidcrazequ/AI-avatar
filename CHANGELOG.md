@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.14.1 (2026-05-18)
+
 > 第二波「Context Engineering」扩展（2026-05-18，并入 Phase 1+2 之后）：借鉴 OpenHuman / TDAI / PAP / Anthropic Claude Skills 四个外部项目的核心思想，给分身加**联网开关 + 引用铁律 / 工具结果压缩 + 离线 lazy / 知识库精确 grep + glob / wiki 概念页 LLM 直读 / emoji → inline icon**。完整方案与决议见 `.cursor/plans/openhuman-借鉴_2026-05-18.plan.md`。
 
 ### 新增（第二波 Context Engineering）

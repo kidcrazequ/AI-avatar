@@ -2,6 +2,73 @@
 
 ## Unreleased
 
+## v0.15.0 (2026-05-19)
+
+> 第三波「2026 GitHub trending 借鉴 + 工程治理」：基于 v0.14.1 之上的近 1-3 个月开源主流 top 50 调研，挑出 6 个真正补 Soul 短板的借鉴点落地——SillyTavern Lorebook / Letta 自编辑记忆 / anthropics-skills SKILL.md 标准 / CrewAI Task 输出契约 / OpenClaw Standing Orders / OpenHuman Memory Tree。同步治理 lint / 测试基础设施，让 `npm run quality` 可用 + 测试默认覆盖。
+
+### 新增（外部借鉴）
+
+- **Lorebook keyword-trigger 注入（SillyTavern 借鉴）** — `avatars/<id>/knowledge/_triggers.yaml` 配 keyword → knowledge 映射；chatStore 装配 prompt 时按 user message 命中 keyword 后被动注入对应知识片段到 dynamic 段。补 BM25/向量召回漏 + `knowledge_grep` 需 LLM 主动调用的最后短板，对小模型场景尤其友好。新工具：`lorebookMatchAndBuild` IPC。新模块 `packages/core/src/lorebook-trigger.ts`，22 单测覆盖载入 / 匹配 / 拼装 / 截断 / 容错。
+- **Agent 自编辑记忆 pin_episode + add_episode_note（Letta core memory 借鉴）** — 让 LLM 在对话中主动管理 episode：`pin_episode` 显式标记关键 episode 永不衰减（salience +50 BONUS、recency 强制 1.0、跳过 forgetter）；`add_episode_note` 补抽 LLM 抽取漏掉的事实。**不提供 unpin 工具**防自我审查；MAX_PINNED=20 / MAX_NOTES_PER_EPISODE=5 / MAX_NOTE_LENGTH=500 三层上限。
+- **anthropics/skills SKILL.md 标准目录格式兼容** — SkillManager 双格式并存：Soul 原生单 .md 向后兼容 + 新支持目录形式 `<id>/SKILL.md + scripts/ + references/ + assets/`（spec 来自 https://agentskills.io/specification）。frontmatter `name` 字段必填且必须匹配目录名（不匹配时 warn + 仍按目录名加载，容错过渡）。接通 anthropics + Claude Code + Codex + Cursor 跨平台 658+ 社区技能生态；community/ 通道仍走 soul-sync.sh 独立链路。
+- **task 工具 expected_output schema（CrewAI 借鉴）** — 调枢 orchestrator 派单从 free-form 文本交接升级到结构化契约：`task({ task, target_avatar, expected_output })`。expected_output 注入到子代理 userPrompt 末尾【输出格式约束】段，不动 systemPrompt 保 prompt cache 命中。空白 expectedOutput 自动 trim 视为不传。SubAgentTask 上 expectedOutput 透传可查。
+- **Standing Orders 永久工作流规则（OpenClaw 借鉴 + ReMeV2 分类摘要思路）** — 补 Soul 之前没有"长期工作流约定"channel 的痛点。两条写入路径：(a) LLM 在回复里写 `[STANDING_ORDER]...[/STANDING_ORDER]` 标签（MEMORY_NUDGE 扩展第 4 类引导）；(b) `add_standing_order` 工具主动调用。落盘 `memory/standing-orders.md`，SoulLoader 紧挨 soul.md 注入，优先级介于 HARD_RULES 与 MEMORY.md 之间。**不提供 remove 工具**防自我审查；MAX_STANDING_ORDERS=50 / MAX_ORDER_LENGTH=500。
+- **Daily Summary 时间维度聚合（OpenHuman Memory Tree 借鉴）** — Soul 之前对话记忆只有实体维度（per-episode + WikiCompiler per-entity 聚合），补**时间维度**：每日 0:40 cron 把当天 episode 机械合并成 `memory/daily-summaries/<YYYY-MM-DD>.md`。零 LLM 成本（v1 纯函数合并 title + theme + clipped summary，forgotten 自动剔除，pinned 标 📌）。两个新工具 `list_daily_summaries(start?, end?, limit?)` + `read_daily_summary(date)`，时间锚定召回对偶 `recall_conversation` 的 query 召回。
+
+### 修订
+
+- **MEMORY_NUDGE_TEXT 扩展** — 从 3 类记忆类型扩到 4 类，加 `[STANDING_ORDER]` 引导：用户明确表达"以后所有 X 都要 Y"类长期约定时单独走该通道，不混入 MEMORY_UPDATE；标签内只写一条规则；规则会注入 system prompt 永久生效；提示用户"添加前确认是真'以后都要'而不是这次特例"。
+- **SoulLoader system prompt 装配** — 紧挨 soul.md 之后注入「Standing Orders 永久规则」段（带使用守则："如认为某条规则与当前任务冲突，先按规则执行 + 用 [UNCERTAIN] 提示用户"）。
+
+### 工具 / IPC
+
+- **新 IPC（4 个）** — `lorebook:match-and-build` / `standing-orders:append` / `standing-orders:read` / `standing-orders:count`
+- **新工具调用 schema（6 个）注册到 AVATAR_TOOLS** — `pin_episode` / `add_episode_note` / `add_standing_order` / `list_daily_summaries` / `read_daily_summary` / 扩展 `task` 加 `expected_output` 参数
+- **新 daily cron** — `daily-summary-all` 每日 0:40（在 episode-forgetting 0:35 之后 5 分钟）
+
+### 工程治理（fix / chore）
+
+- **core test 脚本动态发现** — 从硬编码 14 文件改为 `find dist/tests -name '*.test.js' ! -name 'journey.test.js'`，把漏跑的 37 个单测（含 episode-forgetter / salience / conversation-episode / tool-result-* / tool-router-knowledge-grep / chunk-cache 等）全部纳入默认；分离 `test:integration` 跑 e2e journey。跑全量立刻揪出 chunk-cache.test.ts:70 的 v1 flat-map 格式过期断言（实现 2026-05-12 已升 v2 schema），同步修。
+- **packages/core/eslint.config.mjs 之前完全缺失** — `npm run lint` / `npm run quality` 100% 报错。补一份 Node target 简化版，保留核心规则（no-console / eqeqeq / no-var / no-debugger / toISOString-slice 禁令）。
+- **desktop-app lint ignore 修 widget-static minified bundle** — `electron/widget-static/soul-embed.js` 是 minified 265 行单行 JS 被当源码扫，产生 144 个假阳性 errors（line 1 col 1000+）。`ignores: ['*.js']` 只匹配 root 一级，改为 `**/*.js` 递归 + 显式加 `electron/widget-static/**`。效果：246 → 100 problems。
+- **空 catch 规则改用 ESLint 内置** — 自定义 `no-restricted-syntax CatchClause[body.body.length=0]` 的 AST 选择器不识别注释，把全部 64 处合理的"有意识 + 已注释静默"误报为 error。改用 `no-empty: ['error', { allowEmptyCatch: true }]`，约定层面要求 catch body 写注释。core 130→81 / desktop 100→63 problems。
+- **core 清零 lint errors** — 修 11 处 regex character class 多余转义（`[\/\\]` → `[/\\]` 等，注意 `\]` 中间位置仍需保留）+ 3 处 no-useless-assignment（重构 readSoulExcerpt early-return / `let markdown: string` narrowing / `let hits: number`）+ document renderer 加 default + assertNever 兜底 + 合并 4 处分行 type import + 7 处 catch 重抛加 `{ cause: err }`（preserve-caught-error）+ ocr-html-cleaner emoji character class 拆分。
+- **CHANGELOG v0.14.1 补写** — 上版漏写，本期开头补回。
+
+### 测试
+
+core 单测：**580 → 669（+89 个新单测）**，全部 0 回归：
+- 22 `lorebook-trigger`：载入 / 匹配排序 / max_entries / 截断 / 文件读不到容错
+- 17 `agent-self-edit-memory`：pin 幂等 / 上限 / reason 截断 / note 多条累加 + 上限 / salience pinned 行为 / forgetter 跳过 pinned
+- 9 `skill-manager-skill-md`：单文件 vs 目录形式 / 同名优先级 / SKILL.md 缺失跳过 / community 子目录排除
+- 8 `sub-agent-expected-output`：注入位置 / cache 友好 / 空白 trim / 透传
+- 10 `standing-orders`：首次建 header / 累加 / 空白拒绝 / 上限拒绝 / 单条换行清洗 / source 注释格式
+- 23 `daily-summary`：本地时区 / 按日期分组 / forgotten 跳过 / clipping / write-read roundtrip / start-end-limit / 端到端
+
+desktop-app：typecheck + qa-gate 通过。
+
+### 关于 RRF fusion 调研发现
+
+调研报告原建议加 ReMeV2 的 hybrid retrieval fusion（0.3 BM25 + 0.7 vector 加权），实测发现 Soul 已在 `knowledge-retriever.ts:543` `rrfFusion` 实现了 Reciprocal Rank Fusion（k=60，Cormack et al. 2009 经典公式 `score = 1/(k+rank_bm25) + 1/(k+rank_vector)`）——比 ReMeV2 的 weighted-sum 更先进，不需要分数归一化、对 outlier 鲁棒。无需新代码。Follow-up：rrfFusion 是 private method 未直接单测覆盖，作为 backlog。
+
+### 项目治理
+
+- `@soul/core` 新增模块：`lorebook-trigger.ts` / `memory/standing-orders.ts` / `memory/daily-summary.ts`
+- `SubAgentManager` 扩展：`SubAgentTask.expectedOutput` 字段 + `SubAgentDelegateOptions` 参数 + runTask 注入逻辑
+- `SkillManager` 扩展：`loadSkillFromDir` 私有方法 + `getSkill` fallback 目录形式 + `getAvailableSharedSkills` 双格式
+- `ToolRouter` 扩展：6 个新工具 method（pinEpisodeTool / addEpisodeNoteTool / addStandingOrderTool / listDailySummariesTool / readDailySummaryTool + task 透传 expected_output）
+- `SoulLoader` 扩展：Standing Orders 注入段
+- 依赖：零外部新增
+
+### 已知限制 / 后续
+
+- **rrfFusion 单测缺位**：抽公开 pure function + 加单测，是 1-2 小时小事但跟 rerank 模块耦合，留后续。
+- **Daily Summary v1 是机械合并**：未来如果用户实战感觉"机械版不如 LLM 摘要"，再加 feature-flagged 二次 LLM 摘要路径。当前优先零成本 + 可预期。
+- **Lorebook trigger 当前 substring 匹配**：未来若发现 keyword 命中精度差（如"铜铝"误命中"铜母线铝箔"），加更严格的 word-boundary 选项。
+- **Standing Orders unset 缺失是设计选择**：参考 pin_episode，防 LLM 自我审查。如果用户实战中觉得不便（例如规则改主意），改成"加 deprecated 标记"而不是 remove。
+
+---
+
 ## v0.14.1 (2026-05-18)
 
 > 第二波「Context Engineering」扩展（2026-05-18，并入 Phase 1+2 之后）：借鉴 OpenHuman / TDAI / PAP / Anthropic Claude Skills 四个外部项目的核心思想，给分身加**联网开关 + 引用铁律 / 工具结果压缩 + 离线 lazy / 知识库精确 grep + glob / wiki 概念页 LLM 直读 / emoji → inline icon**。完整方案与决议见 `.cursor/plans/openhuman-借鉴_2026-05-18.plan.md`。

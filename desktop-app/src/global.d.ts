@@ -713,6 +713,12 @@ interface ElectronAPI {
   openMdFile: (avatarId: string, mdRelPath: string) => Promise<{ ok: boolean; error?: string }>
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => Promise<void>
   searchKnowledge: (avatarId: string, query: string) => Promise<SearchResult[]>
+  // Lorebook keyword-trigger（SillyTavern 借鉴）：装配 prompt 时按关键词被动注入知识片段
+  lorebookMatchAndBuild: (avatarId: string, userMessage: string) => Promise<{
+    text: string
+    charCount: number
+    entries: Array<{ knowledge: string; hits: string[]; chars: number; truncated: boolean }>
+  } | null>
   // GAP7: 知识文件 CRUD
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => Promise<void>
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => Promise<void>

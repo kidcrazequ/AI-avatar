@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -2019,6 +2019,20 @@ wrapHandler('write-knowledge-file', (_, avatarId: string, relativePath: string, 
 
 wrapHandler('search-knowledge', (_, avatarId: string, query: string) => {
   return getKnowledgeManager(avatarId).searchFiles(query)
+})
+
+// Lorebook keyword-trigger（SillyTavern 借鉴）：按 user message 关键词被动注入知识片段
+// 配置：avatars/<id>/knowledge/_triggers.yaml；缺失时返回 null（功能未启用）
+wrapHandler('lorebook:match-and-build', (_, avatarId: string, userMessage: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (typeof userMessage !== 'string' || userMessage.length === 0) return null
+  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+  const cfg = loadTriggers(knowledgePath)
+  if (!cfg || cfg.triggers.length === 0) return null
+  const matches = matchTriggers(userMessage, cfg)
+  if (matches.length === 0) return null
+  const retriever = new KnowledgeRetriever(knowledgePath)
+  return buildTriggerInjection(matches, retriever, cfg.total_max_chars)
 })
 
 wrapHandler('create-knowledge-file', (_, avatarId: string, relativePath: string, content?: string) => {

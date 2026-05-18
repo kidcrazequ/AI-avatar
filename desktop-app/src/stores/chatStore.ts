@@ -3064,7 +3064,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 两段都进 stable 段享受 prompt cache；guide 放在 HARD_RULES 之后、systemPrompt 之前，
     // 保持"先红线，再行为指引，再人格"的语义序。
     const stableSystemText = HARD_RULES + '\n\n' + DELIBERATION_GUIDE + '\n\n' + systemPrompt
-    const dynamicSystemText = dynamicAppended + snipNoticeBlock
+
+    // Lorebook keyword-trigger（SillyTavern 借鉴）：按 user message 关键词命中
+    // _triggers.yaml 配置后注入对应知识片段到 dynamic 段（不打 cache，每次重算）。
+    // 未配置 / 未命中 / 调用失败时 lorebookText 为空，不影响主流程。
+    let lorebookText = ''
+    try {
+      if (typeof content === 'string' && content.length > 0) {
+        const inj = await window.electronAPI.lorebookMatchAndBuild(avatarId, content)
+        if (inj && inj.text) {
+          lorebookText = '\n\n' + inj.text
+        }
+      }
+    } catch (lorebookErr) {
+      // 注入失败不阻塞 user message
+      void lorebookErr
+    }
+    const dynamicSystemText = dynamicAppended + lorebookText + snipNoticeBlock
 
     // agent-runtime 观测接入：保留原有 stats 上报，flag off 时无副作用
     try {

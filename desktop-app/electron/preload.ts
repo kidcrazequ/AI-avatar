@@ -257,6 +257,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('knowledge:open-md-file', avatarId, mdRelPath),
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => ipcRenderer.invoke('write-knowledge-file', avatarId, relativePath, content),
   searchKnowledge: (avatarId: string, query: string) => ipcRenderer.invoke('search-knowledge', avatarId, query),
+  // Lorebook keyword-trigger（SillyTavern 借鉴）：在 chatStore 装配 prompt 时调，
+  // 命中 _triggers.yaml 配置的关键词后返回注入文本；未配置/未命中返回 null
+  lorebookMatchAndBuild: (avatarId: string, userMessage: string) =>
+    ipcRenderer.invoke('lorebook:match-and-build', avatarId, userMessage),
   // GAP7: 知识文件 CRUD（之前缺失）
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => ipcRenderer.invoke('create-knowledge-file', avatarId, relativePath, content),
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => ipcRenderer.invoke('delete-knowledge-file', avatarId, relativePath),

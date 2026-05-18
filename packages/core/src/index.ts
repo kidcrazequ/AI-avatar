@@ -372,5 +372,19 @@ export type {
   EpisodeForgettingWeights,
 } from './memory/episode-forgetter'
 
+// Lorebook keyword-trigger（SillyTavern 借鉴）：user message 命中 keyword 时
+// 被动注入对应知识片段到 prompt，补 BM25/向量召回漏 + 需 LLM 主动 grep 的短板
+export {
+  loadTriggers,
+  matchTriggers,
+  buildTriggerInjection,
+} from './lorebook-trigger'
+export type {
+  TriggerEntry,
+  TriggersConfig,
+  TriggerMatch,
+  TriggerInjection,
+} from './lorebook-trigger'
+
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）
 export * as AgentRuntime from './agent-runtime'

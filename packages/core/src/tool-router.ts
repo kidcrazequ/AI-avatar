@@ -4429,6 +4429,9 @@ ${content}` }
     const task = args.task as string
     if (!task) return { content: '', error: '缺少 task 参数' }
 
+    // v18 CrewAI 借鉴：可选 expected_output 描述（自然语言；非空时注入子代理 userPrompt）
+    const expectedOutput = typeof args.expected_output === 'string' ? args.expected_output.trim() : ''
+
     if (!callLLM) {
       return { content: `[子任务已记录] 任务描述：${task}\n\n由于当前无 LLM 调用权限，请在主对话中直接完成此任务。` }
     }
@@ -4501,7 +4504,9 @@ ${content}` }
         }
       : undefined
 
-    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM, onChange)
+    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM, onChange, {
+      ...(expectedOutput ? { expectedOutput } : {}),
+    })
 
     // 基于事件通知等待完成，无轮询
     const TIMEOUT_MS = 30000

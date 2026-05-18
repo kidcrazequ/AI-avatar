@@ -1388,6 +1388,10 @@ IR 语法（markdown + 扩展）：
             type: 'string',
             description: '可选。目标分身 ID（如 "design-master"）。不传则沿用当前分身。目标分身不存在时会返回错误并列出可用分身。',
           },
+          expected_output: {
+            type: 'string',
+            description: '可选。自然语言描述期望的输出格式 / 结构 / 必填字段，例如 "返回 Markdown 表格列：方案名 / 投资额 / 回报年限 / 风险等级" 或 "JSON 数组每项含 name+priority+reason 三字段"。子代理 LLM 在生成时遵循。跨分身派单时强烈建议传——能可靠地结构化结果，避免主代理事后解析 free-form 文本失败。',
+          },
         },
         required: ['task'],
       },

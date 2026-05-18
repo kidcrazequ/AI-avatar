@@ -21,6 +21,18 @@ export interface SubAgentTask {
   error?: string
   startedAt?: number
   finishedAt?: number
+  /**
+   * v18 CrewAI 借鉴：期望输出格式的自然语言描述（如 "返回 Markdown 表格列 A/B/C"）。
+   * 由主代理（如调枢 orchestrator）在派单时声明，子代理 LLM 在生成时遵循。
+   * 不做机器校验——CrewAI 同款"软约束 + LLM 自觉"模式。
+   */
+  expectedOutput?: string
+}
+
+/** delegate 可选参数 */
+export interface SubAgentDelegateOptions {
+  /** 期望输出格式描述；非空时注入到子代理的 userPrompt 末尾 */
+  expectedOutput?: string
 }
 
 /** LLM 调用函数类型 */
@@ -60,22 +72,25 @@ export class SubAgentManager {
     task: string,
     systemPrompt: string,
     callLLM: LLMCallFn,
-    onChange?: SubAgentChangeFn
+    onChange?: SubAgentChangeFn,
+    options?: SubAgentDelegateOptions,
   ): Promise<SubAgentTask> {
     if (this.destroyed) {
       throw new Error('SubAgentManager 已销毁，无法委派新任务')
     }
     const id = `sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const expectedOutput = options?.expectedOutput?.trim()
     const agentTask: SubAgentTask = {
       id,
       task,
       status: 'running',
       startedAt: Date.now(),
+      ...(expectedOutput ? { expectedOutput } : {}),
     }
     this.tasks.set(id, agentTask)
     this.fireChange(onChange, agentTask)
 
-    this.runTask(id, task, systemPrompt, callLLM, onChange).catch((err) => {
+    this.runTask(id, task, systemPrompt, callLLM, onChange, expectedOutput).catch((err) => {
       console.error(`[SubAgentManager] 子代理任务异常退出 (${id}):`, err instanceof Error ? err.message : String(err))
     })
 
@@ -182,13 +197,18 @@ export class SubAgentManager {
     task: string,
     systemPrompt: string,
     callLLM: LLMCallFn,
-    onChange?: SubAgentChangeFn
+    onChange?: SubAgentChangeFn,
+    expectedOutput?: string,
   ): Promise<void> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
     try {
+      // v18 CrewAI 借鉴：expectedOutput 注入到 userPrompt 末尾（不改 systemPrompt 保 cache 命中）
+      const outputDirective = expectedOutput
+        ? `\n\n【输出格式约束 / expected_output】\n${expectedOutput}\n严格按上述格式输出，不要添加额外解释。`
+        : ''
       const llmPromise = callLLM(
         systemPrompt,
-        `请独立完成以下子任务，只输出结果，不需要解释你的思考过程：\n\n${task}`,
+        `请独立完成以下子任务，只输出结果，不需要解释你的思考过程：\n\n${task}${outputDirective}`,
         2000
       )
       const timeoutPromise = new Promise<never>((_, reject) => {

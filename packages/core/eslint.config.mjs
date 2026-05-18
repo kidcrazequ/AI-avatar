@@ -28,15 +28,15 @@ export default tseslint.config(
       'default-case': 'warn',
       'eqeqeq': ['error', 'always'],
       'no-var': 'error',
+      // 空 catch 允许：项目惯用 `} catch { /* 注释 */ }` 表达"有意识静默"，
+      // 但自定义 no-restricted-syntax 的 AST 选择器无法识别注释、会误报。
+      // 约定层面要求 catch body 写注释说明忽略原因（非机械强制）。
+      'no-empty': ['error', { allowEmptyCatch: true }],
 
       'no-restricted-syntax': ['error',
         {
           selector: "CallExpression[callee.property.name='slice'][callee.object.callee.property.name='toISOString']",
           message: '禁止 toISOString().slice() 获取日期，应使用 localDateString() 避免 UTC 时区偏移',
-        },
-        {
-          selector: "CatchClause[body.body.length=0]",
-          message: '禁止空 catch 块，至少记录日志或添加注释说明忽略原因',
         },
       ],
     },

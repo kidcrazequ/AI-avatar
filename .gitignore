@@ -50,6 +50,9 @@ avatars/
 # Claude Code worktree 与会话元数据（多 agent 工作时自动生成，本地存活即可）
 .claude/
 
+# Cursor hooks 运行时 state（时间戳 / generation id 等本地状态，跨机器无意义）
+.cursor/hooks/state/
+
 # 大文件资产与归档（超过 GitHub 100MB 硬限制，禁止入库）
 assets/*.mp4
 assets/*.mov

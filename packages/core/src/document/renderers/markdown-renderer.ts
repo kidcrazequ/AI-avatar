@@ -110,6 +110,11 @@ function renderBlock(block: DocumentBlock): string {
       return renderImage(block.src, block.alt, block.caption)
     case 'divider':
       return '---'
+    default: {
+      // TS exhaustiveness check：未来 DocumentBlock 加新 type 但忘了在此处理，编译期会报错
+      const _never: never = block
+      throw new Error(`未覆盖的 block.type: ${(_never as { type: string }).type}`)
+    }
   }
 }
 

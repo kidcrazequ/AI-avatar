@@ -219,7 +219,9 @@ export function cleanLlmOutput(text: string): string {
   cleaned = cleaned.replace(/🔧/g, '')
 
   // 最后广泛去除剩余 emoji
-  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/gu, '')
+  // emoji range 与 variation selectors 拆两步，避免 no-misleading-character-class
+  cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F000}-\u{1F02F}\u{1F0A0}-\u{1F0FF}]/gu, '')
+  cleaned = cleaned.replace(/[\u{FE00}-\u{FE0F}]/gu, '')
 
   return cleaned.trim()
 }

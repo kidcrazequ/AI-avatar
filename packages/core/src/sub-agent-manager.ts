@@ -214,12 +214,13 @@ export class SubAgentManager {
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle)
-      if (this.destroyed) return
-      const timer = setTimeout(() => {
-        this.tasks.delete(id)
-        this.cleanupTimers.delete(id)
-      }, 5 * 60 * 1000)
-      this.cleanupTimers.set(id, timer)
+      if (!this.destroyed) {
+        const timer = setTimeout(() => {
+          this.tasks.delete(id)
+          this.cleanupTimers.delete(id)
+        }, 5 * 60 * 1000)
+        this.cleanupTimers.set(id, timer)
+      }
     }
   }
 }

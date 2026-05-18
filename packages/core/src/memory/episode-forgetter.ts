@@ -119,6 +119,8 @@ export function applyEpisodeAlgorithmicForgetting(
 ): { episodes: ConversationEpisode[]; changedIds: string[] } {
   const changedIds: string[] = []
   const updated = episodes.map((ep) => {
+    // pinned 跳过遗忘衰减（v18 Letta-style）：被 agent 主动 pin 的 episode 必须永久保留
+    if (ep.pinned) return ep
     const prob = computeEpisodeForgetProbability(ep, now, weights)
     const newStatus = probabilityToEpisodeStatus(prob, weights)
     if (newStatus === ep.consolidationStatus) return ep

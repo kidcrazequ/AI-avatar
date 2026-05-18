@@ -174,3 +174,103 @@ export function shouldExtractEpisode(
   if (!existing) return true
   return currentMessageCount > existing.messageCount
 }
+
+// ─── agent self-edit API（v18 Letta-style）────────────────────────────────────
+
+/** pin 数量上限：防 LLM 把所有 episode 都 pin 爆 system prompt */
+export const MAX_PINNED_EPISODES_PER_AVATAR = 20
+/** 单 episode 最多笔记条数 */
+export const MAX_NOTES_PER_EPISODE = 5
+/** 单条笔记字符上限 */
+export const MAX_NOTE_LENGTH = 500
+/** pin reason 字符上限 */
+export const MAX_PIN_REASON_LENGTH = 300
+
+export type PinEpisodeResult =
+  | { ok: true; alreadyPinned: boolean; totalPinned: number }
+  | { ok: false; error: string }
+
+/**
+ * Pin 一条 episode。
+ *
+ * 语义：被 pin 的 episode 在 system prompt 注入时永远排在前面（PINNED_BONUS），
+ * 且不会被 forgetter 衰减为 blurred/forgotten。
+ *
+ * 设计原则：
+ *   - **不提供 unpin**：防止 LLM 自我审查删除负面记忆。需要清理由人工编辑 .json 文件。
+ *   - **幂等**：重复 pin 返回 alreadyPinned: true，不报错也不刷新 pinnedAt。
+ *   - **数量上限**：达到 MAX_PINNED_EPISODES_PER_AVATAR 后拒绝 pin，强制 LLM 取舍。
+ */
+export async function pinConversationEpisode(
+  avatarsPath: string,
+  avatarId: string,
+  conversationId: string,
+  reason: string,
+): Promise<PinEpisodeResult> {
+  const ep = await readConversationEpisode(avatarsPath, avatarId, conversationId)
+  if (!ep) return { ok: false, error: `episode 不存在: ${conversationId}` }
+
+  if (ep.pinned) {
+    const all = await listConversationEpisodes(avatarsPath, avatarId)
+    return { ok: true, alreadyPinned: true, totalPinned: all.filter(e => e.pinned).length }
+  }
+
+  const all = await listConversationEpisodes(avatarsPath, avatarId)
+  const pinnedCount = all.filter(e => e.pinned).length
+  if (pinnedCount >= MAX_PINNED_EPISODES_PER_AVATAR) {
+    return {
+      ok: false,
+      error: `已达 pin 上限（${MAX_PINNED_EPISODES_PER_AVATAR} 条）；本框架不提供 unpin 工具，需人工编辑 episodes/*.json 解 pin 后才能 pin 新的`,
+    }
+  }
+
+  const sanitizedReason = String(reason ?? '').trim().slice(0, MAX_PIN_REASON_LENGTH)
+  const updated: ConversationEpisode = {
+    ...ep,
+    pinned: true,
+    pinReason: sanitizedReason,
+    pinnedAt: Date.now(),
+  }
+  await writeConversationEpisode(avatarsPath, updated)
+  return { ok: true, alreadyPinned: false, totalPinned: pinnedCount + 1 }
+}
+
+export type AppendNoteResult =
+  | { ok: true; totalNotes: number }
+  | { ok: false; error: string }
+
+/**
+ * 给 episode 追加一条 agent 补充笔记。
+ *
+ * 设计原则：
+ *   - **不覆盖** LLM 抽取的 summary / keyQuotes 等字段；只在 notes[] 后面追加
+ *   - 单条笔记 MAX_NOTE_LENGTH 字符上限，整 episode 最多 MAX_NOTES_PER_EPISODE 条
+ *   - 空白笔记直接拒绝
+ */
+export async function appendConversationEpisodeNote(
+  avatarsPath: string,
+  avatarId: string,
+  conversationId: string,
+  note: string,
+): Promise<AppendNoteResult> {
+  const trimmed = String(note ?? '').trim()
+  if (!trimmed) return { ok: false, error: '笔记不能为空' }
+  if (trimmed.length > MAX_NOTE_LENGTH) {
+    return { ok: false, error: `笔记过长，上限 ${MAX_NOTE_LENGTH} 字符（当前 ${trimmed.length}）` }
+  }
+
+  const ep = await readConversationEpisode(avatarsPath, avatarId, conversationId)
+  if (!ep) return { ok: false, error: `episode 不存在: ${conversationId}` }
+
+  const existingNotes = ep.notes ?? []
+  if (existingNotes.length >= MAX_NOTES_PER_EPISODE) {
+    return { ok: false, error: `本 episode 笔记已达上限（${MAX_NOTES_PER_EPISODE} 条）` }
+  }
+
+  const updated: ConversationEpisode = {
+    ...ep,
+    notes: [...existingNotes, { text: trimmed, ts: Date.now() }],
+  }
+  await writeConversationEpisode(avatarsPath, updated)
+  return { ok: true, totalNotes: updated.notes!.length }
+}

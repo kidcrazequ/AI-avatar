@@ -69,6 +69,16 @@ export interface ConversationEpisode {
   extractedAt: number
   /** 抽取时该会话的消息条数——下次若 > 此值才需要重抽 */
   messageCount: number
+
+  // ─── agent self-edit（v18 Letta-style；可选字段，向后兼容旧 episode） ───
+  /** 是否被 agent 主动 pin 住——pin 后永远进 system prompt 且不被 forgetter 衰减 */
+  pinned?: boolean
+  /** pin 的原因（agent 提供，便于人工审计） */
+  pinReason?: string
+  /** pin 时间戳（毫秒） */
+  pinnedAt?: number
+  /** agent 主动补充的笔记（LLM 抽完 summary 后才意识到漏掉的关键事实） */
+  notes?: Array<{ text: string; ts: number }>
 }
 
 /**

@@ -36,7 +36,24 @@ export interface SalienceInput {
   recencyFactor: number
   /** 整理状态 */
   status: SalienceStatus
+  /**
+   * v18 Letta-style：被 agent pin 住的条目。
+   * pinned=true 时：
+   *   - 跳过 forgotten 早返回（pinned forgotten 仍参与排序）
+   *   - recency 强制为 1.0（不衰减时间因子）
+   *   - status 衰减 / blurredPenalty 被绕过
+   *   - 最终分加上 PINNED_BONUS（确保排在所有非 pinned 之前）
+   * pinned 之间仍按 importance + emotion 排序。
+   */
+  pinned?: boolean
 }
+
+/**
+ * pin 加成分：让 pinned 项稳定排在非 pinned 项之前。
+ * 非 pinned 最大值约 = importance(10) * 1.0 + emotion(10) * 0.3 = 13；
+ * 设 50 确保任何非 pinned 都比最低 pinned 低。
+ */
+export const PINNED_SALIENCE_BONUS = 50
 
 /** 评分权重，可全局微调 */
 export interface SalienceWeights {
@@ -65,12 +82,17 @@ export function computeSalience(
   input: SalienceInput,
   weights: SalienceWeights = DEFAULT_SALIENCE_WEIGHTS,
 ): number {
-  if (input.status === 'forgotten') return 0
+  // pinned 跳过 forgotten 早返回（保护性进 prompt）；非 pinned forgotten 直接归零
+  if (input.status === 'forgotten' && !input.pinned) return 0
   const importance = sanitize(input.importance)
   const emotion = sanitize(input.emotionMagnitude)
-  const recency = sanitizeUnit(input.recencyFactor)
-  const statusFactor = input.status === 'blurred' ? weights.blurredPenalty : 1
-  return (importance * weights.importanceWeight + emotion * weights.emotionWeight) * recency * statusFactor
+  // pinned 不衰减时间因子和状态因子
+  const recency = input.pinned ? 1 : sanitizeUnit(input.recencyFactor)
+  const statusFactor = input.pinned
+    ? 1
+    : (input.status === 'blurred' ? weights.blurredPenalty : 1)
+  const base = (importance * weights.importanceWeight + emotion * weights.emotionWeight) * recency * statusFactor
+  return input.pinned ? base + PINNED_SALIENCE_BONUS : base
 }
 
 function sanitize(x: number): number {

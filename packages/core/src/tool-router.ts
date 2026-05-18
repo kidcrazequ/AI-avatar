@@ -10,7 +10,11 @@ import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
 import { CompositeKnowledgeRetriever } from './composite-knowledge-retriever'
 import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
-import { listConversationEpisodes } from './memory/episode-store'
+import {
+  listConversationEpisodes,
+  pinConversationEpisode,
+  appendConversationEpisodeNote,
+} from './memory/episode-store'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -961,6 +965,10 @@ export class ToolRouter {
           result = await this.readLifeEpisode(avatarId, args); break
         case 'recall_conversation':
           result = await this.recallConversation(avatarId, args); break
+        case 'pin_episode':
+          result = await this.pinEpisodeTool(avatarId, args); break
+        case 'add_episode_note':
+          result = await this.addEpisodeNoteTool(avatarId, args); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -1897,6 +1905,65 @@ ${content}` }
         lines.push('')
       }
       return { content: lines.join('\n') }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * pin_episode：agent 主动把一条 episode 标记为长期保留（v18 Letta-style）。
+   *
+   * pin 后该 episode：
+   *   - 永远进 system prompt 的「我和你的过去」段，无视 salience 排名
+   *   - 不会被 episode-forgetter 衰减为 blurred/forgotten
+   *
+   * 设计原则：**不提供 unpin 工具**——防止 LLM 自我审查删除负面记忆。
+   * 达到 MAX_PINNED_EPISODES_PER_AVATAR 上限后拒绝 pin，强制 LLM 取舍。
+   *
+   * 入参：
+   *   - conversation_id (string): 必填，要 pin 的 episode 所属会话 ID
+   *   - reason (string): 必填，pin 的理由（≤ 300 字，便于人工审计）
+   */
+  private async pinEpisodeTool(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const conversationId = typeof args.conversation_id === 'string' ? args.conversation_id.trim() : ''
+    const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
+    if (!conversationId) return { content: '', error: '缺少 conversation_id 参数' }
+    if (!reason) return { content: '', error: '缺少 reason 参数——必须说明 pin 的理由' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const res = await pinConversationEpisode(this.avatarsPath, avatarId, conversationId, reason)
+      if (!res.ok) return { content: '', error: res.error }
+      if (res.alreadyPinned) {
+        return { content: `[pin_episode] conversation_id=${conversationId} 已经处于 pinned 状态（幂等返回）。当前共 ${res.totalPinned} 条 pinned。` }
+      }
+      return { content: `[pin_episode] 已 pin episode ${conversationId}。当前共 ${res.totalPinned} 条 pinned；本框架不提供 unpin 工具，需人工编辑 .json 才能解除。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_episode_note：给已有 episode 追加 agent 主动补充的笔记（v18 Letta-style）。
+   *
+   * 设计目的：LLM 抽取 summary 时可能漏掉一些用户重视的事实，事后意识到时可补 note。
+   * 不覆盖 summary / keyQuotes 等原字段；只在 notes[] 末尾追加。
+   *
+   * 入参：
+   *   - conversation_id (string): 必填
+   *   - note (string): 必填，≤ MAX_NOTE_LENGTH 字符
+   */
+  private async addEpisodeNoteTool(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const conversationId = typeof args.conversation_id === 'string' ? args.conversation_id.trim() : ''
+    const note = typeof args.note === 'string' ? args.note : ''
+    if (!conversationId) return { content: '', error: '缺少 conversation_id 参数' }
+    if (!note.trim()) return { content: '', error: '缺少 note 参数' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const res = await appendConversationEpisodeNote(this.avatarsPath, avatarId, conversationId, note)
+      if (!res.ok) return { content: '', error: res.error }
+      return { content: `[add_episode_note] 已为 episode ${conversationId} 追加笔记。当前共 ${res.totalNotes} 条 notes。` }
     } catch (err) {
       return { content: '', error: err instanceof Error ? err.message : String(err) }
     }

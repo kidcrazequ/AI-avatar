@@ -1103,6 +1103,38 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // v18 Letta-style：agent 主动 pin 一条 episode，让它永远进 system prompt 且不被遗忘
+    type: 'function',
+    function: {
+      name: 'pin_episode',
+      description: '把一条对话情景记忆永久 pin 住——pin 后该 episode 永远进 system prompt 并不被遗忘曲线衰减。仅在用户明确表达"这件事我希望你长期记住" / 这次对话承载关键事实 / 用户传达了重要的偏好 / 出现重大事件（如签合同/确诊/搬家）时主动调用，日常聊天不要乱 pin。每个分身 pinned 总数上限 20，本框架不提供 unpin（防止自我审查删除负面记忆），用前先想清楚。返回成功 / 已 pin 过 / 已达上限错误。',
+      parameters: {
+        type: 'object',
+        properties: {
+          conversation_id: { type: 'string', description: '要 pin 的 episode 所属会话 ID（用 recall_conversation 检索结果里的 conversation_id；当前会话 ID 也可从上下文推断）' },
+          reason: { type: 'string', description: 'pin 的理由（≤ 300 字）。说明这条记忆为什么值得永久保留，便于人工审计' },
+        },
+        required: ['conversation_id', 'reason'],
+      },
+    },
+  },
+  {
+    // v18 Letta-style：agent 主动给已有 episode 追加笔记（不覆盖 LLM 抽取的 summary/quotes）
+    type: 'function',
+    function: {
+      name: 'add_episode_note',
+      description: '给已存在的对话情景记忆追加一条 agent 笔记。适用场景：你抽取 summary 后才意识到漏掉了关键事实 / 用户后续补充了重要信息 / 你对那次对话有事后反思。不覆盖原 summary / keyQuotes 字段，只在 notes[] 末尾追加。单条 ≤ 500 字符，每个 episode 最多 5 条笔记。',
+      parameters: {
+        type: 'object',
+        properties: {
+          conversation_id: { type: 'string', description: '目标 episode 所属会话 ID' },
+          note: { type: 'string', description: '要追加的笔记内容，≤ 500 字符' },
+        },
+        required: ['conversation_id', 'note'],
+      },
+    },
+  },
+  {
     type: 'function',
     function: {
       name: 'list_design_systems',

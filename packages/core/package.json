@@ -16,9 +16,10 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --test dist/tests/core.test.js dist/tests/skill-reranker.test.js dist/tests/tool-permission-policy.test.js dist/tests/tool-router.export-excel.test.js dist/tests/document-ir.test.js dist/tests/tool-router.generate-document.test.js dist/tests/life-store.test.js dist/tests/life-forgetter.test.js dist/tests/life-generator.test.js dist/tests/life-density.test.js dist/tests/life-grower.test.js dist/tests/soul-loader.test.js dist/tests/structured-memory.test.js dist/tests/avatar-quality-scores.test.js",
+    "test": "node --test $(find dist/tests -name '*.test.js' ! -name 'journey.test.js')",
     "test:cleaner": "node --test dist/tests/ocr-html-cleaner.test.js",
-    "test:all": "node --test dist/tests/core.test.js dist/tests/ocr-html-cleaner.test.js dist/tests/skill-reranker.test.js dist/tests/tool-permission-policy.test.js dist/tests/tool-router.export-excel.test.js dist/tests/document-ir.test.js dist/tests/tool-router.generate-document.test.js dist/tests/life-store.test.js dist/tests/life-forgetter.test.js dist/tests/life-generator.test.js dist/tests/life-density.test.js dist/tests/life-grower.test.js dist/tests/soul-loader.test.js dist/tests/structured-memory.test.js dist/tests/avatar-quality-scores.test.js",
+    "test:integration": "node --test dist/tests/journey.test.js",
+    "test:all": "npm run test && npm run test:integration",
     "test:import-perf-sim": "npx --yes tsx ../../testdocs/import-perf-sim.ts",
     "test:knowledge-score": "npx --yes tsx ../../testdocs/knowledge-quality-rescore.js",
     "test:knowledge-score-compare": "npx --yes tsx ../../testdocs/knowledge-quality-score-compare.js",

@@ -69,14 +69,18 @@ describe('chunk-cache', () => {
 
   it('类型不合法的项被跳过，合法项保留', () => {
     withTempDir((dir) => {
-      // 手工构造一个混合 valid/invalid 的 JSON
+      // 手工构造一个 v2 包装、tokens 内混合 valid/invalid 的 JSON
       const obj = {
-        valid1: ['a', 'b'],
-        invalid1: 'not an array',
-        invalid2: [1, 2, 3],         // numbers not strings
-        invalid3: ['ok', 99, 'bad'], // mixed
-        valid2: ['c'],
-        invalid4: null,
+        v: 2,
+        tokenizer: 'nodejieba',
+        tokens: {
+          valid1: ['a', 'b'],
+          invalid1: 'not an array',
+          invalid2: [1, 2, 3],         // numbers not strings
+          invalid3: ['ok', 99, 'bad'], // mixed
+          valid2: ['c'],
+          invalid4: null,
+        },
       }
       fs.writeFileSync(path.join(dir, TOKENS_FILE), JSON.stringify(obj))
       const loaded = loadTokensCache(dir)

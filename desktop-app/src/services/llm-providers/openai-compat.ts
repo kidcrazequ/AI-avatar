@@ -128,6 +128,7 @@ export class OpenAICompatProvider implements LLMProvider {
       let fullText = ''
       let reasoningText = ''
       const toolCallsMap = new Map<number, ToolCall>()
+      let normalizedUsage: import('./types').NormalizedUsage | undefined
 
       const parser = createParser({
         onEvent: (event) => {
@@ -148,6 +149,12 @@ export class OpenAICompatProvider implements LLMProvider {
               console.info(
                 `[llm-cache] provider=openai-compat prompt_tokens=${total} cache_hit=${hit} cache_miss=${miss} hit_ratio=${(hitRatio * 100).toFixed(1)}% completion=${u.completion_tokens ?? '?'}`,
               )
+              // OpenAI/DeepSeek 的 prompt_tokens 已含 cache hit；归一化时把 inputTokens 拆成 miss + cacheRead
+              normalizedUsage = {
+                inputTokens: miss,
+                outputTokens: u.completion_tokens ?? 0,
+                cacheReadTokens: hit,
+              }
             }
 
             const delta = data.choices?.[0]?.delta
@@ -201,7 +208,7 @@ export class OpenAICompatProvider implements LLMProvider {
             .map(([, v]) => v)
         : undefined
 
-      onDone(fullText, toolCalls, reasoningText || undefined)
+      onDone(fullText, toolCalls, reasoningText || undefined, normalizedUsage)
     } catch (error) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         onError(new Error('网络连接失败，请检查网络和 API 地址'))

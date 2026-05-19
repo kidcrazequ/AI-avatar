@@ -19,9 +19,29 @@ import {
   TelemetryCollector,
   type TelemetryEvent,
   type MessageDoneEvent,
+  type UsageEvent,
 } from '../regression-telemetry'
 import type { NormalizedUsage } from '../llm-providers/types'
 import type { Sample, Solver, SolverOutput } from './types'
+
+/**
+ * 默认 usage 提取器：把所有 UsageEvent 累加（多轮 tool-use 会出多条），
+ * 输出最后一轮的 model（同一会话通常不切换 model；切换则按最后一条为准）。
+ *
+ * 用法：传给 makeChatSolver({ extractUsage: defaultExtractUsage })，或自行覆写。
+ */
+export function defaultExtractUsage(events: TelemetryEvent[]): { usage: NormalizedUsage; model?: string } | undefined {
+  const usageEvents = events.filter((e): e is UsageEvent => e.type === 'usage')
+  if (usageEvents.length === 0) return undefined
+  const acc: NormalizedUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }
+  for (const e of usageEvents) {
+    acc.inputTokens += e.usage.inputTokens || 0
+    acc.outputTokens += e.usage.outputTokens || 0
+    acc.cacheReadTokens = (acc.cacheReadTokens ?? 0) + (e.usage.cacheReadTokens ?? 0)
+    acc.cacheCreationTokens = (acc.cacheCreationTokens ?? 0) + (e.usage.cacheCreationTokens ?? 0)
+  }
+  return { usage: acc, model: usageEvents[usageEvents.length - 1].model }
+}
 
 export interface ChatSolverDeps {
   /** 默认绑定的 avatarId（Sample.metadata.avatarId 可覆盖） */
@@ -35,11 +55,11 @@ export interface ChatSolverDeps {
   /** 单条超时 ms（默认 180_000） */
   perSampleTimeoutMs?: number
   /**
-   * 可选 usage 提取器：从 telemetry 事件流推出本次 token 用量。
-   * Soul 当前 telemetry 不带 usage（chatStore 没 emit），所以默认拿不到。
-   * 等 chatStore 加 'usage' 事件后，传一个解析函数即可让 cost-tracker 自动接上。
+   * 可选 usage 提取器：从 telemetry 事件流推出本次 token 用量与最后一轮 model。
+   * 默认走 defaultExtractUsage（消费 chatStore 发的 UsageEvent）；
+   * mock 测试或要自定义聚合策略时可覆写。
    */
-  extractUsage?: (events: TelemetryEvent[]) => NormalizedUsage | undefined
+  extractUsage?: (events: TelemetryEvent[]) => { usage: NormalizedUsage; model?: string } | undefined
   /** conversationId 前缀（默认 'eval-'） */
   conversationIdPrefix?: string
 }
@@ -76,6 +96,7 @@ function abortable<T>(p: Promise<T>, signal: AbortSignal, label: string): Promis
 export function makeChatSolver(deps: ChatSolverDeps): Solver<string> {
   const timeoutMs = deps.perSampleTimeoutMs ?? 180_000
   const prefix = deps.conversationIdPrefix ?? 'eval-'
+  const extract = deps.extractUsage ?? defaultExtractUsage
 
   return async (sample: Sample<string, unknown>, parentSignal?: AbortSignal): Promise<SolverOutput> => {
     const avatarId = (sample.metadata?.avatarId as string | undefined) ?? deps.defaultAvatarId
@@ -134,12 +155,13 @@ export function makeChatSolver(deps: ChatSolverDeps): Solver<string> {
 
     const msgDone = events.find((e): e is MessageDoneEvent => e.type === 'message-done')
     const text = (msgDone?.content ?? '').slice(0, 4096)
-    const usage = deps.extractUsage?.(events)
+    const extracted = extract(events)
 
     return {
       text,
-      usage,
-      model: deps.model,
+      usage: extracted?.usage,
+      // 模型优先用 telemetry 中最后一轮 model（每轮可能不同）；fallback 到 deps.model
+      model: extracted?.model ?? deps.model,
       toolEvents: events,
       durationMs: finishedAt - startedAt,
       error,

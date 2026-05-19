@@ -79,6 +79,7 @@ export class ClaudeProvider implements LLMProvider {
       let reasoningText = ''
       /** 按 content_block 的 index 累积 tool_use 的 partial_json */
       const toolUseAcc = new Map<number, { id: string; name: string; partialJson: string }>()
+      let normalizedUsage: import('./types').NormalizedUsage | undefined
 
       for await (const event of stream as AsyncIterable<MessageStreamEvent>) {
         if (event.type === 'content_block_start') {
@@ -115,6 +116,12 @@ export class ClaudeProvider implements LLMProvider {
           console.info(
             `[llm-cache] provider=anthropic input_tokens=${input} cache_read=${cacheRead} cache_creation=${cacheCreation} hit_ratio=${(hitRatio * 100).toFixed(1)}% output_tokens=${u.output_tokens ?? '?'}`,
           )
+          normalizedUsage = {
+            inputTokens: input,
+            outputTokens: u.output_tokens ?? 0,
+            cacheReadTokens: cacheRead,
+            cacheCreationTokens: cacheCreation,
+          }
         }
       }
 
@@ -128,7 +135,7 @@ export class ClaudeProvider implements LLMProvider {
             }))
         : undefined
 
-      onDone(fullText, toolCalls, reasoningText || undefined)
+      onDone(fullText, toolCalls, reasoningText || undefined, normalizedUsage)
     } catch (error) {
       onError(mapAnthropicError(error))
     }

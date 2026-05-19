@@ -18,6 +18,7 @@ import {
   runEval,
   staticSolver,
   defaultScorers,
+  defaultExtractUsage,
   questionsToSamples,
   citationScorer,
   personaScorer,
@@ -30,6 +31,7 @@ import {
   type SolverOutput,
 } from './index'
 import type { FullTarget } from './scorers'
+import type { TelemetryEvent } from '../regression-telemetry'
 
 // ─── Scorers ────────────────────────────────────────────────────────────
 
@@ -252,6 +254,37 @@ test('loadFlowsAsSamples: 从 JSONL 文件读', async () => {
   const samples = await loadFlowsAsSamples(path)
   assert.strictEqual(samples.length, 1)
   assert.strictEqual(samples[0].input, 'hello')
+})
+
+// ─── defaultExtractUsage ────────────────────────────────────────────────
+
+test('defaultExtractUsage: 多轮 usage 事件累加，取最后一轮 model', () => {
+  const events: TelemetryEvent[] = [
+    {
+      type: 'usage', conversationId: 'c', timestamp: 1, round: 0,
+      model: 'claude-sonnet-4-6',
+      usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20 },
+    },
+    {
+      type: 'usage', conversationId: 'c', timestamp: 2, round: 1,
+      model: 'claude-opus-4-7',
+      usage: { inputTokens: 200, outputTokens: 80, cacheCreationTokens: 5 },
+    },
+  ]
+  const r = defaultExtractUsage(events)
+  assert.ok(r)
+  assert.strictEqual(r!.usage.inputTokens, 300)
+  assert.strictEqual(r!.usage.outputTokens, 130)
+  assert.strictEqual(r!.usage.cacheReadTokens, 20)
+  assert.strictEqual(r!.usage.cacheCreationTokens, 5)
+  assert.strictEqual(r!.model, 'claude-opus-4-7') // 最后一轮
+})
+
+test('defaultExtractUsage: 无 usage 事件返回 undefined', () => {
+  const r = defaultExtractUsage([
+    { type: 'message-done', conversationId: 'c', timestamp: 1, content: 'x' },
+  ])
+  assert.strictEqual(r, undefined)
 })
 
 test('parseFlowJsonl: 容忍空行与坏行', () => {

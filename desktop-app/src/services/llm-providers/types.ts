@@ -12,7 +12,16 @@
 import type { LLMMessage, ToolCall, ChatOptions } from '../llm-service'
 
 export type ChatChunkCallback = (text: string, kind?: 'content' | 'reasoning') => void
-export type ChatDoneCallback = (fullText: string, toolCalls?: ToolCall[], reasoningText?: string) => void
+/**
+ * onDone 第四个参数 usage：provider 把本轮归一化 token 用量透传出来，
+ * 上层（chatStore）据此 emit telemetry / cost-tracker。可为 undefined（mock provider 等）。
+ */
+export type ChatDoneCallback = (
+  fullText: string,
+  toolCalls?: ToolCall[],
+  reasoningText?: string,
+  usage?: NormalizedUsage,
+) => void
 export type ChatErrorCallback = (error: Error) => void
 
 /**

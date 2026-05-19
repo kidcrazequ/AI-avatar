@@ -40,6 +40,7 @@ export {
   makeChatSolver,
   staticSolver,
   withRegressionTelemetry,
+  defaultExtractUsage,
   type ChatSolverDeps,
 } from './solvers'
 export {

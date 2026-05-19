@@ -17,6 +17,8 @@
 
 // ─── 事件类型 ──────────────────────────────────────────────────────────
 
+import type { NormalizedUsage } from './llm-providers/types'
+
 export type TelemetryEventType =
   | 'conversation-started'
   | 'conversation-error'
@@ -26,6 +28,7 @@ export type TelemetryEventType =
   | 'tool-loop:hard-stop'
   | 'todo-write'
   | 'message-done'
+  | 'usage'
 
 interface BaseEvent {
   type: TelemetryEventType
@@ -92,6 +95,22 @@ export interface MessageDoneEvent extends BaseEvent {
   content: string
 }
 
+/**
+ * LLM 调用结束的 token usage（每轮一条；多轮 tool-use 会出多条）。
+ *
+ * 用途：
+ *   - eval 框架的 extractUsage(events) 汇总后喂 cost-tracker
+ *   - 单条会话的 prompt cache 命中率监控
+ */
+export interface UsageEvent extends BaseEvent {
+  type: 'usage'
+  /** 模型 ID（cost-tracker 据此查定价表） */
+  model: string
+  usage: NormalizedUsage
+  /** 当轮在多轮 tool-use 中的序号（0 起；非 tool 循环时只有 0） */
+  round?: number
+}
+
 export type TelemetryEvent =
   | ConversationStartedEvent
   | ConversationErrorEvent
@@ -101,6 +120,7 @@ export type TelemetryEvent =
   | ToolLoopHardStopEvent
   | TodoWriteEvent
   | MessageDoneEvent
+  | UsageEvent
 
 // ─── 总线 ──────────────────────────────────────────────────────────────
 

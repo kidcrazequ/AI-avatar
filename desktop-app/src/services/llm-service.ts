@@ -186,7 +186,12 @@ export class LLMService {
   async chat(
     messages: LLMMessage[],
     onChunk: (text: string, kind?: 'content' | 'reasoning') => void,
-    onDone: (fullText: string, toolCalls?: ToolCall[], reasoningText?: string) => void,
+    onDone: (
+      fullText: string,
+      toolCalls?: ToolCall[],
+      reasoningText?: string,
+      usage?: import('./llm-providers/types').NormalizedUsage,
+    ) => void,
     onError: (error: Error) => void,
     options: ChatOptions = {},
   ): Promise<void> {

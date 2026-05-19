@@ -3545,8 +3545,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               })
             }
           },
-          (_fullText, toolCalls, reasoning) => {
+          (_fullText, toolCalls, reasoning, usage) => {
             cancelPendingChunk()
+            // usage 在 isStale 之前先 emit：即便结果被丢弃，token 已经计费产生
+            if (usage) {
+              regressionTelemetry.emit({
+                type: 'usage',
+                conversationId,
+                timestamp: Date.now(),
+                model: effectiveModelConfig.model,
+                usage,
+                round,
+              })
+            }
             if (isStale()) {
               pendingToolCalls = undefined
               resolve()

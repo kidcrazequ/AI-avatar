@@ -10,6 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import type { BrowserWindow, IpcMain } from 'electron'
 import * as crypto from 'crypto'
 import type { Logger } from './logger'
+import { flowRecorder } from './flow-recorder'
 
 const DEFAULT_PORT = 18888
 const HOST = '127.0.0.1'
@@ -101,6 +102,8 @@ export function registerSoulProxyIpcHandlers(ipcMain: IpcMain): void {
       const job = pendingJobs.get(jobId)
       if (!job) return { ok: false }
       pendingJobs.delete(jobId)
+      // 录制器异步落盘，不阻塞 finish；recorder 内部已 try/catch
+      void flowRecorder.onFinish(jobId, payload)
       try {
         if (payload.error) {
           if (job.mode === 'sse') {
@@ -242,6 +245,13 @@ export function startSoulProxyServer(deps: SoulProxyServerDeps): void {
       conversationId: conversationId.trim(),
       body: parsed,
     }
+
+    // 录制：请求接收时缓冲（finish 时合并写盘）；disabled 时 O(1) 早退
+    flowRecorder.onRequest(jobId, {
+      conversationId: conversationId.trim(),
+      stream,
+      body: parsed,
+    })
 
     try {
       win.webContents.send('soul-proxy-api:run-request', payload)

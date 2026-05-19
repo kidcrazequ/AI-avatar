@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.17.0 (2026-05-19)
+
 > 第四波「2026 LLM 工具链借鉴」：Inspect AI / mitmproxy / LiteLLM 三件套落地。补 Soul 评测框架抽象不清晰、proxy 流量无法回放、跨 provider 成本不可见三个工程短板。`batch-regression-runner` 不动，新抽象并行落点。
 
 ### 新增（外部借鉴）

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+> 第四波「2026 LLM 工具链借鉴」：Inspect AI / mitmproxy / LiteLLM 三件套落地。补 Soul 评测框架抽象不清晰、proxy 流量无法回放、跨 provider 成本不可见三个工程短板。`batch-regression-runner` 不动，新抽象并行落点。
+
+### 新增（外部借鉴）
+
+- **Inspect-AI 风格 Task / Solver / Scorer 评测抽象（UK AISI `inspect_ai` 借鉴）** — 新模块 `desktop-app/src/services/eval/`（types / solvers / scorers / task / eval-log / adapter / dataset-from-flows / index）。三层抽象把 `batch-regression-runner.ts` 的"题库→断言"硬绑解开：`Sample(input, target, metadata)` + `Solver`（默认 `makeChatSolver` 走真实 chatStore 工作流；`staticSolver` 走查表回放） + `Scorer * N`（红线 2 + expectedTools / Skills / Value / mustContain / mustNotContain + citation + persona 共 7 个内置，组合自由）。`runEval(task)` 单入口，逐题写 JSONL eval log（header + sample * N + summary），与 Inspect `.eval` log 结构对齐。`questionsToSamples` 桥让老 `GeneratedQuestion[]` 不迁移即用。
+- **mitmproxy 风格 flow record / replay（mitmproxy `addon + flow` 借鉴）** — 新增 `desktop-app/electron/flow-recorder.ts`，模块级 `flowRecorder` 单例，默认 disabled emit 是 O(0)。`proxy-server.ts` 加 2 行 hook：onRequest 时缓冲 / onFinish 时合并为一行 JSONL append（含 request body / response.kind=json|sse|error / durationMs / conversationId）。`src/services/eval/dataset-from-flows.ts` 把录制流转 `Sample[]` 喂 `runEval` —— 直接解决离线/弱网回放 + 真实流量自动转回归题库两个场景。**v1 不录 SSE chunk**（reassemble 后续按需），不录 Authorization 头（防 token 泄漏）。
+- **LiteLLM 风格 cost-tracker（LiteLLM `model_prices.json` 借鉴）** — 新增 `desktop-app/src/services/llm-providers/cost-tracker.ts`。内置定价表 `DEFAULT_PRICING` 覆盖 Claude Opus/Sonnet/Haiku 4.x + DeepSeek chat/reasoner 共 5 个型号，单位 USD per 1M tokens，cache_read / cache_creation 单独价位（贴合 Anthropic prompt cache 10× 折扣 / +25% 加价）。API: `costTracker.record(avatarId, model, usage)` / `summary(avatarId?)` / `totalUsd()` / `setPricing(model, p)` / `reset()`。未知模型 token 仍计入、cost=0、按 model 名 dedupe warn 一次。`runEval(task, { trackCostsAs })` 一行接入。
+- **usage telemetry 端到端链路（接通上述三件套）** — `regression-telemetry.ts` 加 `UsageEvent` 类型（model + NormalizedUsage + round）。`ChatDoneCallback` 第四参数 `usage`（向后兼容可选）。`claude.ts` 在 message_delta 阶段把已计算的 input/output/cacheRead/cacheCreation 归一化透传；`openai-compat.ts` 把 prompt_tokens 拆成 cacheRead(hit) + inputTokens(miss)，贴合 LiteLLM 计价语义。`chatStore.ts` round 结束 emit UsageEvent。`eval/solvers.ts` 新 `defaultExtractUsage` 累加多轮 usage、取最后一轮 model，`makeChatSolver` 默认接入零配置。
+
+### 不做（speculative，按 simplicity 原则砍掉）
+
+- **LiteLLM Router YAML**：Soul 当前只有 claude + openai-compat 两个 provider，远未到痛点；等接第 3 个 provider 再做。
+- **mitmproxy SSE chunk 重组**：录制只存 request + 终态（json / error / sse-ok），增量 chunk 重组需 Anthropic SSE parser，v1 不做。
+- **batch-regression-runner 原地重写**：596 行业务耦合较深，新 eval 模块并行落点，老代码继续工作；后续按需迁移。
+
+### 测试
+
+- **24 新单测覆盖 3 个模块**：`src/services/eval/eval.test.ts` 15 个（含 2 个 defaultExtractUsage 用例 + 8 个 runEval/scorer + 2 个 adapter + 3 个 dataset-from-flows）+ `src/services/llm-providers/cost-tracker.test.ts` 6 个（含价位换算 / 累加分桶 / 未知模型 warn 去抖 / setPricing / undefined noop / DEFAULT_PRICING 覆盖断言）+ `electron/flow-recorder.test.ts` 5 个（disabled 零副作用 / JSON 响应 / error 分支 / SSE 分支 / 未对齐 finish 静默忽略）。
+- **0 回归**：老 telemetry + batch-regression-runner + manual-qa 等测试套件 50/50 全绿。
+- **tsc clean**：`npx tsc --noEmit` 零错误。
+
 ## v0.16.0 (2026-05-19)
 
 > Letta `.af` 借鉴落地：分身可移植打包格式 **soul-pack**。

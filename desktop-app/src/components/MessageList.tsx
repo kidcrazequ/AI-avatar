@@ -6,6 +6,9 @@ import { ChatMessage } from '../stores/chatStore'
 interface Props {
   messages: ChatMessage[]
   isLoading?: boolean
+  /** 本轮 sendMessage 的累计耗时（秒）。仅对"最后一条且 isLoading"的 assistant 有意义；
+   *  v19 后由 MessageList 透传给 MessageBubble，让"思考中..."占位在每条消息底下渲染。 */
+  elapsedSec?: number
   quickQuestions?: string[]
   onQuickQuestion?: (question: string) => void
   /** 沉淀回答到 wiki/qa/ 的回调 */
@@ -14,11 +17,13 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+  /** 分身角色标签（短文本，展示在 avatarName 旁边的 chip 里） */
+  avatarRole?: string
   /** 当前对话所属分身 ID，透传给 MessageBubble 用于 [来源:] chip 解析原始文件 */
   avatarId: string
 }
 
-export default function MessageList({ messages, isLoading, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName, avatarId }: Props) {
+export default function MessageList({ messages, isLoading, elapsedSec, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
 
   /**
@@ -44,6 +49,9 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
 
   const itemContent = useCallback((index: number) => {
     const message = messages[index]
+    // 判定本条是不是"还在直播"：最后一条 assistant + 全局 isLoading
+    // 用于让 MessageBubble 在自己的工具调用时间线末尾追加"思考中... · Xs"占位行。
+    const isLive = isLoading === true && index === messages.length - 1 && message.role === 'assistant'
     return (
       <div className="px-6 py-3">
         <MessageBubble
@@ -52,11 +60,14 @@ export default function MessageList({ messages, isLoading, quickQuestions, onQui
           onSaveAnswer={onSaveAnswer}
           avatarImage={avatarImage}
           avatarName={avatarName}
+          avatarRole={avatarRole}
           avatarId={avatarId}
+          isLive={isLive}
+          elapsedSec={isLive ? elapsedSec : undefined}
         />
       </div>
     )
-  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, avatarId])
+  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLoading, elapsedSec])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

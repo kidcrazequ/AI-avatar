@@ -49,18 +49,21 @@ function triggerDownload(dataUrl: string, filename: string): void {
 }
 
 /**
- * 把 dataURL 形式的 PNG 写入剪贴板。
- * Electron 的 Chromium 默认支持 navigator.clipboard.write + ClipboardItem。
- * 老 API（execCommand）只能复制文本，不能复制图片，所以不做降级。
+ * 同步触发图片复制：clipboard.write 必须在 click 事件的 sync stack 调用
+ * （否则 user gesture 过期，Chromium 抛 "Write permission denied"）。
+ *
+ * 关键技巧：ClipboardItem 第二个参数支持 `Blob | Promise<Blob>`。把异步生成
+ * dataURL → Blob 的过程包成 Promise，clipboard.write 在 user gesture 上下文
+ * 内同步调用，浏览器允许等 Promise 解析后再写入。
+ *
+ * 参考：https://developer.mozilla.org/en-US/docs/Web/API/ClipboardItem/ClipboardItem
  */
-async function copyPngDataUrlToClipboard(dataUrl: string): Promise<void> {
+function copyPngBlobToClipboardSync(blobPromise: Promise<Blob>): Promise<void> {
   if (!navigator.clipboard || typeof window.ClipboardItem === 'undefined') {
-    throw new Error('当前环境不支持图片复制（需 Clipboard API + ClipboardItem）')
+    return Promise.reject(new Error('当前环境不支持图片复制（需 Clipboard API + ClipboardItem）'))
   }
-  // dataURL → Blob：手动解析 base64，规避项目对裸 fetch 的禁用规则（dataURL 不走网络，不需要 fetchWithTimeout）
-  const blob = dataUrlToBlob(dataUrl)
-  await navigator.clipboard.write([
-    new ClipboardItem({ [blob.type || 'image/png']: blob }),
+  return navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': blobPromise }),
   ])
 }
 
@@ -80,6 +83,9 @@ export default function RendererToolbar({
 }: RendererToolbarProps): ReactElement {
   const [downloadState, setDownloadState] = useState<ButtonState>('idle')
   const [copyState, setCopyState] = useState<ButtonState>('idle')
+  /** 最近一次错误的具体信息（hover 按钮 title 显示，避免用户必须开 DevTools） */
+  const [downloadError, setDownloadError] = useState('')
+  const [copyError, setCopyError] = useState('')
   const downloadResetRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const copyResetRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -101,27 +107,34 @@ export default function RendererToolbar({
       const dataUrl = await getPngDataUrl()
       if (!dataUrl) throw new Error('未生成图像')
       triggerDownload(dataUrl, defaultFilename(filenameBase))
+      setDownloadError('')
       flashState('success', setDownloadState, downloadResetRef)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[RendererToolbar] 下载 PNG 失败:', msg)
       window.electronAPI?.logEvent?.('error', 'renderer-toolbar:download', msg)
+      setDownloadError(msg)
       flashState('error', setDownloadState, downloadResetRef)
     }
   }, [getPngDataUrl, filenameBase, flashState])
 
-  const handleCopy = useCallback(async () => {
-    try {
-      const dataUrl = await getPngDataUrl()
+  const handleCopy = useCallback(() => {
+    // 关键：clipboard.write 必须**同步**在 click 上下文调用，否则 user gesture 过期。
+    // 把异步生成 PNG → Blob 的过程包成 Promise<Blob>，让 ClipboardItem 等它。
+    const blobPromise = getPngDataUrl().then(dataUrl => {
       if (!dataUrl) throw new Error('未生成图像')
-      await copyPngDataUrlToClipboard(dataUrl)
+      return dataUrlToBlob(dataUrl)
+    })
+    copyPngBlobToClipboardSync(blobPromise).then(() => {
+      setCopyError('')
       flashState('success', setCopyState, copyResetRef)
-    } catch (err) {
+    }).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[RendererToolbar] 复制图片失败:', msg)
       window.electronAPI?.logEvent?.('error', 'renderer-toolbar:copy', msg)
+      setCopyError(msg)
       flashState('error', setCopyState, copyResetRef)
-    }
+    })
   }, [getPngDataUrl, flashState])
 
   // 共用按钮样式（沿用 MessageBubble 的 SAVE 按钮像素风：font-game + tracking-wider + 边框）
@@ -151,7 +164,8 @@ export default function RendererToolbar({
     <div
       className="absolute top-2 right-2 z-10 flex gap-1
         opacity-0 group-hover:opacity-100 focus-within:opacity-100
-        transition-opacity"
+        transition-opacity
+        bg-px-bg/95 backdrop-blur-sm p-1 border border-px-border/60 rounded-sm shadow-pixel-brand"
       role="toolbar"
       aria-label={`${ariaLabelPrefix} 操作`}
     >
@@ -169,7 +183,7 @@ export default function RendererToolbar({
         onClick={handleDownload}
         className={`${baseBtn} ${stateClass(downloadState)}`}
         aria-label={`${ariaLabelPrefix} 下载 PNG`}
-        title="下载为 PNG 图片"
+        title={downloadState === 'error' ? `下载失败：${downloadError || '未知错误'}` : '下载为 PNG 图片'}
       >
         {downloadLabel}
       </button>
@@ -178,7 +192,7 @@ export default function RendererToolbar({
         onClick={handleCopy}
         className={`${baseBtn} ${stateClass(copyState)}`}
         aria-label={`${ariaLabelPrefix} 复制图片到剪贴板`}
-        title="复制图片到剪贴板"
+        title={copyState === 'error' ? `复制失败：${copyError || '未知错误'}` : '复制图片到剪贴板'}
       >
         {copyLabel}
       </button>

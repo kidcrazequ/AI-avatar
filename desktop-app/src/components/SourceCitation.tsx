@@ -41,28 +41,43 @@ function safeLogEvent(level: 'info' | 'warn' | 'error', action: string, detail?:
 }
 
 /** 单个按钮组容器 className（inline 流式排版，按钮换行不破坏行内文字） */
-const GROUP_CLASS = 'inline-flex flex-wrap items-center gap-1 mx-0.5 align-baseline'
+const GROUP_CLASS = 'inline-flex flex-wrap items-center gap-1.5 mx-1 align-baseline'
 
-/** 单个可点击 chip className（像素风，沿用旧实现的色调） */
+/**
+ * 单个可点击 chip className（像素风，视觉权重 3x 强化版）。
+ *
+ * 2026-05-22 真实需求：原 chip 使用 `text-[11px] border border-px-primary/30 bg-px-bg`——
+ * 边框 30% 透明 + 背景与正文同色 + 字号 11px，在 1080p 屏录里几乎隐形。演示"每个数字都能溯源"
+ * 这个核心卖点时观众根本看不到角标。
+ *
+ * 升级方案：
+ *   - border 30% → 100% 实色 (`border-px-primary`) + border-2（双线增加视觉重量）
+ *   - 加 `bg-px-primary/10` 底色（chip 在正文里不再隐形）
+ *   - 字号 11 → 12 + medium 字重
+ *   - hover 加 `shadow-pixel-brand`（像素风偏移阴影，强化"可点击"信号）
+ */
 const CHIP_BUTTON_CLASS =
-  'inline-flex items-center gap-1 px-1.5 py-0.5 align-baseline ' +
-  'border border-px-primary/30 bg-px-bg text-px-primary text-[11px] font-mono ' +
-  'whitespace-nowrap hover:text-px-accent hover:border-px-accent ' +
-  'focus:outline-none focus:border-px-accent ' +
+  'inline-flex items-center gap-1 px-2 py-0.5 align-baseline ' +
+  'border-2 border-px-primary bg-px-primary/10 text-px-primary text-[12px] font-mono font-medium ' +
+  'whitespace-nowrap hover:bg-px-primary/20 hover:shadow-pixel-brand ' +
+  'focus:outline-none focus:bg-px-primary/20 ' +
   'transition-none cursor-pointer'
 
-/** raw_file 缺失 / 已被删除的兜底 chip className：仍可点击，但视觉降级提示原始文件不在 */
+/**
+ * raw_file 缺失 / 已被删除的兜底 chip className：仍可点击，但视觉用 dim 色系区分主链接，
+ * 同步增重以保持与 CHIP_BUTTON_CLASS 的尺寸一致（border-2 + py-0.5），避免文本基线错位。
+ */
 const CHIP_MISSING_CLASS =
-  'inline-flex items-center gap-1 px-1.5 py-0.5 align-baseline ' +
-  'border border-px-border bg-px-elevated text-px-text-dim text-[11px] font-mono ' +
+  'inline-flex items-center gap-1 px-2 py-0.5 align-baseline ' +
+  'border-2 border-px-border bg-px-elevated text-px-text-dim text-[12px] font-mono ' +
   'whitespace-nowrap hover:text-px-text hover:border-px-text-dim ' +
   'focus:outline-none focus:border-px-text-dim ' +
   'transition-none cursor-pointer'
 
 /** 加载中 / 全部解析失败时的占位 chip className */
 const CHIP_PLACEHOLDER_CLASS =
-  'inline-flex items-center gap-1 px-1.5 py-0.5 align-baseline ' +
-  'border border-px-border bg-px-elevated text-px-text-dim/80 text-[11px] font-mono ' +
+  'inline-flex items-center gap-1 px-2 py-0.5 align-baseline ' +
+  'border-2 border-px-border bg-px-elevated text-px-text-dim/80 text-[12px] font-mono ' +
   'whitespace-nowrap'
 
 /**

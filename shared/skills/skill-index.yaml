@@ -276,3 +276,37 @@ skills:
     keywords: [开发交付, handoff, 交给开发, claude code 交接]
     when: 用户要求把设计交付给开发
     priority: 2
+
+  # ═══════════════════════════════════════
+  # 需求澄清（动手前的拷打）
+  # ═══════════════════════════════════════
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把需求问透
+      - 把决策树问透
+      - 在动手前把问题问清楚
+      - 我想被反问
+    when: 用户**显式**请求被反问/拷打需求或决策（非默认对话），跑在「任务拆分计划」之前作为前置澄清
+    priority: 1
+
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 决策记录
+      - 术语对齐
+      - 知识库对齐
+    when: 同 grill-me；当前分身存在 knowledge/ 且 knowledge/README.md 不为空时优先用本技能（叠加术语对齐 + ADR 沉淀）
+    priority: 1

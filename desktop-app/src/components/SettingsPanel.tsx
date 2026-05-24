@@ -65,6 +65,16 @@ const MODEL_SLOTS: ModelSlot[] = [
     helpText: '用于从文档图片提取文字，建议使用公司提供的 OCR 能力；如需使用外部模型，请先报备，确保数据不外泄',
     tag: 'OCR',
   },
+  {
+    // 2026-05-22 Marvis 借鉴：端侧（本地）模型 slot。
+    // 与对话模型并列的第二个 master slot；ChatWindow 顶栏 pill 点击在 cloud（chat slot）↔ local（本 slot）间切换。
+    // 默认 Ollama 端点 + qwen2.5:7b；apiKey 任意非空（Ollama 自身不校验，'ollama' 是惯例）。
+    label: '端侧（本地）',
+    keyPrefix: 'local_chat',
+    defaults: { baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:7b' },
+    helpText: '本机推理服务（Ollama / lm-studio / vllm），数据 100% 不出本机。装好 Ollama 后改 model 为已 pull 的模型名即可；apiKey 任意非空（Ollama 不校验，惯例填 ollama）。',
+    tag: 'LOCAL',
+  },
 ]
 
 interface ModelValues {
@@ -331,6 +341,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const CRON_TAB = -4
   const THEME_TAB = -5
   const INTEGRATIONS_TAB = -6
+  const USER_FILE_ROOTS_TAB = -7
   const { themeId, setTheme } = useThemeStore()
   const [isExporting, setIsExporting] = useState(false)
   const [logMsg, setLogMsg] = useState('')
@@ -391,6 +402,16 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const [proxyToken, setProxyToken] = useState('')
   const [showProxyToken, setShowProxyToken] = useState(false)
   const [proxyStatusMsg, setProxyStatusMsg] = useState('')
+  /**
+   * 用户文件根目录列表（2026-05-22 Marvis File Agent 借鉴）。
+   *
+   * 落 sqlite settings.user_file_roots 的 JSON 数组。空 = 未授权任何目录
+   * → read_user_file / list_user_folder 工具直接返错。
+   * 用户添加目录走 OS 文件夹选择 dialog（preload.ts:521 showOpenDialog）。
+   */
+  const [userFileRoots, setUserFileRoots] = useState<string[]>([])
+  const [userFileRootsStatusMsg, setUserFileRootsStatusMsg] = useState('')
+
   // MCP servers 状态
   const [mcpServers, setMcpServers] = useState<McpServerListItem[]>([])
   const [mcpStatusMsg, setMcpStatusMsg] = useState('')
@@ -618,6 +639,27 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         if (loadSeqRef.current === seq) setMcpServers(list)
       } catch (e) {
         console.warn('[Settings] 加载 MCP servers 失败:', e instanceof Error ? e.message : String(e))
+      }
+
+      // 用户文件根（2026-05-22 Marvis File Agent 借鉴）。
+      // 独立 try：JSON 解析失败时退化为空数组，不影响其他设置加载。
+      try {
+        const rootsRaw = (await window.electronAPI.getSetting('user_file_roots')) ?? ''
+        if (loadSeqRef.current !== seq) return
+        if (!rootsRaw.trim()) {
+          setUserFileRoots([])
+        } else {
+          const parsed = JSON.parse(rootsRaw)
+          if (Array.isArray(parsed) && parsed.every((r) => typeof r === 'string')) {
+            setUserFileRoots(parsed)
+          } else {
+            console.warn('[Settings] user_file_roots 格式异常（非字符串数组），重置为空')
+            setUserFileRoots([])
+          }
+        }
+      } catch (e) {
+        console.warn('[Settings] 解析 user_file_roots 失败：', e instanceof Error ? e.message : String(e))
+        setUserFileRoots([])
       }
     } catch (err) {
       console.error('[Settings] 加载设置失败:', err instanceof Error ? err.message : String(err))
@@ -1020,6 +1062,40 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       window.electronAPI.logEvent('info', 'mcp-upsert-server', input.name)
     } catch (e) {
       setMcpFormError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMcpBusy(false)
+    }
+  }
+
+  /** server 卡片"展开工具"切换状态：当前展开的 server name 集合 */
+  const [mcpExpandedTools, setMcpExpandedTools] = useState<Set<string>>(new Set())
+  const toggleMcpExpand = (name: string) => {
+    setMcpExpandedTools(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  /** 测试 MCP 表单连接（dry-run，不持久化）。结果直接写到 mcpFormError 让用户看到。 */
+  const testMcpConnection = async () => {
+    if (!editingMcp) return
+    setMcpFormError('')
+    setMcpBusy(true)
+    try {
+      const input = mcpFormToInput(editingMcp)
+      const snap = await window.electronAPI.mcpTestConnect(input)
+      if (!snap) {
+        setMcpFormError('测试失败：未返回 snapshot')
+      } else if (snap.status === 'error' || snap.error) {
+        setMcpFormError(`测试失败：${snap.error || snap.status}`)
+      } else {
+        setMcpFormError(`✓ 测试成功 — 状态 ${snap.status}, ${snap.toolCount} tool${snap.toolCount === 1 ? '' : 's'}`)
+      }
+      window.electronAPI.logEvent('info', 'mcp-test-connect', `${input.name}: ${snap?.status || 'no-snap'}`)
+    } catch (e) {
+      setMcpFormError(`测试失败：${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setMcpBusy(false)
     }
@@ -1605,6 +1681,18 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
           >
             <span className="font-game text-[12px] tracking-wider">TOOLS</span>
             <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">工具集成</span>
+          </button>
+          {/* 用户文件根 Tab（2026-05-22 Marvis File Agent 借鉴） */}
+          <button
+            onClick={() => setActiveTab(USER_FILE_ROOTS_TAB)}
+            className={`text-left px-4 py-3 border-l-3 border-t-2 border-t-px-border transition-none
+              ${activeTab === USER_FILE_ROOTS_TAB
+                ? 'border-l-px-primary bg-px-surface text-px-text'
+                : 'border-l-transparent text-px-text-sec hover:bg-px-surface/50 hover:text-px-text'
+              }`}
+          >
+            <span className="font-game text-[12px] tracking-wider">FILES</span>
+            <span className="block font-game text-[13px] mt-0.5 text-px-text-dim">用户文件根</span>
           </button>
           {/* 日志与反馈 Tab */}
           <button
@@ -3023,6 +3111,15 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                                 >
                                   编辑
                                 </button>
+                                {row.toolCount > 0 && (
+                                  <button
+                                    onClick={() => toggleMcpExpand(row.name)}
+                                    className="pixel-btn-ghost text-[11px] px-2 py-0.5"
+                                    title={mcpExpandedTools.has(row.name) ? '收起工具列表' : '展开工具列表'}
+                                  >
+                                    {mcpExpandedTools.has(row.name) ? '收起' : `工具 ▾`}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => removeMcpServer(row.name)}
                                   disabled={mcpBusy}
@@ -3031,6 +3128,22 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                                   删除
                                 </button>
                               </div>
+                              {mcpExpandedTools.has(row.name) && row.tools.length > 0 && (
+                                <div className="border-t border-px-border/40 pt-2 mt-1 space-y-1.5">
+                                  {row.tools.map(tool => (
+                                    <div key={tool.qualifiedName} className="border-l-2 border-px-border pl-2 py-0.5">
+                                      <div className="font-mono text-[11px] text-px-primary truncate">
+                                        {tool.qualifiedName}
+                                      </div>
+                                      {tool.description && (
+                                        <div className="font-game text-[10px] text-px-text-dim mt-0.5">
+                                          {tool.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -3063,6 +3176,100 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                 </div>
               </div>
             </>
+          ) : activeTab === USER_FILE_ROOTS_TAB ? (
+            /* ── 用户文件根面板（2026-05-22 Marvis File Agent 借鉴） ── */
+            <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
+              <div className="max-w-2xl space-y-6">
+                <div className="border-l-3 border-px-primary pl-4 py-1">
+                  <h3 className="font-game text-[16px] font-bold text-px-text mb-1">用户文件根（File Agent）</h3>
+                  <p className="font-game text-[14px] text-px-text-sec">授权分身用 <code className="text-px-primary">read_user_file</code> / <code className="text-px-primary">list_user_folder</code> 读取这里列出的目录下的文件。</p>
+                </div>
+
+                {/* 权限模型说明 banner */}
+                <div className="border-2 border-px-border bg-px-elevated p-4 space-y-2">
+                  <p className="font-game text-[12px] text-px-text">权限模型：</p>
+                  <ul className="font-game text-[12px] text-px-text-sec list-disc pl-5 space-y-1">
+                    <li>默认<strong className="text-px-warning">关闭</strong>——未授权任何目录前，工具调用直接返错</li>
+                    <li>分身只能读授权根目录下的文件，**不能写入、不能列举其他位置**</li>
+                    <li>删除根 = 立即撤销分身对该位置的访问</li>
+                    <li>慎选包含敏感信息的目录（密码 / 密钥 / 私人聊天记录等）</li>
+                  </ul>
+                </div>
+
+                {/* 已授权列表 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-game text-[13px] text-px-text-sec">已授权 {userFileRoots.length} 个目录</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setUserFileRootsStatusMsg('')
+                        try {
+                          const r = await window.electronAPI.showOpenDialog({ properties: ['openDirectory'] })
+                          if (r.canceled || !r.filePaths || r.filePaths.length === 0) return
+                          const picked = r.filePaths[0]
+                          if (userFileRoots.includes(picked)) {
+                            setUserFileRootsStatusMsg(`已在列表中：${picked}`)
+                            return
+                          }
+                          const next = [...userFileRoots, picked]
+                          setUserFileRoots(next)
+                          await window.electronAPI.setSetting('user_file_roots', JSON.stringify(next))
+                          setUserFileRootsStatusMsg(`SAVED - 已授权 ${picked}`)
+                        } catch (e) {
+                          setUserFileRootsStatusMsg(`FAILED - ${e instanceof Error ? e.message : String(e)}`)
+                        }
+                      }}
+                      className="pixel-btn-primary font-game text-[11px] tracking-wider"
+                    >
+                      + 添加根目录
+                    </button>
+                  </div>
+
+                  {userFileRoots.length === 0 ? (
+                    <div className="border-2 border-dashed border-px-border-dim p-6 text-center">
+                      <p className="font-game text-[12px] text-px-text-dim">尚未授权任何目录</p>
+                      <p className="font-game text-[11px] text-px-text-dim mt-1">点击右上"添加根目录"选一个绝对路径授权</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {userFileRoots.map((root, idx) => (
+                        <div key={`${root}-${idx}`} className="flex items-center justify-between px-3 py-2 border border-px-border bg-px-bg gap-2">
+                          <code className="font-mono text-[12px] text-px-text truncate flex-1" title={root}>{root}</code>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setUserFileRootsStatusMsg('')
+                              try {
+                                const next = userFileRoots.filter((_, i) => i !== idx)
+                                setUserFileRoots(next)
+                                await window.electronAPI.setSetting('user_file_roots', JSON.stringify(next))
+                                setUserFileRootsStatusMsg(`SAVED - 已撤销 ${root}`)
+                              } catch (e) {
+                                setUserFileRootsStatusMsg(`FAILED - ${e instanceof Error ? e.message : String(e)}`)
+                              }
+                            }}
+                            className="font-game text-[10px] text-px-danger border border-px-danger px-2 py-0.5 hover:opacity-80 shrink-0"
+                            title="撤销授权"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {userFileRootsStatusMsg && (
+                  <div className={`font-game text-[11px] tracking-wider ${
+                    userFileRootsStatusMsg.includes('SAVED') ? 'text-px-success' :
+                    userFileRootsStatusMsg.includes('FAIL') ? 'text-px-danger' : 'text-px-text-dim'
+                  }`}>
+                    {userFileRootsStatusMsg}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : activeTab === LOG_TAB ? (
             /* ── 日志与反馈面板 ── */
             <div className="flex-1 overflow-y-auto p-6 bg-px-surface">
@@ -3292,6 +3499,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
           onChange={setEditingMcp}
           onCancel={() => { setEditingMcp(null); setMcpFormError('') }}
           onSubmit={submitMcpForm}
+          onTest={testMcpConnection}
         />
       )}
 
@@ -3447,8 +3655,9 @@ function McpServerFormModal(props: {
   onChange: (form: McpFormState) => void
   onCancel: () => void
   onSubmit: () => void
+  onTest?: () => void
 }) {
-  const { form, error, busy, onChange, onCancel, onSubmit } = props
+  const { form, error, busy, onChange, onCancel, onSubmit, onTest } = props
   const update = (patch: Partial<McpFormState>) => onChange({ ...form, ...patch })
 
   return (
@@ -3604,6 +3813,11 @@ function McpServerFormModal(props: {
         </span>
         <div className="flex gap-2">
           <button onClick={onCancel} disabled={busy} className="pixel-btn-ghost">CANCEL</button>
+          {onTest && (
+            <button onClick={onTest} disabled={busy} className="pixel-btn-ghost" title="不保存，仅尝试连接以验证配置">
+              {busy ? '...' : 'TEST'}
+            </button>
+          )}
           <button onClick={onSubmit} disabled={busy} className="pixel-btn-primary">
             {busy ? '...' : 'SAVE'}
           </button>

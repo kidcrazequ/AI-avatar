@@ -15,12 +15,15 @@ import PromptTemplatePanel from './components/PromptTemplatePanel'
 import SchedulesPanel from './components/SchedulesPanel'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
 import ExpertPackPanel from './components/ExpertPackPanel'
+import GlobalSearchPalette from './components/GlobalSearchPalette'
+import ArtifactPanel from './components/ArtifactPanel'
+import ProjectManagerPanel from './components/ProjectManagerPanel'
 import PixelNavBar from './components/PixelNavBar'
 import AvatarImage from './components/AvatarImage'
 import Toast from './components/shared/Toast'
 import { useShallow } from 'zustand/react/shallow'
 import { useThemeStore } from './stores/themeStore'
-import { useChatStore } from './stores/chatStore'
+import { useChatStore, DEFAULT_LOCAL_CHAT_MODEL } from './stores/chatStore'
 import { localDateString, MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from '@soul/core/browser'
 import { ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, DEFAULT_OCR_MODEL, DEFAULT_CREATION_MODEL, resolveCreationModel } from './services/llm-service'
 import { registerSoulProxyApiBridge } from './services/proxy-api-bridge'
@@ -93,6 +96,23 @@ function getAvatarAbilityDescription(avatar: Avatar): string {
   return description
 }
 
+/**
+ * 从 avatar.description 提取一个适合作为 chip 的短角色标签（如"财务分析专家"/"工商储方案专家"）。
+ *
+ * 设计动机：每条助手消息上的"专家身份 chip"必须短到一眼能读完（≤ 14 个中文字符），否则就占满气泡顶栏。
+ * 而 avatar.description 通常是一两句话——直接塞进去会断行难看。
+ *
+ * 策略：取 description 第一段（按句号 / 顿号 / 分号 / 换行切），截断到 14 字。命中 isInternalAvatarDescription
+ * 兜底分支时返回空（让 chip 不渲染，比显示 "灵魂文档" / "行为准则" 这种内部术语强）。
+ */
+function getAvatarRoleTagline(avatar: Avatar | undefined): string {
+  if (!avatar) return ''
+  const desc = avatar.description.trim()
+  if (!desc || isInternalAvatarDescription(desc)) return ''
+  const firstSegment = desc.split(/[。\n,，；;、]/)[0].trim()
+  return firstSegment.length > 14 ? firstSegment.slice(0, 14) + '…' : firstSegment
+}
+
 function getAvatarSourceLabel(avatar: Avatar): string {
   const description = avatar.description.trim()
   if (!description) return '来源：默认能力画像'
@@ -104,6 +124,10 @@ function getAvatarSourceLabel(avatar: Avatar): string {
 function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  /** 全局搜索面板（Cmd+P / Ctrl+P 唤起） */
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false)
+  /** Project 管理面板 */
+  const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
     'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
   >(null)
@@ -145,12 +169,21 @@ function App() {
 
   const themeId = useThemeStore(s => s.themeId)
 
-  const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, chatModel, systemPrompt } = useChatStore(
+  // 同步把 data-theme 设到 <html> 上：LightboxModal / 其它 createPortal 到 document.body
+  // 的组件不在 .crt-scanlines 这个 div 的子树里，否则会丢主题 CSS 变量、落回 :root 默认色
+  // （2026-05-21 用户反馈：放大弹窗里 INFOGRAPHIC 标题左边的竖条显示成默认粉色而非当前主题色）。
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeId)
+  }, [themeId])
+
+  const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, setLocalChatModel, setChatModelMode, chatModel, systemPrompt } = useChatStore(
     useShallow(s => ({
       clearMessages: s.clearMessages,
       resetTransientState: s.resetTransientState,
       setSystemPrompt: s.setSystemPrompt,
       setChatModel: s.setChatModel,
+      setLocalChatModel: s.setLocalChatModel,
+      setChatModelMode: s.setChatModelMode,
       chatModel: s.chatModel,
       systemPrompt: s.systemPrompt,
     }))
@@ -232,6 +265,8 @@ function App() {
       visionApiKey, visionBaseUrl, visionModelName,
       ocrApiKey, ocrBaseUrl, ocrModelName,
       creationApiKey, creationBaseUrl, creationModelName,
+      localApiKey, localBaseUrl, localModelName,
+      chatModelMode,
     ] = await Promise.all([
       window.electronAPI.getSetting('chat_api_key'),
       window.electronAPI.getSetting('chat_base_url'),
@@ -245,6 +280,11 @@ function App() {
       window.electronAPI.getSetting('creation_api_key'),
       window.electronAPI.getSetting('creation_base_url'),
       window.electronAPI.getSetting('creation_model'),
+      // 端侧（本地）模型 slot（2026-05-22 Marvis 借鉴）
+      window.electronAPI.getSetting('local_chat_api_key'),
+      window.electronAPI.getSetting('local_chat_base_url'),
+      window.electronAPI.getSetting('local_chat_model'),
+      window.electronAPI.getSetting('chat_model_mode'),
     ])
 
     setChatModel({
@@ -267,7 +307,15 @@ function App() {
       model: creationModelName || DEFAULT_CREATION_MODEL.model,
       apiKey: creationApiKey || '',
     })
-  }, [setChatModel])
+    setLocalChatModel({
+      baseUrl: localBaseUrl || DEFAULT_LOCAL_CHAT_MODEL.baseUrl,
+      model: localModelName || DEFAULT_LOCAL_CHAT_MODEL.model,
+      // local apiKey 允许空（默认走 Ollama 的 'ollama'）；用户填空时也会用 DEFAULT 的 'ollama' 兜底，
+      // 避免"明明没填 key 但开了 local 模式立刻报 apiKey 缺失"的体验断点
+      apiKey: localApiKey || DEFAULT_LOCAL_CHAT_MODEL.apiKey,
+    })
+    setChatModelMode(chatModelMode === 'local' ? 'local' : 'cloud')
+  }, [setChatModel, setLocalChatModel, setChatModelMode])
 
   const refreshAvatarList = useCallback(async () => {
     const avatars = await window.electronAPI.listAvatars()
@@ -358,10 +406,29 @@ function App() {
     void loadConversations()
   }, [activeAvatarId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // chatStore 自动改名后通过 window 事件通知刷新侧栏标题（不直接持有 App 引用）
+  useEffect(() => {
+    const handler = () => { void loadConversations() }
+    window.addEventListener('conversation-title-changed', handler)
+    return () => window.removeEventListener('conversation-title-changed', handler)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!activeAvatarId) return
     void loadAvatarConfig(activeAvatarId, activeProjectId)
   }, [activeAvatarId, activeProjectId, loadAvatarConfig])
+
+  // 全局快捷键：Cmd+P / Ctrl+P 打开全局搜索
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault()
+        setGlobalSearchOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const handleSelectAvatar = async (avatarId: string) => {
     const seq = ++avatarSwitchSeqRef.current
@@ -391,6 +458,50 @@ function App() {
       window.electronAPI.logEvent('error', 'select-avatar-error', err instanceof Error ? err.message : String(err))
     }
   }
+
+  /** 全局搜索结果跳转到对话：切分身 + 选会话 */
+  const handleNavigateToConversation = useCallback(async (avatarId: string, conversationId: string) => {
+    try {
+      if (avatarId && avatarId !== activeAvatarId) {
+        await handleSelectAvatar(avatarId)
+      }
+      setActiveConversationId(conversationId)
+      setActivePanel(null)
+    } catch (err) {
+      console.error('[App] 全局搜索跳转失败:', err instanceof Error ? err.message : String(err))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAvatarId])
+
+  /** 待跳转到知识库的文件路径（一次性，KnowledgePanel mount 后清掉） */
+  const [knowledgeInitialPath, setKnowledgeInitialPath] = useState<string | null>(null)
+
+  /** 全局搜索结果跳转到 memory panel */
+  const handleNavigateToMemory = useCallback(async (avatarId: string) => {
+    try {
+      if (avatarId && avatarId !== activeAvatarId) {
+        await handleSelectAvatar(avatarId)
+      }
+      setActivePanel('memory')
+    } catch (err) {
+      console.error('[App] 全局搜索跳转 memory 失败:', err instanceof Error ? err.message : String(err))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAvatarId])
+
+  /** 全局搜索结果跳转到知识库面板：切分身 + 打开面板 + 定位文件 */
+  const handleNavigateToKnowledgeFile = useCallback(async (avatarId: string, relativePath: string) => {
+    try {
+      if (avatarId && avatarId !== activeAvatarId) {
+        await handleSelectAvatar(avatarId)
+      }
+      setKnowledgeInitialPath(relativePath)
+      setActivePanel('knowledge')
+    } catch (err) {
+      console.error('[App] 全局搜索跳转知识库失败:', err instanceof Error ? err.message : String(err))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAvatarId])
 
   const handleAvatarCreated = async (avatarId: string, lifeStarted: boolean) => {
     setActivePanel(null)
@@ -615,6 +726,7 @@ function App() {
           knownProjectIds={knownProjectIds}
           onProjectChange={handleProjectChange}
           onCreateProjectId={handleCreateProjectId}
+          onManageProjects={() => setProjectManagerOpen(true)}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
@@ -676,6 +788,8 @@ function App() {
                   fillText={templateFillText}
                   avatarImage={avatarList.find(a => a.id === activeAvatarId)?.avatarImage}
                   avatarName={activeAvatarName}
+                  avatarRole={getAvatarRoleTagline(avatarList.find(a => a.id === activeAvatarId))}
+                  showToast={showToast}
                 />
               </div>
             </div>
@@ -716,11 +830,12 @@ function App() {
       {showKnowledgePanel && activeAvatarId && (
         <KnowledgePanel
           avatarId={activeAvatarId}
-          onClose={() => setActivePanel(null)}
+          onClose={() => { setActivePanel(null); setKnowledgeInitialPath(null) }}
           onSaved={handleKnowledgeSaved}
           ocrModel={ocrModel}
           chatModel={chatModel}
           creationModel={resolveCreationModel(creationModel, chatModel)}
+          initialPath={knowledgeInitialPath ?? undefined}
         />
       )}
 
@@ -831,6 +946,34 @@ function App() {
 
       {toast && (
         <Toast message={toast.message} type={toast.type} onClick={toast.onClick} />
+      )}
+
+      <GlobalSearchPalette
+        isOpen={globalSearchOpen}
+        onClose={() => setGlobalSearchOpen(false)}
+        currentAvatarId={activeAvatarId}
+        onNavigateToConversation={handleNavigateToConversation}
+        onNavigateToKnowledgeFile={handleNavigateToKnowledgeFile}
+        onNavigateToMemory={handleNavigateToMemory}
+      />
+
+      <ArtifactPanel />
+
+      {projectManagerOpen && activeAvatarId && (
+        <ProjectManagerPanel
+          avatarId={activeAvatarId}
+          onClose={() => setProjectManagerOpen(false)}
+          onProjectsChanged={async () => {
+            try {
+              const ids = await window.electronAPI.listProjectIds(activeAvatarId)
+              setKnownProjectIds(ids.length > 0 ? ids : ['default'])
+              const convs = await window.electronAPI.getConversations(activeAvatarId)
+              setConversations(convs)
+            } catch (err) {
+              console.error('[App] 刷新 projects 失败:', err instanceof Error ? err.message : String(err))
+            }
+          }}
+        />
       )}
     </div>
   )

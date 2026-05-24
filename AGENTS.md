@@ -264,3 +264,30 @@ npx tsc --noEmit 2>&1 | head -100
 # 生成 ESLint 报告
 npx eslint . --ext .ts,.tsx --format compact 2>&1 | head -100
 ```
+
+---
+
+## Learned User Preferences
+
+- 周报 / 日报 / 版本总结最终偏好"只列核心条目"——每条一句话的编号列表（`1. xxx 2. xxx`），不要长段落叙述
+- 发版小结 / feature 公告偏好"一句标题 + 2-3 条 dash bullet 要点"格式（如"AI 分身-让专家能力可复制、可传承、永不流失"模板）
+- 用户口语"charge.log"实指 `CHANGELOG.md`；"推送远程 + 打 tag"隐含完整发版流程（version bump + CHANGELOG 段位下沉 + commit + tag + push）
+- 多条 bug 用 `[P1] / [P2] <标题>\n<文件:行号> <现象> <建议修复>` 清单提交，期待按优先级排序逐条处理
+- "code review"/"代码审查"默认只读不改：先扫 git diff，重点找行为回归、类型/运行时风险、缺失校验
+- "查找未提交代码"同时含两类：工作区未提交改动 + 已提交但未推送 origin 的本地 commit
+- 对"修复轮污染对话历史 / 重复计费"零容忍：隐藏 follow-up 必须走 hidden message / repair round 标记，不能复用普通 sendMessage 路径
+- 中文交流为主，回答尽量简洁、不复述用户问题
+
+## Learned Workspace Facts
+
+- 仓库根 `/Users/kian/备份/AI/soul/`（路径含中文"备份"，shell 命令需注意引号）；作者标识 Kian (`zhi.qu`)；项目正式名"Soul AI 分身桌面端"
+- 桌面端为 Electron + Vite + React + TypeScript，源码在 `desktop-app/`；版本号同时维护在 `desktop-app/package.json` 与 `package-lock.json` 根 `version` 字段
+- 发版段位规约：CHANGELOG.md 保留空 `## Unreleased` 头，把当期内容降级为 `## vX.Y.Z (YYYY-MM-DD)`；release commit 用 `chore(release): vX.Y.Z`；annotated tag `vX.Y.Z`；推 `main` + tag
+- 多平台 CI 通过 `.github/workflows/release.yml` 在 macOS / Windows / Linux 自动构建并上传 GitHub Release
+- 模块布局：共享核心 `packages/core/`（TS 库）、Electron 主进程 `desktop-app/electron/`、渲染进程 `desktop-app/src/`、技能 `shared/skills/`、知识 `shared/knowledge/`、专家包 `expert-packs/<expert>/`、同步脚本 `scripts/soul-sync.sh`
+- 发版后才补 release notes 时新增 `docs(changelog): 补写 vX.Y.Z release notes` 提交即可，不重打 tag
+- 小堵分身 `_raw` 重建的原始知识源在 `/Users/kian/备份/堵杰的文档/堵杰的文档/`
+- Windows 打包陷阱：nodejieba 词典在 asar 内路径穿越（v0.13.0 启动崩溃，v0.13.1 已修复）；分身资源易漏打包导致包体异常缩水（v0.13.0 1.07GB→161.4MB）——Windows release 必须验证启动 + 分身内容完整
+- HTTPS 推送在非交互 agent shell 下不可用（无 TTY 触达 osxkeychain），必须用 SSH remote 或预设凭据
+- `expert-packs/<expert>/` 是专家包正本，`avatars/<expert>/` 是运行时副本与历史残留；avatars/ 运行时数据已 .gitignore，旧 `avatars/<expert>/` 静态文件在确认 `expert-packs/<expert>/` 完整后可删除
+- Conventional commits 风格：`chore(release): vX.Y.Z`、`feat(<scope>): ...`（scope 例 `tools` / `expert-packs` / `repo`）、`docs(...)`、`chore(repo): ...`

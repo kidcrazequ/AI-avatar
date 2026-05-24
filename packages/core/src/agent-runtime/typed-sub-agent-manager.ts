@@ -75,6 +75,15 @@ const DEFAULT_AGENT_TYPE_HINTS: Record<SubAgentType, string> = {
   explore: '你是只读探索子代理：可以读文件、搜知识、查 Excel，不可写入。专注定位与回报。',
   plan: '你是规划子代理：分析任务、拆解步骤、不写文件。输出结构化方案，不执行。',
   worker: '你是执行子代理：完成具体子任务后向主代理交付。',
+  verifier: [
+    '你是复核子代理：专门检查另一个子代理（通常是 worker）产出的结论是否站得住。',
+    '检查项（按 Soul 数据可溯源红线）：',
+    '1) 每个具体数字是否真的能在引用的来源里找到？（query_excel / read_file 自己复算一遍）',
+    '2) 引用的 knowledge/<path>.md 是否真实存在且包含被引段落？',
+    '3) Excel 来源是否标到 sheet 名级别？还是用 markdown 总结冒充原始 sheet？',
+    '4) 有没有"缺数据但画了占位骨架"的情况？',
+    '不写文件、不 spawn 子代理。输出必须明确：✅ 通过 / ❌ 不通过 + 具体不通过项 + 缺口清单。',
+  ].join('\n'),
 }
 
 export class TypedSubAgentManager {

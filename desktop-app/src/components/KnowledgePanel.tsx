@@ -16,9 +16,11 @@ interface Props {
   ocrModel?: ModelConfig
   chatModel?: ModelConfig
   creationModel?: ModelConfig
+  /** 打开时直接定位到该相对路径（来自全局搜索 / @ 引用跳转） */
+  initialPath?: string
 }
 
-export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, chatModel, creationModel }: Props) {
+export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, chatModel, creationModel, initialPath }: Props) {
   const [tree, setTree] = useState<FileNode[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [fileContent, setFileContent] = useState<string>('')
@@ -106,6 +108,26 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   useEffect(() => {
     loadTree()
   }, [loadTree])
+
+  /** initialPath：tree 加载完成后自动定位到指定文件（来自全局搜索 / @ 引用跳转） */
+  useEffect(() => {
+    if (!initialPath || tree.length === 0) return
+    // 简单存在性检查：递归查找路径
+    const exists = (nodes: FileNode[]): boolean => {
+      for (const n of nodes) {
+        if (n.path === initialPath) return true
+        if (n.children && exists(n.children)) return true
+      }
+      return false
+    }
+    if (exists(tree)) {
+      void handleSelectFile(initialPath)
+    } else {
+      console.warn('[KnowledgePanel] initialPath 不在知识树中：', initialPath)
+    }
+    // 只在 tree 首次加载完成时执行一次定位；后续切换不再触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree.length > 0])
 
   // 订阅文件写入事件 — 每完成一个文件刷新文件树
   useEffect(() => {

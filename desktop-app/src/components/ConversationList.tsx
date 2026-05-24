@@ -21,6 +21,7 @@ interface Props {
   knownProjectIds: string[]
   onProjectChange: (projectId: string) => void
   onCreateProjectId: () => void
+  onManageProjects?: () => void
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
   onNewConversation: () => void
@@ -35,6 +36,7 @@ export default function ConversationList({
   knownProjectIds,
   onProjectChange,
   onCreateProjectId,
+  onManageProjects,
   onSelectConversation,
   onDeleteConversation,
   onNewConversation,
@@ -58,11 +60,16 @@ export default function ConversationList({
   const filtered = useMemo(() => {
     // 隐藏批量回归测试产生的临时会话（id 前缀 'regression-'）。
     // 即便 regression-cleanup-conversations IPC 因故未执行，也不会污染会话历史 UI。
-    const visible = conversations.filter(c => !c.id.startsWith('regression-'))
+    // 按当前 activeProjectId 过滤：无 project_id 的会话归入 'default'。
+    const visible = conversations.filter(c => {
+      if (c.id.startsWith('regression-')) return false
+      const pid = c.project_id && c.project_id.length > 0 ? c.project_id : 'default'
+      return pid === activeProjectId
+    })
     if (!searchQuery) return visible
     const q = searchQuery.toLowerCase()
     return visible.filter(c => c.title.toLowerCase().includes(q))
-  }, [conversations, searchQuery])
+  }, [conversations, searchQuery, activeProjectId])
 
   // FTS5 全文搜索（≥3 字符时触发）
   useEffect(() => {
@@ -137,14 +144,27 @@ export default function ConversationList({
               ˅
             </span>
           </div>
-          <button
-            type="button"
-            disabled={!activeAvatarId}
-            onClick={onCreateProjectId}
-            className="w-full px-2 py-1.5 border-2 border-px-border-dim text-px-text-dim font-game text-[11px] hover:border-px-primary hover:text-px-text transition-none disabled:opacity-40"
-          >
-            ＋ 新建项目
-          </button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              disabled={!activeAvatarId}
+              onClick={onCreateProjectId}
+              className="flex-1 px-2 py-1.5 border-2 border-px-border-dim text-px-text-dim font-game text-[11px] hover:border-px-primary hover:text-px-text transition-none disabled:opacity-40"
+            >
+              ＋ 新建
+            </button>
+            {onManageProjects && (
+              <button
+                type="button"
+                disabled={!activeAvatarId}
+                onClick={onManageProjects}
+                className="px-2 py-1.5 border-2 border-px-border-dim text-px-text-dim font-game text-[11px] hover:border-px-primary hover:text-px-text transition-none disabled:opacity-40"
+                title="管理任务包（重命名 / 归档 / 删除）"
+              >
+                ⚙
+              </button>
+            )}
+          </div>
         </div>
         <button
           onClick={onNewConversation}

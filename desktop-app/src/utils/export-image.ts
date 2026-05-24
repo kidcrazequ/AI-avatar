@@ -59,6 +59,14 @@ function svgElementToDataUrl(svgEl: SVGElement, width: number, height: number): 
   cloned.setAttribute('width', String(width))
   cloned.setAttribute('height', String(height))
 
+  // 修复 @antv/infographic 输出的非法 `width="auto"` / `height="auto"`：
+  // SVG 规范要求长度值，"auto" 在 child 元素上会被浏览器警告并拒绝解析。
+  // 递归替换所有子节点的 auto → 100%（继承父尺寸）。
+  for (const el of cloned.querySelectorAll<SVGElement>('[width="auto"], [height="auto"]')) {
+    if (el.getAttribute('width') === 'auto') el.setAttribute('width', '100%')
+    if (el.getAttribute('height') === 'auto') el.setAttribute('height', '100%')
+  }
+
   const svgStr = new XMLSerializer().serializeToString(cloned)
   const svgBase64 = btoa(unescape(encodeURIComponent(svgStr)))
   return `data:image/svg+xml;base64,${svgBase64}`

@@ -95,12 +95,61 @@ function parseFrontmatter(content: string): { data: Record<string, unknown>; bod
 export class SoulLoader {
   private avatarsPath: string
   private sharedPath: string
+  private projectRoot: string
   private skillManager: SkillManager
 
   constructor(avatarsPath: string) {
     this.avatarsPath = avatarsPath
     this.sharedPath = path.join(avatarsPath, '..', 'shared')
+    this.projectRoot = path.join(avatarsPath, '..')
     this.skillManager = new SkillManager(avatarsPath)
+  }
+
+  /**
+   * 抽取 markdown 文件里 `<!-- INHERIT_BEGIN: <tag> -->` 与 `<!-- INHERIT_END -->`
+   * 之间的内容。文件不存在 / 没找到标记时返回空字符串（无害跳过）。
+   *
+   * 设计动机：avatars/<id>/CLAUDE.md 通过 inheritance 拼接来自项目级 CLAUDE.md
+   * 和 templates/agent-template.md 的稳定规则段。模板文件里还有
+   * 任务拆分规则、frontmatter 占位符、{{STEP_2_TITLE}} 这类对桌面端分身
+   * 无用甚至有害的内容，所以不能整体塞，只取 INHERIT 块。
+   */
+  private extractInheritBlock(filePath: string, tag: string): string {
+    const content = this.readFileSafe(filePath)
+    if (!content) return ''
+    const re = new RegExp(`<!--\\s*INHERIT_BEGIN:\\s*${tag}\\s*-->([\\s\\S]*?)<!--\\s*INHERIT_END\\s*-->`)
+    const m = content.match(re)
+    if (!m) return ''
+    return m[1].trim()
+  }
+
+  /**
+   * 读取所有需要继承的稳定规则段，按"通用 → 模板 → 分身"层次拼成一段 markdown。
+   *
+   * 拼接顺序（最通用在前）：
+   * 1. 项目级 CLAUDE.md 的 `project-level-core-rules` 块（核心约束、数据溯源粒度强制）
+   * 2. agent-template.md 的 `universal-anti-hallucination` 块（G1-G4 反幻觉强制工作流）
+   *
+   * 任一文件不存在或没有 INHERIT 标记时跳过该段，不报错。返回值放在分身
+   * CLAUDE.md 之前，让分身专属规则覆盖更通用规则。
+   */
+  private loadInheritedRules(): string {
+    const segments: string[] = []
+    const projectLevel = this.extractInheritBlock(
+      path.join(this.projectRoot, 'CLAUDE.md'),
+      'project-level-core-rules',
+    )
+    if (projectLevel) {
+      segments.push('<!-- 继承自 ~/AI/soul/CLAUDE.md：项目级核心约束 -->\n' + projectLevel)
+    }
+    const agentTemplate = this.extractInheritBlock(
+      path.join(this.projectRoot, 'templates', 'agent-template.md'),
+      'universal-anti-hallucination',
+    )
+    if (agentTemplate) {
+      segments.push('<!-- 继承自 templates/agent-template.md：通用反幻觉强制工作流 -->\n' + agentTemplate)
+    }
+    return segments.join('\n\n---\n\n')
   }
 
   private loadBasePrompt(avatarId: string): string {
@@ -209,7 +258,16 @@ export class SoulLoader {
       ] : []),
       '- **calculate_roi(...)**: 计算储能项目的峰谷套利收益、IRR 和回收期',
       '- **load_skill(skill_id)**: 按需加载指定技能的完整执行步骤。通常相关技能已由系统自动注入，只有在系统未注入、且确实需要完整流程时再调用。',
-      '- **delegate_task(task)**: 将独立子任务委派给子代理并行执行，子代理使用相同的知识库但独立对话上下文',
+      '- **read_user_file(path, offset?, limit?)**: 读用户授权根目录下任意 absolute path 的文件（2026-05-22 Marvis File Agent 借鉴）。与 `read_file` 区别：后者只能读 avatar workspace 内，本工具能读用户在「设置 → 用户文件根」显式授权的更广目录（如 `~/Documents/项目报告`）。默认关闭——未授权时直接返错，需用户在设置里添加根路径才生效。',
+      '- **list_user_folder(path)**: 列出用户授权根目录下任意 absolute path 的目录内容。权限模型同 `read_user_file`。',
+      '- **delegate_task(task, expected_output?, target_avatar?, agent_type?)**: 将独立子任务委派给子代理并行执行，子代理使用相同的知识库但独立对话上下文。`agent_type` 可选 `\'verifier\'`——派一个复核子代理检查另一个子代理（通常是 worker）刚给出的数字 / 来源 / 引用是否真的能在原始 sheet / knowledge 文件里找到（2026-05-22 MiniMax Mavis Leader/Worker/Verifier 借鉴）。',
+      '',
+      '  **何时主动派 verifier（自动 fan-out）**：以下任一条件命中，且你即将或刚刚产出涉及具体数字 / 跨源数据 / 关键来源标注的答复时，应在主答复之后主动调一次 `delegate_task({ task: \'复核刚刚答复中的数字与来源\', agent_type: \'verifier\' })`：',
+      '  - 用户问的是「多少 / 几个 / 占比 / 通过率 / 不良率 / 出货量 / 具体数字 / 准确数据」',
+      '  - 用户要求「标到原始 sheet」「来源 / 出处 / 引用」「按文件路径列引用」',
+      '  - 跨多个 Excel / knowledge 文件做对比、汇总',
+      '  - 你已经动用了 `query_excel` 或 `web_search` 拿到数字数据',
+      '  Verifier 自己读原始 sheet / knowledge 文件比对你给的数字、检查 markdown 二手总结有没有冒充 sheet。它返回 ✅ 通过 / ❌ 不通过+缺口清单。**verifier 不通过时，必须在你的主答复后补一段更正与诚实声明，不要硬撑原答复。**',
       '',
       '**调用原则**：当用户询问具体项目数据、特定省份政策、产品规格对比、收益计算时，应主动调用工具获取准确信息。涉及 Excel 表格数据必须用 `query_excel`，不要用 `search_knowledge` 模糊匹配表格。涉及技能时优先使用系统已注入的技能内容，不要把 `load_skill` 当成默认第一步。',
       '',
@@ -315,6 +373,12 @@ export class SoulLoader {
     const stableParts: string[] = []
     if (basePrompt.trim()) {
       stableParts.push(basePrompt, '\n\n---\n\n')
+    }
+    // 继承的通用规则放在分身 CLAUDE.md 之前——通用 baseline 先建立，分身专属规则在后做 specialization。
+    // 不存在 INHERIT 标记时 inheritedRules 返回空，不污染 prompt。
+    const inheritedRules = this.loadInheritedRules()
+    if (inheritedRules) {
+      stableParts.push(inheritedRules, '\n\n---\n\n')
     }
     stableParts.push(claudeMd, '\n\n---\n\n', soulMd)
 

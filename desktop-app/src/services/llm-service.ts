@@ -58,8 +58,18 @@ export interface LLMTool {
 
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
-/** 已知支持 thinking/reasoning 输出的模型名匹配 */
-const REASONING_MODEL_REGEX = /(^|[-/])(deepseek-reasoner|deepseek-r1|o1|o3|gpt-5|qwen-?qwq|glm-4-thinking)|claude.*thinking/i
+/**
+ * 已知支持 thinking/reasoning 输出的模型名匹配。
+ *
+ * DeepSeek 系列命名约定：
+ *   - V3：`deepseek-chat`（非 thinking）/ `deepseek-reasoner` (`deepseek-r1`)（thinking）
+ *   - V4：`deepseek-v4`（非 thinking）/ `deepseek-v4-pro`（thinking，对应 R1 升级版）
+ *
+ * `deepseek-v4-pro` 服务端启用 reasoning_content 校验：client 必须把这模型识别为
+ * thinking，才能走 `chatStore.forceLoadChartSkillIfNeeded` 的「skill 注入到 system
+ * prompt」分支；否则会发出无 reasoning_content 的合成 assistant + tool 消息 → 400。
+ */
+const REASONING_MODEL_REGEX = /(^|[-/])(deepseek-reasoner|deepseek-r1|deepseek-v4-pro|o1|o3|gpt-5|qwen-?qwq|glm-4-thinking)|claude.*thinking/i
 
 export function detectReasoning(modelName: string): { enabled: boolean; effort: ReasoningEffort } {
   return REASONING_MODEL_REGEX.test(modelName)
@@ -142,6 +152,33 @@ export function resolveCreationModel(creationModel: ModelConfig, chatModel: Mode
  */
 export function isClaudeModel(model: string): boolean {
   return /^claude-/i.test(model)
+}
+
+/**
+ * 模型的"端侧 / 端云协同 / 纯云"分级（2026-05-22 Marvis 借鉴）。
+ *
+ * 用于 ChatWindow 顶栏给用户显式的隐私态指示——和 Marvis 的"效率模式 / 隐私模式"
+ * 切换器是同一类信号，只是 Soul 是被动展示，不是主动切换。
+ *
+ * - `local`   : 完全端侧推理（ollama / lm-studio / vllm 本机部署）。数据 100% 不出本机。
+ * - `cloud`   : 调云端 API（claude / openai / deepseek / qwen / gemini / kimi 等）。
+ * - `unknown` : 既不是已知云端 model 名前缀，也没有明显本地特征（如自定义 baseUrl）。
+ *
+ * 判定优先级：baseUrl 是 localhost / 127.0.0.1 / 内网 IP → local；
+ * 否则按 model 名常见云端前缀判云端；都不匹配返回 unknown。
+ *
+ * 故意保守：用户用自建反向代理转发到云时 baseUrl 可能是 localhost 但实际数据还是出网——
+ * 这种 corner case 由用户自己承担（UI 标签语义是"baseUrl 端点"而非"数据是否绝对不出网"）。
+ */
+export type ModelTier = 'local' | 'cloud' | 'unknown'
+
+const LOCAL_HOSTNAME_REGEX = /^(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/i
+const CLOUD_MODEL_PREFIX_REGEX = /^(?:claude-|gpt-|o\d|deepseek-|qwen-|qwen2|gemini-|kimi-|moonshot-|glm-|chatglm-|ernie-|hunyuan-|doubao-|spark-|baichuan-|abab-)/i
+
+export function getModelTier(model: string, baseUrl?: string): ModelTier {
+  if (baseUrl && LOCAL_HOSTNAME_REGEX.test(baseUrl.trim())) return 'local'
+  if (CLOUD_MODEL_PREFIX_REGEX.test(model.trim())) return 'cloud'
+  return 'unknown'
 }
 
 /**

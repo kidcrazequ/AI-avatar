@@ -1,7 +1,3 @@
 {
-  "plugins": {
-    "tavily": {
-      "enabled": true
-    }
-  }
+  "plugins": {}
 }

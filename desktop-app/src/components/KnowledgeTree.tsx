@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 interface Props {
   tree: FileNode[]
@@ -51,6 +51,14 @@ function TreeNode({
   const [isExpanded, setIsExpanded] = useState(true)
   const isSelected = selectedPath === node.path
   const isConfirmingDelete = confirmDeletePath === node.path
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // selectedPath 命中此 file 时滚入视口（initialPath 跳转 / 搜索结果跳转都走这里）
+  useEffect(() => {
+    if (isSelected && node.type === 'file') {
+      rowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [isSelected, node.type])
 
   if (node.type === 'directory') {
     return (
@@ -92,6 +100,7 @@ function TreeNode({
   return (
     <div style={{ paddingLeft: `${level * 12 + 20}px` }}>
       <div
+        ref={rowRef}
         className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer group transition-none
           ${isSelected ? 'bg-px-primary/15 text-px-text border-l-2 border-l-px-primary -ml-0.5' : 'hover:bg-px-hover text-px-text-sec'}`}
         onClick={() => onSelectFile(node.path)}

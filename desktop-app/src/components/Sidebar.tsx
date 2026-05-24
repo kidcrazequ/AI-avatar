@@ -9,6 +9,7 @@ interface Props {
   knownProjectIds: string[]
   onProjectChange: (projectId: string) => void
   onCreateProjectId: () => void
+  onManageProjects?: () => void
   onSelectConversation: (id: string) => void
   onDeleteConversation: (id: string) => void
   onNewConversation: () => void
@@ -24,6 +25,7 @@ export default function Sidebar({
   knownProjectIds,
   onProjectChange,
   onCreateProjectId,
+  onManageProjects,
   onSelectConversation,
   onDeleteConversation,
   onNewConversation,
@@ -41,6 +43,7 @@ export default function Sidebar({
           knownProjectIds={knownProjectIds}
           onProjectChange={onProjectChange}
           onCreateProjectId={onCreateProjectId}
+          onManageProjects={onManageProjects}
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}

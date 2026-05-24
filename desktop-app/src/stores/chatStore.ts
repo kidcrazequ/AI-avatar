@@ -152,6 +152,16 @@ export interface ChatMessage {
    */
   uncertainMarkers?: string[]
   reconsiderMarkers?: string[]
+  /**
+   * v19 (2026-05-21)：本条 assistant 消息关联的工具调用时间线。
+   *
+   * 流式期间由 chatStore 在 tool loop 内追加；落盘时序列化为 JSON 写入 messages.tool_call_timeline_json；
+   * 加载会话时由 ChatWindow 反序列化回填。把时间线挂到具体消息上而不是全局 store，
+   * 让用户切对话 / 重启 app 后仍能看到每条 assistant 当时调了哪些工具。
+   *
+   * 仅 assistant 消息会有；缺省 undefined 与空数组等价。
+   */
+  toolCallTimeline?: ToolCallTimelineEntry[]
 }
 
 /**
@@ -199,12 +209,15 @@ export interface AgentTaskToolCall {
  *                   rag/skill: 中文友好文本（detail），渲染时作为主标签优先于 name
  *   - resultPreview 工具结果文本截前 200 字符（rag/skill 通常为空）
  *   - durationMs    本次执行耗时
- *   - ok            true=成功；false=失败（含被守卫拦截）
+ *   - ok            true=成功；false=失败（**真错误**，不含守卫拦截）
  *   - startedAt     开始时间戳（Date.now()），用于按时序排序/展示
  *   - kind          条目种类（默认 'tool'，向后兼容）：
  *                     tool  - LLM function-calling 工具调用（前缀 ▷）
  *                     rag   - 主进程 RAG 检索阶段事件（前缀 ⌕）
  *                     skill - Skill 路由命中事件（前缀 ★）
+ *   - skipped       v19 (2026-05-21)：本次调用被**守卫主动拦截**（如 load_skill 同 skill 重复加载）。
+ *                   与 ok=false 区分：跳过不是错误而是预期行为；UI 用 ⊘ 中性色显示，
+ *                   "N 失败" 汇总不计入。旧持久化条目无此字段 → 视为 undefined → 老 ok=false 行为不变。
  */
 export interface ToolCallTimelineEntry {
   id: string
@@ -215,6 +228,7 @@ export interface ToolCallTimelineEntry {
   ok: boolean
   startedAt: number
   kind?: 'tool' | 'rag' | 'skill'
+  skipped?: boolean
 }
 
 export interface AgentTask {
@@ -260,6 +274,24 @@ interface ChatStore {
   isLoading: boolean
   systemPrompt: string
   chatModel: ModelConfig
+  /**
+   * 端侧（本地）模型配置（2026-05-22 Marvis 借鉴；端云/端侧切换闭环）。
+   *
+   * 与 chatModel 并列的第二个 master slot——用户在设置里配置一份指向本机的
+   * Ollama / lm-studio / vllm 等本地推理服务（baseUrl 通常是 localhost:11434/v1）。
+   * 发送链路按 chatModelMode 决定走 chatModel 还是 localChatModel。
+   *
+   * 默认指向 Ollama 默认端口 + qwen2.5:7b（最常见本地中文 7B 选择）；
+   * 用户未装 Ollama 时切换到 'local' 后发送会失败，UI 会引导去设置配置。
+   */
+  localChatModel: ModelConfig
+  /**
+   * 当前 active 的模型 slot（App 全局态）。
+   *
+   * 'cloud' = 用 chatModel（默认）；'local' = 用 localChatModel。
+   * ChatWindow 顶栏 pill 是这个 state 的反映与切换入口；App 启动时从 settings.chat_model_mode 加载。
+   */
+  chatModelMode: 'cloud' | 'local'
   /** GAP8: 当前正在执行的工具名称，用于 UI 可视化 */
   toolCallStatus: string
   /** 九层重构 #17：当前会话模式（agent / plan / ask） */
@@ -293,6 +325,10 @@ interface ChatStore {
 
   setSystemPrompt: (prompt: string) => void
   setChatModel: (config: ModelConfig) => void
+  /** 设置端侧（本地）模型配置（2026-05-22 Marvis 借鉴）。 */
+  setLocalChatModel: (config: ModelConfig) => void
+  /** 切换 active master slot（端云 / 端侧）。落 sqlite 由调用方负责。 */
+  setChatModelMode: (mode: 'cloud' | 'local') => void
   /**
    * 会话级模型覆盖：null/缺失 = 使用分身 defaultModel 或 chatModel slot。
    * 子任务 7 UI 切换器写入；sendMessage 读取后注入 LLMService。
@@ -301,6 +337,16 @@ interface ChatStore {
   /** 设置当前会话的模型覆盖；传 null 清除覆盖回到默认 */
   setConversationModel: (conversationId: string, model: string | null) => void
   setMessages: (messages: ChatMessage[]) => void
+  /**
+   * 切走→切回会话时，把闭包里 in-flight streaming 的 assistantText/reasoningText/toolCallTimeline
+   * 从 module-level snapshot 回灌到 messages 列表（拼到末尾），同时恢复 isLoading=true。
+   *
+   * 返回值：snapshot 命中时返回 { startedAt }，让 ChatWindow 校准"思考中... · Xs"计时器
+   * （否则计时器从 0 重新算，给用户"流刚开始"的错觉）。无 in-flight 或会话不匹配时返回 null。
+   *
+   * 由 ChatWindow.loadMessages 在 setMessages 之后调用。
+   */
+  restoreInflightStreamingMessage: (conversationId: string) => { startedAt: number } | null
   sendMessage: (
     content: string,
     conversationId: string,
@@ -310,7 +356,25 @@ interface ChatStore {
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
     proxyOpts?: SendMessageProxyOptions,
-    options?: { skipCache?: boolean },
+    options?: {
+      skipCache?: boolean
+      skipInfographicRevalidate?: boolean
+      /**
+       * 隐藏修复轮（2026-05-24）。LLM 调用照常，但所有面向用户的副作用全部禁掉：
+       *   - 不插入 user / assistant 消息到 messages
+       *   - 不入 DB（saveMessage user / assistant 都跳过）
+       *   - 不触发首条消息自动改名
+       *   - 不写答案缓存
+       *   - 不创建 streamingSnapshot（避免切回会话被 hidden 内容回灌覆盖）
+       *   - 不触发 conversation episode 抽取
+       *   - phase05 埋点标 hiddenRepair=1 便于过滤
+       *
+       * 当前用途：infographic validator 触发的格式修正轮。原实现走普通
+       * sendMessage 链路会把修正 prompt 当真实用户消息入库、入历史、计费，
+       * 严重污染对话；本 flag 把修正轮做成真正隐藏。
+       */
+      hiddenRepair?: boolean
+    },
   ) => Promise<void>
   /**
    * 重新生成指定 assistant 消息（v14）。
@@ -370,7 +434,20 @@ interface ChatStore {
    */
   toolCallTimeline: ToolCallTimelineEntry[]
   /** 追加一条工具调用时间线（每次工具循环执行完毕后调用，失败应静默） */
-  appendToolCallTimeline: (entry: ToolCallTimelineEntry) => void
+  /**
+   * 追加一条工具调用时间线条目。
+   *
+   * target 强烈建议传：用 conversationId + assistantMsgId 精确定位，避免：
+   *   ① 跨会话污染——A 会话在跑工具，用户切到 B，旧实现按"最后一条 assistant"
+   *      启发式更新会把 A 的工具行挂到 B 最后一条 assistant
+   *   ② saveMessage 落库时找不到 timeline（A 不在视图，messages 里没有 A 的 assistant）
+   *
+   * 不传 target 时仍走旧的"最后一条 assistant"路径（向后兼容）。
+   */
+  appendToolCallTimeline: (
+    entry: ToolCallTimelineEntry,
+    target?: { conversationId: string; assistantMsgId: string },
+  ) => void
   /** 清空工具调用时间线（新提问 / 重置 / 清屏时调用） */
   clearToolCallTimeline: () => void
 }
@@ -1860,6 +1937,59 @@ IR 语法（markdown + 扩展）：
   },
   {
     /**
+     * read_user_file: 读用户授权根目录下任意 absolute path 的文件（2026-05-22 Marvis File Agent 借鉴）。
+     * 与 read_file 区别：后者限于 avatar workspace，本工具能读用户在「设置 → 用户文件根」显式授权的更广目录。
+     * 默认关闭，未授权前直接返错。
+     */
+    type: 'function',
+    function: {
+      name: 'read_user_file',
+      description: [
+        '读用户授权根目录下任意 absolute path 的文件（File Agent，Marvis 借鉴）。',
+        '',
+        '与 read_file 区别：',
+        '- read_file 仅能读 avatar workspace 内文件',
+        '- read_user_file 能读用户在「设置 → 用户文件根」显式授权的更广目录（如 ~/Documents/项目报告）',
+        '',
+        '权限模型（默认保守关闭）：',
+        '- 用户在设置里加入 absolute root 路径后才生效',
+        '- 未授权时返错 + 提示用户去设置授权',
+        '- 路径必须落在某个授权根下，否则拒绝',
+        '',
+        '何时使用：用户引用了 workspace 外的具体文件路径，希望分身读取其内容。',
+        '何时不用：workspace 内文件用 read_file / read_lines；http(s) 用 web_fetch。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '绝对路径（必须以 / 开头）' },
+          offset: { type: 'number', description: '0-based 行偏移（默认 0）' },
+          limit: { type: 'number', description: '最多读多少行（默认 2000）' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    /**
+     * list_user_folder: 列用户授权根目录下任意 absolute path 的目录内容（Marvis File Agent 借鉴）。
+     * 权限模型同 read_user_file。
+     */
+    type: 'function',
+    function: {
+      name: 'list_user_folder',
+      description: '列用户授权根目录下任意 absolute path 的目录内容（File Agent，Marvis 借鉴）。权限模型同 read_user_file——默认关闭，需用户在「设置 → 用户文件根」授权。返回行格式 `DIR/FILE/OTHER<TAB>名字`。',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: '绝对路径（必须以 / 开头）' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    /**
      * read_tool_ref: 取回长工具输出的离线正文。
      *
      * 当 `web_fetch` 等返回 ≥ 4000 字符 且 启用 lazy-store（设置 / env `SOUL_TOOL_LAZY_RETRIEVAL=on`）时，
@@ -2118,11 +2248,18 @@ const ROUND_STREAM_IDLE_TIMEOUT_MS = 90_000
 const ENABLE_QUERY_EXCEL_GUARD = true
 /**
  * 单次对话里 query_excel 的实际执行上限（超限后返回收敛提示，不再执行工具）。
- * 回归修复：1 次预算会让 schema / 小样本查询后过早收敛，行级数据无法再取。
- * 保留小预算但允许 schema → rows → fallback 三步查询，配合同参缓存和硬轮次防止拖慢。
- * 回滚方式：恢复为 1。
+ *
+ * 调参史：
+ * - 1：早期。schema / 小样本查询后过早收敛，行级数据无法再取。
+ * - 3：允许 schema → rows → fallback 三步。简单单 sheet 问答够用。
+ * - 5：当前值（2026-05-22 调整）。复合 prompt（如"双轴图 + SWOT 信息图"同时查
+ *   CoPQ 机型映射 + Summary 月度数据 + 280Ah 销量预测 + 电芯参数）容易撞 3 次墙，
+ *   converge mode 提前触发导致后续数据被打断。5 次覆盖典型"3-4 sheet + 1-2 变体重试"
+ *   的真实需求；仍远低于 tool-budget.ts 的 24 次硬上限。
+ *
+ * 回滚方式：恢复为 3 或 1。
  */
-const MAX_QUERY_EXCEL_CALLS_PER_REQUEST = 3
+const MAX_QUERY_EXCEL_CALLS_PER_REQUEST = 5
 /**
  * load_skill 守卫开关（B1 改造）。
  * 启用后限制 load_skill 在单次对话里的调用次数，防止 LLM 中途切换技能导致路径变长。
@@ -2134,7 +2271,13 @@ const ENABLE_LOAD_SKILL_GUARD = true
  * 一般情况下 SkillRouter 已在 systemPrompt 注入相关技能，
  * LLM 不应该再主动 load_skill；如果真要调，最多 1 次。
  */
-const MAX_LOAD_SKILL_CALLS_PER_REQUEST = 1
+/**
+ * load_skill 单次请求最多 N 个**不同**的 skill_id。同 skill_id 重复加载始终阻止；
+ * 这里 N 用作防滥用兜底（避免 LLM 串行加载所有 skill 浪费上下文）。
+ * 实际"是否拦"以 loadedSkillIds Set 为准（见 chatStore §forceLoadChartSkillIfNeeded
+ * 上方注释）。从 1 提到 3：覆盖 chart-from-knowledge → draw-chart → 兜底其它技能场景。
+ */
+const MAX_LOAD_SKILL_CALLS_PER_REQUEST = 3
 /**
  * 工具收敛模式开关（可快速回滚）。
  * 当工具达到上限后，后续轮次禁用工具，强制 LLM 基于现有结果直接收敛回答。
@@ -2147,8 +2290,17 @@ const MAX_TOOL_RESULT_CONTEXT_CHARS = 6000
  * 回滚方式：改为 false，恢复旧行为（不注入收敛提示，不限制最终轮 max_tokens/temperature）。
  */
 const ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP = true
-/** 收敛最终轮的输出长度上限，避免长篇推理拖慢响应 */
-const CONVERGE_FINAL_ROUND_MAX_TOKENS = 1200
+/**
+ * 收敛最终轮的输出长度上限，避免长篇推理拖慢响应。
+ *
+ * 调参史：
+ * - 1200：初始值。简单"该不该画图 + 一段说明"够用，但对"复合任务"（如拒绝绘图说明 +
+ *   一张 SWOT 信息图 4 块完整内容）经常打满截断（2026-05-22 真实事故：262 柜体 + SWOT
+ *   组合请求，正文写到 Weaknesses 第 1 条就 hit 1200 上限被截断）。
+ * - 3500：当前值。容纳"拒答说明 + 完整 SWOT 4 块（每块 4-6 条带 source）" 这种复合
+ *   产出。reasoning model 多消耗的 thinking budget 由 reasoningEffort='low' 控制。
+ */
+const CONVERGE_FINAL_ROUND_MAX_TOKENS = 3500
 /**
  * 图表一致性模式开关（可快速回滚）。
  * 命中图表请求时固定较低 temperature，并注入统一的降级规则，减少同问多解。
@@ -2420,6 +2572,29 @@ let activeChatRequest: { id: number; conversationId: string } | null = null
 let chatRequestSeq = 0
 let pendingChunkUpdate: number | null = null
 let activeAbortController: AbortController | null = null
+/**
+ * 切走 → 切回会话时"streaming 回答消失" bug 的修复（2026-05-22）。
+ *
+ * 旧实现：onChunk 回调里 isViewedConv() === false 就跳过 setState，但闭包里的 assistantText/
+ * reasoningText 没暴露出来。用户切回 A 会话时，ChatWindow.loadMessages 从 DB 重新拉消息，
+ * DB 里还没有 assistant（流没结束），UI 显示空白；要等下一个 chunk 才能触发 RAF 重刷——
+ * 如果模型在 reasoning 段或 chunk 间隔大，等待时间不可控。
+ *
+ * 新策略：每个 chunk 同步更新本 snapshot（跟 RAF 节流解耦），bindConversation /
+ * ChatWindow.loadMessages 完成时调 restoreInflightStreamingMessage 主动回灌。
+ * sendMessage 完成时清空 snapshot；同时只允许一个 sendMessage 在跑（isLoading 锁），
+ * 所以单值不会并发竞争。
+ */
+let streamingSnapshot: {
+  conversationId: string
+  assistantMsgId: string
+  text: string
+  reasoning: string
+  /** sendMessage 发起时刻，切回会话时给计时器校准（避免"思考中 0s"从头开始） */
+  startedAt: number
+  /** 已采集的工具调用条目（appendToolCallTimeline 同步），切回时回灌到 store + message */
+  toolCallTimeline: ToolCallTimelineEntry[]
+} | null = null
 
 /** 更新或追加最后一条 assistant 消息（消除 4 处重复代码） */
 function upsertLastAssistant(
@@ -2431,11 +2606,16 @@ function upsertLastAssistant(
   uncertainMarkers?: string[],
   reconsiderMarkers?: string[],
 ): ChatMessage[] {
-  const withoutLast = messages.at(-1)?.role === 'assistant'
-    ? messages.slice(0, -1)
-    : messages
+  const last = messages.at(-1)
+  const lastIsAssistant = last?.role === 'assistant'
+  const withoutLast = lastIsAssistant ? messages.slice(0, -1) : messages
   const trimmedReasoning = reasoning?.trim()
   const attachments = documentAttachments && documentAttachments.length > 0 ? documentAttachments : undefined
+  // v19：流式期间 appendToolCallTimeline 可能已经把工具调用条目挂到 last 上，
+  // 这里 upsert 必须把它沿用过来，否则下一帧渲染会丢失整段时间线。
+  const preservedTimeline = lastIsAssistant && last?.toolCallTimeline && last.toolCallTimeline.length > 0
+    ? last.toolCallTimeline
+    : undefined
   return [...withoutLast, {
     id,
     role: 'assistant',
@@ -2446,6 +2626,7 @@ function upsertLastAssistant(
     // 时把抽出的 markers 一并塞进 message，让 chip 立刻渲染，不必等下一次 loadMessages。
     uncertainMarkers: uncertainMarkers && uncertainMarkers.length > 0 ? uncertainMarkers : undefined,
     reconsiderMarkers: reconsiderMarkers && reconsiderMarkers.length > 0 ? reconsiderMarkers : undefined,
+    toolCallTimeline: preservedTimeline,
   }]
 }
 
@@ -2553,11 +2734,25 @@ function persistTasks(conversationId: string | null, tasks: AgentTask[]): void {
   }
 }
 
+/**
+ * 端侧（本地）模型默认配置——指向 Ollama 默认端点 + qwen2.5:7b。
+ *
+ * 用户启动 Ollama（`ollama serve`）并拉过 qwen2.5:7b 后开箱可用；
+ * 没装会在切换到 'local' 后首次发送时失败，UI 引导去设置面板配置。
+ */
+export const DEFAULT_LOCAL_CHAT_MODEL: ModelConfig = {
+  baseUrl: 'http://localhost:11434/v1',
+  model: 'qwen2.5:7b',
+  apiKey: 'ollama',
+}
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   isLoading: false,
   systemPrompt: '',
   chatModel: DEFAULT_CHAT_MODEL,
+  localChatModel: DEFAULT_LOCAL_CHAT_MODEL,
+  chatModelMode: 'cloud',
   toolCallStatus: '',
   skillProposals: [],
   collapsedMessageIds: new Set<string>(),
@@ -2582,6 +2777,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setChatModel: (config) => set({ chatModel: config }),
 
+  setLocalChatModel: (config) => set({ localChatModel: config }),
+
+  setChatModelMode: (mode) => set({ chatModelMode: mode }),
+
   conversationModelOverrides: {},
 
   setConversationModel: (conversationId, model) => set(state => {
@@ -2597,6 +2796,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   }),
 
   setMessages: (messages) => set({ messages }),
+
+  restoreInflightStreamingMessage: (conversationId) => {
+    const snap = streamingSnapshot
+    if (!snap || snap.conversationId !== conversationId) return null
+    // 把 snapshot 当前的 text/reasoning 拼到 messages 末尾（占位 assistantMsgId 复用，
+    // 之后的 chunk RAF 刷新会继续基于同一个 id 做 upsert，不会重复气泡）。
+    // 同时把已采集的 toolCallTimeline 挂到当前 assistant message + 同步进全局 timeline state。
+    set((state) => {
+      const baseMessages = upsertLastAssistant(state.messages, snap.assistantMsgId, snap.text, snap.reasoning)
+      // 把 timeline 同时挂到目标 message（v19 行为）+ 全局 timeline state（向后兼容 + 流式 transient 视图）
+      const messagesWithTimeline = snap.toolCallTimeline.length > 0
+        ? baseMessages.map(m => m.id === snap.assistantMsgId ? { ...m, toolCallTimeline: snap.toolCallTimeline } : m)
+        : baseMessages
+      return {
+        messages: messagesWithTimeline,
+        isLoading: true,
+        toolCallTimeline: snap.toolCallTimeline,
+      }
+    })
+    return { startedAt: snap.startedAt }
+  },
 
   clearSkillProposals: () => set({ skillProposals: [] }),
 
@@ -2687,8 +2907,67 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     persistTasks(get().currentConversationId, [])
   },
 
-  appendToolCallTimeline: (entry) =>
-    set((s) => ({ toolCallTimeline: [...s.toolCallTimeline, entry] })),
+  appendToolCallTimeline: (entry, target) => {
+    set((s) => {
+      // v19：时间线挂到当前 assistant 消息上，让切对话/重启后能从 DB 恢复。
+      // 全局 toolCallTimeline 仍维护（向后兼容暂未读它的代码 + 流式期间的 transient 视图），
+      // UI 侧已经改用 message.toolCallTimeline，全局后续可下线。
+      //
+      // 2026-05-24 隔离修复（target 路径）：
+      //   - 仅当当前视图就是 target 会话时，才更新 messages + 全局 timeline；
+      //     用户切到 B 时，A 的工具调用不污染 B 的最后一条 assistant，也不污染 B 的顶部时间线
+      //   - 精确按 assistantMsgId 定位，不再用"最后一条 assistant"启发式
+      if (target) {
+        if (s.currentConversationId !== target.conversationId) {
+          return {}
+        }
+        const targetIdx = s.messages.findIndex(
+          (m) => m.id === target.assistantMsgId && m.role === 'assistant',
+        )
+        if (targetIdx < 0) {
+          // 视图匹配但目标 message 已不在 messages（用户清了会话/重新生成覆盖）——
+          // 仍写全局 timeline（顶部滚动展示），不动 messages。
+          return { toolCallTimeline: [...s.toolCallTimeline, entry] }
+        }
+        const updatedMessages = [...s.messages]
+        updatedMessages[targetIdx] = {
+          ...updatedMessages[targetIdx],
+          toolCallTimeline: [...(updatedMessages[targetIdx].toolCallTimeline ?? []), entry],
+        }
+        return {
+          messages: updatedMessages,
+          toolCallTimeline: [...s.toolCallTimeline, entry],
+        }
+      }
+      // 旧路径：未传 target 时回退到"最后一条 assistant"启发式（向后兼容）
+      const lastIdx = s.messages.length - 1
+      const last = lastIdx >= 0 ? s.messages[lastIdx] : undefined
+      if (last && last.role === 'assistant') {
+        const updatedMessages = [...s.messages]
+        updatedMessages[lastIdx] = {
+          ...last,
+          toolCallTimeline: [...(last.toolCallTimeline ?? []), entry],
+        }
+        return {
+          messages: updatedMessages,
+          toolCallTimeline: [...s.toolCallTimeline, entry],
+        }
+      }
+      return { toolCallTimeline: [...s.toolCallTimeline, entry] }
+    })
+    // 同步进 streaming snapshot：传 target 时校验 snapshot 是同一请求的，避免误写到
+    // 另一请求的 snapshot；不传 target 则维持旧的"全局唯一 snapshot"写入。
+    if (
+      streamingSnapshot
+      && (
+        !target
+        || (streamingSnapshot.conversationId === target.conversationId
+          && streamingSnapshot.assistantMsgId === target.assistantMsgId)
+      )
+    ) {
+      streamingSnapshot.toolCallTimeline = [...streamingSnapshot.toolCallTimeline, entry]
+    }
+  },
 
   clearToolCallTimeline: () => set({ toolCallTimeline: [] }),
 
@@ -2741,7 +3020,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
     proxyOpts?: SendMessageProxyOptions,
-    options?: { skipCache?: boolean },
+    options?: { skipCache?: boolean; skipInfographicRevalidate?: boolean; hiddenRepair?: boolean },
   ) => {
     const invokeProxyComplete = async (
       r: { ok: true; assistantText: string } | { ok: false; error: string },
@@ -2762,6 +3041,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ isLoading: true, toolCallTimeline: [] })
     const requestId = ++chatRequestSeq
     const requestStartedAt = Date.now()
+    // 提前生成 assistantMsgId：在 user 消息插入时同步塞入空 assistant 占位气泡，
+    // 让用户立刻看到分身气泡 + "思考中... · Xs"，不再等首个 chunk 才创建。
+    // 后续所有早期返回路径（cache 命中 / 错误）都用 upsertLastAssistant(assistantMsgId)
+    // 替换这个占位，避免出现两条 assistant。
+    const assistantMsgId = nextMessageId()
     const perfTag = `[chat-perf][conv:${conversationId}][req:${requestId}]`
     const logPerf = (event: string, extra?: string): void => {
       const elapsed = Date.now() - requestStartedAt
@@ -2788,10 +3072,58 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     if (activeAbortController) activeAbortController.abort()
     const abortController = new AbortController()
     activeAbortController = abortController
+    // 2026-05-24：hiddenRepair 模式（infographic validator 触发的格式修正轮）
+    // 所有面向用户的副作用全部禁掉——见接口处 hiddenRepair 注释。
+    const isHiddenRepair = options?.hiddenRepair === true
+    // 切走→切回 streaming 回灌的 snapshot，每个 chunk 同步更新（见模块顶部说明）。
+    // hiddenRepair 模式不创建——避免用户切走再切回时被 hidden 内容（修正 prompt 的
+    // LLM 回复）回灌覆盖到 UI。
+    if (!isHiddenRepair) {
+      streamingSnapshot = {
+        conversationId,
+        assistantMsgId,
+        text: '',
+        reasoning: '',
+        startedAt: requestStartedAt,
+        toolCallTimeline: [],
+      }
+    }
     const isStale = () =>
       !activeChatRequest
       || activeChatRequest.id !== requestId
       || activeChatRequest.conversationId !== conversationId
+
+    /**
+     * 早退 / 完成时统一清理本请求挂在模块级单例上的状态。
+     *
+     * 必要性（2026-05-24）：
+     *   - API key 缺失、saveMessage user 失败、答案 cache 命中等早退路径，原先
+     *     直接 `return` 不清 streamingSnapshot / activeChatRequest，导致：
+     *     ① 切回该会话时 restoreInflightStreamingMessage 用空 snapshot 覆盖已落盘的真答案
+     *     ② 下次 sendMessage 的 isStale 判定会被错误的 activeChatRequest 干扰
+     *
+     * 自检：用 requestId / abortController / assistantMsgId 三重锚定，
+     * 后续请求若已接管这些状态，本函数变成 no-op，绝不误清；多次调用幂等。
+     *
+     * isLoading 兜底：成功/错误路径只在 isViewedConv() 时 set isLoading=false，
+     * 切走视图时会卡 true；本函数确认是"自然终结"后兜底清掉，避免切回仍转圈。
+     */
+    const cleanupRequest = (): void => {
+      const isOwn = activeChatRequest?.id === requestId
+      if (isOwn) {
+        activeChatRequest = null
+        if (get().isLoading) {
+          set({ isLoading: false, toolCallStatus: '' })
+        }
+      }
+      if (activeAbortController === abortController) activeAbortController = null
+      if (
+        streamingSnapshot?.conversationId === conversationId
+        && streamingSnapshot?.assistantMsgId === assistantMsgId
+      ) {
+        streamingSnapshot = null
+      }
+    }
 
     // 用户当前是否还在看本次 sendMessage 所属的会话。切走时流式继续在闭包里累积
     // assistantText / reasoningText，但不实时 setState（否则会污染当前正在看的别的会话的消息列表）。
@@ -2799,13 +3131,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 与是否在视图无关，保证答复永不丢失。
     const isViewedConv = (): boolean => get().currentConversationId === conversationId
 
-    const { messages, systemPrompt, chatModel } = get()
+    const { messages, systemPrompt, chatModel: cloudChatModel, localChatModel, chatModelMode } = get()
+    // 端云 / 端侧切换（2026-05-22 Marvis 借鉴）：active master slot 由 mode 决定。
+    // 视觉路径不走 mode 切换——vision 任务依赖云端模型，本地多数 7B 不支持图像输入。
+    const chatModel = chatModelMode === 'local' ? localChatModel : cloudChatModel
 
     // GAP9b: 有图片时使用视觉模型
     const activeModel = (images && images.length > 0 && visionModel?.apiKey) ? visionModel : chatModel
 
     if (!activeModel.apiKey) {
-      const errorMsg = '请先在设置中配置 API Key'
+      const errorMsg = chatModelMode === 'local'
+        ? '端侧模型未配置 API Key（Ollama 默认为 "ollama"，本地 vllm 等可填任意非空字符串）。请在设置 → 端侧（本地）填写。'
+        : '请先在设置中配置 API Key'
       set({
         messages: [...messages, { id: nextMessageId(), role: 'user', content }, { id: nextMessageId(), role: 'assistant', content: errorMsg }],
         isLoading: false,
@@ -2813,6 +3150,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       await window.electronAPI.saveMessage(conversationId, 'user', content)
       await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
       await invokeProxyComplete({ ok: false, error: errorMsg })
+      cleanupRequest()
       return
     }
 
@@ -2870,20 +3208,69 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       imageUrls: images && images.length > 0 ? images : undefined,
       attachments: attachments && attachments.length > 0 ? attachments : undefined,
     }
-    set({ messages: [...messages, userMessage] })
+    // 本对话发送前的消息数（含 system 等），用于触发首条消息自动改名
+    const _messageCountBeforeUserSend = messages.length
+    // user 消息 + 空 assistant 占位同帧插入：用户提问后立刻看到分身气泡 +
+    // 时间线里的"思考中... · Xs"，避免 cache/RAG/TTFT 期间界面像卡死。
+    // 占位会被后续 cache 命中、流式 chunk、或错误路径通过 upsertLastAssistant 替换。
+    // hiddenRepair 模式跳过——不入 UI，不入 DB，对用户完全不可见。
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+    }
+    if (!isHiddenRepair) {
+      set({ messages: [...messages, userMessage, assistantPlaceholder] })
+    }
     let savedUserMessageId: string | null = null
-    try {
-      savedUserMessageId = await window.electronAPI.saveMessage(conversationId, 'user', taggedContent, undefined, images)
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error)
-      window.electronAPI.logEvent('error', 'save-user-message-error', errMsg)
-      set((state) => ({
-        messages: [...state.messages, { id: nextMessageId(), role: 'assistant', content: `抱歉，保存消息失败：${errMsg}` }],
-        isLoading: false,
-        toolCallStatus: '',
-      }))
-      await invokeProxyComplete({ ok: false, error: `保存用户消息失败：${errMsg}` })
-      return
+    if (!isHiddenRepair) {
+      try {
+        savedUserMessageId = await window.electronAPI.saveMessage(conversationId, 'user', taggedContent, undefined, images)
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error)
+        window.electronAPI.logEvent('error', 'save-user-message-error', errMsg)
+        set((state) => ({
+          messages: upsertLastAssistant(state.messages, assistantMsgId, `抱歉，保存消息失败：${errMsg}`),
+          isLoading: false,
+          toolCallStatus: '',
+        }))
+        await invokeProxyComplete({ ok: false, error: `保存用户消息失败：${errMsg}` })
+        cleanupRequest()
+        return
+      }
+    }
+
+    // 自动改名：本对话第一条用户消息发出时，把"新对话"标题改成内容片段，
+    // 否则侧栏所有会话都叫"新对话"，无法区分（2026-05-21 用户反馈）。
+    // 触发条件：sendMessage 进入前 messages 为空（即这是该会话首条用户消息）。
+    // 失败仅记日志，不阻塞主对话流程。
+    // hiddenRepair 模式跳过——修正 prompt 不应当作"首条消息"被拿来当标题。
+    if (_messageCountBeforeUserSend === 0 && !isHiddenRepair) {
+      const stripped = content.trim().replace(/\s+/g, ' ')
+      if (stripped.length > 0) {
+        const snippet = stripped.slice(0, 20)
+        const newTitle = snippet.length < stripped.length ? `${snippet}…` : snippet
+        try {
+          await window.electronAPI.updateConversationTitle(conversationId, newTitle)
+          // chatStore 无 App.tsx 引用，用 window 自定义事件通知侧栏刷新
+          window.dispatchEvent(
+            new CustomEvent('conversation-title-changed', {
+              detail: { conversationId, title: newTitle },
+            }),
+          )
+          window.electronAPI.logEvent(
+            'info',
+            'conversation-auto-titled',
+            `id=${conversationId} title=${newTitle.replace(/\n/g, ' ')}`,
+          )
+        } catch (renameErr) {
+          window.electronAPI.logEvent(
+            'warn',
+            'conversation-auto-title-failed',
+            renameErr instanceof Error ? renameErr.message : String(renameErr),
+          )
+        }
+      }
     }
 
     // 对话框附件扩展（2026-05-01）：把刚上传的附件回填到 user 消息上，
@@ -2919,14 +3306,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const cached = await window.electronAPI.getCachedAnswer(cacheKey)
         if (cached) {
           logPerf('answer-cache:hit', `key=${cacheKey.slice(0, 32)}... len=${cached.assistantContent.length}`)
-          const assistantMsg: ChatMessage = {
-            id: nextMessageId(),
-            role: 'assistant',
-            content: cached.assistantContent,
-            reasoning: cached.reasoningContent ?? undefined,
-          }
           set((state) => ({
-            messages: [...state.messages, assistantMsg],
+            messages: upsertLastAssistant(
+              state.messages,
+              assistantMsgId,
+              cached.assistantContent,
+              cached.reasoningContent ?? undefined,
+            ),
             isLoading: false,
             toolCallStatus: '',
           }))
@@ -2945,6 +3331,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
           logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms via-cache displayLen=${cached.assistantContent.length}`)
           await invokeProxyComplete({ ok: true, assistantText: cached.assistantContent })
+          cleanupRequest()
           return
         }
       } catch (cacheErr) {
@@ -2970,18 +3357,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             await invokeProxyComplete({ ok: false, error: '请求已过期或已取消' })
             return
           }
-          const cachedMsg: ChatMessage = {
-            id: nextMessageId(),
-            role: 'assistant',
-            content: cacheResult.assistantContent,
-          }
           set((state) => ({
-            messages: [...state.messages, cachedMsg],
+            messages: upsertLastAssistant(state.messages, assistantMsgId, cacheResult.assistantContent),
             isLoading: false,
             toolCallStatus: '',
           }))
           await window.electronAPI.saveMessage(conversationId, 'assistant', cacheResult.assistantContent)
-          activeChatRequest = null
+          // 早返路径统一走 cleanupRequest（含 snapshot / activeChatRequest / abortController），
+          // 避免切回会话时被空 snapshot 覆盖 cache 答案。
+          cleanupRequest()
           if (proxyOpts?.proxyStream) {
             writeProxyStreamDelta(cacheResult.assistantContent)
           }
@@ -3208,8 +3592,46 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     // apiMessages 不再包含 role=system —— Provider 会优先采用 options.systemBlocks
+    //
+    // thinking 模型（DeepSeek-Reasoner 等）的严格校验：服务端要求历史里**所有** assistant
+    // 消息都必须带 reasoning_content。只要任一条缺失（旧消息、reasoning 在 DB 写入前
+    // 中断、跨 schema 迁移等），下一轮就直接 400：
+    //   The `reasoning_content` in the thinking mode must be passed back to the API
+    //
+    // 修复策略：先探测当前**实际会使用**的模型是否要求 reasoning（会话级 override 优先于
+    // activeModel）；若是 thinking 模型，则把历史里 reasoning_content 为空的 assistant
+    // 消息及紧贴它的 tool 消息全部丢弃——丢上下文胜过整轮卡死。同时丢弃 trailing 的孤立
+    // 工具消息（tool 必须紧跟在 assistant.tool_calls 之后），保留 user 消息（孤立 user
+    // 可被服务端接受）。
+    const _convOverride = get().conversationModelOverrides[conversationId] ?? null
+    const _historyModelName = _convOverride ?? activeModel.model
+    const _historyRequiresReasoning = detectReasoning(_historyModelName).enabled
+
+    // store 持久化层只保留 user / assistant / system（tool 角色不进 compressedRecentMessages，
+    // 参见 saveMessage 调用点 + global.d.ts 的 ChatMessage.role 类型），所以仅过滤 assistant
+    // 即可，不必担心孤立 tool。
+    let _sanitizedHistory = compressedRecentMessages
+    let _droppedAssistantNoReasoning = 0
+    if (_historyRequiresReasoning) {
+      const kept = compressedRecentMessages.filter(m => {
+        if (m.role === 'assistant' && !m.reasoning) {
+          _droppedAssistantNoReasoning++
+          return false
+        }
+        return true
+      })
+      _sanitizedHistory = kept
+      if (_droppedAssistantNoReasoning > 0) {
+        window.electronAPI.logEvent(
+          'warn',
+          'thinking-model-history-sanitized',
+          `model=${_historyModelName} droppedAssistant=${_droppedAssistantNoReasoning} kept=${kept.length}/${compressedRecentMessages.length}`,
+        )
+      }
+    }
+
     const apiMessages: LLMMessage[] = [
-      ...compressedRecentMessages.map(m => {
+      ..._sanitizedHistory.map(m => {
         const msg: LLMMessage = { role: m.role, content: m.content }
         if (m.reasoning) msg.reasoning_content = m.reasoning
         return msg
@@ -3253,18 +3675,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (constructErr) {
       // Claude 模型未配 Anthropic key、或其他构造期错误：直接返回错误消息并解锁 isLoading，
       // 不进入流式循环（否则 UI 一直停在「思考中」状态）。
+      // user 消息已在上游 set + saveMessage（含 tagged anchor），这里只需用
+      // upsertLastAssistant 把空占位替换成错误消息，并持久化 assistant 错误条；
+      // 不要再 push user 消息（否则会重复入库 + UI 出现两条同样的 user 气泡）。
+      // hiddenRepair 模式跳过 UI / DB 写入——失败仅日志，对用户完全静默。
       const errorMsg = constructErr instanceof Error ? constructErr.message : String(constructErr)
-      set({
-        messages: [
-          ...get().messages,
-          { id: nextMessageId(), role: 'user', content },
-          { id: nextMessageId(), role: 'assistant', content: errorMsg },
-        ],
-        isLoading: false,
-      })
-      await window.electronAPI.saveMessage(conversationId, 'user', content)
-      await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
+      if (!isHiddenRepair) {
+        set((state) => ({
+          messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
+          isLoading: false,
+        }))
+        await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
+      }
       await invokeProxyComplete({ ok: false, error: errorMsg })
+      cleanupRequest()
       return
     }
     const activeModelReasoning = detectReasoning(effectiveModelConfig.model).enabled
@@ -3346,8 +3770,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 否则服务端直接 400。注意：仅本轮（按调用粒度），不要和 UI 显示用的 reasoningText 混用。
      */
     let roundReasoningText = ''
+    // A 方案兜底：reasoning model 偶发把 completion budget 全消耗在 reasoning_content
+    // 上、message.content 留空（textLen=0 / reasoningLen>0），用户主回答区空白。
+    // 进入此模式后下一轮 runRound 放开 maxTokens 限制，让模型有 budget 写正文。
+    let emptyTextRetryMode = false
+    // 截断检测：上一轮 LLM 输出 outputTokens 接近 maxTokens（即 finish_reason='length' 等价信号），
+    // 说明正文被强制截断。供 tool-loop 末尾的兜底重试 + auto-seal 任务状态决策使用。
+    let lastRoundOutputTruncated = false
     let pendingToolCalls: ToolCall[] | undefined
-    const assistantMsgId = nextMessageId()
+    // assistantMsgId 已在 sendMessage 入口处提前生成（与 user 消息同帧插入空占位），
+    // 这里直接复用闭包内的常量。
     let toolCallCount = 0
     let toolLoopStartedAt: number | null = null
     let roundStartedAt = 0
@@ -3364,6 +3796,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      */
     const collectedDocumentAttachments: DocumentAttachment[] = []
     let loadSkillCallCount = 0
+    /**
+     * 已加载的 skill_id 集合（去重）。
+     *
+     * 之前的实现按"总次数"卡 MAX_LOAD_SKILL_CALLS_PER_REQUEST=1，导致：
+     *   - force-load `chart-from-knowledge` 已用掉 1 次额度
+     *   - LLM 按 chart-from-knowledge 指引继续 `load_skill('draw-chart')` 拿基础画图规则
+     *   - 守卫拦截 → ECharts 代码块没出，可视化图缺失（2026-05-21 Case 04 实测踩到）
+     *
+     * 修复后：按 skill_id 去重——同一个 skill 不重复加载，但不同 skill 允许各加载一次。
+     * 仍保留次数兜底（MAX_LOAD_SKILL_CALLS_PER_REQUEST 翻倍后作为"防滥用"上限）。
+     */
+    const loadedSkillIds = new Set<string>()
     let forceConvergeNoTools = false
     let convergeHintInjected = false
     let softWarnInjected = false
@@ -3409,6 +3853,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const result = await window.electronAPI.executeToolCall(avatarId, conversationId, 'load_skill', toolArgs, toolInvocationMeta)
         if (isStale()) return
         loadSkillCallCount++
+        loadedSkillIds.add(FORCED_CHART_SKILL_ID)
         resultText = result.error
           ? `工具执行失败: ${result.error}`
           : result.content
@@ -3450,7 +3895,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
          */
         const systemMsg = apiMessages[0]
         if (systemMsg && systemMsg.role === 'system' && typeof systemMsg.content === 'string') {
-          systemMsg.content = `${systemMsg.content}\n\n[已自动加载技能：${FORCED_CHART_SKILL_ID}]\n${resultText}`
+          // 注入文案要够强：旧版只写"[已自动加载技能：xxx]"，DeepSeek-Reasoner 等
+          // thinking 模型仍会按习惯 load_skill 一次（导致工具调用时间线出现"1 失败"的
+          // 拦截记录，看着像 bug）。改用明确禁令 + 后续可调 skill 名单，让模型直接
+          // 跳过冗余的 load_skill('chart-from-knowledge') 调用。
+          systemMsg.content =
+            `${systemMsg.content}\n\n` +
+            `[系统预加载技能 · 必读]\n` +
+            `技能 \`${FORCED_CHART_SKILL_ID}\` 的完整定义已经预加载在下面，` +
+            `**请直接使用，禁止再调用 \`load_skill('${FORCED_CHART_SKILL_ID}')\`**——` +
+            `重复加载会被守卫拦截并显示为"工具失败"，徒增噪声。\n` +
+            `如需进一步加载其它技能（如 \`draw-chart\` 基础画图规则），照常调 \`load_skill\` 即可。\n\n` +
+            `===== ${FORCED_CHART_SKILL_ID} 技能定义开始 =====\n` +
+            `${resultText}\n` +
+            `===== ${FORCED_CHART_SKILL_ID} 技能定义结束 =====`
           logPerf('chart-skill:inject-into-system', `model=${activeModel.model} contentLen=${resultText.length}`)
         } else {
           window.electronAPI.logEvent(
@@ -3470,11 +3928,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           tool_call_id: toolCallId,
           content: resultText,
         })
-        try {
-          await window.electronAPI.saveMessage(conversationId, 'tool', resultText, toolCallId)
-        } catch (saveErr) {
-          const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
-          window.electronAPI.logEvent('warn', 'save-forced-chart-skill-message-failed', msg)
+        // hiddenRepair 模式跳过 saveMessage——本轮所有 tool/assistant 都不入库（避免孤儿记录）。
+        // 实际上修正 prompt 不会触发 chartConsistencyMode（无图表关键词），到这里的概率极低，
+        // 保险加守卫避免未来路径变化产生污染。
+        if (!isHiddenRepair) {
+          try {
+            await window.electronAPI.saveMessage(conversationId, 'tool', resultText, toolCallId)
+          } catch (saveErr) {
+            const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+            window.electronAPI.logEvent('warn', 'save-forced-chart-skill-message-failed', msg)
+          }
         }
       }
       set({ toolCallStatus: '' })
@@ -3516,11 +3979,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             }
             if (kind === 'reasoning') {
               reasoningText += chunk
-              if (round === 0 && pendingChunkUpdate === null) {
+              // 切走→切回回灌 snapshot：同步更新（不依赖 RAF 是否触发 set）
+              if (streamingSnapshot && streamingSnapshot.conversationId === conversationId) {
+                streamingSnapshot.reasoning = reasoningText
+              }
+              if (round === 0 && pendingChunkUpdate === null && !isHiddenRepair) {
                 pendingChunkUpdate = requestAnimationFrame(() => {
                   pendingChunkUpdate = null
                   if (isStale()) return
-                  if (!isViewedConv()) return  // 切走时不实时刷 UI，避免污染目标会话；累积量已在闭包里
+                  if (!isViewedConv()) return  // 切走时不实时刷 UI，避免污染目标会话；累积量已在 snapshot
                   set((state) => ({
                     messages: upsertLastAssistant(state.messages, assistantMsgId, assistantText, reasoningText),
                   }))
@@ -3529,11 +3996,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               return
             }
             assistantText += chunk
+            // 切走→切回回灌 snapshot：同步更新
+            if (streamingSnapshot && streamingSnapshot.conversationId === conversationId) {
+              streamingSnapshot.text = assistantText
+            }
             writeProxyStreamDelta(chunk)
             // 工具调用中间轮次（round > 0）不实时显示文字给用户，
             // 避免 LLM 在中间轮输出半成品分析后最终轮又重复一遍。
             // 只在第一轮（用户刚发消息）和最终轮（下面 resolve 后判断无 tool_calls 再刷新）时显示。
-            if (round === 0 && pendingChunkUpdate === null) {
+            // hiddenRepair 模式跳过——本轮 messages 里没有占位 message，set 会插入新气泡污染 UI。
+            if (round === 0 && pendingChunkUpdate === null && !isHiddenRepair) {
               pendingChunkUpdate = requestAnimationFrame(() => {
                 pendingChunkUpdate = null
                 if (isStale()) return
@@ -3558,6 +4030,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 round,
               })
             }
+            // 截断检测：当前轮如果设了 maxTokens，且 outputTokens 接近上限（留 4 token 容差），
+            // 视为被强制截断。供 tool-loop 末尾决定是否兜底重试 + auto-seal 任务状态。
+            const effectiveMaxTokens = shouldConvergeFast && !emptyTextRetryMode
+              ? CONVERGE_FINAL_ROUND_MAX_TOKENS
+              : 0
+            lastRoundOutputTruncated =
+              effectiveMaxTokens > 0 &&
+              typeof usage?.outputTokens === 'number' &&
+              usage.outputTokens >= effectiveMaxTokens - 4
             if (isStale()) {
               pendingToolCalls = undefined
               resolve()
@@ -3571,9 +4052,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               `round=${round} duration=${Date.now() - roundStartedAt}ms textLen=${assistantText.length} toolCalls=${toolCalls?.length ?? 0} reasoningLen=${roundReasoningText.length}`,
             )
             // 本轮没有 tool_calls → 最终轮，立即刷新显示最终文字
+            // hiddenRepair 模式跳过 UI 写入（messages 里没有占位 message）。
             if ((!toolCalls || toolCalls.length === 0) && !hasDsmlToolCallLeak(assistantText)) {
               const text = assistantText
-              if (isViewedConv()) {
+              if (isViewedConv() && !isHiddenRepair) {
                 set((state) => ({
                   messages: upsertLastAssistant(state.messages, assistantMsgId, text, reasoningText),
                 }))
@@ -3590,7 +4072,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           {
             tools: (!forceConvergeNoTools && tools.length > 0) ? tools : undefined,
             signal: abortController.signal,
-            maxTokens: shouldConvergeFast ? CONVERGE_FINAL_ROUND_MAX_TOKENS : undefined,
+            maxTokens: shouldConvergeFast && !emptyTextRetryMode ? CONVERGE_FINAL_ROUND_MAX_TOKENS : undefined,
             temperature: effectiveTemperature,
             seed: deterministicSeed,
             reasoningEffort: activeModelReasoning && (ragDirectAnswerFastPath || shouldConvergeFast) ? 'low' : undefined,
@@ -3655,6 +4137,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (isStale()) return
       if (await correctDsmlToolCallLeak() && isStale()) return
 
+      // 用 do-while 包原 tool-loop while：B 兜底（"文档承诺未兑现"retry）触发时让 LLM
+      // 重新 emit tool_calls（generate_document），continue 让外层 do-while 再走一次内层 while
+      // 执行新发起的工具调用，从而真的落盘文件（2026-05-22 修复：分身说"将落盘"但没调工具）。
+      // 无 retry 触发时 break 一次即退，行为与改造前完全一致。
+      do {
       while (pendingToolCalls && pendingToolCalls.length > 0 && round < HARD_MAX_ROUNDS) {
         if (isStale()) return
         round++
@@ -3795,17 +4282,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
               }
             } else if (ENABLE_LOAD_SKILL_GUARD && tc.function.name === 'load_skill') {
-              if (loadSkillCallCount >= MAX_LOAD_SKILL_CALLS_PER_REQUEST) {
-                resultText = `工具执行已跳过：load_skill 在当前对话已执行 ${MAX_LOAD_SKILL_CALLS_PER_REQUEST} 次。相关技能内容已在 systemPrompt 中提供，请基于已有上下文直接完成回答，不要继续调用 load_skill。`
-                logPerf('tool-call:blocked', `round=${round} name=load_skill reason=max-calls(${MAX_LOAD_SKILL_CALLS_PER_REQUEST})`)
+              const requestedSkillId = typeof toolArgs.skill_id === 'string' ? toolArgs.skill_id : ''
+              if (requestedSkillId && loadedSkillIds.has(requestedSkillId)) {
+                // 重复加载同一个 skill —— 阻止，提示模型已有上下文
+                resultText = `工具执行已跳过：skill "${requestedSkillId}" 已在本对话加载过，相关内容已在 systemPrompt 或之前的工具结果中提供，请基于已有上下文直接完成回答，不要重复调用 load_skill。`
+                logPerf('tool-call:blocked', `round=${round} name=load_skill reason=duplicate-skill skill=${requestedSkillId}`)
+              } else if (loadSkillCallCount >= MAX_LOAD_SKILL_CALLS_PER_REQUEST) {
+                // 防滥用上限：累计加载了 N 个不同 skill 仍不收敛
+                resultText = `工具执行已跳过：load_skill 本次请求已加载 ${MAX_LOAD_SKILL_CALLS_PER_REQUEST} 个不同的 skill，已达兜底上限。请基于已加载的技能内容直接完成回答，不要继续调用 load_skill。`
+                logPerf('tool-call:blocked', `round=${round} name=load_skill reason=max-distinct(${MAX_LOAD_SKILL_CALLS_PER_REQUEST}) skill=${requestedSkillId}`)
                 if (ENABLE_TOOL_CONVERGE_MODE) {
                   forceConvergeNoTools = true
-                  logPerf('tool-loop:converge-mode-on', `round=${round} reason=load_skill-max-calls`)
+                  logPerf('tool-loop:converge-mode-on', `round=${round} reason=load_skill-max-distinct`)
                 }
               } else {
                 const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
                 if (isStale()) return
                 loadSkillCallCount++
+                if (requestedSkillId) loadedSkillIds.add(requestedSkillId)
                 resultText = result.error
                   ? `工具执行失败: ${result.error}`
                   : result.content
@@ -3824,8 +4318,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
           // 即使 try 没抛错，结果文本以"工具执行失败"开头也视为失败（IPC 路径返回的 error 转字符串）
           if (toolOk && resultText.startsWith('工具执行失败')) toolOk = false
-          // "工具执行已跳过" 是守卫主动拦截，不算 ok 但用户应能看到（在 UI 中以 ⚠ 区分）
-          if (toolOk && resultText.startsWith('工具执行已跳过')) toolOk = false
+          // "工具执行已跳过" 是守卫主动拦截。telemetry 端仍记 ok=false（事件分析需要看到拦截），
+          // 但 timeline 端额外打 skipped=true，UI 凭它把"拦截"显示为 ⊘ 中性而不是 ✗ 失败，
+          // "N 失败" 汇总也跳过这条。两层语义分离，互不影响。
+          const wasSkipped = resultText.startsWith('工具执行已跳过')
+          if (toolOk && wasSkipped) toolOk = false
           const truncatedResult = truncateToolResultForContext(tc.function.name, resultText)
           if (truncatedResult.truncated) {
             logPerf(
@@ -3856,7 +4353,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
           // Stage 三 P2 #14：把本次工具调用挂到当前 in_progress 任务，让 UI 显示"任务 → 工具调用"对应关系。
           // 例外：todo_write 本身就是管理任务的工具，不挂到自己上避免噪音。
-          if (tc.function.name !== 'todo_write') {
+          // hiddenRepair 模式跳过——修正轮的工具调用不应污染用户的真实 task 列表。
+          if (tc.function.name !== 'todo_write' && !isHiddenRepair) {
             try {
               get().attachToolCallToTask({
                 id: tc.id,
@@ -3874,28 +4372,39 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // 工具调用时间线（与 attachToolCallToTask 并行：任务关联用于 TaskListPanel；时间线用于 ChatWindow 顶部滚动展示）
           // 与 attachToolCallToTask 不同，timeline 不依赖 todo_write 任务存在，每次工具调用都记录（含 todo_write 本身，
           // 让用户能看到"任务列表被刷新"这件事）。
-          try {
-            get().appendToolCallTimeline({
-              id: tc.id,
-              name: tc.function.name,
-              argsPreview: (tc.function.arguments || '').slice(0, 80),
-              resultPreview: resultText.slice(0, 200),
-              durationMs: toolDurationMs,
-              ok: toolOk,
-              startedAt: toolStartedAt,
-            })
-          } catch (timelineErr) {
-            // 时间线 push 失败绝不影响主链路
-            const msg = timelineErr instanceof Error ? timelineErr.message : String(timelineErr)
-            window.electronAPI.logEvent('warn', 'append-tool-timeline-failed', `${tc.function.name}: ${msg}`)
+          // 2026-05-24：传 { conversationId, assistantMsgId } 精确定位，避免切对话时
+          // 把 A 的工具调用挂到 B 最后一条 assistant 上、或者 A 不在视图时 timeline 落库为空。
+          // hiddenRepair 模式跳过——修正轮的工具调用不应出现在顶部时间线 / 不应入库。
+          if (!isHiddenRepair) {
+            try {
+              get().appendToolCallTimeline(
+                {
+                  id: tc.id,
+                  name: tc.function.name,
+                  argsPreview: (tc.function.arguments || '').slice(0, 80),
+                  resultPreview: resultText.slice(0, 200),
+                  durationMs: toolDurationMs,
+                  ok: toolOk,
+                  startedAt: toolStartedAt,
+                  skipped: wasSkipped,
+                },
+                { conversationId, assistantMsgId },
+              )
+            } catch (timelineErr) {
+              // 时间线 push 失败绝不影响主链路
+              const msg = timelineErr instanceof Error ? timelineErr.message : String(timelineErr)
+              window.electronAPI.logEvent('warn', 'append-tool-timeline-failed', `${tc.function.name}: ${msg}`)
+            }
           }
 
           // 决策 B3：检测落盘文件，统一以 FileCard 展示在对话气泡内
+          // hiddenRepair 模式跳过 UI 更新——修正轮的工具产物不应展示在原 assistant 气泡。
+          // collectedDocumentAttachments 仍 push（无害；本轮不落盘 assistant 消息，attachments 不会持久化）。
           if (toolOk && (tc.function.name === 'generate_document' || tc.function.name === 'export_excel')) {
             const attachment = tryExtractDocumentAttachment(tc.function.name, resultText)
             if (attachment) {
               collectedDocumentAttachments.push(attachment)
-              if (isViewedConv()) {
+              if (isViewedConv() && !isHiddenRepair) {
                 set((state) => ({
                   messages: upsertLastAssistant(
                     state.messages,
@@ -3917,11 +4426,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           })
 
           // 保存工具结果到数据库
-          try {
-            await window.electronAPI.saveMessage(conversationId, 'tool', resultText, tc.id)
-          } catch (saveErr) {
-            const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
-            window.electronAPI.logEvent('warn', 'save-tool-message-failed', msg)
+          // hiddenRepair 模式跳过——本轮的 user/assistant 都不入库，孤儿 tool 行会让
+          // loadMessages 回灌时显示一条没有上下文的"工具调用结果"气泡，污染对话视图。
+          if (!isHiddenRepair) {
+            try {
+              await window.electronAPI.saveMessage(conversationId, 'tool', resultText, tc.id)
+            } catch (saveErr) {
+              const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
+              window.electronAPI.logEvent('warn', 'save-tool-message-failed', msg)
+            }
           }
           if (isStale()) return
         }
@@ -3949,10 +4462,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
 
         // 收敛模式下仅注入一次简短指令，强制下一轮直接给最终答案，避免冗长分析。
+        // 关键约束：必须输出 message.content 正文（用户唯一可见的部分），
+        // 不允许把 budget 全部消耗在 reasoning_content 上导致正文空白（2026-05-22 真实事故）。
         if (ENABLE_CONVERGE_FINAL_ROUND_SPEEDUP && forceConvergeNoTools && !convergeHintInjected) {
           apiMessages.push({
             role: 'user',
-            content: '[系统提示] 立即基于当前已获得的数据直接输出最终答案。不要继续分析过程，不要再请求任何工具，不要重复列出中间推理。',
+            content: '[系统提示] 立即基于当前已获得的数据直接输出最终答案。不要继续分析过程，不要再请求任何工具，不要重复列出中间推理。\n\n**输出形式硬性要求**：必须以 markdown 正文形式写入 message.content（用户主回答区）。reasoning_content / thinking 内容用户看不到，只有 message.content 会被展示。如果只在 reasoning 里推理而 content 为空，等同于没有回答。本轮 reasoning 控制在 200 字以内，把 token 留给正文。',
           })
           convergeHintInjected = true
           logPerf('tool-loop:converge-hint-injected', `round=${round}`)
@@ -3981,8 +4496,206 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         await runRoundWithTimeout()
         if (isStale()) return
       }
+
+      // ─── B 兜底：承诺未兑现 retry（覆盖 doc 落盘 + 图表代码块两种） ─────────────
+      // 触发条件（任一缺失即触发）：
+      //
+      // [doc 缺失] 触发条件：
+      //   1) 用户 prompt 含文档生成意图（"落成/落盘/生成/出一份/做成" + "PDF/word/docx/md/文档/报告/方案/ADR/纪要"）
+      //   2) assistant 文本里出现交付承诺（"将落盘 / 已生成 / 立即落盘 / 现在将...落盘"）
+      //   3) toolCallSequence 里没调过 generate_document
+      //
+      // [chart 缺失] 触发条件：
+      //   1) 用户 prompt 含图表生成意图（柱状图/信息图/SWOT/对比卡 等触发词）
+      //   2) assistant 文本里出现交付承诺（"已输出 / 已生成 / 三个交付物均已输出"等）
+      //   3) content 里 ``` chart / ``` infographic / ``` mermaid 代码块数量 < prompt 要求的图表数量
+      //
+      // 共同前提：
+      //   - 还没用过 retry slot（emptyTextRetryMode === false）
+      //   - inner while 已经退出（pendingToolCalls 空，模型自然 stop）
+      //
+      // 动作：注入统一提示要求补 generate_document tool_call + chart/infographic 代码块 →
+      //      跑一轮 LLM → continue 让外层 do-while 让内层 while 执行 generate_document（如有 emit）。
+      //
+      // 真实事故：
+      // - 2026-05-22 (doc): 分身写了完整 ADR + 末尾"现在将完整 ADR 落盘"，但 stop 没调 generate_document
+      // - 2026-05-22 (chart): 分身 reasoning 18K+ 字"想象"了 3 个图表，content 只一句"已输出"
+      //   没有任何 ```chart / ```infographic 代码块
+
+      // [doc 缺失] 检测
+      const docTriggerInPrompt = /落成|落盘|生成|出一份|做成|写一份|做个/.test(content)
+        && /pdf|word|docx|markdown|md\b|文档|报告|方案|adr|纪要|协议|说明书|意见书/i.test(content)
+      const docCommitmentInText = /(?:将|准备|立即|马上|现在).{0,8}(?:落盘|生成|落成|交付)/.test(assistantText)
+        || /已(?:落盘|生成|落成|交付)/.test(assistantText)
+      const generateDocAlreadyCalled = apiMessages.some(m => {
+        if (m.role !== 'assistant') return false
+        const tcs = (m as { tool_calls?: Array<{ function?: { name?: string } }> }).tool_calls
+        return Array.isArray(tcs) && tcs.some(tc => tc.function?.name === 'generate_document')
+      })
+      const docMissing = docTriggerInPrompt && docCommitmentInText && !generateDocAlreadyCalled
+
+      // [chart 缺失] 检测：按用户 prompt 推算"应有"的图表类别数 vs content 实际代码块数
+      const wantsDataChart = /柱状图|折线图|饼图|散点图|趋势图|对比图|分布图|雷达|桑基|热力|chart\b/i.test(content)
+      const wantsInfographic = /信息图|infographic|swot|对比卡|分类卡|分类卡片|金字塔|词云|演示图/i.test(content)
+      const wantsMermaid = /甘特|流程图|时序图|思维导图|状态机|er图|看板|mermaid/i.test(content)
+      const expectedChartTypes = (wantsDataChart ? 1 : 0) + (wantsInfographic ? 1 : 0) + (wantsMermaid ? 1 : 0)
+      const actualChartBlocks = (assistantText.match(/```(?:chart|infographic|mermaid)/gi) || []).length
+      const chartCommitmentInText = /(?:已|完成|三个|两个|多个).{0,12}(?:输出|生成|绘制|画出|交付物)/.test(assistantText)
+        || /(?:输出|生成|绘制).{0,4}(?:完毕|完成|完了)/.test(assistantText)
+      const chartMissing = expectedChartTypes > 0
+        && chartCommitmentInText
+        && actualChartBlocks < expectedChartTypes
+
+      const shouldRetryFinalCommitment =
+        !emptyTextRetryMode &&
+        toolLoopStartedAt !== null &&
+        (!pendingToolCalls || pendingToolCalls.length === 0) &&
+        (docMissing || chartMissing)
+
+      if (shouldRetryFinalCommitment) {
+        const retryKind = docMissing && chartMissing ? 'doc+chart-unfulfilled'
+          : docMissing ? 'doc-commitment-unfulfilled'
+          : 'chart-commitment-unfulfilled'
+        logPerf(
+          'tool-loop:final-retry-start',
+          `kind=${retryKind} textLen=${assistantText.length} expectedCharts=${expectedChartTypes} actualBlocks=${actualChartBlocks}`,
+        )
+        emptyTextRetryMode = true
+        // 推上一轮 assistant 内容 + reasoning（thinking 模型多轮 round-trip 必须原样回传）
+        apiMessages.push({
+          role: 'assistant',
+          content: assistantText,
+          reasoning_content: roundReasoningText || undefined,
+        })
+        // 根据 doc / chart 缺失情况动态组装 retry 提示
+        const retryPromptParts: string[] = []
+        retryPromptParts.push('[系统提示] 你刚才在回答里写了交付承诺（"已输出 / 已生成 / 三个交付物均已输出 / 将落盘"等），但实际**没有完整交付**。')
+        retryPromptParts.push('')
+        if (docMissing) {
+          retryPromptParts.push('## 缺失 1：generate_document 工具调用')
+          retryPromptParts.push('你说"将落盘 / 已生成 文档"，但 toolCallSequence 里**没有 generate_document**——只在 content 写了承诺就停了。')
+          retryPromptParts.push('请**立即发起 tool_call** 调一次 generate_document：')
+          retryPromptParts.push('- format: "md"')
+          retryPromptParts.push('- ir: 基于上面已经写好的内容构造（含 frontmatter title）')
+          retryPromptParts.push('- filename: 有意义的名字')
+          retryPromptParts.push('')
+        }
+        if (chartMissing) {
+          const missingHint: string[] = []
+          if (wantsDataChart && !/```chart/i.test(assistantText)) missingHint.push('` ```chart ` ECharts 代码块（柱状图/折线/饼图等）')
+          if (wantsInfographic && !/```infographic/i.test(assistantText)) missingHint.push('` ```infographic ` 信息图代码块（SWOT/对比卡/分类卡）')
+          if (wantsMermaid && !/```mermaid/i.test(assistantText)) missingHint.push('` ```mermaid ` 代码块（甘特/流程图/时序）')
+          retryPromptParts.push('## 缺失 2：图表代码块')
+          retryPromptParts.push(`你说"已输出图表 / 三个交付物均已输出"，但 message.content 里实际只有 ${actualChartBlocks} 个代码块，少于 prompt 要求的 ${expectedChartTypes} 个。`)
+          retryPromptParts.push('缺以下代码块（请在 content 里直接输出，不要在 reasoning 里规划）：')
+          missingHint.forEach(h => retryPromptParts.push(`- ${h}`))
+          retryPromptParts.push('')
+          retryPromptParts.push('**注意**：reasoning_content 里写 "我准备输出 chart 代码块" 不算交付，必须把代码块**实际写在 message.content** 里用户才看得到。')
+        }
+        retryPromptParts.push('')
+        retryPromptParts.push('请补齐以上缺失项。本轮 reasoning 控制在 100 字以内，把所有 budget 留给：(a) tool_call 调用 (b) content 里的代码块。不要再重写已经写好的文字部分。')
+        apiMessages.push({
+          role: 'user',
+          content: retryPromptParts.join('\n'),
+        })
+        // 关键：让工具可用（与 A 兜底相反——A 关 tools，B 必须开 tools）
+        forceConvergeNoTools = false
+        pendingToolCalls = undefined
+        try {
+          await runRoundWithTimeout()
+          if (isStale()) return
+        } catch (retryErr) {
+          const m = retryErr instanceof Error ? retryErr.message : String(retryErr)
+          logPerf('tool-loop:final-retry-failed', `kind=${retryKind} ${m}`)
+        }
+        // runRound 的 onDone 闭包回调会重设 pendingToolCalls。TS 控制流分析无法跨越
+        // 异步回调边界判断，会把 pendingToolCalls 锁定为 `undefined`，所以这里显式
+        // 重读为 ToolCall[] | undefined 绕过类型窄化，行为本身不变。
+        const pendingAfterRetry = pendingToolCalls as ToolCall[] | undefined
+        const finalChartBlocks = (assistantText.match(/```(?:chart|infographic|mermaid)/gi) || []).length
+        logPerf(
+          'tool-loop:final-retry-done',
+          `kind=${retryKind} emitsToolCalls=${(pendingAfterRetry?.length ?? 0) > 0} textLen=${assistantText.length} chartBlocks=${finalChartBlocks}`,
+        )
+        // 如果 LLM emit 了 tool_calls（含 generate_document），continue 让外层 do-while 让内层 while
+        // 跑一遍：执行工具 → 再跑一轮 LLM 让它写"已生成"确认。
+        if (pendingAfterRetry && pendingAfterRetry.length > 0) continue
+      }
+      break
+      } while (true)
+
       if (toolLoopStartedAt !== null) {
         logPerf('tool-loop:done', `rounds=${round} calls=${toolCallCount} duration=${Date.now() - toolLoopStartedAt}ms`)
+      }
+
+      // A 方案兜底：两种被截断/空白模式都触发同一个 retry 流程（共用同一个 mode 标志，
+      // 重试一次后失败就放弃，不无限循环）。
+      //
+      // 模式 1（empty-text）：正文 trim 后为空 + reasoning ≥ 100 字 —— reasoning model
+      //   偶发把 budget 全消耗在 reasoning_content 上、message.content 留空。
+      // 模式 2（truncated）：上一轮 outputTokens 打满 maxTokens（lastRoundOutputTruncated=true）
+      //   + 正文 > 0（说明有写但写到一半被切）—— 收敛轮的 maxTokens 不够装下复合任务输出。
+      //
+      // 重试策略：放开 maxTokens（emptyTextRetryMode=true → 不再受 CONVERGE_FINAL_ROUND_MAX_TOKENS 约束），
+      // 注入对应场景的修正提示，强制无工具，跑一次 runRoundWithTimeout。
+      const isEmptyTextCase =
+        assistantText.trim() === '' && reasoningText.trim().length >= 100
+      const isTruncatedCase =
+        lastRoundOutputTruncated && assistantText.trim().length > 0
+      const shouldRetry =
+        !emptyTextRetryMode &&
+        (isEmptyTextCase || isTruncatedCase) &&
+        toolLoopStartedAt !== null &&
+        !hasDsmlToolCallLeak(assistantText)
+
+      if (shouldRetry) {
+        const retryKind = isEmptyTextCase ? 'empty-text' : 'truncated'
+        logPerf(
+          'tool-loop:final-retry-start',
+          `kind=${retryKind} textLen=${assistantText.length} reasoningLen=${reasoningText.length}`,
+        )
+        // 截断模式需要保留上一轮的部分正文 + reasoning，让模型从断点接续
+        apiMessages.push({
+          role: 'assistant',
+          content: assistantText,
+          reasoning_content: roundReasoningText || undefined,
+        })
+        if (isEmptyTextCase) {
+          apiMessages.push({
+            role: 'user',
+            content: '[系统提示] 上一轮你只输出了 reasoning_content（思考过程）但 message.content 为空。用户只能看到 content，看不到 reasoning。请基于刚才的思考，直接以 markdown 正文形式输出最终答案到 content。不要再调用任何工具，不要再展开新的分析，直接给答案。本轮 reasoning 控制在 50 字以内。',
+          })
+        } else {
+          apiMessages.push({
+            role: 'user',
+            content: '[系统提示] 上一轮的正文被 max_tokens 截断了（你看到的 assistant 消息是被切到一半的）。请从断点处**继续接着写**，把没写完的部分补完。不要重写已经写过的内容，不要再调用工具，直接续写到结束。本轮 reasoning 控制在 50 字以内，把所有 budget 留给正文。',
+          })
+        }
+        emptyTextRetryMode = true
+        forceConvergeNoTools = true
+        pendingToolCalls = undefined
+        const truncatedTextSnapshot = isTruncatedCase ? assistantText : ''
+        try {
+          await runRoundWithTimeout()
+          // 截断接续模式：runRound 在新一轮开始会清空 assistantText，需要手动拼接断点前的部分
+          if (!isStale() && isTruncatedCase && truncatedTextSnapshot && assistantText) {
+            assistantText = truncatedTextSnapshot + assistantText
+          }
+          if (!isStale()) {
+            logPerf(
+              'tool-loop:final-retry-done',
+              `kind=${retryKind} textLen=${assistantText.length} reasoningLen=${reasoningText.length}`,
+            )
+          }
+        } catch (retryErr) {
+          const m = retryErr instanceof Error ? retryErr.message : String(retryErr)
+          logPerf('tool-loop:final-retry-failed', `kind=${retryKind} ${m}`)
+          // 截断 retry 失败时至少保留已有部分正文，不要把用户已经看到的内容丢掉
+          if (isTruncatedCase && !assistantText && truncatedTextSnapshot) {
+            assistantText = truncatedTextSnapshot
+          }
+        }
+        if (isStale()) return
       }
 
       if (hasDsmlToolCallLeak(assistantText)) {
@@ -4138,7 +4851,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
 
       if (isStale()) return
+
+      // 关键修复（2026-05-21 用户反馈"问题答完但任务没有结束"）：Agent 模式 LLM 输出
+      // 最终答案后，经常忘记 todo_write 把最后一个 in_progress 任务标 completed，
+      // 导致 TASKS 面板永远卡在 "3/4 · 进行中"。这里在自然收束时兜底封存：
+      //   - in_progress → completed（LLM 实际做完，只是漏 update）
+      //   - pending → cancelled（LLM 没动，答案已吐完，不会回来做了）
+      //
+      // 截断保护（2026-05-22 真实事故）：如果上一轮被 max_tokens 截断（lastRoundOutputTruncated=true），
+      // pending 任务**不应该**被标 cancelled——模型本来想做但没机会，标 cancelled 会让
+      // 用户误判"被取消"。保持 pending 让用户看到真相（"未完成"）。
+      let sealedTasksUpdate: AgentTask[] | null = null
       if (isViewedConv()) {
+        const currentTasks = get().tasks
+        if (currentTasks.length > 0) {
+          const candidate = currentTasks.map(t => {
+            if (t.status === 'in_progress') return { ...t, status: 'completed' as const }
+            // pending 默认 cancel，但被截断时保留 pending（模型没机会做完）
+            if (t.status === 'pending' && !lastRoundOutputTruncated) return { ...t, status: 'cancelled' as const }
+            return t
+          })
+          if (candidate.some((s, i) => s.status !== currentTasks[i].status)) {
+            sealedTasksUpdate = candidate
+            persistTasks(conversationId, candidate)
+            const sealedCount = candidate.filter((s, i) => s.status !== currentTasks[i].status).length
+            logPerf('tasks:auto-seal', `count=${sealedCount} total=${currentTasks.length} truncated=${lastRoundOutputTruncated}`)
+          }
+        }
+      }
+
+      if (isViewedConv() && !isHiddenRepair) {
         set((state) => ({
           messages: upsertLastAssistant(
             state.messages,
@@ -4152,14 +4894,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           isLoading: false,
           toolCallStatus: '',
           skillProposals,
+          ...(sealedTasksUpdate ? { tasks: sealedTasksUpdate } : {}),
         }))
       }
 
       if (isStale()) return
-      try {
+      // hiddenRepair 跳过 saveMessage / episode / cache 三段——不入库、不抽取、不污染缓存。
+      // 但仍走 phase05 埋点（带 hiddenRepair=1 标记，便于后续过滤）+ infographic-revalidate
+      // 检测段（其实 skipInfographicRevalidate=true 自动短路，但加 isHiddenRepair 守卫更清晰）。
+      if (!isHiddenRepair) {
+        try {
         // 把流式累积的 reasoningText 一并落盘，让切换会话回来仍能恢复 thinking 折叠区。
         // 非 thinking 模型 reasoningText 是空串，saveMessage 内部按 trim 长度判定存 NULL。
         // v17：连带把 [UNCERTAIN]/[RECONSIDER] 抽出的标记数组一起落盘。
+        // v19：把本轮 sendMessage 累积的工具调用时间线落盘，让切对话/重启后仍能看到。
+        //
+        // 2026-05-24 修复：取 timeline 时优先 streamingSnapshot.toolCallTimeline，
+        // 回退到 messages 查找。原实现只查 messages，如果用户切走视图后流式跑完，
+        // 当前 messages 是别的会话的，find 返回 undefined → timeline 落库为空。
+        // snapshot 在 appendToolCallTimeline 时同步累积，且只会被本请求的 cleanupRequest
+        // 清掉（cleanupRequest 在 saveMessage 之后才跑），所以这里 snapshot 一定还在。
+        const snapshotTimeline =
+          streamingSnapshot?.conversationId === conversationId
+          && streamingSnapshot?.assistantMsgId === assistantMsgId
+            ? streamingSnapshot.toolCallTimeline
+            : null
+        const messageTimeline = get().messages.find(m => m.id === assistantMsgId)?.toolCallTimeline ?? []
+        const timelineForSave = snapshotTimeline ?? messageTimeline
+        const timelineJson = timelineForSave.length > 0 ? JSON.stringify(timelineForSave) : undefined
         await window.electronAPI.saveMessage(
           conversationId,
           'assistant',
@@ -4169,6 +4931,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           reasoningText || undefined,
           uncertainMarkers.length > 0 ? uncertainMarkers : undefined,
           reconsiderMarkers.length > 0 ? reconsiderMarkers : undefined,
+          timelineJson,
         )
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)
@@ -4217,13 +4980,62 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           window.electronAPI.logEvent('warn', 'answer-cache-save-error', m)
         }
       }
-      logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms displayLen=${displayText.length}`)
-      // Phase 0.5 结构化埋点：写持久日志，2 周后聚合分析（按分身的 search_knowledge 触发率/命中率/TTFT）
+      } // ← 闭合 if (!isHiddenRepair) { saveMessage / episode / cache 三段
+      logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms displayLen=${displayText.length}${isHiddenRepair ? ' hiddenRepair' : ''}`)
+      // Phase 0.5 结构化埋点：写持久日志，2 周后聚合分析（按分身的 search_knowledge 触发率/命中率/TTFT）。
+      // hiddenRepair=1 标记便于事后过滤掉修正轮的 LLM 调用，避免混在常规对话指标里。
       window.electronAPI.logEvent(
         'info',
         'phase05-query-summary',
-        `avatar=${avatarId} status=ok queryLen=${content.length} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt}`,
+        `avatar=${avatarId} status=ok queryLen=${content.length} hiddenRepair=${isHiddenRepair ? 1 : 0} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt}`,
       )
+
+      // #C 方案：infographic 输出 validator + 自动追问。
+      // 检测 displayText 中所有 ```infographic 代码块；若任一不合法且 coerce 救不了，
+      // 触发一次隐藏 follow-up 让 LLM 修正。skipInfographicRevalidate=true 时不递归。
+      // hiddenRepair 也跳过——本轮就是修正轮，不允许再嵌套触发。
+      if (!options?.skipInfographicRevalidate && !isHiddenRepair && !isStale()) {
+        void (async () => {
+          try {
+            const { extractInfographicBlocks, validateInfographicBlock, buildRevalidatePrompt } =
+              await import('../services/infographic-validator')
+            const blocks = extractInfographicBlocks(displayText)
+            if (blocks.length === 0) return
+            const firstBad = blocks.find(b => !validateInfographicBlock(b.raw).ok)
+            if (!firstBad) return
+            const { errors } = validateInfographicBlock(firstBad.raw)
+            window.electronAPI.logEvent(
+              'info',
+              'infographic-revalidate-triggered',
+              `errors=${errors.length}: ${errors.map(e => e.kind).join(',')}`,
+            )
+            const revisePrompt = buildRevalidatePrompt(firstBad.raw, errors)
+            // 用同一 sendMessage 链路追问：
+            //   - skipInfographicRevalidate 防递归
+            //   - skipCache 不污染答案缓存
+            //   - hiddenRepair（2026-05-24）让修正 prompt 对用户完全不可见：
+            //     不入历史、不入 DB、不计费、不触发自动改名 / episode 抽取
+            //     注意：当前 hiddenRepair 只做"静默化"，修正后的 infographic
+            //     **暂不自动应用回原 assistant 消息**——后续接 updateMessage
+            //     IPC 后即可补完整闭环。本次先止血对话历史污染问题。
+            await get().sendMessage(
+              revisePrompt,
+              conversationId,
+              avatarId,
+              undefined,
+              visionModel,
+              undefined,
+              undefined,
+              undefined,
+              { skipCache: true, skipInfographicRevalidate: true, hiddenRepair: true },
+            )
+          } catch (validateErr) {
+            const m = validateErr instanceof Error ? validateErr.message : String(validateErr)
+            window.electronAPI.logEvent('warn', 'infographic-revalidate-error', m)
+          }
+        })()
+      }
+
       regressionTelemetry.emit({
         type: 'message-done',
         conversationId,
@@ -4231,7 +5043,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         content: displayText,
       })
       await invokeProxyComplete({ ok: true, assistantText: displayText })
-      if (!isStale()) activeChatRequest = null
+      // 流式完成：cleanupRequest 内部自检 requestId/abortController/assistantMsgId，
+      // 即使 isStale 也是 no-op；不再依赖外层判断。
+      cleanupRequest()
     } catch (error) {
       if (isStale()) return
       const errMsg = error instanceof Error ? error.message : String(error)
@@ -4242,7 +5056,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       window.electronAPI.logEvent(
         'info',
         'phase05-query-summary',
-        `avatar=${avatarId} status=error queryLen=${content.length} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt} err=${errMsg.slice(0, 80)}`,
+        `avatar=${avatarId} status=error queryLen=${content.length} hiddenRepair=${isHiddenRepair ? 1 : 0} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt} err=${errMsg.slice(0, 80)}`,
       )
       regressionTelemetry.emit({
         type: 'conversation-error',
@@ -4251,25 +5065,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         error: errMsg,
       })
       await invokeProxyComplete({ ok: false, error: errMsg })
-      const errorMessage = `抱歉，发生了错误：${errMsg}`
-      if (isViewedConv()) {
-        set((state) => ({
-          messages: upsertLastAssistant(state.messages, nextMessageId(), errorMessage),
-          isLoading: false,
-          toolCallStatus: '',
-        }))
+      // hiddenRepair 模式：错误消息也不入 UI / 不入 DB，对用户完全静默；
+      // 失败仅靠 phase05 埋点 + chat-error 日志记账。
+      if (!isHiddenRepair) {
+        const errorMessage = `抱歉，发生了错误：${errMsg}`
+        if (isViewedConv()) {
+          set((state) => ({
+            messages: upsertLastAssistant(state.messages, assistantMsgId, errorMessage),
+            isLoading: false,
+            toolCallStatus: '',
+          }))
+        }
+        try {
+          await window.electronAPI.saveMessage(conversationId, 'assistant', errorMessage)
+        } catch (saveErr) {
+          console.error('[chatStore] 保存错误消息失败:', saveErr instanceof Error ? saveErr.message : String(saveErr))
+        }
       }
-      try {
-        await window.electronAPI.saveMessage(conversationId, 'assistant', errorMessage)
-      } catch (saveErr) {
-        console.error('[chatStore] 保存错误消息失败:', saveErr instanceof Error ? saveErr.message : String(saveErr))
-      }
-      if (!isStale()) activeChatRequest = null
+      // 错误路径：cleanupRequest 自检本请求是否仍 active，避免覆盖后续请求的状态
+      cleanupRequest()
     } finally {
-      // 仅在本请求仍是当前活跃请求时重置 isLoading，避免误清另一个请求的状态
-      if (activeChatRequest?.id === requestId && get().isLoading) {
-        set({ isLoading: false, toolCallStatus: '' })
-      }
+      // 兜底：catch 内部若再次抛错而跳过上面的 cleanupRequest，这里再保险一次（幂等）。
+      cleanupRequest()
     }
   },
 

@@ -282,7 +282,11 @@ describe('parseIR', () => {
 // ===========================================================================
 
 describe('renderMarkdown roundtrip', () => {
-  it('简单 IR 通过 render→parse 后核心字段一致', () => {
+  it('简单 IR 通过 render→parse 后基础 block 字段一致（不含 callout/cite，见单独用例）', () => {
+    // 注意：自 2026-05-22 起 renderMarkdown 把 callout/cite 渲染成标准 GFM blockquote
+    // (`>` 前缀 + `[!WARNING]` Alert)，**不保 IR roundtrip**——这是产品决策：用户保存的 .md
+    // 文件优先兼容 GitHub / VS Code / 桌面端预览，不能让 `:::cite` directive 在标准渲染器
+    // 里显示成裸文本。所以这里去掉 callout，单独用例改为断言"渲染成 blockquote 格式"。
     const ir: DocumentIR = {
       metadata: { title: '我的文档', author: '小堵', date: '2026-05-08' },
       blocks: [
@@ -290,7 +294,6 @@ describe('renderMarkdown roundtrip', () => {
         { type: 'paragraph', text: '这是一段文字。' },
         { type: 'list', ordered: false, items: ['项 1', '项 2'] },
         { type: 'divider' },
-        { type: 'callout', level: 'warning', text: '注意' },
       ],
     }
     const md = renderMarkdown(ir)
@@ -318,7 +321,13 @@ describe('renderMarkdown roundtrip', () => {
     }
   })
 
-  it('cite 块 roundtrip：source + page 保留', () => {
+  it('cite 块渲染成标准 GFM blockquote（含 source、页码、原文）', () => {
+    // 2026-05-22 改动：cite 不再用 `:::cite source="..." page=N` directive，因为标准 markdown
+    // 渲染器（GitHub / VS Code / 桌面端预览）不认识 `:::`，会显示成裸文本。改用 blockquote：
+    // > **来源**：`knowledge/a.md` (p.7)
+    // >
+    // > 原文片段
+    // 这里断言关键字符串都出现，而不是 IR roundtrip（renderer 已不保 roundtrip，by design）。
     const ir: DocumentIR = {
       metadata: { title: '引用测试' },
       blocks: [
@@ -326,14 +335,25 @@ describe('renderMarkdown roundtrip', () => {
       ],
     }
     const md = renderMarkdown(ir)
-    const { ir: ir2 } = parseIR(md)
-    const c = ir2.blocks[0]
-    assert.ok(c.type === 'cite')
-    if (c.type === 'cite') {
-      assert.equal(c.source, 'knowledge/a.md')
-      assert.equal(c.page, 7)
-      assert.equal(c.text, '原文片段')
+    // 关键内容都在；且不再出现 `:::cite` directive 文本
+    assert.match(md, /> \*\*来源\*\*：`knowledge\/a\.md` \(p\.7\)/, '来源行使用 blockquote + 反引号包裹路径')
+    assert.match(md, /> 原文片段/, '原文每行加 `> ` 前缀')
+    assert.ok(!md.includes(':::cite'), '不再输出 :::cite directive（标准渲染器不识别）')
+  })
+
+  it('callout 块渲染成 GFM Alert（GitHub 原生支持，标准渲染器回退为 blockquote）', () => {
+    // 2026-05-22 改动：与 cite 同理，`:::callout warning` directive 改成 `> [!WARNING]` GFM Alert
+    const ir: DocumentIR = {
+      metadata: { title: 'callout 测试' },
+      blocks: [
+        { type: 'callout', level: 'warning', text: '注意事项' },
+        { type: 'callout', level: 'danger', text: '高危操作' },
+      ],
     }
+    const md = renderMarkdown(ir)
+    assert.match(md, /> \[!WARNING\]\n> 注意事项/, 'warning → GFM Alert WARNING')
+    assert.match(md, /> \[!CAUTION\]\n> 高危操作/, 'danger → GFM Alert CAUTION')
+    assert.ok(!md.includes(':::callout'), '不再输出 :::callout directive')
   })
 
   it('frontmatter title 含冒号能正确 roundtrip（依赖渲染器加引号）', () => {

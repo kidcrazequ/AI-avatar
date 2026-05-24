@@ -103,8 +103,17 @@ export class ToolResultSpool {
         '',
         `[系统提示] 工具 ${toolName} 返回过长，完整内容已落盘到：`,
         `  ${file}`,
-        `如需查看中段或完整结构，调用 read_tool_result 工具按行号读取该文件（不要用 read_lines / read_file，它们会因路径不在工作区而失败）。`,
-        `否则请基于以上头/尾摘要直接收敛回答。`,
+        ``,
+        `如需查看中段或完整结构，调用 \`read_tool_result\` 工具：`,
+        `  read_tool_result(path="${file}")`,
+        ``,
+        `⚠️ **工具名警示**：`,
+        `- 正确：\`read_tool_result\`（**result**，读 spool 文件）`,
+        `- 错误：\`read_tool_ref\`（**ref**，只用于 web_fetch lazy_ref，本场景无效）`,
+        `- 错误：\`read_lines\` / \`read_file\`（路径不在工作区，会被路径穿越守卫拒绝）`,
+        `两个工具名几乎一样但功能完全不同，注意尾部是 result 不是 ref。`,
+        ``,
+        `否则请基于以上头/尾摘要直接收敛回答，不要调任何工具读这个 spool 文件——头/尾摘要 + reasoning 通常已经够答题。`,
       ].join('\n')
 
       return { spilled: true, content: summary, path: file, originalLength }

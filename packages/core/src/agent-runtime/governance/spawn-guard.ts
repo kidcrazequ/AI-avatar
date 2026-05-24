@@ -13,13 +13,16 @@ import {
   type ToolRef,
 } from '../blueprint'
 
-export type SubAgentType = 'explore' | 'plan' | 'worker'
+export type SubAgentType = 'explore' | 'plan' | 'worker' | 'verifier'
 
 /**
- * 三类子代理的默认能力约束。
+ * 四类子代理的默认能力约束。
  * - explore：只读工具白名单，不能写文件、不能 spawn 子代理
  * - plan：可读 + 可推理，不能写文件
  * - worker：继承父代理工具白名单（无独立约束）
+ * - verifier：只读工具白名单（与 explore 同），不能写文件、不能 spawn；定位是
+ *   复核 worker 已产出的结论（来源、数字、引用是否真实存在），匹配 Soul 的
+ *   数据可溯源红线。借鉴 MiniMax Mavis 的 Leader/Worker/Verifier 三角色（2026-05-22）。
  */
 export interface SubAgentTypeProfile {
   /** 允许的工具名集合；null 表示继承父代理 */
@@ -66,6 +69,12 @@ export const SUB_AGENT_PROFILES: Record<SubAgentType, SubAgentTypeProfile> = {
     defaultMode: 'allow',
     canSpawn: true,
     maxTurns: 20,
+  },
+  verifier: {
+    allowedTools: READ_ONLY_TOOLS,
+    defaultMode: 'allow',
+    canSpawn: false,
+    maxTurns: 6,
   },
 }
 

@@ -226,3 +226,44 @@ shared_skills:
       - 服务列表
     when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
     priority: 1
+
+  # ── 需求澄清（动手前的拷打；显式触发） ──
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把方案问透
+      - 把需求问透
+      - 把决策树问透
+      - 方案拷打
+      - 投资测算 grill
+      - 收益方案 grill
+      - 收益测算拷打
+      - EMC 方案 grill
+      - 用电曲线澄清
+      - 电价机制澄清
+      - 备电时长澄清
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 术语对齐
+    when: 用户显式请求被反问/拷打方案或决策；小堵在工商储方案设计/收益测算/投资模型/EMC 模式前用本技能 grill 场景参数（用电曲线、电价机制、屋面/装机、备电时长、业主类型）并沉淀 ADR
+    priority: 1
+
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 反问我
+      - 在动手前把问题问清楚
+    when: 同 grill-against-knowledge 但无需 ADR / 术语对齐的轻量场景（兜底）
+    priority: 2

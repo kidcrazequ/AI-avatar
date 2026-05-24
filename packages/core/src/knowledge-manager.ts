@@ -168,6 +168,38 @@ export class KnowledgeManager {
   }
 
   /**
+   * 重命名（或移动）知识库内的目录，相对路径形式，落在 knowledgePath 下。
+   *
+   * 用途（2026-05-24）：project rename 时同步迁移 `projects/<old>/` → `projects/<new>/`，
+   * 否则 ChatWindow 读 `projects/<pid>/README.md` 时拿不到老路径，project 上下文丢失。
+   *
+   * 行为：
+   *   - 双向路径都用 resolveUnderRoot 校验，禁止逃逸 knowledgePath
+   *   - 源不存在 → 静默成功（视为"无需迁移"，因为 createProject 时 knowledge 模板写入可能失败）
+   *   - 目标已存在 → 抛错（避免无声覆盖；caller 自行 warn 并提示用户手动合并）
+   *   - 父目录不存在 → 自动 mkdir 兜底
+   *
+   * @author zhi.qu
+   * @date 2026-05-24
+   */
+  renameDirectory(oldRelativePath: string, newRelativePath: string): void {
+    const oldFull = resolveUnderRoot(this.knowledgePath, oldRelativePath)
+    const newFull = resolveUnderRoot(this.knowledgePath, newRelativePath)
+    if (oldFull === newFull) return
+    if (!fs.existsSync(oldFull)) return
+    if (fs.existsSync(newFull)) {
+      throw new Error(
+        `重命名目标已存在: ${newRelativePath}（避免静默覆盖，请用户手动合并或先备份）`,
+      )
+    }
+    const parentDir = path.dirname(newFull)
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true })
+    }
+    fs.renameSync(oldFull, newFull)
+  }
+
+  /**
    * 回填 README.md：用实际的知识文件和图片信息替换模板占位符
    *
    * @param agentName 分身显示名称

@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 17
+const CURRENT_SCHEMA_VERSION = 19
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -139,6 +139,15 @@ export interface Message {
    * 与 uncertain 分开存便于按类型过滤；语义不同：uncertain=认知不确定，reconsider=立场更新。
    */
   reconsider_markers?: string | null
+  /**
+   * 工具调用时间线（v19 引入，2026-05-21）。
+   *
+   * 仅 assistant 角色会带：sqlite 存 ToolCallTimelineEntry[] 的 JSON 字符串。
+   * NULL 等价空数组（多数 assistant 不调工具时无需写入）。
+   * 用途：切换会话/重启后渲染每条 assistant 当时的工具调用过程，
+   * 而不是全局 transient 状态被清空后丢失。
+   */
+  tool_call_timeline_json?: string | null
   created_at: number
 }
 
@@ -252,7 +261,7 @@ export class DatabaseManager {
         `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
       ),
       insertMessage: this.db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, tool_call_timeline_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateConversationTime: this.db.prepare(
         `UPDATE conversations SET updated_at = ? WHERE id = ?`
@@ -267,6 +276,7 @@ export class DatabaseManager {
         SELECT m.id AS messageId,
                m.conversation_id AS conversationId,
                c.title AS conversationTitle,
+               c.avatar_id AS avatarId,
                snippet(messages_fts, 0, '[', ']', '...', 20) AS snippet,
                m.role,
                m.created_at AS createdAt
@@ -283,6 +293,7 @@ export class DatabaseManager {
         SELECT m.id AS messageId,
                m.conversation_id AS conversationId,
                c.title AS conversationTitle,
+               c.avatar_id AS avatarId,
                snippet(messages_fts, 0, '[', ']', '...', 20) AS snippet,
                m.role,
                m.created_at AS createdAt
@@ -989,6 +1000,53 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 18) {
+      // v17 → v18：新增 projects 表（分身下的"任务包"实体）。
+      // 与 conversations.project_id 字符串保持兼容：projects.name 等于该字符串。
+      // 数据迁移：从现有 DISTINCT (avatar_id, project_id) 反推已有 project。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(avatar_id, name)
+          )
+        `)
+        this.db.exec(`CREATE INDEX IF NOT EXISTS idx_projects_avatar ON projects(avatar_id)`)
+        const now = Date.now()
+        // 反推已有 project：从 conversations 表的 DISTINCT (avatar_id, project_id) 取
+        const rows = this.db.prepare(`
+          SELECT DISTINCT avatar_id, project_id FROM conversations
+          WHERE avatar_id != '' AND project_id != ''
+        `).all() as Array<{ avatar_id: string; project_id: string }>
+        const insertStmt = this.db.prepare(`
+          INSERT OR IGNORE INTO projects (id, avatar_id, name, description, archived, created_at, updated_at)
+          VALUES (?, ?, ?, '', 0, ?, ?)
+        `)
+        for (const r of rows) {
+          const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
+          insertStmt.run(id, r.avatar_id, r.project_id, now, now)
+        }
+        version = 18
+      })()
+    }
+
+    if (version < 19) {
+      // v18 → v19：messages 增加 tool_call_timeline_json 列，承载本条 assistant 消息
+      // 关联的工具调用时间线（ToolCallTimelineEntry[] 的 JSON 字符串），让用户切换/重启
+      // 后仍能看到每条 assistant 消息当时的工具调用过程。NULL 等价空数组，旧数据兼容。
+      // 2026-05-21 用户反馈：切对话后工具调用步骤丢失。
+      this.db.transaction(() => {
+        this.safeAddColumn('messages', 'tool_call_timeline_json', 'TEXT')
+        version = 19
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -1229,12 +1287,19 @@ export class DatabaseManager {
     uncertainMarkers?: string[],
     /** v17：assistant 的 [RECONSIDER] 标记内容数组；空数组等价 NULL */
     reconsiderMarkers?: string[],
+    /**
+     * v19：assistant 关联的工具调用时间线 JSON 字符串。
+     * 由 chatStore 在落盘前 JSON.stringify(ToolCallTimelineEntry[]) 得到。
+     * 空数组（"[]"）等价 NULL，不写入；保持 DB 行干净，节省存储。
+     */
+    toolCallTimelineJson?: string,
   ): string {
     const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const now = Date.now()
     const reasoningValue = reasoning && reasoning.trim().length > 0 ? reasoning : null
     const uncertainValue = uncertainMarkers && uncertainMarkers.length > 0 ? JSON.stringify(uncertainMarkers) : null
     const reconsiderValue = reconsiderMarkers && reconsiderMarkers.length > 0 ? JSON.stringify(reconsiderMarkers) : null
+    const timelineValue = toolCallTimelineJson && toolCallTimelineJson !== '[]' && toolCallTimelineJson.length > 0 ? toolCallTimelineJson : null
 
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
@@ -1245,6 +1310,7 @@ export class DatabaseManager {
         reasoningValue,
         uncertainValue,
         reconsiderValue,
+        timelineValue,
         now,
       )
       this.stmts.updateConversationTime.run(now, conversationId)
@@ -1448,6 +1514,117 @@ export class DatabaseManager {
       }
       throw new Error(`消息搜索失败: ${msg}`)
     }
+  }
+
+  // ─── Projects（任务包，v18）──────────────────────────────────────────────
+
+  /** 列出某分身下的所有 project（archived 排在后）；不传 avatarId 返回全部 */
+  listProjects(avatarId?: string): Array<{
+    id: string
+    avatar_id: string
+    name: string
+    description: string
+    archived: 0 | 1
+    created_at: number
+    updated_at: number
+    conversation_count: number
+  }> {
+    const where = avatarId ? 'WHERE p.avatar_id = ?' : ''
+    const args = avatarId ? [avatarId] : []
+    return this.db.prepare(`
+      SELECT p.*,
+        (SELECT COUNT(*) FROM conversations c WHERE c.avatar_id = p.avatar_id AND c.project_id = p.name) AS conversation_count
+      FROM projects p
+      ${where}
+      ORDER BY p.archived ASC, p.updated_at DESC
+    `).all(...args) as Array<{
+      id: string; avatar_id: string; name: string; description: string;
+      archived: 0 | 1; created_at: number; updated_at: number; conversation_count: number
+    }>
+  }
+
+  /** 按 id 取单个 project */
+  getProject(id: string): { id: string; avatar_id: string; name: string; description: string; archived: 0 | 1; created_at: number; updated_at: number } | undefined {
+    const row = this.db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as
+      | { id: string; avatar_id: string; name: string; description: string; archived: 0 | 1; created_at: number; updated_at: number }
+      | undefined
+    return row
+  }
+
+  /** 创建 project；name 必须在 avatar 内唯一 */
+  createProject(avatarId: string, name: string, description = ''): string {
+    if (!avatarId) throw new Error('avatarId 必填')
+    if (!/^[\w-]+$/.test(name)) throw new Error('project name 仅允许字母数字下划线连字符')
+    const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
+    const now = Date.now()
+    try {
+      this.db.prepare(`
+        INSERT INTO projects (id, avatar_id, name, description, archived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 0, ?, ?)
+      `).run(id, avatarId, name, description, now, now)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('UNIQUE')) throw new Error(`project "${name}" 已存在`)
+      throw err
+    }
+    return id
+  }
+
+  /** 更新 project（rename 时同步迁移 conversations.project_id） */
+  updateProject(id: string, patch: { name?: string; description?: string }): void {
+    const existing = this.getProject(id)
+    if (!existing) throw new Error(`project 不存在: ${id}`)
+    const sets: string[] = []
+    const args: unknown[] = []
+    let newName = existing.name
+    if (patch.name !== undefined && patch.name !== existing.name) {
+      if (!/^[\w-]+$/.test(patch.name)) throw new Error('project name 仅允许字母数字下划线连字符')
+      sets.push('name = ?')
+      args.push(patch.name)
+      newName = patch.name
+    }
+    if (patch.description !== undefined) {
+      sets.push('description = ?')
+      args.push(patch.description)
+    }
+    if (sets.length === 0) return
+    sets.push('updated_at = ?')
+    args.push(Date.now())
+    args.push(id)
+    this.db.transaction(() => {
+      this.db.prepare(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`).run(...args)
+      if (newName !== existing.name) {
+        // 同步迁移 conversations.project_id（rename 不破坏既有归属）
+        this.db.prepare(`
+          UPDATE conversations SET project_id = ?, updated_at = ?
+          WHERE avatar_id = ? AND project_id = ?
+        `).run(newName, Date.now(), existing.avatar_id, existing.name)
+      }
+    })()
+  }
+
+  /** 归档 / 取消归档 project（不删除数据） */
+  archiveProject(id: string, archived: boolean): void {
+    this.db.prepare(`UPDATE projects SET archived = ?, updated_at = ? WHERE id = ?`)
+      .run(archived ? 1 : 0, Date.now(), id)
+  }
+
+  /**
+   * 删除 project。
+   * options.migrateConversationsTo: 把该 project 下会话迁到目标 project name（默认 'default'）。
+   * 不传则迁到 'default'，不允许硬删会话。
+   */
+  deleteProject(id: string, options: { migrateConversationsTo?: string } = {}): void {
+    const existing = this.getProject(id)
+    if (!existing) return
+    const target = options.migrateConversationsTo ?? 'default'
+    this.db.transaction(() => {
+      this.db.prepare(`
+        UPDATE conversations SET project_id = ?, updated_at = ?
+        WHERE avatar_id = ? AND project_id = ?
+      `).run(target, Date.now(), existing.avatar_id, existing.name)
+      this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(id)
+    })()
   }
 
   // ─── 提示词模板 ──────────────────────────────────────────────────────────────

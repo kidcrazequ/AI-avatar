@@ -73,3 +73,40 @@ shared_skills:
       - chart
     when: 多精确数值制图（先 load_skill）
     priority: 3
+
+  # ── 需求澄清（动手前的拷打；显式触发） ──
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把 PRD 问透
+      - 把需求问透
+      - 把决策树问透
+      - PRD 拷打
+      - 需求 grill
+      - 用户故事 grill
+      - 决策树拷打
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 术语对齐
+    when: 用户显式请求被反问/拷打需求或决策；品研起草 PRD/用户故事/产品方案前用本技能把决策树问透，并对照 knowledge/ 术语 + 沉淀 ADR
+    priority: 1
+
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 反问我
+      - 在动手前把问题问清楚
+    when: 同 grill-against-knowledge 但无需 ADR / 术语对齐的轻量场景（兜底）
+    priority: 2

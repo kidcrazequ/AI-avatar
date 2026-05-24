@@ -23,6 +23,7 @@ import { Component, useCallback, useEffect, useRef, useState, type ReactElement,
 import LightboxModal from './LightboxModal'
 import RendererToolbar from './RendererToolbar'
 import { svgElementToPngDataUrl } from '../utils/export-image'
+import { useArtifactStore } from '../stores/artifactStore'
 
 interface MermaidRendererProps {
   /** mermaid 源码（不含 ```mermaid fence） */
@@ -259,7 +260,11 @@ function MermaidRendererCore({ code }: MermaidRendererProps): ReactElement {
       {/* 工具栏只在渲染完成后显示，避免流式中点击触发 "SVG 未渲染" */}
       {svg && (
         <RendererToolbar
-          onZoom={() => setLightboxOpen(true)}
+          onZoom={() => {
+            // 副面板 + Lightbox 不应同时显示——放大打开 Lightbox 时关掉副面板（2026-05-21）。
+            useArtifactStore.getState().closeArtifact()
+            setLightboxOpen(true)
+          }}
           getPngDataUrl={getPngDataUrl}
           filenameBase="mermaid"
           ariaLabelPrefix="Mermaid 图表"

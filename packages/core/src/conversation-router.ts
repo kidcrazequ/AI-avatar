@@ -41,6 +41,11 @@ export interface RoutingDecision<TModel> {
   policy: ConsistencyPolicy
   /** 路由理由，仅用于日志与回归分析 */
   reason: string
+  /**
+   * 建议主分身这轮 fan-out 一个 verifier 子代理复核（2026-05-22 Mavis 借鉴）。
+   * null = 不建议。调用方可把这个信号转成一条 system prompt 提示注入到当前轮的 LLM 调用。
+   */
+  fanOut: FanOutSignal | null
 }
 
 /**
@@ -48,6 +53,30 @@ export interface RoutingDecision<TModel> {
  * 命中后跳过 RAG，避免空检索浪费 token。这是少数 router 能判断对的低风险场景。
  */
 const ACK_REGEX = /^(好|好的|行|可以|收到|明白|嗯|哦|谢谢|感谢|ok|okay|yes|no|继续|开始吧|收到啦|知道了|了解了|好嘞|行吧)[！!。.,，\s]*$/i
+
+/**
+ * 高风险数据类问题特征：用户要具体数字 / 来源 / 出货量 / 通过率 / 跨源对比。
+ * 命中时建议主分身在产出后 fan-out 一个 verifier 子代理复核（2026-05-22 Mavis 借鉴）。
+ *
+ * 故意保守：宁可少建议也不要每条都触发；门槛是"含至少一个高风险关键词 + 内容长度 ≥ 12"。
+ * 单纯打招呼或简短确认不触发。
+ */
+const HIGH_STAKES_DATA_REGEX = /(多少|几个|哪几|占比|通过率|不良率|出货量|具体数字|具体多少|准确数据|项目数据|历史数据|来源|出处|引用|标到|标注来源|对比|比较|区别|vs )/i
+
+/** verifier fan-out 建议信号——纯函数；调用方决定要不要拼到系统提示。 */
+export interface FanOutSignal {
+  kind: 'verifier'
+  /** 命中的关键词（人读用，便于回归调试） */
+  reason: string
+}
+
+export function detectFanOutSignal(content: string): FanOutSignal | null {
+  const trimmed = content.trim()
+  if (trimmed.length < 12) return null
+  const m = trimmed.match(HIGH_STAKES_DATA_REGEX)
+  if (!m) return null
+  return { kind: 'verifier', reason: `high-stakes-keyword:${m[1] ?? m[0]}` }
+}
 
 export function routeConversation<TModel>(options: RouteConversationOptions<TModel>): RoutingDecision<TModel> {
   const {
@@ -69,6 +98,7 @@ export function routeConversation<TModel>(options: RouteConversationOptions<TMod
       contextStrategy: 'no-rag',
       policy,
       reason: 'images',
+      fanOut: null,
     }
   }
 
@@ -80,15 +110,17 @@ export function routeConversation<TModel>(options: RouteConversationOptions<TMod
       contextStrategy: 'no-rag',
       policy,
       reason: trimmed.length === 0 ? 'empty' : (ACK_REGEX.test(trimmed) ? 'ack' : 'too-short'),
+      fanOut: null,
     }
   }
 
-  // 默认：透传给 LLM 自主决策
+  // 默认：透传给 LLM 自主决策；额外附带 fan-out 信号供 caller 决定是否注入 verifier 提示
   return {
     model: chatModel,
     modelKind: 'chat',
     contextStrategy: 'auto',
     policy,
     reason: 'auto',
+    fanOut: detectFanOutSignal(content),
   }
 }

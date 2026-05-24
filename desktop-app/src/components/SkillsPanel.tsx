@@ -44,6 +44,8 @@ description: 描述这个技能做什么，什么时候该用它。LLM 会读这
 
 export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Props) {
   const [skills, setSkills] = useState<Skill[]>([])
+  /** 已在该分身 skill-index.yaml 引用的 shared 技能数（不计 local override 同名） */
+  const [sharedEnabledCount, setSharedEnabledCount] = useState(0)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
@@ -68,9 +70,17 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
   const loadSkills = useCallback(async (preserveSelection = true) => {
     try {
-      const skillList = await window.electronAPI.getSkills(avatarId)
+      // 并行拉 local + shared：顶部统计要合并算，否则只显示 local 数（与 SharedSkillTab 看到的实际启用数不一致）
+      const [skillList, sharedList] = await Promise.all([
+        window.electronAPI.getSkills(avatarId),
+        window.electronAPI.getAvailableSharedSkills(avatarId),
+      ])
       if (!mountedRef.current) return
       setSkills(skillList)
+      // shared 仅计 enabled=true（已在分身 skill-index.yaml 引用）且未被同名 local 覆写
+      const localNames = new Set(skillList.map(s => s.name || s.id))
+      const sharedActive = sharedList.filter(s => s.enabled && !localNames.has(s.name)).length
+      setSharedEnabledCount(sharedActive)
       if (preserveSelection) {
         setSelectedSkill(prev => {
           if (!prev) return skillList.length > 0 ? skillList[0] : null
@@ -272,10 +282,16 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const handleCancelDelete = () => setPendingDeleteId(null)
 
   const { enabledCount, disabledCount } = useMemo(() => {
-    let enabled = 0
-    for (const s of skills) { if (s.enabled) enabled++ }
-    return { enabledCount: enabled, disabledCount: skills.length - enabled }
-  }, [skills])
+    // 顶部"X ON / Y OFF"统计口径：
+    //   ON  = 启用的 local 技能 + 已引用的 shared 技能（不重复算 local override）
+    //   OFF = 用户手动 disable 的 local 技能（shared/skills 里没引用的不算"关闭"，它们不属于本分身）
+    let localEnabled = 0
+    for (const s of skills) { if (s.enabled) localEnabled++ }
+    return {
+      enabledCount: localEnabled + sharedEnabledCount,
+      disabledCount: skills.length - localEnabled,
+    }
+  }, [skills, sharedEnabledCount])
 
   return (
     <Modal isOpen={true} onClose={onClose} size="lg">

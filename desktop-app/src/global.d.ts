@@ -129,6 +129,8 @@ interface DbMessage {
   uncertain_markers?: string | null
   /** v17：[RECONSIDER] 标记内容 JSON 数组字符串；NULL/缺失 = 无 chip */
   reconsider_markers?: string | null
+  /** v19：本条 assistant 消息关联的工具调用时间线 JSON 字符串；NULL/缺失 = 没调工具或老数据 */
+  tool_call_timeline_json?: string | null
   created_at: number
 }
 
@@ -175,6 +177,18 @@ interface FileNode {
  * 用户自定义定时任务（#11 Scheduled Tasks，2026-05-09）。
  * 与 electron/db-schedules.ts 的 ScheduleRow 保持字段一致，仅枚举 enabled 用 0/1。
  */
+/** Project（任务包，v18）— 分身下的子工作空间显式实体。 */
+interface ProjectRow {
+  id: string
+  avatar_id: string
+  name: string
+  description: string
+  archived: 0 | 1
+  created_at: number
+  updated_at: number
+  conversation_count: number
+}
+
 interface ScheduleRow {
   id: string
   name: string
@@ -431,6 +445,8 @@ interface WorkspaceGrepResult {
 interface MessageSearchResult {
   conversationId: string
   conversationTitle: string
+  /** 所属分身 ID（用于全局搜索时跨分身跳转） */
+  avatarId: string
   messageId: string
   snippet: string
   role: string
@@ -569,6 +585,7 @@ interface ElectronAPI {
     reasoning?: string,
     uncertainMarkers?: string[],
     reconsiderMarkers?: string[],
+    toolCallTimelineJson?: string,
   ) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
 
@@ -787,6 +804,15 @@ interface ElectronAPI {
 
   // 记忆管理（GAP2）
   readMemory: (avatarId: string) => Promise<string>
+  /** 跨分身搜索 MEMORY.md（按行匹配） */
+  searchMemory: (query: string) => Promise<Array<{ avatarId: string; lineNo: number; line: string; context: string }>>
+
+  // Projects 任务包 CRUD（v18，#5 Step B1）
+  projectsList: (avatarId?: string) => Promise<ProjectRow[]>
+  projectsCreate: (avatarId: string, name: string, description?: string) => Promise<string>
+  projectsUpdate: (id: string, patch: { name?: string; description?: string }) => Promise<void>
+  projectsArchive: (id: string, archived: boolean) => Promise<void>
+  projectsDelete: (id: string, options?: { migrateConversationsTo?: string }) => Promise<void>
   writeMemory: (avatarId: string, content: string) => Promise<void>
   getMemoryStats: (avatarId: string) => Promise<{ chars: number; ratio: number; entries: number }>
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>
@@ -1196,6 +1222,13 @@ interface ElectronAPI {
     excelBasenames?: string[]
   }) => Promise<void>
   checkUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion?: string; downloadUrl?: string; releaseNotes?: string }>
+  /** @web 引用：联网搜索（DuckDuckGo Instant Answer） */
+  webSearch: (query: string) => Promise<{
+    query: string
+    results: Array<{ title: string; snippet: string; url: string }>
+    abstract?: string
+    abstractSource?: string
+  }>
   /** 用系统文件管理器打开日志目录，返回目录路径 */
   openLogsFolder: () => Promise<string>
   /** 用系统文件管理器打开当前分身的 workspaces 根目录 */
@@ -1210,6 +1243,8 @@ interface ElectronAPI {
   mcpListServers: () => Promise<McpServerListItem[]>
   /** 创建或更新 server（同时写 DB + 重建连接） */
   mcpUpsertServer: (config: McpServerInput) => Promise<McpServerSnapshot | null>
+  /** 测试连接：临时 addServer 拿 snapshot 后立即 remove，不写 DB */
+  mcpTestConnect: (config: McpServerInput) => Promise<McpServerSnapshot | null>
   /** 删除 server */
   mcpRemoveServer: (name: string) => Promise<{ ok: boolean }>
   /** 重新连接（不改 DB） */

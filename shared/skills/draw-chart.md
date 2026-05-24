@@ -224,6 +224,43 @@ LLM 训练数据里 Chart.js 比 ECharts 流行很多，你可能下意识写出
    - **即使被剥掉**：渲染器在 v0.6.16 起会主动剥掉所有显式 series.color，但你应该从 prompt 阶段就不写，避免误导用户阅读 JSON
 7. **X 轴类目 > 12 时改用横向** — 如月份可以竖着，但站点、SKU 这种多条目必须用横向柱状图（`yAxis.type: 'category'`, `xAxis.type: 'value'`, `series[].type: 'bar'`）
 8. **单值 KPI 必须带对比** — 如果只有一个数字，必须同时展示"上期/去年同期"作为第二个系列或副标题
+9. **双 Y 轴 / 双 X 轴必须显式 `position`** — 多指标对比（如"加速度" + "温度"）用两个 yAxis，**默认两个 yAxis 都在左侧、两个 xAxis 都在底部**，刻度和轴名会完全叠在一起（2026-05-21 实测 ENS-L262 抗震+湿热踩坑：60/50/40/30/20/10 和 3/2/1 两套刻度交叉重叠成一片）。规则：
+
+   - 多 yAxis 时**第 2 个必须**写 `"position": "right"`，否则两套刻度叠加
+   - 多 xAxis 时**第 2 个必须**写 `"position": "top"`，否则两套类目标签叠加
+   - 每个 yAxis 的 `name` 字段同时**必须**配合 `nameLocation: 'middle'`、`nameGap: 40`、`nameRotate: 90`（左轴）/ `nameRotate: -90`（右轴）。这样轴名沿轴线**居中显示**，不再争抢顶部空间
+   - **正确**（双 yAxis）：
+     ```json
+     "yAxis": [
+       { "name": "加速度 (m/s²)", "nameLocation": "middle", "nameGap": 40, "nameRotate": 90 },
+       { "name": "温度 (°C)", "position": "right", "nameLocation": "middle", "nameGap": 40, "nameRotate": -90 }
+     ]
+     ```
+   - **正确**（双 xAxis）：
+     ```json
+     "xAxis": [
+       { "type": "category", "data": ["台面X", "台面Y", ...] },
+       { "type": "category", "position": "top", "data": ["升温", "高温恒定", "降温"] }
+     ]
+     ```
+   - **错误**：`yAxis: [{ name: '加速度' }, { name: '温度' }]`（无 position + 无 nameLocation，两套全堆左侧）
+   - 单 yAxis 也建议同样配置（轴名居中比顶部更好读）
+   - 注意 series 必须用 `yAxisIndex` / `xAxisIndex` 显式指向哪根轴，否则全部默认轴 0
+10. **🚫 严禁 `grid` 数组多子图布局** — 想在一个 chart 里塞 2 个/4 个子图、用 `grid: [{...}, {...}]` 数组分区？**禁止**。
+    - 真实事故（2026-05-21）：小堵把"抗震参数"和"湿热参数"塞进同一张 chart 的左右两个 grid，结果**标题撞轴名撞副标题撞 legend**，渲染层兜底也救不回来美观
+    - 多组数据要表达 → **输出多个独立的 ` ```chart ` 代码块**，每个 chart 自带完整标题/工具栏/放大功能
+    - **正确**：
+      ````
+      ```chart
+      { "title": { "text": "抗震参数" }, ... }
+      ```
+      （文字过渡：「以下是交变湿热数据」）
+      ```chart
+      { "title": { "text": "湿热参数" }, ... }
+      ```
+      ````
+    - **错误**：单个 `chart` 代码块含 `"grid": [{...}, {...}]` + 多个 `xAxis` / `yAxis` 配 `gridIndex`
+    - 单 grid 对象（`grid: {top: ..., left: ...}`）**仍然允许**（虽然主题已默认计算，多数情况不必写）；这一条只禁数组形式
 
 ### ✅ 高级视觉（主题已内置，你只需配合）
 
@@ -239,7 +276,7 @@ LLM 训练数据里 Chart.js 比 ECharts 流行很多，你可能下意识写出
 2. **areaStyle 默认关闭**（v0.6.3 起）—— 主题不再默认给折线图加渐变 areaStyle（之前多 series 折线图会重叠变浑浊）。**单 series** 折线图想要渐变效果，可在 `series[0].areaStyle: {}` 里显式写空对象（主题会自动注入渐变色）；**多 series 严禁** `areaStyle`
 3. **饼图用环形** — `radius: ["45%", "70%"]`，比实心饼更现代
 4. **markPoint 标注极值** — 趋势图（数据点 ≥ 3 时）加 `markPoint: { data: [{ type: "max" }, { type: "min" }] }` 突出关键数据
-5. **grid 留白** — 不要写 grid 字段，主题默认 `{top: 64, bottom: 56, left: 56, right: 64}` 已为标题、底部 legend、markLine 标签留够空间
+5. **grid 留白** — 不要写 grid 字段，主题默认 `{top: 64, bottom: 56, left: 56, right: 64}` 已为标题、底部 legend、markLine 标签留够空间。**ChartRenderer 在 v0.6.17 起会按 title.text/subtext + yAxis.name 个数动态算最小 grid.top（最多 140px），即使你算错或漏配，渲染层也会兜底**——但你应当照规则写，别依赖兜底。
 
 ### ❌ 严禁
 

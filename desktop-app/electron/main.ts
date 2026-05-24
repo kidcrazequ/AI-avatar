@@ -671,8 +671,9 @@ function initManagers() {
         error: task.error ?? null,
         started_at: task.startedAt ?? Date.now(),
         finished_at: task.finishedAt ?? null,
-        // 旧 SubAgentManager 没有类型，TypedSubAgentManager sink 才会填这列
-        agent_type: null,
+        // task() 工具的 agent_type 参数通过 ctx 透传到这里（2026-05-22 Mavis 借鉴）；
+        // 未传 → null（保持旧行为）；'verifier' / 'explore' / 'plan' / 'worker' → 落库
+        agent_type: ctx.agentType ?? null,
       }
       db.upsertSubAgentTask(row)
     } catch (e) {
@@ -689,8 +690,8 @@ function initManagers() {
       // task 描述截断到 ~500 字符防止单行过大；完整 task 在 sqlite
       taskPreview: task.task.length > 500 ? task.task.slice(0, 500) + '…' : task.task,
       error: task.error ?? null,
-      // 旧 SubAgentManager 无类型；TypedSubAgentManager sink 才填这两个字段
-      agentType: null,
+      // task() 工具传 agent_type 时透传到 JSONL；未传保持 null（向后兼容）
+      agentType: ctx.agentType ?? null,
       ts: Date.now(),
     })
   }
@@ -1244,7 +1245,68 @@ wrapHandler('create-conversation', (_, title: string, avatarId: string, projectI
 
 wrapHandler('list-project-ids', (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  return getDb().listProjectIdsForAvatar(avatarId)
+  // 真源合并（2026-05-24 修复 P1 #4）：
+  //   ① projects 表中所有 name（含未关联 conversation 的"空 project"）
+  //   ② conversations 反推（容老数据：v18 之前 projects 表不存在，project_id 散在 conversations 里）
+  //
+  // 原实现只走 ②，导致 ProjectManagerPanel 新建的空 project 不出现在侧栏，
+  // 用户没法新建对话到空 project 里。改为合并后，新建空 project 立刻可见；
+  // 老数据反推路径仍保留，保证向后兼容。
+  const db = getDb()
+  const fromTable = db.listProjects(avatarId).map((p) => p.name)
+  const fromConvs = db.listProjectIdsForAvatar(avatarId)
+  return [...new Set([...fromTable, ...fromConvs])].sort()
+})
+
+// ─── Projects 任务包 CRUD（v18，#5 Step B1）──────────────────────────────
+wrapHandler('projects:list', (_, avatarId?: string) => {
+  if (avatarId) assertSafeSegment(avatarId, '分身ID')
+  return getDb().listProjects(avatarId)
+})
+wrapHandler('projects:create', async (_, avatarId: string, name: string, description?: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const id = getDb().createProject(avatarId, name, description ?? '')
+  // 副作用：在知识库下建立 projects/<name>/ 模板目录（README.md / notes.md / decisions/.gitkeep）
+  // 失败不阻塞 create（DB 已经写入）；只 warn
+  try {
+    const km = getKnowledgeManager(avatarId)
+    const readme = `# 任务包：${name}\n\n${description ?? ''}\n\n## 关键资料\n\n（把本任务包独有的资料放在这个目录下；分身在引用 @project-context 时会优先看这里。）\n\n## 决策记录\n\n参见 \`decisions/\` 子目录（grill-against-knowledge 写 ADR 时会自动落到这里）。\n`
+    km.writeFile(`projects/${name}/README.md`, readme)
+    km.writeFile(`projects/${name}/notes.md`, `# ${name} · 工作笔记\n\n（记录会议纪要、客户反馈、临时想法。）\n`)
+    km.writeFile(`projects/${name}/decisions/.gitkeep`, '')
+  } catch (err) {
+    console.warn('[projects:create] 创建知识库模板失败（不影响 DB）:', err instanceof Error ? err.message : String(err))
+  }
+  return id
+})
+wrapHandler('projects:update', (_, id: string, patch: { name?: string; description?: string }) => {
+  // rename 时同步迁移 knowledge/projects/<old>/ → <new>/（2026-05-24 修复 P1 #4）：
+  // ChatWindow 注入 project 上下文时读 `projects/<pid>/README.md`，如果只改 DB 不动 knowledge 目录，
+  // 改名后 project 上下文会全部丢失。
+  //
+  // 顺序很重要：必须先读旧 name → 改 DB（会校验 name 合法性）→ 再 mv 目录。
+  // DB 校验失败时不动目录；目录 mv 失败时 DB 已 committed，仅 warn 并提示用户手动迁移。
+  const db = getDb()
+  const before = db.getProject(id)
+  db.updateProject(id, patch)
+  if (before && patch.name && patch.name !== before.name) {
+    try {
+      const km = getKnowledgeManager(before.avatar_id)
+      km.renameDirectory(`projects/${before.name}`, `projects/${patch.name}`)
+    } catch (mvErr) {
+      const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
+      console.warn(
+        `[projects:update] knowledge 目录迁移失败（DB 已更新；请手动 mv "projects/${before.name}" → "projects/${patch.name}"）:`,
+        msg,
+      )
+    }
+  }
+})
+wrapHandler('projects:archive', (_, id: string, archived: boolean) => {
+  getDb().archiveProject(id, !!archived)
+})
+wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsTo?: string }) => {
+  getDb().deleteProject(id, options)
 })
 
 wrapHandler('get-conversations', (_, avatarId?: string) => {
@@ -1338,8 +1400,9 @@ wrapHandler('save-message', (
   reasoning?: string,
   uncertainMarkers?: string[],
   reconsiderMarkers?: string[],
+  toolCallTimelineJson?: string,
 ) => {
-  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers)
+  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson)
 })
 
 wrapHandler('get-messages', (_, conversationId: string) => {
@@ -2144,6 +2207,52 @@ wrapHandler('write-memory', async (_, avatarId: string, content: string) => {
   await fs.promises.mkdir(memoryDir, { recursive: true })
   await atomicWriteFile(memoryPath, content)
   if (logger) logger.recordGenerated('memory', avatarId, memoryPath)
+})
+
+/**
+ * search-memory: 跨分身搜索 MEMORY.md，返回每个匹配条目的行号 + 上下文。
+ *
+ * 实现简单：遍历 avatarsPath/*\/memory/MEMORY.md，按行匹配 query 子串（忽略大小写）。
+ * 不建索引（memory 文件普遍 < 50KB，遍历足够快）。
+ */
+wrapHandler('search-memory', async (_, query: string): Promise<Array<{
+  avatarId: string
+  lineNo: number
+  line: string
+  context: string
+}>> => {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return []
+  if (q.length > 200) throw new Error('搜索词不能超过 200 字符')
+  let entries: string[]
+  try {
+    entries = await fs.promises.readdir(avatarsPath)
+  } catch {
+    return []
+  }
+  const hits: Array<{ avatarId: string; lineNo: number; line: string; context: string }> = []
+  for (const avatarId of entries) {
+    try {
+      const memoryPath = path.join(avatarsPath, avatarId, 'memory', 'MEMORY.md')
+      const stat = await fs.promises.stat(memoryPath).catch(() => null)
+      if (!stat?.isFile()) continue
+      const text = await fs.promises.readFile(memoryPath, 'utf-8')
+      const lines = text.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].toLowerCase().includes(q)) {
+          // 上下文：当前行 + 上下各 1 行
+          const ctxStart = Math.max(0, i - 1)
+          const ctxEnd = Math.min(lines.length - 1, i + 1)
+          const context = lines.slice(ctxStart, ctxEnd + 1).join('\n')
+          hits.push({ avatarId, lineNo: i + 1, line: lines[i], context })
+          if (hits.length >= 50) return hits // 全局 cap，避免单关键词扫出几百条
+        }
+      }
+    } catch {
+      // 单个分身读失败不影响其他
+    }
+  }
+  return hits
 })
 
 /**
@@ -3272,22 +3381,38 @@ wrapHandler(
   // ─── read_tool_result: 读取 ToolResultSpool 落盘的工具结果文件 ──────────
   // spool 路径在 userData/tool-results/<conv>/<tool>-<ts>.txt，不在 workspace 下，
   // 用 read_lines 会被路径安全策略拒绝。本工具专门处理 spool 路径，仅允许 spool root 下。
+  //
+  // 参数兼容：
+  //   path     - spool 文件绝对路径（推荐，spool 提示中给出的完整路径）
+  //   call_id  - 兜底，等价 spool 文件 basename（不含 .txt）。
+  //              LLM 经常把"工具名-时间戳"误当作 call_id 传，这里映射到 spool 文件解决。
   if (name === 'read_tool_result') {
     const rawPath = (args.path as string) ?? ''
+    const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
     const startLine = typeof args.start_line === 'number' && Number.isFinite(args.start_line)
       ? Math.max(1, Math.floor(args.start_line))
-      : 1
+      : (typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(1, Math.floor(args.offset)) : 1)
     const endLineArg = typeof args.end_line === 'number' && Number.isFinite(args.end_line)
       ? Math.floor(args.end_line)
-      : undefined
-    if (!rawPath) return { content: '', error: '缺少 path 参数（应为 spool 文件绝对路径）' }
+      : (typeof args.limit === 'number' && Number.isFinite(args.limit) ? startLine + Math.max(1, Math.floor(args.limit)) - 1 : undefined)
+
     const spoolRoot = toolResultSpool.getRootDir()
-    const abs = path.resolve(rawPath)
+    let abs: string
+    if (rawPath) {
+      abs = path.resolve(rawPath)
+    } else if (callId && conversationId) {
+      // call_id 兼容：等价于 spool 文件 basename（与 ToolResultSpool.spool 的 ${safeName}-${ts} 对齐）
+      const safeName = callId.replace(/\.txt$/i, '').replace(/[^\w.-]/g, '_')
+      abs = path.join(spoolRoot, conversationId, `${safeName}.txt`)
+    } else {
+      return { content: '', error: '需要 path（spool 文件绝对路径）或 call_id（spool 文件名，不含 .txt）' }
+    }
+
     if (!abs.startsWith(spoolRoot + path.sep) && abs !== spoolRoot) {
-      return { content: '', error: `路径不在 tool-results 目录下，请使用 spool 提示的完整路径：${rawPath}` }
+      return { content: '', error: `路径不在 tool-results 目录下，请使用 spool 提示的完整路径：${rawPath || callId}` }
     }
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath}` }
+      return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath || callId}` }
     }
     const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
     const totalLines = lines.length
@@ -5984,6 +6109,61 @@ wrapHandler('export-error-log', async (_, days = 3) => {
  * check-update: 从 GitHub Releases 获取最新版本号，与本地版本比较。
  * 轻量实现：只检查版本号 + 返回下载链接，不自动下载安装。
  */
+/**
+ * web-search: 联网搜索（@web 引用的 backend）。
+ *
+ * 实现：调 DuckDuckGo Instant Answer API（免 key / 免 CORS / 稳定）。
+ * 局限：DDG IA 对 long-tail 查询返回稀疏；想要更准的结果用户应当配 MCP Tavily/Brave server。
+ *
+ * 返回 markdown 化结果（标题 + 摘要 + 链接），供前端作为 inline file 引用。
+ */
+wrapHandler('web-search', async (_, query: string): Promise<{
+  query: string
+  results: Array<{ title: string; snippet: string; url: string }>
+  abstract?: string
+  abstractSource?: string
+}> => {
+  const q = (query || '').trim()
+  if (!q) throw new Error('搜索关键词不能为空')
+  if (q.length > 200) throw new Error('搜索关键词不能超过 200 字符')
+  const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`
+  const res = await fetchWithTimeout(url, {
+    headers: { 'User-Agent': 'Soul-Desktop' },
+    timeoutMs: 8000,
+  })
+  if (!res.ok) throw new Error(`DuckDuckGo 返回 ${res.status}`)
+  const data = await res.json() as {
+    Abstract?: string
+    AbstractSource?: string
+    AbstractURL?: string
+    Heading?: string
+    RelatedTopics?: Array<{ Text?: string; FirstURL?: string; Topics?: Array<{ Text?: string; FirstURL?: string }> }>
+    Results?: Array<{ Text?: string; FirstURL?: string }>
+  }
+  const results: Array<{ title: string; snippet: string; url: string }> = []
+  for (const r of data.Results || []) {
+    if (r.Text && r.FirstURL) results.push({ title: r.Text.split(' - ')[0] || r.Text, snippet: r.Text, url: r.FirstURL })
+  }
+  for (const r of data.RelatedTopics || []) {
+    if (r.Topics) {
+      for (const sub of r.Topics) {
+        if (sub.Text && sub.FirstURL) {
+          results.push({ title: sub.Text.split(' - ')[0] || sub.Text, snippet: sub.Text, url: sub.FirstURL })
+        }
+      }
+    } else if (r.Text && r.FirstURL) {
+      results.push({ title: r.Text.split(' - ')[0] || r.Text, snippet: r.Text, url: r.FirstURL })
+    }
+    if (results.length >= 15) break
+  }
+  return {
+    query: q,
+    results: results.slice(0, 15),
+    abstract: data.Abstract || undefined,
+    abstractSource: data.AbstractSource || undefined,
+  }
+})
+
 wrapHandler('check-update', async (): Promise<{
   hasUpdate: boolean
   currentVersion: string
@@ -6116,6 +6296,44 @@ wrapHandler('mcp:upsert-server', async (_event, input: McpServerInput) => {
     description: input.description,
   })
   return mcpManager.getSnapshot(input.name)
+})
+
+/**
+ * mcp:test-connect — 测试 MCP server 配置但不持久化到 DB。
+ *
+ * 实现：addServer（mcpManager 内部已支持 enabled 触发 connect），等 ready 拿到 snapshot，
+ * 然后 removeServer 清理。整个过程不写 DB。
+ *
+ * 用户场景：编辑表单时点"测试"，不希望先保存才能验证。
+ *
+ * 返回：snapshot（含 toolCount / tools / error / status）；失败时也返回（含 error 信息）。
+ */
+wrapHandler('mcp:test-connect', async (_event, input: McpServerInput) => {
+  if (!mcpManager) throw new Error('mcpManager 未初始化')
+  if (!input?.name || !/^[a-zA-Z0-9_-]{1,32}$/.test(input.name)) {
+    throw new Error('server 名称非法，仅允许 [a-zA-Z0-9_-]，长度 1~32')
+  }
+  // 用临时名（前缀 __test__）避免和真实 server 冲突 + 不污染 DB
+  const testName = `__test__${Date.now().toString(36).slice(-8)}`
+  try {
+    await mcpManager.addServer({
+      name: testName,
+      enabled: true, // 测试时强制启用，否则不会连
+      transport: input.transport,
+      command: input.command,
+      args: input.args,
+      env: input.env,
+      cwd: input.cwd,
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      description: input.description,
+    })
+    const snapshot = mcpManager.getSnapshot(testName)
+    return snapshot
+  } finally {
+    // 不管成功失败都清理
+    try { await mcpManager.removeServer(testName) } catch { /* ignore */ }
+  }
 })
 
 wrapHandler('mcp:remove-server', async (_event, name: string) => {

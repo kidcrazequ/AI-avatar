@@ -23,6 +23,7 @@ import { Component, useCallback, useEffect, useRef, useState, type ReactElement,
 import LightboxModal from './LightboxModal'
 import RendererToolbar from './RendererToolbar'
 import { svgElementToPngDataUrl } from '../utils/export-image'
+import { useArtifactStore } from '../stores/artifactStore'
 
 interface InfographicRendererProps {
   /** 完整的 infographic DSL 源码（不含 ```infographic fence） */
@@ -53,25 +54,114 @@ class InfographicErrorBoundary extends Component<
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const rawMsg = this.state.errorMessage || ''
+      const hint = explainInfographicError(rawMsg, this.props.dsl)
       return (
         <div
           role="alert"
           className="my-3 border-2 border-px-danger bg-px-bg p-3"
           aria-label="Infographic 渲染失败"
         >
-          <div className="font-game text-[11px] tracking-wider text-px-danger mb-2">
-            ⚠ INFOGRAPHIC RENDER FAILED
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-game text-[11px] tracking-wider text-px-danger">
+              ⚠ 信息图渲染失败 · DSL {this.props.dsl.length} chars
+            </div>
+            <button
+              type="button"
+              onClick={() => { void navigator.clipboard?.writeText?.(this.props.dsl) }}
+              className="font-game text-[10px] text-px-text-dim hover:text-px-primary px-2 py-0.5 border border-px-border hover:border-px-primary"
+              title="复制完整 DSL 源码到剪贴板"
+            >
+              复制 DSL
+            </button>
           </div>
-          <div className="text-[12px] text-px-text-dim mb-2 font-body">
-            {this.state.errorMessage || '未知错误'}
+          <div className="text-[13px] text-px-text leading-relaxed mb-2 font-body">
+            {hint.headline}
           </div>
-          <pre className="text-[11px] text-px-text-dim font-mono overflow-x-auto max-h-40">
+          {hint.suggestions.length > 0 && (
+            <ul className="text-[12px] text-px-text-dim font-body list-disc pl-5 mb-2 space-y-0.5">
+              {hint.suggestions.map((s, i) => (<li key={i}>{s}</li>))}
+            </ul>
+          )}
+          <details className="text-[11px] text-px-text-dim/80 font-body mb-2">
+            <summary className="cursor-pointer select-none hover:text-px-text-dim">
+              查看技术错误信息（开发调试用）
+            </summary>
+            <div className="mt-1 font-mono text-[10px] break-all">{rawMsg || '未知错误'}</div>
+          </details>
+          <pre className="text-[11px] text-px-text-dim font-mono overflow-auto max-h-[600px] whitespace-pre-wrap break-all bg-px-surface/40 p-2 border border-px-border/40">
             {this.props.dsl}
           </pre>
         </div>
       )
     }
     return this.props.children
+  }
+}
+
+/**
+ * 把 @antv/infographic 抛出的底层异常翻译成人话 + 给出可操作建议。
+ *
+ * 触发点：
+ *   - "Invalid SVG string"：DSL 字段名 / 缩进 / 类型错配，导致生成空 SVG。最常见 LLM
+ *     在 compare-swot 里给 `items` 数组但 antv 只认 plain `text`（已有 coerce 兜底，
+ *     但仍可能漏掉边角形态）；或 label 里夹 emoji 让文本测量失败。
+ *   - "未导出 Infographic 类"：@antv/infographic 加载失败或被外部脚本污染。
+ *
+ * 注意：chatStore.sendMessage 末尾已经接了 validator + 自动追问（见 chatStore.ts
+ * 「#C 方案」），所以这个红框可能只是"上一轮的废稿"——下一条助手消息通常已经把
+ * 修正后的图发过来。提示文字里要点出这一点，避免用户以为分身完全没救。
+ */
+function explainInfographicError(
+  rawMsg: string,
+  dsl: string,
+): { headline: string; suggestions: string[] } {
+  const lower = rawMsg.toLowerCase()
+  const isCompareSwot = /^\s*infographic\s+compare-swot\b/im.test(dsl)
+  const hasEmojiInLabel = /^\s*-\s+label\s+.*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/mu.test(dsl)
+
+  if (lower.includes('invalid svg')) {
+    const suggestions: string[] = []
+    if (isCompareSwot) {
+      suggestions.push('compare-swot 模板每块只接受 `text 一段文字`，不接受 `items` 数组——若 LLM 输出了 items 列表会渲染失败')
+      suggestions.push('label 文本里出现 emoji（如 ✅ 🔵 🔴）有概率让 SVG 文本测量失败；改用纯文字标签如 "优势 / 劣势 / 机会 / 威胁"')
+    } else {
+      suggestions.push('检查 DSL 首行是否为 `infographic <模板名>`，缩进是否用 2 空格（不是 tab）')
+      suggestions.push('字段名遵守模板规定：list 用 `lists`、compare 用 `compares`、hierarchy 用 `root + children`')
+    }
+    suggestions.push('系统已自动让 AI 重新生成一版——如果下一条消息出现了同主题的新图，本红框可以忽略')
+    return {
+      headline: '信息图代码格式不被图形库接受（生成了空 SVG）。',
+      suggestions,
+    }
+  }
+
+  if (lower.includes('未导出 infographic 类') || lower.includes('加载 @antv/infographic 失败')) {
+    return {
+      headline: '@antv/infographic 库加载失败 —— 这是渲染器层问题，不是 AI 答案错。',
+      suggestions: [
+        '尝试刷新 desktop-app（Cmd+R / 重启）',
+        '检查 node_modules/@antv/infographic 是否存在；执行 `npm install` 重装',
+      ],
+    }
+  }
+
+  if (hasEmojiInLabel) {
+    return {
+      headline: 'label 文本里的 emoji 让信息图渲染失败。',
+      suggestions: [
+        '请 AI 改用纯文字标签（如 "优势 / 劣势 / 机会 / 威胁"）替换 emoji',
+        '已加 emoji 标签是来自模型的格式偏好，与人格规则无关',
+      ],
+    }
+  }
+
+  return {
+    headline: '信息图渲染失败，可能是 DSL 字段错配或数据缺失。',
+    suggestions: [
+      '系统已自动让 AI 重新生成一版——如果下一条消息出现了同主题的新图，本红框可以忽略',
+      '若多次失败，可以追问"请改用 list-grid-badge-card 模板重新画"',
+    ],
   }
 }
 
@@ -100,6 +190,39 @@ async function ensureInfographicLoaded(): Promise<void> {
   })()
 
   return _loadingPromise
+}
+
+/**
+ * 把当前项目主题（CSS 变量 --px-bg / --px-surface / --px-primary / --px-text / ...）
+ * 映射成 @antv/infographic 的 ThemeConfig。让 infographic 跟随当前主题模板的配色。
+ *
+ * 设计点：
+ * - colorBg 用 --px-surface 而不是 --px-bg：surface 是"卡片层"，比 bg 略亮，避免
+ *   信息图整张和聊天背景完全融合（之前 2026-05-22 "图给人很黑" 的根因就是 colorBg
+ *   = #FFF 默认值在 dark mode 下被反色成低饱和度暗色，跟 px-bg #0A0A0F 几乎一样）。
+ * - colorPrimary 用 --px-primary：antv 会基于此衍生整套调色板（卡片色、强调色等）。
+ * - base.text.fill 用 --px-text：保证文字在 colorBg 上有足够对比。
+ *
+ * 返回 undefined 时（SSR / 变量缺失）回退到 @antv/infographic 默认主题。
+ *
+ * 局限：已渲染的旧 infographic 是静态 SVG，主题切换后不会自动重新渲染——仅新生成的
+ * 信息图跟随当前主题。这跟"切换主题时聊天历史里 mermaid/chart 不重绘"行为一致。
+ */
+function buildInfographicThemeConfig(): Record<string, unknown> | undefined {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return undefined
+  const cs = getComputedStyle(document.documentElement)
+  const read = (name: string) => cs.getPropertyValue(name).trim()
+  const bg = read('--px-surface') || read('--px-bg')
+  const primary = read('--px-primary')
+  const text = read('--px-text')
+  if (!bg || !primary || !text) return undefined
+  return {
+    colorBg: bg,
+    colorPrimary: primary,
+    base: {
+      text: { fill: text },
+    },
+  }
 }
 
 /**
@@ -160,7 +283,15 @@ function InfographicRendererCore({ dsl }: InfographicRendererProps): ReactElemen
       instanceRef.current = new _Infographic({
         container: containerRef.current,
         width: '100%',
-        height: 'auto',
+        // height: 'auto' 会让 @antv/infographic 生成含 `height="auto"` 的 SVG，
+        // 而 SVG 规范不接受 "auto"（浏览器拒绝解析 → "Invalid SVG string"）。
+        // 改用具体像素 + 实际渲染后 SVG 由 viewBox 自适应，体验等价但合法。
+        height: 600,
+        // 主题跟随项目当前 data-theme：从 :root 上的 CSS 变量读 --px-surface /
+        // --px-primary / --px-text，映射成 antv ThemeConfig。antv 内部 generateThemeColors
+        // 基于 colorPrimary 衍生整套调色板，卡片色自动匹配主题色调（2026-05-22 修复）。
+        // 失败回退到 antv 默认主题（之前是固定 'light'，跟项目深底强烈割裂）。
+        themeConfig: buildInfographicThemeConfig(),
         // editable: false — 聊天消息里不需要编辑器，会污染 hover 状态
       })
       instanceRef.current.render(dsl)
@@ -180,6 +311,13 @@ function InfographicRendererCore({ dsl }: InfographicRendererProps): ReactElemen
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[InfographicRenderer] 渲染失败:', msg)
+      // eslint-disable-next-line no-console
+      console.groupCollapsed(`[InfographicRenderer] 失败 DSL 完整内容（点击展开，共 ${dsl.length} chars）`)
+      // eslint-disable-next-line no-console
+      console.log(dsl)
+      // eslint-disable-next-line no-console
+      console.groupEnd()
+      window.electronAPI?.logEvent?.('error', 'infographic-render-fail', `msg=${msg.slice(0, 200)} | dsl=${dsl.slice(0, 3800)}`)
       // 这里 setState 是为了下一次 render 时 if(renderError) throw → ErrorBoundary 接管。
       // 这是 React 官方推荐的"async error → ErrorBoundary"模式，
       // react-hooks/set-state-in-effect 在该用例下属误报，安全 disable。
@@ -234,7 +372,12 @@ function InfographicRendererCore({ dsl }: InfographicRendererProps): ReactElemen
 
       {svgSnapshot && (
         <RendererToolbar
-          onZoom={() => setLightboxOpen(true)}
+          onZoom={() => {
+            // 副面板 + Lightbox 不应同时显示——用户反馈：点击「放大」副面板没消失（2026-05-21）。
+            // 放大优先级最高（全屏），打开 Lightbox 时把副面板关掉。
+            useArtifactStore.getState().closeArtifact()
+            setLightboxOpen(true)
+          }}
           getPngDataUrl={getPngDataUrl}
           filenameBase="infographic"
           ariaLabelPrefix="Infographic 信息图"

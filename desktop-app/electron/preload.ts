@@ -29,8 +29,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     reasoning?: string,
     uncertainMarkers?: string[],
     reconsiderMarkers?: string[],
+    toolCallTimelineJson?: string,
   ) =>
-    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers),
+    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson),
   getMessages: (conversationId: string) => ipcRenderer.invoke('get-messages', conversationId),
 
   // 删除单条消息（v14，「重新生成」按钮专用）
@@ -282,6 +283,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 记忆管理（GAP2）
   readMemory: (avatarId: string) => ipcRenderer.invoke('read-memory', avatarId),
+  searchMemory: (query: string) => ipcRenderer.invoke('search-memory', query),
+
+  // Projects 任务包 CRUD（v18，#5 Step B1）
+  projectsList: (avatarId?: string) => ipcRenderer.invoke('projects:list', avatarId),
+  projectsCreate: (avatarId: string, name: string, description?: string) =>
+    ipcRenderer.invoke('projects:create', avatarId, name, description),
+  projectsUpdate: (id: string, patch: { name?: string; description?: string }) =>
+    ipcRenderer.invoke('projects:update', id, patch),
+  projectsArchive: (id: string, archived: boolean) =>
+    ipcRenderer.invoke('projects:archive', id, archived),
+  projectsDelete: (id: string, options?: { migrateConversationsTo?: string }) =>
+    ipcRenderer.invoke('projects:delete', id, options),
   writeMemory: (avatarId: string, content: string) => ipcRenderer.invoke('write-memory', avatarId, content),
   getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>
@@ -687,6 +700,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 检查更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
 
+  // 联网搜索（@web 引用 backend）
+  webSearch: (query: string) => ipcRenderer.invoke('web-search', query),
+
   // ─── MCP server 管理（设置面板「工具集成 → MCP」用） ─────────────────
   // 与 main.ts 的 ipc:'mcp:*' handlers 对应。返回类型见 main.ts 的 wrapHandler 实现。
   mcpListServers: () => ipcRenderer.invoke('mcp:list-servers'),
@@ -702,6 +718,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     timeoutMs?: number
     description?: string
   }) => ipcRenderer.invoke('mcp:upsert-server', config),
+  mcpTestConnect: (config: {
+    name: string
+    enabled: boolean
+    transport: 'stdio' | 'http' | 'sse'
+    command?: string
+    args?: string[]
+    env?: Record<string, string>
+    cwd?: string
+    url?: string
+    timeoutMs?: number
+    description?: string
+  }) => ipcRenderer.invoke('mcp:test-connect', config),
   mcpRemoveServer: (name: string) => ipcRenderer.invoke('mcp:remove-server', name),
   mcpReconnectServer: (name: string) => ipcRenderer.invoke('mcp:reconnect-server', name),
   mcpDisconnectServer: (name: string) => ipcRenderer.invoke('mcp:disconnect-server', name),

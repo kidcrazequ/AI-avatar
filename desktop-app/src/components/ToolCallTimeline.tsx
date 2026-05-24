@@ -30,8 +30,9 @@ import type { ToolCallTimelineEntry } from '../stores/chatStore'
 /**
  * 把毫秒时长格式化为人类可读字符串。
  *
- *   < 1000ms → "312ms"
- *   ≥ 1000ms → "1.2s"（保留 1 位小数）
+ *   < 1000ms       → "312ms"
+ *   1s – 59.95s    → "1.2s"（保留 1 位小数）
+ *   ≥ 60s          → "1m 24.1s"（分 + 秒，2026-05-21 用户反馈：超过 1 分的纯秒数读起来累）
  *
  * @param ms 工具调用耗时（毫秒）
  * @returns 格式化后的字符串
@@ -39,7 +40,25 @@ import type { ToolCallTimelineEntry } from '../stores/chatStore'
 function formatDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '0ms'
   if (ms < 1000) return `${Math.round(ms)}ms`
-  return `${(ms / 1000).toFixed(1)}s`
+  const totalSec = ms / 1000
+  if (totalSec < 60) return `${totalSec.toFixed(1)}s`
+  const minutes = Math.floor(totalSec / 60)
+  const seconds = totalSec - minutes * 60
+  return `${minutes}m ${seconds.toFixed(1)}s`
+}
+
+/**
+ * 秒为单位的"已经过时间"格式化（用于直播态"思考中..."占位行）。
+ *
+ *   < 60s   → "44.1s"
+ *   ≥ 60s   → "1m 24.1s"
+ */
+function formatElapsedSec(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0s'
+  if (sec < 60) return `${sec.toFixed(1)}s`
+  const minutes = Math.floor(sec / 60)
+  const seconds = sec - minutes * 60
+  return `${minutes}m ${seconds.toFixed(1)}s`
 }
 
 /** 单行 props（仅给内部 TimelineRow 用） */
@@ -92,9 +111,15 @@ const TimelineRow = memo(function TimelineRow({ entry }: TimelineRowProps) {
 
   const cnName = getDisplayName(entry)
   const { glyph: kindGlyph, cls: kindCls } = getKindGlyph(entry.kind)
-  const okGlyph = entry.ok ? '✓' : '✗'
-  // px-error 在本项目 Tailwind 主题中不存在；按 spec 的回退顺序使用 px-warning
-  const okClass = entry.ok ? 'text-px-success' : 'text-px-warning'
+  // v19 (2026-05-21)：skipped（守卫主动拦截）与 ok=false（真错误）视觉分离：
+  //   ⊘ 中性灰  = 已跳过（如 load_skill 重复加载、达到次数上限）
+  //   ✓ 成功色  = 正常执行
+  //   ✗ 警告色  = 真错误（IPC 失败 / 工具内部异常）
+  const okGlyph = entry.skipped ? '⊘' : entry.ok ? '✓' : '✗'
+  const okClass = entry.skipped
+    ? 'text-px-text-dim'
+    : entry.ok ? 'text-px-success' : 'text-px-warning'
+  const okLabel = entry.skipped ? '已跳过' : entry.ok ? '成功' : '失败'
   const duration = formatDuration(entry.durationMs)
 
   // rag/skill 条目展开后只显示 args（resultPreview 通常为空，显示也无意义）
@@ -146,8 +171,8 @@ const TimelineRow = memo(function TimelineRow({ entry }: TimelineRowProps) {
           {duration}
         </span>
 
-        {/* 成功/失败状态符号 */}
-        <span className={`font-game text-[12px] shrink-0 ${okClass}`} aria-label={entry.ok ? '成功' : '失败'}>
+        {/* 成功/失败/已跳过 状态符号 */}
+        <span className={`font-game text-[12px] shrink-0 ${okClass}`} aria-label={okLabel}>
           {okGlyph}
         </span>
       </div>
@@ -199,7 +224,7 @@ const ThinkingRow = memo(function ThinkingRow({ elapsedSec }: { elapsedSec?: num
         思考中...
         {typeof elapsedSec === 'number' && Number.isFinite(elapsedSec) && (
           <span className="ml-1 font-mono text-[11px] text-px-text-dim">
-            · {elapsedSec.toFixed(1)}s
+            · {formatElapsedSec(elapsedSec)}
           </span>
         )}
       </span>
@@ -244,7 +269,9 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
   if (entries.length === 0 && !isLoading) return null
 
   const total = entries.length
-  const failedCount = entries.reduce((acc, e) => acc + (e.ok ? 0 : 1), 0)
+  // v19：守卫拦截（skipped）不计入"失败"汇总——拦截是预期行为，不该让用户以为出错。
+  const failedCount = entries.reduce((acc, e) => acc + (!e.ok && !e.skipped ? 1 : 0), 0)
+  const skippedCount = entries.reduce((acc, e) => acc + (e.skipped ? 1 : 0), 0)
 
   return (
     <div className="px-6 py-2 bg-px-surface border-t-2 border-px-border">
@@ -274,6 +301,11 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
             · {failedCount} 失败
           </span>
         )}
+        {skippedCount > 0 && (
+          <span className="font-game text-[11px] tracking-wider text-px-text-dim" aria-label={`其中 ${skippedCount} 步已跳过`}>
+            · {skippedCount} 已跳过
+          </span>
+        )}
         {/* 折叠时把活动指示挪到标题栏右侧，避免用户误以为"卡住了" */}
         {collapsed && isLoading && (
           <span className="ml-auto flex items-center gap-1.5 shrink-0">
@@ -286,7 +318,7 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
               思考中...
               {typeof elapsedSec === 'number' && Number.isFinite(elapsedSec) && (
                 <span className="ml-1 font-mono text-[11px] text-px-text-dim">
-                  · {elapsedSec.toFixed(1)}s
+                  · {formatElapsedSec(elapsedSec)}
                 </span>
               )}
             </span>

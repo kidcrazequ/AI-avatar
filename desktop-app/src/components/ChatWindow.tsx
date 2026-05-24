@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useChatStore, nextMessageId, tryExtractDocumentAttachment, type AttachmentRef } from '../stores/chatStore'
+import { useChatStore, nextMessageId, tryExtractDocumentAttachment, type AttachmentRef, type ChatMessage } from '../stores/chatStore'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import SkillProposalCard from './SkillProposalCard'
 import TaskListPanel from './TaskListPanel'
 import L3EventsPanel from './L3EventsPanel'
 import AskQuestionCard from './AskQuestionCard'
-import { ModelConfig } from '../services/llm-service'
+import { ModelConfig, getModelTier, type ModelTier } from '../services/llm-service'
 import type { DocumentAttachment } from '../services/chat-types'
 import { localDateString } from '@soul/core/browser'
-import ToolCallTimeline from './ToolCallTimeline'
+// v19：ToolCallTimeline 不再由 ChatWindow 直接渲染（挪到了 MessageBubble 内）；
+// 保留组件文件供 MessageBubble 引用即可。
 import EventViewer from './EventViewer'
 
 /** 九层重构 #12 ask_question：当前等待用户回答的问题 payload（null = 无问题） */
@@ -25,6 +26,20 @@ const MODE_BADGE_STYLE: Record<'agent' | 'plan' | 'ask', { label: string; cls: s
   agent: { label: 'AGENT', cls: 'text-px-success border-px-success' },
   plan: { label: 'PLAN', cls: 'text-px-warning border-px-warning' },
   ask: { label: 'ASK', cls: 'text-px-text-dim border-px-border' },
+}
+
+/**
+ * 端云 / 端侧 pill 颜色映射（2026-05-22 Marvis 借鉴）。
+ *
+ * 状态由 store.chatModelMode 受控驱动（不是 baseUrl 自动推导）：
+ * - local: 用 localChatModel（端侧 slot，通常指向本机 Ollama / lm-studio / vllm）
+ * - cloud: 用 chatModel（云端 slot，DeepSeek / Claude / Qwen 等）
+ *
+ * unknown 不会出现——mode 是受控二态。
+ */
+const TIER_BADGE_STYLE: Record<'local' | 'cloud', { label: string; cls: string; title: string }> = {
+  local: { label: '🟢 端侧', cls: 'text-px-success border-px-success', title: '当前走端侧模型 slot：数据发到 localChatModel.baseUrl（默认本机 Ollama），不出本机（隐私模式）。' },
+  cloud: { label: '🟡 端云', cls: 'text-px-warning border-px-warning', title: '当前走云端模型 slot：问题与上下文会发到 chatModel.baseUrl 配置的云服务商（效率模式）。' },
 }
 
 const QUICK_QUESTIONS: string[] = []
@@ -60,14 +75,17 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于消息气泡展示） */
   avatarName?: string
+  /** 分身角色标签（短文本，如"财务分析专家"，展示在消息气泡 avatarName 旁的 chip 里） */
+  avatarRole?: string
+  /** App 全局 toast，供"沉淀知识"等操作给用户明确反馈 */
+  showToast?: (message: string, type?: 'success' | 'error') => void
 }
 
-export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName }: Props) {
-  const { messages, isLoading, toolCallTimeline, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, bindConversation, mode, setMode, conversationModelOverride, setConversationModel } = useChatStore(
+export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName, avatarRole, showToast }: Props) {
+  const { messages, isLoading, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
       isLoading: s.isLoading,
-      toolCallTimeline: s.toolCallTimeline,
       appendToolCallTimeline: s.appendToolCallTimeline,
       skillProposals: s.skillProposals,
       clearSkillProposals: s.clearSkillProposals,
@@ -75,12 +93,28 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       sendMessage: s.sendMessage,
       setMessages: s.setMessages,
       bindConversation: s.bindConversation,
+      restoreInflightStreamingMessage: s.restoreInflightStreamingMessage,
       mode: s.mode,
       setMode: s.setMode,
       conversationModelOverride: s.conversationModelOverrides[conversationId] ?? null,
       setConversationModel: s.setConversationModel,
+      chatModel: s.chatModel,
+      localChatModel: s.localChatModel,
+      chatModelMode: s.chatModelMode,
+      setChatModelMode: s.setChatModelMode,
     }))
   )
+
+  // 端云/端侧 pill：由 chatModelMode（受控全局态）直接驱动，不再用 getModelTier 推导。
+  // getModelTier 仍保留导出供其它地方诊断 baseUrl 实际指向；这里 pill 主色跟 mode 一一对应。
+  // 缺配置警示：mode='local' 但 localChatModel 还在默认 ollama / qwen2.5:7b 且没改过，
+  // 用户可能没装本地推理服务——点 pill 切到 local 后发送会报 ECONNREFUSED。
+  // 这里轻量检测："baseUrl 是默认 ollama 端口"且"apiKey 是默认的 'ollama'" → 视为"未自定义配置"，
+  // 不显示警示，因为这就是 Ollama 默认环境（已装则可用）。判定保守，不打扰用户。
+  const pillTier: ModelTier = chatModelMode === 'local' ? 'local' : 'cloud'
+  const tieredModel = chatModelMode === 'local' ? localChatModel : chatModel
+  // 仅用于诊断显示（title 提示），不参与主色判定
+  const diagnosticTier = getModelTier(tieredModel.model, tieredModel.baseUrl)
 
   /** 会话内可临时切换的模型循环菜单（与子任务 7 配套；默认 = 走分身 defaultModel） */
   const MODEL_CYCLE: Array<{ value: string | null; label: string }> = [
@@ -108,6 +142,15 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   conversationIdRef.current = conversationId
   /** L3 桌面工具事件触发的临时输入填充（来自 inspector / form / canva 等卡片） */
   const [l3InjectedFill, setL3InjectedFill] = useState<string | undefined>(undefined)
+  /**
+   * Project 上下文缓存：当 conversation.project_id 不是 default 时，
+   * 自动读 knowledge/projects/<pid>/README.md + notes.md，发送时作为 inline file 注入。
+   * key 用 `${conversationId}` 隔离。
+   */
+  const [projectContext, setProjectContext] = useState<{
+    name: string
+    text: string
+  } | null>(null)
   const handleInjectPrompt = useCallback((text: string) => {
     setL3InjectedFill(text)
   }, [])
@@ -269,6 +312,19 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 } catch { /* swallow: 损坏列等价于无 chip */ }
                 return undefined
               }
+              // v19：工具调用时间线从 DB tool_call_timeline_json 列恢复，让切换会话回来时
+              // 仍能完整看到每条 assistant 当时调用了哪些工具（之前是全局 store 状态，
+              // 切对话就被清空）。损坏/非数组的列退化为 undefined。
+              const parseTimeline = (raw: string | null | undefined) => {
+                if (!raw) return undefined
+                try {
+                  const parsed = JSON.parse(raw)
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    return parsed as ChatMessage['toolCallTimeline']
+                  }
+                } catch { /* swallow: 损坏列等价于无时间线 */ }
+                return undefined
+              }
               return {
                 // 用 DB 的真实 messageId，便于后续 attachments 用 message_id 精确关联
                 id: `db-${conversationId}-${m.id || i}`,
@@ -282,9 +338,20 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 reasoning: m.reasoning_content || undefined,
                 uncertainMarkers: parseMarkers(m.uncertain_markers),
                 reconsiderMarkers: parseMarkers(m.reconsider_markers),
+                toolCallTimeline: parseTimeline(m.tool_call_timeline_json),
               }
             })
         )
+        // 切走→切回会话时回灌 in-flight streaming：DB 里还没有落盘的 assistant 消息，
+        // 此处把 sendMessage 闭包累积的 text/reasoning/toolCallTimeline 从 snapshot 拼到末尾，
+        // 避免用户切回时看到空白（2026-05-22 回归修复）。
+        // 返回 { startedAt } 时同步校准"思考中... · Xs"计时器，避免从 0 重新算给"流刚开始"
+        // 的错觉（用户上次反馈"计时从 0 开始"的根因）。
+        const restored = restoreInflightStreamingMessage(conversationId)
+        if (restored) {
+          const elapsedSec = Math.max(0, +(((Date.now() - restored.startedAt) / 1000).toFixed(1)))
+          setElapsedSec(elapsedSec)
+        }
       } catch (err) {
         if (!cancelled) {
           console.error('[ChatWindow] 加载消息失败:', err instanceof Error ? err.message : String(err))
@@ -296,7 +363,44 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     }
     loadMessages()
     return () => { cancelled = true }
-  }, [conversationId, setMessages, resetTransientState, bindConversation])
+  }, [conversationId, setMessages, resetTransientState, bindConversation, restoreInflightStreamingMessage])
+
+  // 加载当前 conversation 的 project 上下文（README + notes），用于发送时自动注入
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const conv = await window.electronAPI.getConversation(conversationId)
+        if (cancelled) return
+        const pid = conv?.project_id && conv.project_id.length > 0 ? conv.project_id : 'default'
+        if (pid === 'default') { setProjectContext(null); return }
+        const parts: string[] = []
+        try {
+          const readme = await window.electronAPI.readKnowledgeFile(avatarId, `projects/${pid}/README.md`)
+          if (readme && readme.trim()) parts.push(`## README\n\n${readme}`)
+        } catch { /* 不存在 OK */ }
+        try {
+          const notes = await window.electronAPI.readKnowledgeFile(avatarId, `projects/${pid}/notes.md`)
+          if (notes && notes.trim()) parts.push(`## NOTES\n\n${notes}`)
+        } catch { /* 不存在 OK */ }
+        if (cancelled) return
+        if (parts.length > 0) {
+          setProjectContext({
+            name: pid,
+            text: `# 当前任务包：${pid}\n\n（以下内容由系统自动注入，作为本次对话的背景上下文。）\n\n${parts.join('\n\n')}`,
+          })
+        } else {
+          setProjectContext(null)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[ChatWindow] 加载 project 上下文失败:', err instanceof Error ? err.message : String(err))
+          setProjectContext(null)
+        }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [conversationId, avatarId])
 
   const handleSendMessage = async (
     content: string,
@@ -308,7 +412,14 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       await handleTestSelf()
       return
     }
-    await sendMessage(content, conversationId, avatarId, images, visionModel, attachments, inlineFiles)
+    // 自动注入 project 上下文（prepend 到 inlineFiles，让分身在 system / user prompt 拼装时看到）
+    const finalInlineFiles = projectContext
+      ? [
+          { name: `@project/${projectContext.name}.md`, ext: '.md', mime: 'text/markdown', text: projectContext.text },
+          ...(inlineFiles || []),
+        ]
+      : inlineFiles
+    await sendMessage(content, conversationId, avatarId, images, visionModel, attachments, finalInlineFiles)
     onConversationUpdate()
   }
 
@@ -378,10 +489,14 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         savedAt: localDateString(),
       }
       await window.electronAPI.saveWikiAnswer(avatarId, qa)
+      // v19：之前只把 saved 状态在按钮上闪 3s，用户感受不到落盘是否真的成功，
+      // 反馈为「SAVE 功能失效」。这里改用全局 toast 给出可见的"已沉淀"提示。
+      showToast?.('已沉淀到知识百科', 'success')
     } catch (err) {
       console.warn('答案沉淀失败:', err)
+      showToast?.(`沉淀失败：${err instanceof Error ? err.message : String(err)}`, 'error')
     }
-  }, [avatarId])
+  }, [avatarId, showToast])
 
   if (!isInitialized) {
     return (
@@ -400,14 +515,60 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     <div className="flex flex-col h-full bg-px-bg">
       {/* 顶栏：模式徽章 + 工具按钮（九层重构 #17） */}
       <div className="flex items-center justify-end px-4 py-1.5 border-b border-px-border-dim bg-px-surface gap-2">
-        {/* 模型切换：点击循环 默认/Opus/Sonnet/Haiku/DeepSeek，会话级生效 */}
+        {/*
+         * 端云 / 端侧 pill（2026-05-22 Marvis 借鉴）
+         * 点击切换 app 全局 master slot：cloud（chatModel）↔ local（localChatModel）。
+         * 切换后立即 setSetting 落 sqlite，下次启动保持上次 mode。
+         * diagnosticTier !== pillTier 时（如 mode='local' 但 baseUrl 实际是云）追加 ⚠ 提示。
+         */}
+        <button
+          type="button"
+          onClick={() => {
+            const next: 'cloud' | 'local' = chatModelMode === 'cloud' ? 'local' : 'cloud'
+            setChatModelMode(next)
+            void window.electronAPI.setSetting('chat_model_mode', next)
+            // 切换 toast：cloud→local 提醒需本地推理服务已起；local→cloud 简短确认
+            // 降低"切了但没视觉反馈"的体验断点，再发送消息时不会"突然报 ECONNREFUSED 不知道为啥"
+            if (showToast) {
+              if (next === 'local') {
+                showToast(
+                  `已切到 🟢 端侧 · 数据走 ${localChatModel.baseUrl} (${localChatModel.model})。需 Ollama / lm-studio 已启动并 pull 过该模型——发送前请确认。`,
+                  'success',
+                )
+              } else {
+                showToast('已切到 🟡 端云 · 数据走云端 API', 'success')
+              }
+            }
+          }}
+          className={`font-game text-[11px] px-2 py-0.5 border tracking-widest hover:opacity-80 ${TIER_BADGE_STYLE[pillTier].cls}`}
+          title={`${TIER_BADGE_STYLE[pillTier].title}（点击切换到${chatModelMode === 'cloud' ? '端侧' : '端云'}）${diagnosticTier !== pillTier && diagnosticTier !== 'unknown' ? `\n⚠ 当前 baseUrl 实际指向 ${diagnosticTier === 'local' ? '本机' : '云端'}，与 pill 状态不一致——请在设置里核对。` : ''}`}
+          aria-label={`切换到${chatModelMode === 'cloud' ? '端侧' : '端云'}模式`}
+        >
+          {TIER_BADGE_STYLE[pillTier].label}
+          {diagnosticTier !== pillTier && diagnosticTier !== 'unknown' ? ' ⚠' : ''}
+        </button>
+        {/*
+         * 模型切换：点击循环 默认/Opus/Sonnet/Haiku/DeepSeek，会话级生效。
+         * 端侧模式下禁用：循环列表里都是云端模型名，落到 localhost:11434 上要么 model not found
+         * 要么 ECONNREFUSED——禁掉避免用户在 local 模式下点了循环按钮然后困惑为啥发不出去。
+         * 想用别的本地模型 → 设置 → 端侧（本地）slot 改 model 名。
+         */}
         <button
           onClick={cycleModel}
-          className="font-game text-[11px] px-2 py-0.5 border tracking-widest text-px-text-sec border-px-border hover:opacity-80"
-          title={`当前模型：${currentModelLabel}（点击循环切换；"默认"使用分身 defaultModel 或 chat slot）`}
+          disabled={chatModelMode === 'local'}
+          className={`font-game text-[11px] px-2 py-0.5 border tracking-widest border-px-border ${
+            chatModelMode === 'local'
+              ? 'text-px-text-dim opacity-50 cursor-not-allowed'
+              : 'text-px-text-sec hover:opacity-80'
+          }`}
+          title={
+            chatModelMode === 'local'
+              ? '端侧模式下，模型名由「设置 → 端侧（本地）slot」配置，循环按钮已禁用。要换本地模型请去设置。'
+              : `当前模型：${currentModelLabel}（点击循环切换；"默认"使用分身 defaultModel 或 chat slot）`
+          }
           aria-label="切换会话模型"
         >
-          {currentModelLabel}
+          {chatModelMode === 'local' ? `🟢 ${localChatModel.model}` : currentModelLabel}
         </button>
         {/* 模式徽章：点击循环 agent → plan → ask → agent，方便快速切换 */}
         <button
@@ -465,11 +626,13 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         <MessageList
           messages={messages}
           isLoading={isLoading || isRunningTests}
+          elapsedSec={elapsedSec}
           onQuickQuestion={handleSendMessage}
           quickQuestions={messages.length === 0 ? QUICK_QUESTIONS : undefined}
           onSaveAnswer={handleSaveAnswer}
           avatarImage={avatarImage}
           avatarName={avatarName}
+          avatarRole={avatarRole}
           avatarId={avatarId}
         />
       </div>
@@ -501,12 +664,11 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         />
       )}
 
-      {/* 工具调用时间线（仿 Cursor）：完整展示本轮所有工具调用历史 */}
-      <ToolCallTimeline
-        entries={toolCallTimeline}
-        isLoading={isLoading}
-        elapsedSec={elapsedSec}
-      />
+      {/*
+        v19：原来 ChatWindow 底部全局唯一一份工具调用时间线，切对话 / 重启就丢。
+        现在改成挂到每条 assistant 消息上（MessageBubble 内部用 ToolCallTimeline 渲染），
+        通过 messages.tool_call_timeline_json 持久化。本处不再需要全局渲染。
+      */}
 
       {/* 兜底：仅回归测试运行时显示（RAG 阶段已并入 ToolCallTimeline；
           ragProgress state 仍保留但不再渲染，作为内部状态供未来其他用途读取）。 */}
@@ -536,6 +698,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           disabled={isLoading || isRunningTests}
           fillText={l3InjectedFill ?? fillText}
           conversationId={conversationId}
+          avatarId={avatarId}
         />
       </div>
 

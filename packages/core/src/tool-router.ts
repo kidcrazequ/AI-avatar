@@ -401,6 +401,12 @@ export interface SubAgentDispatchContext {
   parentAvatarId: string
   /** 跨分身派发的目标分身 ID；同分身派发为 null */
   targetAvatar: string | null
+  /**
+   * 子代理角色（2026-05-22 Mavis 借鉴）：'verifier' 用于复核 worker 已产出的结论。
+   * task() 工具的 agent_type 参数透传到这里；旧 SubAgentManager 路径默认为 null
+   * （desktop-app sink 据此决定 sqlite agent_type 列写什么）。
+   */
+  agentType?: 'explore' | 'plan' | 'worker' | 'verifier' | null
 }
 
 /**
@@ -1021,6 +1027,10 @@ export class ToolRouter {
           result = await this.webSearch(args); break
         case 'web_fetch':
           result = await this.webFetch(args); break
+        case 'read_user_file':
+          result = this.readUserFile(args); break
+        case 'list_user_folder':
+          result = this.listUserFolder(args); break
         case 'read_tool_ref':
           result = this.readToolRefTool(avatarId, conversationId, args); break
         case 'list_mcp_tools':
@@ -1094,6 +1104,129 @@ export class ToolRouter {
     const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
     const sliced = lines.slice(offset, offset + limit)
     return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') }
+  }
+
+  /**
+   * 读取用户授权根路径下的任意文件（Marvis File Agent 借鉴，2026-05-22）。
+   *
+   * 与 readFile 的区别：
+   *   - readFile 限定 avatar workspace，路径不能逃逸
+   *   - readUserFile 允许跨 workspace 读，但**仅限**用户在设置里显式授权的根目录
+   *
+   * 权限模型：
+   *   - 用户在「设置 → 用户文件根」里添加 absolute path（settings 表 key=`user_file_roots`，值为 JSON 数组）
+   *   - 调用时检查 path 是否落在任一授权根下（用 path.relative 实现，避免 startsWith 误判 /foo vs /foobar）
+   *   - 未授权或未配置 getSetting → 直接返错 + 给用户操作指引
+   *
+   * 默认保守关闭——没显式授权前任何读取都拒绝，零安全风险。
+   */
+  private readUserFile(args: Record<string, unknown>): ToolCallResult {
+    const filePath = typeof args.path === 'string' ? args.path.trim() : ''
+    if (!filePath) return { content: '', error: '缺少 path 参数（需要绝对路径）' }
+    if (!path.isAbsolute(filePath)) {
+      return { content: '', error: 'read_user_file 仅接受绝对路径；若读 avatar workspace 内文件请用 read_file' }
+    }
+    const guard = this.checkUserFileRoot(filePath)
+    if (!guard.ok) return { content: '', error: guard.reason }
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return { content: '', error: `文件不存在或不是普通文件: ${filePath}` }
+    }
+    const offset = typeof args.offset === 'number' ? Math.max(0, Math.floor(args.offset)) : 0
+    const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000
+    const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
+    const sliced = lines.slice(offset, offset + limit)
+    return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') }
+  }
+
+  /**
+   * 列出用户授权根路径下的目录内容（Marvis File Agent 借鉴）。
+   * 权限模型同 readUserFile。
+   */
+  private listUserFolder(args: Record<string, unknown>): ToolCallResult {
+    const dirPath = typeof args.path === 'string' ? args.path.trim() : ''
+    if (!dirPath) return { content: '', error: '缺少 path 参数（需要绝对路径）' }
+    if (!path.isAbsolute(dirPath)) {
+      return { content: '', error: 'list_user_folder 仅接受绝对路径；若列 avatar workspace 内目录请用 list_files' }
+    }
+    const guard = this.checkUserFileRoot(dirPath)
+    if (!guard.ok) return { content: '', error: guard.reason }
+    if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+      return { content: '', error: `目录不存在或不是目录: ${dirPath}` }
+    }
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    const lines = entries
+      .map((e) => {
+        const tag = e.isDirectory() ? 'DIR ' : e.isFile() ? 'FILE' : 'OTHER'
+        return `${tag}\t${e.name}`
+      })
+      .sort()
+    return { content: lines.join('\n') || '(空目录)' }
+  }
+
+  /**
+   * 校验 absolute path 是否落在用户授权根目录下。
+   *
+   * `path.relative(root, target)` 不以 `..` 开头且不是绝对路径，则 target 在 root 下。
+   * 这种判定比 `startsWith` 安全：`/foo` vs `/foobar` 的边界 case 不会误判。
+   *
+   * 2026-05-24 安全加固：仅做字符串路径比较会被 symlink 绕过——
+   * 授权目录里若存在 symlink 指向外部（如 `/safe/evil → /etc/passwd`），
+   * `path.relative` 仍认为 target 在 `/safe` 内，但 `fs.readFileSync` 默认跟随
+   * symlink 读到外部内容。因此对 target 和 roots **双向都做 realpath 解析**
+   * 后再比较：
+   *   - target 是 symlink 指向外部 → 解析后落在 root 之外 → 拒绝
+   *   - root 本身是 symlink（如 macOS 的 ~/Desktop） → 解析后与 target 真位置一致 → 仍允许
+   * target 不存在时降级到 `realpath(dirname) + basename`，避免误把"文件不存在"
+   * 当成"未授权"，保留更精确的错误。
+   */
+  private checkUserFileRoot(abs: string): { ok: boolean; reason: string } {
+    if (!this.getSetting) {
+      return { ok: false, reason: '主进程未注入 getSetting，无法读取 user_file_roots 设置' }
+    }
+    const raw = (this.getSetting('user_file_roots') ?? '').trim()
+    if (!raw) {
+      return {
+        ok: false,
+        reason: '尚未授权任何用户文件根目录。请用户在「设置 → 用户文件根」里添加 absolute path 后再使用本工具（默认关闭，零安全风险）。',
+      }
+    }
+    let roots: string[]
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed) || !parsed.every((r) => typeof r === 'string')) {
+        return { ok: false, reason: 'user_file_roots 设置格式错误（应为字符串数组的 JSON）' }
+      }
+      roots = parsed
+    } catch (e) {
+      return { ok: false, reason: `user_file_roots 解析失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    const resolveRealPath = (p: string): string => {
+      const normalized = path.resolve(p)
+      try {
+        return fs.realpathSync(normalized)
+      } catch {
+        // target 不存在时降级：解析最深存在的父目录后拼回 basename。
+        // 这样既不会因路径不存在就报"未授权"，又能正确处理 dirname 是 symlink 的情况。
+        const dir = path.dirname(normalized)
+        try {
+          return path.join(fs.realpathSync(dir), path.basename(normalized))
+        } catch {
+          return normalized
+        }
+      }
+    }
+    const normalizedTarget = resolveRealPath(abs)
+    for (const root of roots) {
+      const rootAbs = resolveRealPath(root)
+      const rel = path.relative(rootAbs, normalizedTarget)
+      if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+        return { ok: true, reason: '' }
+      }
+    }
+    return {
+      ok: false,
+      reason: `路径不在任何授权根下（已解析 symlink 后比较真实位置）。当前授权根：${roots.join(', ')}。若该路径确属允许范围，请用户在「设置」里添加该路径所在的父目录。`,
+    }
   }
 
   /**
@@ -2664,9 +2797,11 @@ ${content}` }
     const hasColumns = Array.isArray(columns) && columns.length > 0
     const isSmallTable = sheet.rowCount <= SMALL_TABLE_ROW_THRESHOLD
     if (!hasFilter && !hasColumns && typeof limitRaw !== 'number' && !isSmallTable) {
+      // 守卫主动拦截，不是工具真错误：用 content + "工具执行已跳过：" 前缀走 chatStore 的 skipped 识别（chatStore.ts:3985），
+      // UI timeline 显示为 ⊘ 中性而不是 ✗ 警告，与 load_skill / query_excel 次数上限等其它守卫拦截视觉对齐。
+      // 不再用 error 字段，避免前端包装成"工具执行失败: ..."前缀而错过 skipped 识别。
       return {
-        content: '',
-        error: `查询过宽：没有 filter、没有 columns、也没有 limit，会一次性返回整张表 ${sheet.rowCount} 行污染 context。请至少指定 filter（推荐）、columns 或显式 limit≤50。`,
+        content: `工具执行已跳过：查询过宽：没有 filter、没有 columns、也没有 limit，会一次性返回整张表 ${sheet.rowCount} 行污染 context。请至少指定 filter（推荐）、columns 或显式 limit≤50。`,
       }
     }
 
@@ -3574,11 +3709,46 @@ ${content}` }
       return { content: '', error: 'read_tool_ref 需要 conversationId（当前调用上下文缺失，无法定位会话工作区）' }
     }
     const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
+    // 工具名歧义警示：read_tool_ref（本工具）和 read_tool_result（spool 读取工具）名字几乎相同，
+    // LLM 经常 token-level 混淆。错误返回中明确指出"你想要的是 read_tool_result"。
+    const TOOL_DISAMBIGUATE_HINT = '\n\n⚠️ **工具名歧义警示**：\n'
+      + '- `read_tool_ref`（本工具）：仅取 web_fetch 返回 body_lazy_ref 的正文，**入参是 call_id="tool-{12hex}"**。\n'
+      + '- `read_tool_result`（不同工具）：读 search_knowledge / query_excel 等结果被 spool 落盘的完整文件，'
+      + '**入参是 path="/.../tool-results/<convId>/<工具名>-<时间戳>.txt"（绝对路径）**。\n'
+      + '如果你刚才看到的工具返回提示里有"完整内容已落盘到 /.../tool-results/.../*.txt"，**正确做法是调 `read_tool_result(path="...")`，不是 read_tool_ref**。'
     if (!callId) {
-      return { content: '', error: '缺少 call_id 参数（形如 "tool-a8f2c4e9b1c2"）' }
+      return {
+        content: '',
+        error: '缺少 call_id 参数。read_tool_ref 仅用于 web_fetch 返回的 body_lazy_ref，'
+          + '此时 call_id 形如 "tool-a8f2c4e9b1c2" 已经在 lazy_ref 对象里。'
+          + '如果你正在处理 search_knowledge / query_excel / read_knowledge_file 等其他工具的结果，'
+          + '它们已经直接返回完整内容，**不要**调用 read_tool_ref——直接基于现有结果回答。'
+          + TOOL_DISAMBIGUATE_HINT,
+      }
     }
     if (!isValidCallId(callId)) {
-      return { content: '', error: `非法 call_id 格式: ${callId}（必须为 tool-{12hex}）` }
+      // 常见误用：LLM 把"工具名-时间戳"（如 search_knowledge-1779426503790、tool-1779426503790）
+      // 编成 call_id；或者把 spool 文件绝对路径整段当 call_id。
+      // 真正的 call_id 形如 tool-a8f2c4e9b1c2（12 位十六进制），且必须来自 web_fetch body_lazy_ref。
+      // 详见 2026-05-22 用户反馈"工具调用 4 失败"——LLM 看到 spool 提示"调用 read_tool_result"
+      // 但 token-level 混淆调成了 read_tool_ref。
+      const looksLikeSpoolPath = callId.includes('tool-results/') || callId.endsWith('.txt')
+      const looksLikeToolTimestamp = /^[a-z_]+-\d{10,}$/i.test(callId)
+      let extraHint = ''
+      if (looksLikeSpoolPath) {
+        extraHint = '\n\n你传入的 call_id 看起来是 spool 文件路径，**应该用 `read_tool_result(path="..." )` 而不是 read_tool_ref**。'
+          + '把这整串作为 path 重新调一次 read_tool_result。'
+      } else if (looksLikeToolTimestamp) {
+        extraHint = '\n\n你传入的 call_id 看起来是"工具名-时间戳"，**这是 spool 文件名的一部分，不是 call_id**。'
+          + '如果你想读完整工具返回内容，应该调 `read_tool_result(path="<工具返回提示里给的完整绝对路径>")`，不是 read_tool_ref。'
+      }
+      return {
+        content: '',
+        error: `非法 call_id 格式: ${callId}（必须为 tool-{12hex}，形如 "tool-a8f2c4e9b1c2"）。`
+          + '真正的 call_id 只能从 web_fetch 返回的 body_lazy_ref.call_id 字段里取，**不能凭印象编**。'
+          + extraHint
+          + TOOL_DISAMBIGUATE_HINT,
+      }
     }
     const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.floor(args.offset) : 0
     const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : undefined
@@ -4486,13 +4656,34 @@ ${content}` }
     } catch (e) {
       return { content: '', error: e instanceof Error ? e.message : String(e) }
     }
-    const skillPath = path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`)
+    // 候选路径优先级（与 SkillRouter 的三级技能体系一致：local > shared > community）：
+    //   1) local 单文件 / 目录形式
+    //   2) shared 单文件 / 目录形式（SkillRouter 已根据 skill-index.yaml 注入描述，这里需要能读出实际内容）
+    //   3) community 技能（shared/skills/community/<pack>/skills/<id>.md 或目录形式）
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    const candidates: string[] = [
+      path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`),
+      path.join(this.avatarsPath, avatarId, 'skills', skillId, 'SKILL.md'),
+      path.join(sharedRoot, `${skillId}.md`),
+      path.join(sharedRoot, skillId, 'SKILL.md'),
+    ]
+    // community：扫一遍 shared/skills/community/<pack>/skills/<id>.md
     try {
-      const content = fs.readFileSync(skillPath, 'utf-8')
-      return { content: `## 技能：${skillId}\n\n${content}` }
-    } catch {
-      return { content: '', error: `技能不存在: ${skillId}` }
+      const communityRoot = path.join(sharedRoot, 'community')
+      const packs = fs.existsSync(communityRoot) ? fs.readdirSync(communityRoot, { withFileTypes: true }) : []
+      for (const pack of packs) {
+        if (!pack.isDirectory()) continue
+        candidates.push(path.join(communityRoot, pack.name, 'skills', `${skillId}.md`))
+        candidates.push(path.join(communityRoot, pack.name, 'skills', skillId, 'SKILL.md'))
+      }
+    } catch { /* community 扫描失败不阻塞主路径 */ }
+    for (const p of candidates) {
+      try {
+        const content = fs.readFileSync(p, 'utf-8')
+        return { content: `## 技能：${skillId}\n\n${content}` }
+      } catch { /* 继续下一个候选 */ }
     }
+    return { content: '', error: `技能不存在: ${skillId}（已尝试 local / shared / community 路径）` }
   }
 
   /**
@@ -4510,6 +4701,33 @@ ${content}` }
 
     // v18 CrewAI 借鉴：可选 expected_output 描述（自然语言；非空时注入子代理 userPrompt）
     const expectedOutput = typeof args.expected_output === 'string' ? args.expected_output.trim() : ''
+
+    /**
+     * 子代理角色（2026-05-22 Mavis 借鉴）。
+     *
+     * - 未传 / 非法值 → 走旧行为（agent_type=null）
+     * - 'verifier'    → 在 systemPrompt 前缀加复核 hint；ctx.agentType='verifier' 让 sink 落库
+     * - 'explore' / 'plan' / 'worker' → 仅透传给 sink 便于 UI 区分；prompt 不变
+     *
+     * Verifier 的 hint 在主 prompt 前缀注入而不是替换：保留分身人格（保证语气一致），
+     * 只追加"你这次的任务是复核来源/数字真实性，不接受占位骨架"这条强约束。
+     */
+    const VALID_AGENT_TYPES = ['explore', 'plan', 'worker', 'verifier'] as const
+    type AgentTypeArg = (typeof VALID_AGENT_TYPES)[number]
+    const rawAgentType = typeof args.agent_type === 'string' ? args.agent_type.trim() : ''
+    const agentType: AgentTypeArg | null = (VALID_AGENT_TYPES as readonly string[]).includes(rawAgentType)
+      ? (rawAgentType as AgentTypeArg)
+      : null
+    const VERIFIER_PROMPT_PREFIX = [
+      '【本轮以复核子代理（Verifier）身份执行——MiniMax Mavis 借鉴的 Leader/Worker/Verifier 三角色】',
+      '你的任务不是回答问题，而是检查另一个子代理给出的结论是否站得住。检查项（Soul 数据可溯源红线）：',
+      '1) 每个具体数字是否真的能在引用来源里找到？query_excel / read_file 自己复算一遍。',
+      '2) 引用的 knowledge/<path>.md 是否真实存在且包含被引段落？',
+      '3) Excel 来源是否标到 sheet 名级别？还是用 markdown 总结冒充原始 sheet？',
+      '4) 有没有"缺数据但画了占位骨架"？',
+      '不写文件、不 spawn 子代理。最终输出必须是：✅ 通过 / ❌ 不通过 + 具体不通过项 + 缺口清单。',
+      '— 以上是本轮约束，下面恢复你的分身人格 —',
+    ].join('\n')
 
     if (!callLLM) {
       return { content: `[子任务已记录] 任务描述：${task}\n\n由于当前无 LLM 调用权限，请在主对话中直接完成此任务。` }
@@ -4567,6 +4785,11 @@ ${content}` }
       systemPrompt = this.systemPromptCache.get(avatarId) || `你是一个专业 AI 助手，请独立完成分配的任务。`
     }
 
+    // verifier 前缀注入：放在分身人格 systemPrompt 之前，保留分身语气、追加复核约束。
+    if (agentType === 'verifier') {
+      systemPrompt = `${VERIFIER_PROMPT_PREFIX}\n\n${systemPrompt}`
+    }
+
     /**
      * 构造派发上下文 + sink 闭包。
      *
@@ -4579,6 +4802,7 @@ ${content}` }
             conversationId,
             parentAvatarId: avatarId,
             targetAvatar: targetAvatar || null,
+            agentType,
           })
         }
       : undefined

@@ -14,6 +14,8 @@ export interface Skill {
   content: string
   /** 系统自带技能（来自 templates/skills/），不允许通过 UI 删除 */
   isBuiltin: boolean
+  /** 技能来源：local=分身本地物理文件，shared=shared/skills/，community=shared/skills/community/<pack>/ */
+  source?: 'local' | 'shared' | 'community'
 }
 
 /**
@@ -126,31 +128,57 @@ export class SkillManager {
     assertSafeSegment(avatarId, '分身ID')
     assertSafeSegment(skillId, '技能ID')
     const skillsPath = path.join(this.avatarsPath, avatarId, 'skills')
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
 
-    // 单文件优先：<skillId>.md（Soul 原生格式）
-    const filePath = path.join(skillsPath, `${skillId}.md`)
-    if (fs.existsSync(filePath)) {
+    // 候选路径（按 local > shared > community 顺序）：
+    //   - 单文件 .md（Soul 原生格式）
+    //   - 目录形式 <skillId>/SKILL.md（anthropics/skills 标准）
+    type Candidate = {
+      kind: 'file' | 'dir'
+      path: string
+      source: 'local' | 'shared' | 'community'
+    }
+    const candidates: Candidate[] = [
+      { kind: 'file', path: path.join(skillsPath, `${skillId}.md`), source: 'local' },
+      { kind: 'dir', path: path.join(skillsPath, skillId), source: 'local' },
+      { kind: 'file', path: path.join(sharedRoot, `${skillId}.md`), source: 'shared' },
+      { kind: 'dir', path: path.join(sharedRoot, skillId), source: 'shared' },
+    ]
+    // community：扫一遍 shared/skills/community/<pack>/skills/<id>.md
+    try {
+      const communityRoot = path.join(sharedRoot, 'community')
+      if (fs.existsSync(communityRoot)) {
+        for (const pack of fs.readdirSync(communityRoot, { withFileTypes: true })) {
+          if (!pack.isDirectory()) continue
+          candidates.push({ kind: 'file', path: path.join(communityRoot, pack.name, 'skills', `${skillId}.md`), source: 'community' })
+          candidates.push({ kind: 'dir', path: path.join(communityRoot, pack.name, 'skills', skillId), source: 'community' })
+        }
+      }
+    } catch { /* community 扫描失败不阻塞主路径 */ }
+
+    for (const cand of candidates) {
       try {
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const parsed = this.parseSkill(content, filePath, `${skillId}.md`)
-        if (parsed) {
-          const config = this.getSkillConfig(avatarId)
-          parsed.enabled = !config.disabledSkills.includes(parsed.id)
-          return parsed
+        if (cand.kind === 'file') {
+          if (!fs.existsSync(cand.path)) continue
+          const content = fs.readFileSync(cand.path, 'utf-8')
+          const fileName = path.basename(cand.path)
+          const parsed = this.parseSkill(content, cand.path, fileName, cand.source)
+          if (parsed) {
+            const config = this.getSkillConfig(avatarId)
+            parsed.enabled = !config.disabledSkills.includes(parsed.id)
+            return parsed
+          }
+        } else {
+          if (!fs.existsSync(cand.path) || !fs.statSync(cand.path).isDirectory()) continue
+          const parsed = this.loadSkillFromDir(cand.path, skillId, cand.source)
+          if (parsed) {
+            const config = this.getSkillConfig(avatarId)
+            parsed.enabled = !config.disabledSkills.includes(parsed.id)
+            return parsed
+          }
         }
       } catch (error) {
-        console.error(`解析技能失败: ${filePath}`, error)
-      }
-    }
-
-    // fallback：目录形式 <skillId>/SKILL.md（anthropics/skills 标准）
-    const dirPath = path.join(skillsPath, skillId)
-    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-      const parsed = this.loadSkillFromDir(dirPath, skillId)
-      if (parsed) {
-        const config = this.getSkillConfig(avatarId)
-        parsed.enabled = !config.disabledSkills.includes(parsed.id)
-        return parsed
+        console.error(`解析技能失败: ${cand.path}`, error)
       }
     }
 
@@ -163,6 +191,11 @@ export class SkillManager {
     const skill = this.getSkill(avatarId, skillId)
     if (!skill) {
       throw new Error(`技能不存在: ${skillId}`)
+    }
+    // 非 local skill 不允许从分身侧编辑（避免单分身改动影响所有分身 / 污染上游社区包）。
+    // 想改 shared/community 技能：要么直接编辑 shared/skills/<id>.md，要么在分身本地创建同名覆写。
+    if (skill.source && skill.source !== 'local') {
+      throw new Error(`${skill.source === 'shared' ? '公共' : '社区'}技能不可从分身侧编辑：${skillId}（请创建本地覆写或直接编辑源文件）`)
     }
 
     fs.writeFileSync(skill.filePath, content, 'utf-8')
@@ -216,6 +249,10 @@ export class SkillManager {
     const skill = this.getSkill(avatarId, skillId)
     if (!skill) {
       throw new Error(`技能不存在: ${skillId}`)
+    }
+    // 非 local skill 不允许删（删了会影响其他分身 / 污染上游）。
+    if (skill.source && skill.source !== 'local') {
+      throw new Error(`${skill.source === 'shared' ? '公共' : '社区'}技能不可从分身侧删除：${skillId}（如需该分身停用，请在 skill-index.yaml 移除引用）`)
     }
     // 内置技能不允许删除（来自 templates/skills/，删了下次创建分身又会回来，且会破坏其它分身共享假设）
     if (this.isBuiltinSkill(skillId)) {
@@ -487,7 +524,7 @@ export class SkillManager {
   }
 
   // 解析技能文件
-  private parseSkill(content: string, filePath: string, fileName: string): Skill | null {
+  private parseSkill(content: string, filePath: string, fileName: string, source: 'local' | 'shared' | 'community' = 'local'): Skill | null {
     const name = extractTitle(content) || fileName.replace('.md', '')
     const level = extractMetadata(content, '级别') || '未知'
     const version = extractMetadata(content, '版本') || 'v1.0'
@@ -508,6 +545,7 @@ export class SkillManager {
       filePath,
       content,
       isBuiltin: this.isBuiltinSkill(id),
+      source,
     }
   }
 
@@ -527,7 +565,7 @@ export class SkillManager {
    * - scripts/ / references/ / assets/ 不进 prompt；只暴露 SKILL.md body 给 LLM
    *   后续 LLM 调用 `read_knowledge_file` / `exec_shell` 等工具可按需访问
    */
-  private loadSkillFromDir(skillDir: string, dirName: string): Skill | null {
+  private loadSkillFromDir(skillDir: string, dirName: string, source: 'local' | 'shared' | 'community' = 'local'): Skill | null {
     const skillMdPath = path.join(skillDir, 'SKILL.md')
     if (!fs.existsSync(skillMdPath)) return null
     let content: string
@@ -545,7 +583,7 @@ export class SkillManager {
       )
     }
     // 复用 parseSkill：把 dirName 当 fileName 传入，让 id = dirName
-    return this.parseSkill(content, skillMdPath, `${dirName}.md`)
+    return this.parseSkill(content, skillMdPath, `${dirName}.md`, source)
   }
 
   // 获取启用的技能内容（用于生成 systemPrompt）

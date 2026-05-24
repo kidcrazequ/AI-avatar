@@ -103,7 +103,7 @@ function renderBlock(block: DocumentBlock): string {
     case 'code':
       return renderCode(block.language, block.code)
     case 'callout':
-      return `:::callout ${block.level}\n${block.text}\n:::`
+      return renderCallout(block.level, block.text)
     case 'cite':
       return renderCite(block.source, block.page, block.text)
     case 'image':
@@ -143,11 +143,40 @@ function renderCode(language: string | undefined, code: string): string {
   return '```' + fenceLang + '\n' + code + '\n```'
 }
 
+/**
+ * 把 cite 块渲染成标准 GFM blockquote（每行 `> ` 前缀）。
+ *
+ * 旧实现用 `:::cite source="..." page=2\n...\n:::` 扩展指令，但**标准 markdown 渲染器
+ * 不识别 `:::` directive**——GitHub / VS Code / 桌面端预览都把它当裸文本显示
+ * （2026-05-22 用户反馈"生成的 md 文件缺少格式"）。改用 blockquote 兼容所有渲染器。
+ * 来源行加粗强调，文本部分多行也加 `> ` 前缀避免被识别为引用结束。
+ *
+ * DOCX/PDF 不走这里（它们直接吃 IR），所以这次修改不影响那些格式的渲染。
+ */
 function renderCite(source: string, page: number | undefined, text: string): string {
-  const attrs = page !== undefined
-    ? `source="${source}" page=${page}`
-    : `source="${source}"`
-  return `:::cite ${attrs}\n${text}\n:::`
+  const sourceLine = page !== undefined
+    ? `> **来源**：\`${source}\` (p.${page})`
+    : `> **来源**：\`${source}\``
+  const textLines = text.split('\n').map(l => `> ${l}`).join('\n')
+  return `${sourceLine}\n>\n${textLines}`
+}
+
+/**
+ * 把 callout 块渲染成 GFM Alert 语法（GitHub 原生支持，VS Code / 多数渲染器也兼容）。
+ *
+ * 旧实现 `:::callout warning\n...\n:::` 同样是 directive 扩展，标准渲染器无效。
+ * GFM Alert 形如 `> [!WARNING]\n> 文本`，外观仍是 blockquote 但带语义标记。
+ * 不支持 GFM Alert 的渲染器至少会回退为普通 blockquote，可读性可接受。
+ */
+function renderCallout(level: 'info' | 'warning' | 'success' | 'danger', text: string): string {
+  const tag: Record<typeof level, string> = {
+    info: 'NOTE',
+    success: 'TIP',
+    warning: 'WARNING',
+    danger: 'CAUTION',
+  }
+  const textLines = text.split('\n').map(l => `> ${l}`).join('\n')
+  return `> [!${tag[level]}]\n${textLines}`
 }
 
 function renderImage(src: string, alt: string | undefined, caption: string | undefined): string {

@@ -58,3 +58,43 @@ shared_skills:
       - KPI
     when: 数值已取证（先 load_skill）
     priority: 2
+
+  # ── 需求澄清（动手前的拷打；显式触发） ──
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把项目问透
+      - 把范围问透
+      - 把工期问透
+      - 项目启动 grill
+      - 立项 grill
+      - 工期拷打
+      - 范围拷打
+      - 风险拷打
+      - 干系人 grill
+      - 依赖梳理
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 术语对齐
+    when: 用户显式请求被反问/拷打项目要素；项枢在立项/排期/范围确认/风险评估前用本技能 grill 工期约束 / 范围 / 干系人 / 依赖 / 风险，并对照 knowledge/ 沉淀 ADR；与"不占位承诺工期"红线兼容
+    priority: 1
+
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 反问我
+      - 在动手前把问题问清楚
+    when: 同 grill-against-knowledge 但无需 ADR / 术语对齐的轻量场景（兜底）
+    priority: 2

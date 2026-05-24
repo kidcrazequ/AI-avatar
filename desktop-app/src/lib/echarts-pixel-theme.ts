@@ -34,19 +34,31 @@ const PIXEL_COLORS = {
 } as const
 
 /**
- * 主题 palette（5 色）：
- *   - primary (LED 粉)  主序列
- *   - accent (薄荷绿)   对比序列
- *   - #7EB8E8 (柔蓝)   第三序列
- *   - #F0C060 (暖黄)   第四序列
- *   - #B89AE8 (淡紫)   第五序列
+ * 主题 palette（5 色，v0.6.18 单品牌色家族）：
+ *   - LED 粉 #FFB0C8       主序列（品牌色）
+ *   - 深玫粉 #E08FA8       第二序列（同色相加深 → 有序对比天然适配）
+ *   - 暗酒红 #B86F88       第三序列（最深，强调"重档位"）
+ *   - 浅粉 #FFD0DC         第四序列（最浅，对应"低档位"或辅助信息）
+ *   - 灰粉 #C09098         第五序列（去饱和粉，做对照/参考线/历史值）
+ *
+ * 设计意图（2026-05-21 用户决策）：放弃多色相 palette，整张图全部走 LED 粉色系。
+ * 优点：
+ *   1. 品牌色 100% 主导，主题色 = palette color，视觉统一高级
+ *   2. 有序对比（如 8 烈度 vs 9 烈度、Q1 vs Q2 vs Q3）天然适配——深浅差异本身就编码强度
+ *   3. 避免粉+绿/粉+蓝这种"跨色相撞色"的廉价感
+ * 缺点：
+ *   1. 5 系列并列时彼此区分度低于多色 palette（但实际场景很少 5 系列同框）
+ *   2. 色盲友好性下降（依赖 aria + tooltip 补强）
+ *
+ * 注意：PIXEL_COLORS.accent (#50D8A0) 仍保留供 UI 其他位置（按钮/状态标记/成功提示）使用，
+ * 仅图表 palette 不再引用它。
  */
 const SERIES_PALETTE = [
   PIXEL_COLORS.primary,
-  PIXEL_COLORS.accent,
-  '#7EB8E8',
-  PIXEL_COLORS.warning,
-  '#B89AE8',
+  '#E08FA8',
+  '#B86F88',
+  '#FFD0DC',
+  '#C09098',
 ]
 
 const PIXEL_THEME = {

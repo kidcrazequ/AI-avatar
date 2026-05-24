@@ -1,4 +1,5 @@
-import { createElement, useState, useRef, useEffect, useMemo, memo, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
+import { createElement, useState, useRef, useEffect, useMemo, useCallback, memo, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
+import ToolCallTimeline from './ToolCallTimeline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage, useChatStore } from '../stores/chatStore'
@@ -6,9 +7,63 @@ import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
 import MermaidRenderer from './MermaidRenderer'
 import InfographicRenderer from './InfographicRenderer'
+import RefusalCard from './RefusalCard'
 import LightboxModal from './LightboxModal'
 import { renderChildrenWithCitations } from './source-citation-utils'
 import FileCard from './FileCard'
+import { useArtifactStore, type ArtifactKind } from '../stores/artifactStore'
+
+/**
+ * 把任意 artifact 渲染包一层 wrapper：
+ *   - hover 时显示"⤢ 副面板"按钮
+ *   - 当 raw 大小超过 autoOpenThreshold 且未自动打开过时，挂载后自动 openArtifact 一次
+ */
+function ArtifactSlot({ kind, raw, children }: { kind: ArtifactKind; raw: string; children: ReactNode }): ReactElement {
+  const openArtifact = useArtifactStore(s => s.openArtifact)
+  const autoOpenThreshold = useArtifactStore(s => s.autoOpenThreshold)
+  // 同实例只自动打开一次（防止流式更新触发多次 push 出"中间状态副面板"）
+  const openedRef = useRef(false)
+  // 防抖：raw 稳定 600ms 后才真正 open，避免拿到流式半成品
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (openedRef.current) return
+    if (autoOpenThreshold <= 0) return
+    if (raw.length < autoOpenThreshold) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      if (openedRef.current) return
+      openedRef.current = true
+      openArtifact({ kind, raw })
+    }, 600)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [autoOpenThreshold, raw, kind, openArtifact])
+
+  return (
+    <div className="relative group">
+      {/*
+        副面板按钮放在左上角，避开 chart/infographic 内部的 RendererToolbar
+        （它固定在 top-2 right-2，本按钮原来也在 top-1 right-1 时两者重叠，
+        2026-05-21 用户反馈：「后面那个按钮被覆盖了」）。
+      */}
+      <button
+        type="button"
+        onClick={() => openArtifact({ kind, raw })}
+        className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity
+          font-game text-[10px] text-px-text-dim hover:text-px-primary
+          px-1.5 py-0.5 bg-px-surface/90 border border-px-border hover:border-px-primary
+          tracking-wider"
+        title="在副面板打开（独立滚动 / 复制 / 放大）"
+        aria-label="在副面板打开"
+      >
+        ⤢ 副面板
+      </button>
+      {children}
+    </div>
+  )
+}
 
 const REMARK_PLUGINS = [remarkGfm]
 
@@ -27,17 +82,688 @@ function isMermaidComplete(code: string): boolean {
 }
 
 /**
- * @antv/infographic DSL 流式检测：首行必须是 `infographic <template-name>`。
- * 流式接收时未结束的 fragment 不渲染，避免 LLM 还在打字时就 SVG 报错。
+ * @antv/infographic DSL 流式检测：识别 LLM 已输完代码块的启发式。
+ *
+ * 兼容多种 LLM 误用的首行形式 — 即使 body 错也让 renderer 接管，比卡 "生成中…" 友好：
+ *   1. DSL 标准（唯一正确）：`infographic <template-name>`
+ *   2. YAML 误用：           `template: <template-name>`
+ *   3. JS 对象 / JSON 误用：  `@antv/infographic { ` 或 `{` 单独首行
+ *   4. import / config 误用：`const xxx = {`、`export default {` 等
  */
 function isInfographicComplete(code: string): boolean {
   const trimmed = code.trim()
   if (trimmed.length < 15) return false
-  // 首行必须是 `infographic xxx-xxx` 格式
   const firstLine = trimmed.split('\n')[0].trim()
-  if (!/^infographic\s+[a-z][a-z0-9-]+/.test(firstLine)) return false
-  // 至少有 data 块开始（说明已经开始填数据，不是只写了模板名）
-  return /\n\s*data\b/.test(trimmed) || /\n\s*-/.test(trimmed)
+  const isDslStyle = /^infographic\s+[a-z][a-z0-9-]+/i.test(firstLine)
+  const isYamlMisuse = /^template\s*:\s*[a-z][a-z0-9-]+/i.test(firstLine)
+  // JS 对象 / JSON 风格：首行通常是 `@antv/infographic {`、单独的 `{`、或 `const/export ... = {`
+  const isJsObjectMisuse =
+    /^@?[a-z@][\w/-]*\s*\{?\s*$/i.test(firstLine) ||
+    /^\{\s*$/.test(firstLine) ||
+    /^(const|let|var|export)\s/i.test(firstLine)
+  // 新增：LLM 漏首行直接 body 开头（title / compares / lists / sequences / data / root / theme 等）
+  // `theme` 是 LLM 误以为 DSL 顶级有 theme 字段（实际是 Infographic 构造参数，DSL 不读）——
+  // 但要识别它，否则前端卡 "生成中..." 永远不接管（2026-05-22 真实事故）。
+  const hasTypicalBodyHead =
+    /^(title|subtitle|theme|data|compares|lists|sequences|root|nodes|relations|values|items)\b/i.test(firstLine)
+  if (!isDslStyle && !isYamlMisuse && !isJsObjectMisuse && !hasTypicalBodyHead) return false
+  // body 完成度启发：要么有 data/list 段，要么花括号已收尾
+  return (
+    /\n\s*data\b/i.test(trimmed) ||
+    /\n\s*-\s/.test(trimmed) ||
+    /\}\s*$/.test(trimmed) ||
+    /\n\s*(strengths|weaknesses|opportunities|threats|items|lists|sequences|compares)\b/i.test(trimmed)
+  )
+}
+
+/**
+ * 把 LLM 误输出的常见非 DSL 风格"治愈"为合法首行 + 修正 body。
+ *
+ * 当前覆盖：
+ *   首行级：
+ *     - YAML 首行   `template: xxx`          → `infographic xxx`
+ *     - JS / JSON   `@antv/infographic { ...` → 从 body 里搜 `type/template/name: "xxx"` 提模板名
+ *   body 级：
+ *     - compare-swot 字段误结构：把 `compares\n  strengths\n    - xxx\n  weaknesses\n    - yyy` 这种
+ *       "顶级 strengths/weaknesses 当字段"的错误，自动转成合法的 `compares: 数组 of {label, items}` 形式
+ *       （LLM 最高频踩坑点；治标 80% 的 compare-swot 渲染失败）
+ *
+ * body 真彻底错时 renderer 仍会失败，但 ErrorBoundary 红框会暴露源码。
+ */
+function coerceInfographicDsl(raw: string): string {
+  // 字段名标准化（在所有路径之前）：LLM 经常用 `cards / items` 代替 antv 期望的
+  // `compares / children`（2026-05-22 真实事故：商业模式对比图用 cards 段渲染失败）。
+  // 这里把顶级 cards / 卡片内 items 字段名换成 antv 兼容形式，让后续 inferTemplate
+  // 和 coerceCompareSwotToChildren 能继续接力。
+  let coerced = normalizeAntvFieldNames(raw)
+  const lines = coerced.split('\n')
+  const first = lines[0]?.trim() ?? ''
+
+  // Case 1: YAML 首行
+  const yamlMatch = first.match(/^template\s*:\s*([a-z][a-z0-9-]+)\s*$/i)
+  if (yamlMatch) {
+    coerced = `infographic ${yamlMatch[1]}\n${lines.slice(1).join('\n')}`
+  } else {
+    // Case 2: JS 对象 / JSON 风格
+    const isJsLike = /^@?[a-z@][\w/-]*\s*\{?\s*$/i.test(first) ||
+                     /^\{\s*$/.test(first) ||
+                     /^(const|let|var|export)\s/i.test(first)
+    if (isJsLike) {
+      const m = coerced.match(/(?:^|\s|\{)["'`]?(?:type|template|name)["'`]?\s*[:=]\s*["'`]([a-z][a-z0-9-]+)["'`]/i)
+      if (m) coerced = `infographic ${m[1]}\n${coerced}`
+    } else if (!/^infographic\s+[a-z][a-z0-9-]+/i.test(first)) {
+      // Case 3: 缺 `infographic xxx` 首行（LLM 漏首行）— 按 body 关键字推断模板
+      const inferred = inferTemplateFromBody(coerced)
+      if (inferred) coerced = `infographic ${inferred}\n${coerced}`
+    }
+  }
+
+  // 缺 `data` 包裹注入：必须在首行解析（infographic <name>）之后，body 级修复（compare-swot 等）之前。
+  coerced = injectMissingDataWrapper(coerced)
+
+  // body 级修复：compare-swot 高频字段误结构
+  coerced = coerceCompareSwotBody(coerced)
+  // body 级修复 2：compare-swot 每块用 text/items 字段时转成正确的 children 数组（每 child 一个 - label）
+  coerced = coerceCompareSwotToChildren(coerced)
+
+  return coerced
+}
+
+/**
+ * 检测 LLM 漏写 `data` 包裹（把 title / lists / compares / sequences / root / nodes / values 等
+ * 顶级数据字段直接写在 `infographic <name>` 同级而不是 `data` 段内）的常见错误，自动补 `data` 行 +
+ * 把后续所有非空行整体缩进 2 空格。
+ *
+ * 真实事故（2026-05-22）：分类卡片信息图，LLM 输出
+ *   ```
+ *   theme light
+ *   title 工商储商业模式速查
+ *   items
+ *     - label EMC 合同能源管理
+ *       desc ...
+ *   ```
+ * coerceInfographicDsl 把 theme 删了、把 items 改名 lists、inferTemplate 在首行补了
+ * `infographic list-grid-badge-card`，但**没人补 `data` 包裹**。
+ *
+ * @antv/infographic 的 options.parser.js 只从 `options.data` 里取 `lists/sequences/compares/...`
+ * 字段，data === undefined 时 parseData 直接 return → 渲染容器空白，**不抛 Invalid SVG 异常**
+ * （所以也不会进 ErrorBoundary 红框），用户看到的就是"副面板空缺"。
+ *
+ * 检测条件：首行 `infographic <name>` 之后第一个非空行如果是顶级（无缩进）的已知数据字段
+ * （title/description/subtitle/lists/compares/sequences/root/nodes/relations/values/items）
+ * 且**不是** `data` → 判定缺 data 包裹 → 注入。
+ *
+ * 幂等：若结构已是 `infographic <name>\ndata\n  ...` 则原样返回。
+ */
+function injectMissingDataWrapper(raw: string): string {
+  const lines = raw.split('\n')
+  if (lines.length < 2) return raw
+  if (!/^infographic\s+[a-z][a-z0-9-]+/i.test(lines[0])) return raw
+
+  let firstNonEmptyIdx = -1
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() !== '') { firstNonEmptyIdx = i; break }
+  }
+  if (firstNonEmptyIdx === -1) return raw
+
+  const firstNonEmpty = lines[firstNonEmptyIdx]
+  // 已有 data 包裹 → 跳过
+  if (/^\s*data\s*$/.test(firstNonEmpty)) return raw
+  // 必须是 0 缩进的已知顶级数据字段才修（缩进 > 0 说明可能已经在某个上下文里，不动）
+  if (!/^(title|description|subtitle|lists|compares|sequences|root|nodes|relations|values|items)\b/.test(firstNonEmpty)) {
+    return raw
+  }
+
+  const before = lines.slice(0, firstNonEmptyIdx)
+  const rest = lines.slice(firstNonEmptyIdx)
+  const indented = rest.map(l => l.trim() === '' ? l : '  ' + l)
+  return [...before, 'data', ...indented].join('\n')
+}
+
+/**
+ * LLM 写 infographic DSL 时常见的字段名错误标准化为 antv 期望的字段名。
+ * 只匹配独占一行的字段名，避免误伤正文里的同名词。
+ *
+ * 2026-05-22 真实事故迭代：
+ * - LLM 写 `cards` 顶级（应是 compares） → 整图空框
+ * - LLM 写 `items` 卡片内（应是 children） → schema 不匹配
+ * - LLM 写 `items:` 带冒号（半 YAML 风格） → 字面字段名"items:"不识别
+ * - LLM 写 `subtitle`（应是 description） → 顶级字段错
+ * - LLM 写 `desc` 在卡片内（应是 children + label） → 渲染丢内容
+ */
+function normalizeAntvFieldNames(raw: string): string {
+  // 顶级 `cards` / `items` 应该映射成 `compares` 还是 `lists`，由 body 内容决定：
+  //
+  // - 含 SWOT 关键词 → SWOT 对比 → `compares`（让 inferTemplate 推 compare-swot）
+  // - 含**任意嵌套二级数组**（children / cards / items 4+ 空格缩进）→ 多层级对比 → `compares`
+  //   （让 inferTemplate 推 compare-hierarchy-row-letter-card-compact-card）
+  // - 否则 → 普通卡片列表 → `lists`（让 inferTemplate 推 list-grid-badge-card）
+  //
+  // 关键：含嵌套二级数组时必须走 compares 而不是 lists——list-grid 模板不读 children，
+  // 嵌套内容会丢；compare-hierarchy-row 模板专门为"root + children"层级设计（2026-05-22 修正）。
+  //
+  // 嵌套检测：look-forward 检测 4+ 空格缩进的 cards / items / children 任一字段名独占一行。
+  const isSwotFlavor = /(strengths|weaknesses|opportunities|threats|优势|劣势|机会|威胁)/i.test(raw)
+  const hasNestedSubArray = /^\s{4,}(children|cards|items)\s*$/m.test(raw)
+  const cardsTarget = (isSwotFlavor || hasNestedSubArray) ? 'compares' : 'lists'
+
+  return mergeNonStandardNestedArraysIntoDesc(mergeBadgesIntoDesc(mergeShortValueIntoLabel(coerceItemValueToDescWhenNoDesc(
+    raw
+      // 顶级 theme 行删除：LLM 误以为 DSL 有 theme 字段，实际 theme 是 Infographic 构造参数
+      // （我们在 InfographicRenderer 里通过 themeConfig 注入，DSL 里写了 antv parser 会报错）。
+      // 必须放在最前删除，避免后续 normalize / coerce 看到它。
+      .replace(/^\s*theme\s+\S+\s*$/m, '')
+      // 顶级 cards（0-2 空格缩进）→ compares/lists（智能路由）
+      .replace(/^(\s{0,2})cards(\s*)$/m, `$1${cardsTarget}$2`)
+      // 嵌套 cards（4+ 空格缩进）→ children：antv hierarchy 模板的子项数组字段
+      // 这条必须在顶级 cards 之后，否则 4+ 空格的 cards 会被误匹配成顶级（2026-05-22 修复）
+      .replace(/^(\s{4,})cards(\s*)$/gm, '$1children$2')
+      // 顶级 items: 带冒号（半 YAML 风格）→ cardsTarget
+      .replace(/^(\s*)items\s*:\s*$/m, `$1${cardsTarget}`)
+      // 顶级 items（0-2 空格缩进，无冒号）→ cardsTarget
+      .replace(/^(\s{0,2})items(\s*)$/m, `$1${cardsTarget}$2`)
+      // 嵌套 items（缩进 ≥ 4 空格，无冒号）→ children
+      .replace(/^(\s{4,})items(\s*)$/gm, '$1children$2')
+      // 顶级 subtitle → description（antv 顶级标题副标题字段叫 description）
+      .replace(/^(\s*)subtitle(\s+)/m, '$1description$2')
+      // 顶级 introduction → description（LLM 又一种"副标题"误写法）
+      .replace(/^(\s*)introduction(\s+)/m, '$1description$2')
+      // 嵌套 subtitle（≥ 4 空格缩进）→ badge：合并到同 item 的 desc 末尾
+      .replace(/^(\s{4,})subtitle\s+(.+)$/gm, '$1badge $2')
+      // 嵌套 tag（≥ 4 空格缩进）→ badge：antv item 不读 tag 字段，转 badge 合并入 desc
+      .replace(/^(\s{4,})tag\s+(.+)$/gm, '$1badge $2')
+      // 嵌套 `- title X` → `- label X`：antv item 主标题字段是 label
+      .replace(/^(\s*-\s+)title(\s+)/gm, '$1label$2'),
+  ))))
+}
+
+/**
+ * 把 LLM 在每个 `- label` item 里凭空发明的"嵌套数组字段"（pros / cons / advantages /
+ * disadvantages / features / risks / benefits / highlights / notes / bullets / tags）的子项
+ * 合并进同 item 的 desc 末尾，避免 antv list-grid-badge-card 把这些字段静默丢弃。
+ *
+ * 真实事故（2026-05-22）：分类卡片信息图问商业模式速查，LLM 输出
+ *   ```
+ *   - label EMC 合同能源管理
+ *     desc 资方出资...
+ *     pros
+ *       - label 零初始投入
+ *       - label 风险转移
+ *     cons
+ *       - label 电价波动直接侵蚀
+ *   ```
+ * antv BadgeCard 只读 label/desc/value/icon，pros/cons 数组整组被丢弃 → 卡片只剩 label + desc，
+ * 关键差异点完全不可见。
+ *
+ * 合并策略：
+ *   - 检测每个 `- label` item 内、缩进恰好 = item 缩进 + 2 的非标准字段名
+ *   - 收集该字段下所有 `- label X` / `- X` 子项的文本
+ *   - 整组用 ` · ` 拼接，按字段做轻量中文化（pros→优势 / cons→风险），多组用 `；` 分隔
+ *   - 追加到 item 的 desc 末尾（用 ` · ` 分隔）；item 无 desc 时新建 desc 行
+ *   - 标准嵌套字段 children 不动（compare-hierarchy 等模板真正读它）
+ */
+function mergeNonStandardNestedArraysIntoDesc(raw: string): string {
+  const NON_STANDARD_FIELDS: Record<string, string> = {
+    pros: '优势',
+    cons: '风险',
+    advantages: '优势',
+    disadvantages: '劣势',
+    features: '特点',
+    risks: '风险',
+    benefits: '收益',
+    highlights: '亮点',
+    notes: '备注',
+    bullets: '要点',
+    tags: '标签',
+  }
+  const NON_STANDARD_RE = new RegExp(`^(${Object.keys(NON_STANDARD_FIELDS).join('|')})$`, 'i')
+
+  const lines = raw.split('\n')
+  const out: string[] = []
+
+  let currentItemLabelIdx = -1
+  let currentItemDescIdx = -1
+  let currentItemIndent = -1
+  let pendingSegments: string[] = []
+
+  const flushPendingToCurrentItem = (): void => {
+    if (pendingSegments.length === 0) return
+    const merged = pendingSegments.join('；')
+    if (currentItemDescIdx >= 0) {
+      out[currentItemDescIdx] = out[currentItemDescIdx] + ' · ' + merged
+    } else if (currentItemLabelIdx >= 0) {
+      const indentStr = ' '.repeat(currentItemIndent + 2)
+      const descLine = `${indentStr}desc ${merged}`
+      out.splice(currentItemLabelIdx + 1, 0, descLine)
+      currentItemDescIdx = currentItemLabelIdx + 1
+    }
+    pendingSegments = []
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+
+    const labelMatch = line.match(/^(\s*)-\s+label\s+/)
+    if (labelMatch) {
+      flushPendingToCurrentItem()
+      out.push(line)
+      currentItemLabelIdx = out.length - 1
+      currentItemDescIdx = -1
+      currentItemIndent = labelMatch[1].length
+      i++
+      continue
+    }
+
+    if (currentItemLabelIdx >= 0) {
+      const fieldMatch = line.match(/^(\s+)([a-z]+)\s*$/i)
+      if (fieldMatch) {
+        const fieldIndent = fieldMatch[1].length
+        const fieldName = fieldMatch[2]
+        // 必须**正好**是 item 的下一级（item 缩进 + 2），且字段名在非标准白名单里
+        if (fieldIndent === currentItemIndent + 2 && NON_STANDARD_RE.test(fieldName)) {
+          const labelKey = NON_STANDARD_FIELDS[fieldName.toLowerCase()] || fieldName
+          const children: string[] = []
+          i++
+          // 收集嵌套数组里的所有子项（缩进 > fieldIndent，可带 label 关键字也可不带）
+          while (i < lines.length) {
+            const child = lines[i]
+            if (child.trim() === '') { i++; continue }
+            const childIndent = (child.match(/^(\s*)/)?.[1] ?? '').length
+            if (childIndent <= fieldIndent) break
+            const mc = child.match(/^\s*-\s+(?:label\s+)?(.+?)\s*$/)
+            if (mc) children.push(mc[1].trim())
+            // 嵌套数组里的非 `-` 起头的子行（比如 `desc xxx`）：忽略，宁可丢辅助说明也不污染主合并
+            i++
+          }
+          if (children.length > 0) {
+            pendingSegments.push(`${labelKey}：${children.join(' · ')}`)
+          }
+          continue
+        }
+      }
+
+      const descMatch = line.match(/^(\s+)desc\s+/)
+      if (descMatch && descMatch[1].length === currentItemIndent + 2) {
+        out.push(line)
+        currentItemDescIdx = out.length - 1
+        i++
+        continue
+      }
+    }
+
+    out.push(line)
+    i++
+  }
+
+  flushPendingToCurrentItem()
+  return out.join('\n')
+}
+
+/**
+ * 嵌套 value 字段的安全降级：LLM 经常把短字符串塞进 antv 不读纯文本的 `value` 字段。
+ * 历史上无脑全部改名为 desc，但当同一个 item 已经有 desc 时，会出现两个 desc 行 →
+ * antv 只取一个，长描述被短 value 字符串覆盖。
+ *
+ * 真实事故（2026-05-22）：商业模式速览图每条 item 同时给了长描述（desc）和计量
+ * "14 项目"（value），结果渲染只剩"14 项目"，长描述完全丢失。
+ *
+ * 修复：按 `- label` 边界切 item，逐 item 决策——
+ *   - item 没有 desc → value 改名 desc（保留文字内容）
+ *   - item 已有 desc → 保留 value 不动（让 antv 当 badge / 计量数字渲染）
+ */
+function coerceItemValueToDescWhenNoDesc(raw: string): string {
+  const lines = raw.split('\n')
+  const itemStarts: number[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*-\s+label\s+/.test(lines[i])) itemStarts.push(i)
+  }
+  for (let k = 0; k < itemStarts.length; k++) {
+    const start = itemStarts[k]
+    const end = k + 1 < itemStarts.length ? itemStarts[k + 1] : lines.length
+    const hasDesc = lines.slice(start, end).some(l => /^\s+desc\s+/.test(l))
+    if (!hasDesc) {
+      for (let i = start; i < end; i++) {
+        lines[i] = lines[i].replace(/^(\s{4,})value(\s+)/, '$1desc$2')
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
+/**
+ * 当 item 同时有 label + desc + 短 value 时把 value 合并进 label，避免 antv
+ * list-grid-badge-card 把 value 渲染成巨字号、吃掉卡片大半高度、desc 被裁切。
+ *
+ * 真实事故（2026-05-22，紧接 coerceItemValueToDescWhenNoDesc 的修复后）：
+ * 商业模式速览图每条 item 长 desc + 短 value（"14 项目" / "—"），上一个修复让
+ * desc 留住了但 value 巨字号挤占卡片高度，desc 仍被裁。
+ *
+ * 处理策略：
+ *   - value 长度 ≤ 20 字符 → 拼到 label 末尾（" · " 分隔）并删除 value 行
+ *   - value 长度 > 20 字符 → 保留不动（极少见，主调用方应单独处理）
+ *   - "—" / "-" / "" 等占位 value → 直接删除 value 行（不污染 label）
+ *
+ * 注：必须在 coerceItemValueToDescWhenNoDesc 之后调用——后者会把"只有 value 没有 desc"
+ * 的 item 先把 value 改名 desc；本函数仅处理剩下的"同时有 desc 和 value"情形。
+ */
+function mergeShortValueIntoLabel(raw: string): string {
+  const lines = raw.split('\n')
+  const itemStarts: number[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*-\s+label\s+/.test(lines[i])) itemStarts.push(i)
+  }
+  // 倒序遍历：删除行会改变下标，从后往前删避免影响前一个 item 的 end
+  for (let k = itemStarts.length - 1; k >= 0; k--) {
+    const start = itemStarts[k]
+    const end = k + 1 < itemStarts.length ? itemStarts[k + 1] : lines.length
+    let valueIdx = -1
+    let valueText = ''
+    for (let i = start; i < end; i++) {
+      const m = lines[i].match(/^\s{4,}value\s+(.+)$/)
+      if (m) { valueIdx = i; valueText = m[1].trim(); break }
+    }
+    if (valueIdx < 0) continue
+    const isPlaceholder = /^[—\-–~]\s*$/.test(valueText) || valueText.length === 0
+    if (isPlaceholder) {
+      lines.splice(valueIdx, 1)
+      continue
+    }
+    if (valueText.length > 20) continue
+    const labelMatch = lines[start].match(/^(\s*-\s+label\s+)(.+?)\s*$/)
+    if (!labelMatch) continue
+    lines[start] = `${labelMatch[1]}${labelMatch[2].trim()} · ${valueText}`
+    lines.splice(valueIdx, 1)
+  }
+  return lines.join('\n')
+}
+
+/**
+ * 把 LLM 凭空发明的 `badge X` 字段（antv item schema 里根本不读）合并进同 item 的
+ * `desc` 末尾，用 ` · ` / ` / ` 拼接，避免 badge 内容完全丢失。
+ *
+ * 真实事故（2026-05-22）：LLM 写 `- label X / desc 一段话 / badge A / badge B / badge C`，
+ * antv BadgeCard 只读 label+desc+value+icon，3 个 badge 直接被忽略 →
+ * 即使模板路由正确，关键 tag 信息也丢失。
+ *
+ * 合并策略：每碰到新的 `- label` 开始一个新 item 边界，badge 只能合到本 item 的 desc 末尾，
+ * 不跨 item 串。如果 item 没 desc，把 badge 集合作为新 desc 行。
+ */
+function mergeBadgesIntoDesc(raw: string): string {
+  const lines = raw.split('\n')
+  const out: string[] = []
+  let currentItemLabelIdx = -1
+  let currentItemDescIdx = -1
+  let pendingBadges: string[] = []
+
+  /**
+   * 把 pendingBadges 合并进**当前 item 的 desc**。
+   * - 当前 item 已有 desc → 拼到 desc 末尾
+   * - 当前 item 没 desc → 在 label 行后插入新 desc 行
+   * 不跨 item 串：每碰到新 - label 都会先调一次 flush 清空 pending。
+   */
+  const flushBadgesToCurrentItem = () => {
+    if (pendingBadges.length === 0) return
+    const merged = pendingBadges.join(' / ')
+    if (currentItemDescIdx >= 0) {
+      out[currentItemDescIdx] = out[currentItemDescIdx] + ' · ' + merged
+    } else if (currentItemLabelIdx >= 0) {
+      const labelLine = out[currentItemLabelIdx]
+      const labelIndent = labelLine.match(/^(\s*)/)?.[1] ?? ''
+      const descLine = `${labelIndent}  desc ${merged}`
+      out.splice(currentItemLabelIdx + 1, 0, descLine)
+      currentItemDescIdx = currentItemLabelIdx + 1
+    }
+    pendingBadges = []
+  }
+
+  for (const line of lines) {
+    const labelMatch = line.match(/^\s*-\s+label\s+/)
+    const descMatch = line.match(/^\s+desc\s+/)
+    const badgeMatch = line.match(/^\s+badge\s+(.+)$/)
+
+    if (labelMatch) {
+      flushBadgesToCurrentItem() // flush 到上一个 item
+      out.push(line)
+      currentItemLabelIdx = out.length - 1
+      currentItemDescIdx = -1 // 新 item 重置
+    } else if (descMatch) {
+      // 先 push 这个 desc 行（成为当前 item 的 desc），再把 pending badges 拼到它末尾。
+      // 不能先 flush——flush 会**新插入**一行 desc，导致与即将 push 的 desc 重复（2026-05-22 bug）。
+      out.push(line)
+      currentItemDescIdx = out.length - 1
+      if (pendingBadges.length > 0) {
+        out[currentItemDescIdx] = out[currentItemDescIdx] + ' · ' + pendingBadges.join(' / ')
+        pendingBadges = []
+      }
+    } else if (badgeMatch) {
+      pendingBadges.push(badgeMatch[1].trim())
+      // 跳过 badge 行不 push
+    } else {
+      flushBadgesToCurrentItem()
+      out.push(line)
+    }
+  }
+  flushBadgesToCurrentItem() // 末尾收口
+  return out.join('\n')
+}
+
+/**
+ * @antv/infographic 的 compare-swot 模板每个 label 块只支持 1 条 plain-text（letter-card + 单段文本）。
+ * LLM 经常按 SWOT 习惯输出每块 3-5 条 items 数组 — 模板拿不到 plain-text 字段就只渲染 4 个字母色块。
+ *
+ * 修复策略：检测到每个 - label 项的 items 段有多个 `- 条` 时，把所有条用「、」拼成单段 text，
+ * 让 plain-text 字段拿到内容显示出来。失去 bullet 格式但至少图里有可见内容。
+ */
+function coerceCompareSwotToChildren(raw: string): string {
+  if (!/^infographic\s+compare-swot\b/im.test(raw)) return raw
+  const lines = raw.split('\n')
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    // 锁定 - label 行；清理 label 中手动加的 S/W/O/T 字母前后缀（letter-card 会自动生成）
+    const labelMatch = line.match(/^(\s*)-\s+label\s+(.+?)\s*$/)
+    if (labelMatch) {
+      const labelIndent = labelMatch[1]
+      let labelText = labelMatch[2].trim()
+      // 清理 letter-card 模板下用户多余写的 S/W/O/T 单字母前缀/后缀（"优势 S" / "S - 优势" / "(S)"）。
+      // 老正则匹配过宽，会把 "(Strengths)" 末尾的 "s)" 误删（变成 "(Strength"），
+      // 导致 @antv/infographic 渲染失败（2026-05-22 真实事故）。
+      // 修复：要求 SWOT 字母前后**必须有明确分隔符**（空白 / . - : : ( ）），
+      // 不能是单词内部的字母——`Strengths` 中的 `S` 后面跟着 `t` 不算 letter-prefix。
+      labelText = labelText
+        .replace(/^[SWOT](?:\s*[.\-:：]|\s+)\s*/i, '')
+        .replace(/(?:^|\s|[\-:：(（])\s*[SWOT]\s*[)）]?\s*$/i, '')
+        .trim()
+      out.push(`${labelIndent}- label ${labelText}`)
+      i++
+      // 跳过空行
+      while (i < lines.length && lines[i].trim() === '') { out.push(lines[i]); i++ }
+      if (i >= lines.length) continue
+      // 检查下一行是不是 items / text / desc / children 字段
+      const nextLine = lines[i]
+      const nextIndent = (nextLine.match(/^(\s*)/)?.[1] ?? '').length
+      const labelInnerIndent = labelIndent.length + 2 // 每 - label 项内字段的标准缩进
+      let collected: string[] = []
+      let consumed = false
+
+      // 情况 A：items 数组（LLM 旧习惯）→ 收集所有 - 列表项作为内容
+      if (/^\s*items\s*$/.test(nextLine)) {
+        i++
+        const itemsBlockIndent = nextIndent
+        while (i < lines.length) {
+          const it = lines[i]
+          const itIndent = (it.match(/^(\s*)/)?.[1] ?? '').length
+          if (it.trim() === '') { i++; continue }
+          if (itIndent <= itemsBlockIndent) break
+          const m = it.match(/^\s+-\s+(.+)$/)
+          if (m) collected.push(m[1].trim())
+          i++
+        }
+        consumed = true
+      }
+      // 情况 B：text 字段 → 拆分成多个 child（按、；; 等分隔符）
+      else {
+        const textMatch = nextLine.match(/^\s+(?:text|desc|description|content)\s+(.+)$/i)
+        if (textMatch) {
+          // 按常见中文分隔符（、；;）拆分；若没分隔符就单条
+          collected = textMatch[1].split(/[、；;]/).map(s => s.trim()).filter(Boolean)
+          i++
+          consumed = true
+        }
+        // 情况 C：已经是 children 数组（标准格式）→ 不动，passthrough
+        else if (/^\s*children\s*$/.test(nextLine)) {
+          // 不消耗，继续走主循环让 children 段原样输出
+          continue
+        }
+      }
+
+      if (!consumed) continue
+      if (collected.length === 0) continue
+      // 输出 children 数组（compare-swot 真正的字段）
+      out.push(`${' '.repeat(labelInnerIndent)}children`)
+      const childIndent = labelInnerIndent + 2
+      for (const c of collected) {
+        out.push(`${' '.repeat(childIndent)}- label ${c}`)
+      }
+    } else {
+      out.push(line)
+      i++
+    }
+  }
+  return out.join('\n')
+}
+
+/**
+ * 根据 body 内容启发式推断模板名（缺 `infographic xxx` 首行时用）。
+ * 只覆盖最常用的几个模板：覆盖不到的让 renderer 自己 fail。
+ */
+function inferTemplateFromBody(raw: string): string | null {
+  // SWOT：compares 段 + 含 Strengths/Weaknesses/Opportunities/Threats 或对应中文标签
+  if (/\bcompares\b/i.test(raw) && /(strengths|weaknesses|opportunities|threats|优势|劣势|机会|威胁)/i.test(raw)) {
+    return 'compare-swot'
+  }
+  // 层级对比：compares + 含 children 嵌套（每个对比项下面有 children 数组，比如 LLM 写
+  // "3 列商业模式 × 每列多个属性" 这种 schema）。antv 的 `compare-hierarchy-row-letter-card-compact-card`
+  // 模板正好对应"第一级：横向根节点 + 第二级：子节点列表"结构。
+  // 真实事故（2026-05-22）：LLM 写 cards/items（→ normalize 成 compares/children）然后被
+  // 推成 compare-bar-card（不接受 children 嵌套，单值对比模板）→ antv 渲染失败 → 空框。
+  if (/\bcompares\b/i.test(raw) && /\bchildren\b/i.test(raw)) {
+    return 'compare-hierarchy-row-letter-card-compact-card'
+  }
+  // 普通对比：compares 段（单层无 children，每项一个 value/score）
+  if (/\bcompares\b/i.test(raw)) return 'compare-bar-card'
+  // list 含 badge：lists 段 + 每项有 badge → list-grid-badge-card（带徽章的卡片网格）
+  // 真实事故（2026-05-22）：LLM 把"分类卡片信息图"写成 items: + label/desc/badge 风格，
+  // normalize 后变成 lists + badge，这条规则匹配 → list-grid-badge-card
+  if (/\blists\b/i.test(raw) && /^\s*badge\s+/im.test(raw)) return 'list-grid-badge-card'
+  // list：lists 段 → 选最通用的 list-grid-badge-card 模板
+  if (/\blists\b/i.test(raw)) return 'list-grid-badge-card'
+  // sequence：sequences 段
+  if (/\bsequences\b/i.test(raw)) return 'sequence-stairs-arrow'
+  // hierarchy：root + children
+  if (/\broot\b/i.test(raw) && /\bchildren\b/i.test(raw)) return 'hierarchy-tree'
+  // 词云：items + weight
+  if (/\bitems\b/i.test(raw) && /\bweight\b/i.test(raw)) return 'word-cloud'
+  return null
+}
+
+/**
+ * compare-swot 字段修复：把"顶级 strengths/weaknesses/..."误结构转为标准的 compares 数组。
+ *
+ * 输入误结构（LLM 最常输出的版本）：
+ *   ```
+ *   compares
+ *     strengths
+ *       - 优势1
+ *       - 优势2
+ *     weaknesses
+ *       - 劣势1
+ *     opportunities
+ *       - 机会1
+ *     threats
+ *       - 威胁1
+ *   ```
+ *
+ * 输出标准 DSL：
+ *   ```
+ *   compares
+ *     - label 优势
+ *       items
+ *         - 优势1
+ *         - 优势2
+ *     - label 劣势
+ *       items
+ *         - 劣势1
+ *     ...
+ *   ```
+ *
+ * 仅在检测到 4 个固定 SWOT 字段名时触发，其它情况不动 body（避免误伤合法 DSL）。
+ */
+function coerceCompareSwotBody(raw: string): string {
+  // 必须是 compare-swot 模板才动 body
+  if (!/^infographic\s+compare-swot\b/im.test(raw)) return raw
+  // 至少要看到一个 SWOT 字段名作为子级
+  const swotFieldRe = /^\s+(strengths|weaknesses|opportunities|threats)\s*$/im
+  if (!swotFieldRe.test(raw)) return raw
+
+  const labelMap: Record<string, string> = {
+    strengths: '优势',
+    weaknesses: '劣势',
+    opportunities: '机会',
+    threats: '威胁',
+  }
+  const lines = raw.split('\n')
+  const out: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    // 锁定 "compares" 段头
+    if (/^\s*compares\s*$/.test(line)) {
+      out.push(line)
+      const compIndent = (line.match(/^(\s*)/)?.[1] ?? '').length
+      i++
+      // 进入 compares 子项：寻找 strengths/weaknesses/opportunities/threats
+      while (i < lines.length) {
+        const sub = lines[i]
+        const subIndent = (sub.match(/^(\s*)/)?.[1] ?? '').length
+        // 退出 compares 段（缩进回到 compIndent 或更外）
+        if (sub.trim() !== '' && subIndent <= compIndent) break
+        const m = sub.match(/^(\s+)(strengths|weaknesses|opportunities|threats)\s*$/i)
+        if (m) {
+          const fieldIndent = m[1]
+          const fieldKey = m[2].toLowerCase()
+          const label = labelMap[fieldKey] || fieldKey
+          out.push(`${fieldIndent}- label ${label}`)
+          out.push(`${fieldIndent}  items`)
+          i++
+          // 收集该字段下的 - 列表项，移到 items 下并加 2 空格缩进
+          while (i < lines.length) {
+            const item = lines[i]
+            const itemIndent = (item.match(/^(\s*)/)?.[1] ?? '').length
+            if (item.trim() === '') { out.push(item); i++; continue }
+            // 退出该字段：缩进回到 fieldIndent 或更外
+            if (itemIndent <= fieldIndent.length) break
+            // - 列表项加额外 2 空格缩进塞进 items 下
+            if (/^\s*-\s/.test(item)) {
+              out.push(`    ${item}`)
+            } else {
+              out.push(item)
+            }
+            i++
+          }
+        } else {
+          out.push(sub)
+          i++
+        }
+      }
+    } else {
+      out.push(line)
+      i++
+    }
+  }
+  return out.join('\n')
 }
 
 /**
@@ -54,6 +780,12 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
     return <code className={className} {...rest}>{children}</code>
   }
 
+  // refuse 分支：知识库无数据·已拒答 结构化卡片（draw-infographic 风格 DSL）
+  // 流式中也直接渲染——RefusalCard 自带 parser 容错，半截内容不会崩
+  if (className.includes('language-refuse')) {
+    return <RefusalCard dsl={raw} />
+  }
+
   // mermaid 分支（甘特/流程/时序/思维导图/看板/饼图/状态机/ER/类/git 等）
   if (className.includes('language-mermaid')) {
     if (!isMermaidComplete(raw)) {
@@ -66,7 +798,7 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
         </pre>
       )
     }
-    return <MermaidRenderer code={raw} />
+    return <ArtifactSlot kind="mermaid" raw={raw}><MermaidRenderer code={raw} /></ArtifactSlot>
   }
 
   // infographic 分支（信息图/列表/对比/序列/SWOT/思维导图等 84+ 模板）
@@ -81,7 +813,28 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
         </pre>
       )
     }
-    return <InfographicRenderer dsl={raw} />
+    const coerced = coerceInfographicDsl(raw)
+    // 详细诊断日志：每次完成检测后打印 raw 和 coerced 全文（便于无 DevTools 时也能 grep 到）
+    // eslint-disable-next-line no-console
+    console.groupCollapsed('[Infographic DSL] 渲染前完整诊断（点击展开）')
+    // eslint-disable-next-line no-console
+    console.log('=== RAW（LLM 原输出）===')
+    // eslint-disable-next-line no-console
+    console.log(raw)
+    // eslint-disable-next-line no-console
+    console.log('=== COERCED（前端 coerce 后实际送 renderer 的内容）===')
+    // eslint-disable-next-line no-console
+    console.log(coerced)
+    // eslint-disable-next-line no-console
+    console.log(`=== raw === ${raw.length} chars / coerced ${coerced.length} chars`)
+    // eslint-disable-next-line no-console
+    console.groupEnd()
+    // 同时写主进程日志（事件 viewer 可查；最多保留 4KB）
+    window.electronAPI.logEvent('info', 'infographic-dsl-raw', raw.slice(0, 4000))
+    if (coerced !== raw) {
+      window.electronAPI.logEvent('info', 'infographic-dsl-coerced', coerced.slice(0, 4000))
+    }
+    return <ArtifactSlot kind="infographic" raw={coerced}><InfographicRenderer dsl={coerced} /></ArtifactSlot>
   }
 
   // 非 chart / 非 mermaid / 非 infographic 代码块走默认渲染
@@ -116,7 +869,7 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
   }
 
   if (parsedOption) {
-    return <ChartRenderer option={parsedOption} rawJson={raw} />
+    return <ArtifactSlot kind="chart" raw={raw}><ChartRenderer option={parsedOption} rawJson={raw} /></ArtifactSlot>
   }
 
   // JSON 解析失败：降级为带红框的原始代码块，提示用户图表数据格式错误
@@ -197,8 +950,21 @@ interface Props {
   avatarImage?: string
   /** 分身名称（用于 AI 消息气泡展示） */
   avatarName?: string
+  /**
+   * 分身角色标签（专家身份描述，如"财务分析专家"/"工商储方案专家"）。
+   * 显示在 avatarName 旁边的小 chip 上，让每条助手消息一眼能看出"这是哪个工种专家的回答"。
+   * 来源：App.tsx 从 avatar.description 截取首句、限定长度后传入。
+   */
+  avatarRole?: string
   /** 当前对话所属分身 ID，用于 [来源:] chip 解析原始 PDF/Excel/PPT 文件 */
   avatarId: string
+  /**
+   * v19：本条消息是否正在"直播"（最后一条 + isLoading）。
+   * true 时在工具调用时间线末尾追加"思考中..."占位行；false 时只渲染已有条目。
+   */
+  isLive?: boolean
+  /** 本轮 sendMessage 累计耗时（秒），仅 isLive=true 时有意义。 */
+  elapsedSec?: number
 }
 
 /**
@@ -257,7 +1023,7 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, avatarId }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLive = false, elapsedSec }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -293,6 +1059,25 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
     savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
   }
 
+  // v19 (2026-05-21)：复制答案到剪贴板，操作 footer 第三个按钮触发。
+  // 失败时静默 console.warn——剪贴板权限失败不阻断主流程。
+  const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const handleCopyAnswer = useCallback(() => {
+    if (copied) return
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(contentForDisplay)
+        setCopied(true)
+        clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = setTimeout(() => setCopied(false), 2000)
+      } catch (err) {
+        console.warn('[MessageBubble] 复制答案失败:', err)
+      }
+    })()
+  }, [contentForDisplay, copied])
+  useEffect(() => () => { clearTimeout(copiedTimerRef.current) }, [])
+
   /**
    * markdown 组件渲染器：闭包注入 avatarId + messageId 以拦截 [来源:] chip。
    * avatarId/messageId 都是稳定值，仅在切换分身/消息时重建。
@@ -312,11 +1097,28 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
       )}
 
       <div className={`max-w-[75%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
-        {/* 角色标签 */}
-        <div className={`font-game text-[12px] tracking-widest mb-1.5
-          ${isUser ? 'text-right text-px-primary' : 'text-left text-px-accent'}`}>
-          {isUser ? '你' : (avatarName ?? '专家')}
-        </div>
+        {/* 角色标签：助手消息加 role chip，让"和不同工种专家说话"在视觉上立得住 */}
+        {isUser ? (
+          <div className="font-game text-[12px] tracking-widest mb-1.5 text-right text-px-primary">
+            你
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="font-game text-[12px] tracking-widest text-px-accent">
+              {avatarName ?? '专家'}
+            </span>
+            {avatarRole && avatarRole !== avatarName && (
+              <span
+                className="font-game text-[10px] tracking-wider px-1.5 py-0.5
+                  border border-px-border bg-px-elevated text-px-text-dim
+                  whitespace-nowrap"
+                title={avatarRole}
+              >
+                {avatarRole}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* 消息体 */}
         <div
@@ -326,46 +1128,12 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               : 'bg-px-surface text-px-text border-px-border shadow-pixel-white'
             }`}
         >
-          {/* 助手消息的 SAVE 按钮（hover 时显示） */}
-          {!isUser && onSaveAnswer && previousUserMessage && (
-            <button
-              onClick={handleSave}
-              disabled={saved}
-              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100
-                font-game text-[10px] tracking-wider px-2 py-0.5
-                border border-px-border bg-px-elevated text-px-text-dim
-                hover:text-px-primary hover:border-px-primary
-                focus:opacity-100
-                disabled:text-px-success disabled:border-px-success
-                transition-opacity"
-              aria-label={saved ? '已沉淀' : '沉淀到知识百科'}
-              title="沉淀到知识百科"
-            >
-              {saved ? 'SAVED' : 'SAVE'}
-            </button>
-          )}
-          {/* 助手消息的「重新生成」按钮（v14，bypass answer cache）。
-              仅 assistant 消息可点；isLoading 或缺 avatarId/conversationId 时禁用。 */}
-          {!isUser && previousUserMessage && currentConversationId && avatarId && (
-            <button
-              onClick={() => {
-                void regenerateAssistantMessage(message.id, currentConversationId, avatarId)
-              }}
-              disabled={isLoadingChat}
-              className="absolute top-2 right-[3.25rem] opacity-0 group-hover:opacity-100
-                font-game text-[10px] tracking-wider px-2 py-0.5
-                border border-px-border bg-px-elevated text-px-text-dim
-                hover:text-px-primary hover:border-px-primary
-                focus:opacity-100
-                disabled:opacity-40 disabled:cursor-not-allowed
-                transition-opacity"
-              aria-label="重新生成"
-              title="重新生成（跳过答案缓存，重新调用 LLM）"
-            >
-              ↻ AGAIN
-            </button>
-          )}
-
+          {/*
+            v19（2026-05-21）：原来「重新生成 / SAVE」两个按钮 absolute 在右上角，
+            遮挡内容、显得乱，且 SAVE 成功后只闪 3s 没明确反馈，用户反馈"功能失效"。
+            现挪到气泡底部的 action footer：常驻可见但视觉克制；SAVE 触发后用全局 toast 反馈。
+            两个按钮在 JSX 末尾的 footer 块统一渲染，这里只保留消息内容的渲染逻辑。
+          */}
           {isUser ? (
             <div className="flex flex-col gap-2">
               {/* 用户上传的图片缩略图（点击在应用内 Lightbox 查看大图） */}
@@ -434,13 +1202,22 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   </pre>
                 </details>
               )}
-              <ReactMarkdown
-                remarkPlugins={REMARK_PLUGINS}
-                urlTransform={safeUrlTransform}
-                components={markdownComponents}
-              >
-                {displayContent}
-              </ReactMarkdown>
+              {/*
+                isLive 占位期（user 提问后到首个 chunk 到达之前）content 为空，
+                跳过 ReactMarkdown 渲染。否则 prose 容器会留出 leading-[1.75]
+                高度的空行，让"思考中..."占位行被推到一个孤立的空白下方，
+                视觉上像空气泡。chart/mermaid/infographic 的"生成中"占位由
+                ChartCodeBlock 内部判定，不受此分支影响。
+              */}
+              {!(isLive && displayContent.length === 0) && (
+                <ReactMarkdown
+                  remarkPlugins={REMARK_PLUGINS}
+                  urlTransform={safeUrlTransform}
+                  components={markdownComponents}
+                >
+                  {displayContent}
+                </ReactMarkdown>
+              )}
               {canCollapse && (
                 <div className="mt-3 -mb-1 pt-2 border-t border-px-border/40 flex items-center justify-between">
                   <span className="font-game text-[10px] text-px-text-dim tracking-wider">
@@ -501,6 +1278,78 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                   ))}
                 </div>
               ) : null}
+              {/*
+                v19：工具调用时间线挂到 assistant 消息底下（之前是 ChatWindow 全局唯一一份，
+                切对话或重启就丢）。 timeline 持久化在 messages.tool_call_timeline_json 里，
+                所以历史会话切回来也能看见当时的工具调用步骤。
+                显示条件：有保存的 timeline，或当前消息还在直播（直播期间 entries 会动态追加）。
+              */}
+              {((message.toolCallTimeline && message.toolCallTimeline.length > 0) || isLive) && (
+                <div className="not-prose mt-3 pt-3 border-t border-px-border/40">
+                  <ToolCallTimeline
+                    entries={message.toolCallTimeline ?? []}
+                    isLoading={isLive}
+                    elapsedSec={elapsedSec}
+                  />
+                </div>
+              )}
+              {/*
+                v19：操作 footer —— 把「重新生成」「沉淀知识」两个按钮放到气泡底部。
+                设计：
+                  - 常驻可见（默认 dim 半透明），hover 时变亮，避免之前 absolute 在右上角
+                    且 group-hover 才显示的"功能藏起来 + 遮挡内容"双重问题
+                  - 不带边框、文字风格，视觉上不与正文冲突
+                  - 仅 assistant 消息显示，且需要至少 previousUserMessage 才能重生成/沉淀
+              */}
+              {!isUser && previousUserMessage && (
+                <div className="not-prose mt-3 pt-2 border-t border-px-border/40 flex items-center gap-3 text-px-text-dim/70">
+                  {currentConversationId && avatarId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void regenerateAssistantMessage(message.id, currentConversationId, avatarId)
+                      }}
+                      disabled={isLoadingChat}
+                      className="font-game text-[11px] tracking-wider
+                        hover:text-px-primary
+                        disabled:opacity-40 disabled:cursor-not-allowed
+                        transition-colors"
+                      aria-label="重新生成"
+                      title="重新生成（跳过答案缓存，重新调用 LLM）"
+                    >
+                      ↻ 重新生成
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCopyAnswer}
+                    disabled={copied}
+                    className="font-game text-[11px] tracking-wider
+                      hover:text-px-primary
+                      disabled:text-px-success disabled:cursor-default
+                      transition-colors"
+                    aria-label={copied ? '已复制' : '复制答案'}
+                    title={copied ? '已复制到剪贴板' : '复制答案到剪贴板（含 markdown）'}
+                  >
+                    {copied ? '✓ 已复制' : '⎘ 复制答案'}
+                  </button>
+                  {onSaveAnswer && (
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saved}
+                      className="font-game text-[11px] tracking-wider
+                        hover:text-px-primary
+                        disabled:text-px-success disabled:cursor-default
+                        transition-colors"
+                      aria-label={saved ? '已沉淀' : '沉淀到知识百科'}
+                      title={saved ? '已沉淀（3 秒后可再次沉淀）' : '沉淀到知识百科'}
+                    >
+                      {saved ? '✓ 已沉淀' : '⤓ 沉淀知识'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

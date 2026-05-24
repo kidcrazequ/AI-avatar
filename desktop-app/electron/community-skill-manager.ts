@@ -18,6 +18,7 @@ import fs from 'fs'
 import { spawn } from 'child_process'
 import {
   assertSafeSegment,
+  extractFrontmatter,
   localDateString,
   type CommunitySkillSource,
   type InstalledCommunityPack,
@@ -345,17 +346,9 @@ export class CommunitySkillManager {
   private extractSkillInfo(filePath: string): CommunitySkillInfo {
     const content = fs.readFileSync(filePath, 'utf-8')
     const name = path.basename(filePath, '.md')
-    let description = ''
-    let domain = ''
-
-    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/)
-    if (frontmatterMatch) {
-      const fm = frontmatterMatch[1]
-      const descMatch = fm.match(/description:\s*(.+)/)
-      if (descMatch) description = descMatch[1].trim()
-      const domainMatch = fm.match(/domain:\s*(.+)/)
-      if (domainMatch) domain = domainMatch[1].trim()
-    }
+    const fm = extractFrontmatter(content)
+    let description = fm.description || ''
+    const domain = fm.domain || ''
 
     if (!description) {
       const firstLine = content.split('\n').find(l => l.trim() && !l.startsWith('#') && !l.startsWith('---'))

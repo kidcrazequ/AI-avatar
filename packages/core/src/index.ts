@@ -199,8 +199,8 @@ export { DYNAMIC_SYSTEM_PROMPT_MARKER, combineSystemPromptSections, splitSystemP
 export type { SystemPromptSections } from './prompt-sections'
 export { buildKnowledgeLinkGraph, extractExplicitLinks, expandLinkedFiles, selectRelevantSnippet } from './link-graph'
 export type { LinkGraph, KnowledgeLinkEntry, LinkedFileCandidate, ExpandLinkedFilesOptions, SelectRelevantSnippetOptions } from './link-graph'
-export { routeConversation } from './conversation-router'
-export type { RouteConversationOptions, RoutingDecision, ContextStrategy } from './conversation-router'
+export { routeConversation, detectFanOutSignal } from './conversation-router'
+export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'
 export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from './provider-capabilities'

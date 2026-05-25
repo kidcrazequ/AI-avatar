@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceLifeResult, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -3189,9 +3189,9 @@ wrapHandler('run-tests', async (_, avatarId: string, caseIds: string[]) => {
 wrapHandler('get-skills', (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
   const skills = skillManager.getSkills(avatarId)
-  return skills.map((s: any) => ({
+  return skills.map((s) => ({
     ...s,
-    source: s.source || 'local',
+    source: (s as unknown as { source?: string }).source || 'local',
   }))
 })
 
@@ -4114,9 +4114,7 @@ wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string,
  */
 wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey: string, baseUrl: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  const _ragT0 = Date.now()
   const retriever = toolRouter.getRetriever(avatarId)
-  console.log(`[rag-retrieve] getRetriever: ${Date.now() - _ragT0}ms`)
 
   const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')  // 实体提取用 turbo 即可，plus 单次 ~177s 太慢
   const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
@@ -4143,9 +4141,7 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
   // 额外一轮 load_skill 工具调用，省一次 LLM 往返。
   skillRouter.loadIndex(avatarId)
   const routeResult = skillRouter.route(avatarId, question)
-  console.log(`[rag-retrieve] skillRouter: ${routeResult.log.durationMs}ms → ${routeResult.selectedSkill ?? 'none'}`)
 
-  console.log(`[rag-retrieve] before retrieveAndBuildPrompt: ${Date.now() - _ragT0}ms`)
   const onProgress = (phase: string, detail?: string): void => {
     try {
       mainWindow?.webContents.send('rag-progress', { avatarId, phase, detail })
@@ -4177,7 +4173,6 @@ wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey
     result = `[系统提示] 根据你的问题，自动加载了技能「${routeResult.selectedSkill}」的完整定义。\n请严格按照以下技能指令执行。\n\n---\n\n${routeResult.skillContent}\n\n---\n\n${result}`
   }
 
-  console.log(`[rag-retrieve] total: ${Date.now() - _ragT0}ms`)
   toolRouter.saveRetrieverTokens(avatarId)
   return result
 })
@@ -4589,8 +4584,7 @@ async function batchImportFiles(
       }
 
       const totalMs = Date.now() - fileStartTime
-      const textLen = Math.round(cleanedText.length / 1024)
-      console.log(`[batch-import] ✓ ${i + 1}/${total} ${fileName} — ${totalMs}ms (解析 ${parseMs}ms, OCR ${ocrMs}ms, 格式化 ${fmtMs}ms) ${textLen}KB`)
+      if (logger) logger.activity('batch-import', `✓ ${i + 1}/${total} ${fileName} — ${totalMs}ms (解析 ${parseMs}ms, OCR ${ocrMs}ms, 格式化 ${fmtMs}ms) ${Math.round(cleanedText.length / 1024)}KB`)
 
       imported.push({ fileName, targetPath: relativePath })
       mainWindow?.webContents.send('knowledge-import-progress', {
@@ -4607,7 +4601,7 @@ async function batchImportFiles(
   }
 
   const batchTotalSec = Math.round((Date.now() - batchStartTime) / 1000)
-  console.log(`[batch-import] 完成: ${imported.length} 成功 / ${failed.length} 失败 / 共 ${total} 文件 — 总耗时 ${batchTotalSec}s (${Math.round(batchTotalSec / 60)}分${batchTotalSec % 60}秒)`)
+  if (logger) logger.activity('batch-import', `完成: ${imported.length} 成功 / ${failed.length} 失败 / 共 ${total} 文件 — 总耗时 ${batchTotalSec}s (${Math.round(batchTotalSec / 60)}分${batchTotalSec % 60}秒)`)
 
   // 更新 README.md 索引（与单文件导入一致）
   if (imported.length > 0) {
@@ -4816,7 +4810,6 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
   const callLLM: LLMCallFn = createLLMFn(fmtApiKey, fmtBaseUrl, fmtModel)
 
   // 从 _raw/ 重新解析原始文件（如果有）或用当前 .md 的纯文本
-  const rawDir = path.join(knowledgePath, '_raw')
   let rawText = ''
   let parsedFileType = 'text'
 

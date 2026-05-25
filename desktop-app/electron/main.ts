@@ -6017,12 +6017,33 @@ wrapHandler('open-avatar-workspaces-folder', async (_, avatarId: string) => {
  * @author zhi.qu
  * @date 2026-05-08
  */
+/**
+ * 二次校验：文档相关 IPC 的 absolutePath 必须在 userData 根下。Soul 所有合法
+ * 文档（attachments、generate_document 输出 exports、conversation jsonl 等）
+ * 都落在 userData 内；任何超出 userData 的绝对路径都不应该被渲染层"借这条
+ * IPC 通道写入或访问"。注释里把信任托付给 ToolRouter 是不够的—— IPC 边界
+ * 上的渲染进程是 BrowserWindow，可以构造任意 path 进来。
+ *
+ * 注：showItemInFolder/openPath 对系统路径（/etc, ~/Desktop）做 reveal 在
+ * 攻击面上看是"读"+OS 软件执行；阻断这条通道防 prompt-injection 让 LLM
+ * 拼出 outputPath 写到 ~/Library 等敏感位置的场景。
+ */
+function isUnderUserData(absolutePath: string): boolean {
+  const userData = path.resolve(app.getPath('userData'))
+  const normalized = path.resolve(absolutePath)
+  // 末尾加 sep 防 prefix 匹配漏（`<userData>2` 不该被认为属于 `<userData>`）
+  return normalized === userData || normalized.startsWith(userData + path.sep)
+}
+
 wrapHandler('document:render-pdf', async (_, html: string, outputPath: string) => {
   if (typeof html !== 'string' || html.length === 0) {
     throw new Error('document:render-pdf 缺少 html')
   }
   if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
     throw new Error('document:render-pdf 缺少绝对 outputPath')
+  }
+  if (!isUnderUserData(outputPath)) {
+    throw new Error(`document:render-pdf outputPath 必须在 userData 根下: ${outputPath}`)
   }
   return renderDocumentPdf(html, outputPath, { logger: logger ?? undefined })
 })
@@ -6034,6 +6055,9 @@ wrapHandler('document:render-docx', async (_, ir: DocumentIR, outputPath: string
   if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
     throw new Error('document:render-docx 缺少绝对 outputPath')
   }
+  if (!isUnderUserData(outputPath)) {
+    throw new Error(`document:render-docx outputPath 必须在 userData 根下: ${outputPath}`)
+  }
   return renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined })
 })
 
@@ -6044,6 +6068,9 @@ wrapHandler('document:render-docx', async (_, ir: DocumentIR, outputPath: string
 wrapHandler('document:open', async (_, absolutePath: string) => {
   if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
     return '缺少绝对路径'
+  }
+  if (!isUnderUserData(absolutePath)) {
+    return `路径必须在 userData 根下: ${absolutePath}`
   }
   if (!fs.existsSync(absolutePath)) {
     return `文件不存在: ${absolutePath}`
@@ -6058,6 +6085,9 @@ wrapHandler('document:open', async (_, absolutePath: string) => {
 wrapHandler('document:show-in-folder', async (_, absolutePath: string) => {
   if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
     return { ok: false, error: '缺少绝对路径' }
+  }
+  if (!isUnderUserData(absolutePath)) {
+    return { ok: false, error: `路径必须在 userData 根下: ${absolutePath}` }
   }
   if (!fs.existsSync(absolutePath)) {
     return { ok: false, error: `文件不存在: ${absolutePath}` }

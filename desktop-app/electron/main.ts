@@ -1253,7 +1253,9 @@ wrapHandler('list-project-ids', (_, avatarId: string) => {
   // 用户没法新建对话到空 project 里。改为合并后，新建空 project 立刻可见；
   // 老数据反推路径仍保留，保证向后兼容。
   const db = getDb()
-  const fromTable = db.listProjects(avatarId).map((p) => p.name)
+  // 只取 active project：listProjects() 返回全部（含 archived=1，因为
+  // ProjectManagerPanel 需要显示归档项让用户解档），但侧边栏不该列归档。
+  const fromTable = db.listProjects(avatarId).filter((p) => !p.archived).map((p) => p.name)
   const fromConvs = db.listProjectIdsForAvatar(avatarId)
   return [...new Set([...fromTable, ...fromConvs])].sort()
 })

@@ -118,7 +118,7 @@ export function isGarbledText(text: string): boolean {
   const stripped = text.replace(/\s+/g, '')
   if (stripped.length < 20) return false
   // 常见字符：CJK 基本区 + ASCII 字母数字 + 中英文标点
-  const commonChars = stripped.replace(/[A-Za-z0-9\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF.,;:!?'"()\[\]{}<>@#$%^&*+=\-_/\\|~`，。；：！？、""''（）【】《》—…·\u00A0\u2000-\u206F]/g, '')
+  const commonChars = stripped.replace(/[A-Za-z0-9\u4E00-\u9FFF\u3000-\u303F\uFF00-\uFFEF.,;:!?'"()[\]{}<>@#$%^&*+=\-_/\\|~`，。；：！？、""''（）【】《》—…·\u00A0\u2000-\u206F]/g, '')
   const ratio = 1 - commonChars.length / stripped.length
   return ratio < 0.4
 }

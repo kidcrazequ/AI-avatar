@@ -1,4 +1,4 @@
-import { createElement, useState, useRef, useEffect, useMemo, useCallback, memo, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
+import { createContext, createElement, useState, useRef, useEffect, useMemo, useCallback, useContext, memo, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
 import ToolCallTimeline from './ToolCallTimeline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -14,35 +14,37 @@ import FileCard from './FileCard'
 import { useArtifactStore, hashRaw, type ArtifactKind } from '../stores/artifactStore'
 
 /**
+ * Context：告诉子组件当前 message 是否还在流式（isLive）。
+ * ArtifactSlot 用它决定 auto-open 时机——流式期间不打开任何中间状态版本，
+ * 等 message 完成（isLive=false）才打开。MessageBubble 在 render 时 Provider 注入。
+ */
+const MessageStreamingContext = createContext<boolean>(false)
+
+/**
  * 把任意 artifact 渲染包一层 wrapper：
  *   - hover 时显示"⤢ 副面板"按钮
- *   - 当 raw 大小超过 autoOpenThreshold 且未自动打开过时，挂载后自动 openArtifact 一次
+ *   - 当 raw 大小超过 autoOpenThreshold 且 message 已完成时，自动 openArtifact 一次
  */
 function ArtifactSlot({ kind, raw, children }: { kind: ArtifactKind; raw: string; children: ReactNode }): ReactElement {
   const openArtifact = useArtifactStore(s => s.openArtifact)
   const autoOpenThreshold = useArtifactStore(s => s.autoOpenThreshold)
-  // 防抖：raw 稳定 600ms 后才真正 open，避免拿到流式半成品
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLive = useContext(MessageStreamingContext)
 
   useEffect(() => {
+    // 流式中不 auto-open：ArtifactSlot 实例化时虽然单个 fence 已闭合（外层
+    // isMermaidComplete / isInfographicComplete / chart isIncomplete 已守过），
+    // 但 LLM 可能在同一 message 内 emit 多个 fence（"我再改一版"），各自 raw
+    // 不同 → 各自 key 不同 → 都被 push 出 tab。等 message 完成（isLive=false）
+    // 后 effect 重跑，那时 raw 已经稳定为 message 内最后一个值。
+    if (isLive) return
     if (autoOpenThreshold <= 0) return
     if (raw.length < autoOpenThreshold) return
-    // 用 store 的全局 autoOpenedKeys 去重：组件 remount / 流式 raw 多次变化时，
-    // 同一 (kind, hash(raw)) 不会再被 push 出新的中间状态 tab。
-    // 之前用本地 openedRef → 实例销毁就丢，重挂载会再 push。
+    // 用 store 的全局 autoOpenedKeys 去重：组件 remount 时同一 key 不重复打开
     const key = hashRaw(kind, raw)
     if (useArtifactStore.getState().autoOpenedKeys.has(key)) return
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      // 二次检查：debounce 期间另一处可能已经 markAutoOpened 同 key
-      if (useArtifactStore.getState().autoOpenedKeys.has(key)) return
-      useArtifactStore.getState().markAutoOpened(key)
-      openArtifact({ kind, raw })
-    }, 600)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [autoOpenThreshold, raw, kind, openArtifact])
+    useArtifactStore.getState().markAutoOpened(key)
+    openArtifact({ kind, raw })
+  }, [autoOpenThreshold, raw, kind, openArtifact, isLive])
 
   return (
     <div className="relative group">
@@ -1091,6 +1093,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   )
 
   return (
+    <MessageStreamingContext.Provider value={isLive}>
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start gap-3'} animate-fade-in`}>
       {/* AI 消息左侧小头像 */}
       {!isUser && (
@@ -1358,6 +1361,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
         </div>
       </div>
     </div>
+    </MessageStreamingContext.Provider>
   )
 })
 

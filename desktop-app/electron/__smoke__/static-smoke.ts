@@ -13,6 +13,8 @@
  * @date 2026-04-28
  */
 
+/* eslint-disable no-console -- smoke 脚本的输出全靠 console，CI 直接看 stdout */
+
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -206,26 +208,21 @@ async function run(): Promise<void> {
   // ---------- 汇总 ----------
   const passed = steps.filter((s) => s.ok).length
   const failed = steps.length - passed
-  // eslint-disable-next-line no-console
   console.log('\n========== SOUL STATIC SMOKE REPORT ==========')
-  // eslint-disable-next-line no-console
   console.log('Output dir:', SMOKE_DIR)
   for (const s of steps) {
     const tag = s.ok ? 'PASS' : 'FAIL'
-    // eslint-disable-next-line no-console
     console.log(`\n[${tag}] ${s.name}`)
     if (s.outputPath) console.log('  → output:', s.outputPath, `(${s.bytes ?? 0} bytes)`)
     console.log('  → elapsed:', s.elapsedMs + 'ms')
     if (s.detail) console.log('  → detail :', JSON.stringify(s.detail))
     if (s.error) console.log('  → error  :', s.error)
   }
-  // eslint-disable-next-line no-console
   console.log(`\nTotal: ${steps.length}   Passed: ${passed}   Failed: ${failed}`)
   if (failed > 0) process.exit(1)
 }
 
 run().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('static-smoke fatal:', err)
   process.exit(2)
 })

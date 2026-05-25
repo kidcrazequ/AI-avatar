@@ -132,7 +132,6 @@ async function run(): Promise<void> {
 }
 
 run().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('verifier-smoke fatal:', err)
   app.quit()
   setTimeout(() => process.exit(2), 200)

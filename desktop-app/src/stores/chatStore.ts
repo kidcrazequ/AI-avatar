@@ -5059,6 +5059,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   m.id === assistantMsgId ? { ...m, content: newDisplayText } : m,
                 ),
               }))
+              // 同步覆盖答案缓存：line ~4978 saveCachedAnswer 用的是修正前的 displayText，
+              // 之后同问命中 cache 直接早退（line ~3304），不会再跑 validator → 永远吐
+              // 坏 infographic。这里用 newDisplayText 覆盖（saveCachedAnswer 是 INSERT OR
+              // REPLACE），下一次同问就能拿到修正版。cacheBypassed 时本来就没写过 cache，
+              // 跳过避免创建一条不该存在的 cache 项。
+              if (!cacheBypassed) {
+                try {
+                  const cacheKey = deriveAnswerCacheKey(avatarId, conversationId, content, messages)
+                  await window.electronAPI.saveCachedAnswer({
+                    cacheKey,
+                    avatarId,
+                    conversationId,
+                    userContent: content,
+                    assistantContent: newDisplayText,
+                    reasoningContent: reasoningText || null,
+                    model: activeModel.model,
+                  })
+                } catch (cacheUpdateErr) {
+                  const m = cacheUpdateErr instanceof Error ? cacheUpdateErr.message : String(cacheUpdateErr)
+                  window.electronAPI.logEvent('warn', 'infographic-repair-cache-update-failed', m)
+                }
+              }
               window.electronAPI.logEvent('info', 'infographic-repair-applied',
                 `assistantMsgId=${assistantMsgId} oldLen=${firstBad.raw.length} newLen=${firstGood.raw.length}`)
             } catch (writeErr) {

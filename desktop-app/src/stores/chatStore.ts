@@ -3032,12 +3032,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       void window.electronAPI.soulProxyApiSseWrite(proxyOpts.proxyJobId, line)
     }
 
-    if (get().isLoading) {
+    // hiddenRepair（infographic 修正轮）必须对用户完全不可见：
+    //   - 不受 outer call 的 isLoading 锁阻断（outer 还在跑时 repair 也能起）
+    //   - 不 set isLoading=true（避免 UI 转圈 / 输入禁用）
+    //   - 不清 toolCallTimeline（outer 的工具时间线对用户仍可见）
+    // 配合 line ~3076 的 isHiddenRepair 后续守卫，整轮对 isLoading / 视图 transient 状态零影响。
+    const _hiddenRepairEarly = options?.hiddenRepair === true
+    if (get().isLoading && !_hiddenRepairEarly) {
       await invokeProxyComplete({ ok: false, error: 'Soul 正有一条对话进行中（isLoading）' })
       return
     }
-    // 每次新提问都清空上一轮的工具调用时间线，保证 UI 顶部只展示本轮
-    set({ isLoading: true, toolCallTimeline: [] })
+    // 每次新提问都清空上一轮的工具调用时间线，保证 UI 顶部只展示本轮（hiddenRepair 跳过）
+    if (!_hiddenRepairEarly) {
+      set({ isLoading: true, toolCallTimeline: [] })
+    }
     const requestId = ++chatRequestSeq
     const requestStartedAt = Date.now()
     // 提前生成 assistantMsgId：在 user 消息插入时同步塞入空 assistant 占位气泡，

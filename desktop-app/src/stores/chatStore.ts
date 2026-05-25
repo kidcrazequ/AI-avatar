@@ -2888,7 +2888,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setTasks: (tasks) => {
-    console.log(`[chatStore] setTasks: 整体覆盖任务列表，count=${tasks.length}`)
     set({ tasks })
     persistTasks(get().currentConversationId, tasks)
   },
@@ -2898,25 +2897,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const state = get()
     const indexById = new Map(state.tasks.map((t, idx) => [t.id, idx]))
     const next = state.tasks.slice()
-    let updated = 0
-    let added = 0
     for (const p of patch) {
       const existingIdx = indexById.get(p.id)
       if (existingIdx !== undefined) {
         next[existingIdx] = { ...next[existingIdx], ...p }
-        updated++
       } else {
         next.push(p)
-        added++
       }
     }
-    console.log(`[chatStore] mergeTasks: updated=${updated} added=${added} total=${next.length}`)
     set({ tasks: next })
     persistTasks(state.currentConversationId, next)
   },
 
   clearTasks: () => {
-    console.log('[chatStore] clearTasks: 清空任务列表')
     set({ tasks: [] })
     persistTasks(get().currentConversationId, [])
   },
@@ -4628,6 +4621,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (pendingAfterRetry && pendingAfterRetry.length > 0) continue
       }
       break
+      // eslint-disable-next-line no-constant-condition -- do-while-true 是 tool-loop 的 idiomatic 控制流，break 由 round 上限/收敛条件触发；改 for(;;) 会丢失 do 块语义
       } while (true)
 
       if (toolLoopStartedAt !== null) {

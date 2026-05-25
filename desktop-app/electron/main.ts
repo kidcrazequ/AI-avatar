@@ -2087,6 +2087,7 @@ wrapHandler('knowledge:open-md-file', async (_, avatarId: string, mdRelPath: str
 wrapHandler('write-knowledge-file', (_, avatarId: string, relativePath: string, content: string) => {
   const km = getKnowledgeManager(avatarId)
   km.writeFile(relativePath, content)
+  toolRouter.invalidateRetriever(avatarId)
   if (!relativePath.toLowerCase().includes('readme')) {
     const fullPath = path.join(avatarsPath, avatarId, 'knowledge', relativePath)
     if (logger) logger.recordGenerated('knowledge', avatarId, fullPath, { relativePath })
@@ -2180,12 +2181,14 @@ wrapHandler('lorebook:match-and-build', (_, avatarId: string, userMessage: strin
 
 wrapHandler('create-knowledge-file', (_, avatarId: string, relativePath: string, content?: string) => {
   getKnowledgeManager(avatarId).createFile(relativePath, content ?? '')
+  toolRouter.invalidateRetriever(avatarId)
   const fullPath = path.join(avatarsPath, avatarId, 'knowledge', relativePath)
   if (logger) logger.recordGenerated('knowledge', avatarId, fullPath, { relativePath, action: 'create' })
 })
 
 wrapHandler('delete-knowledge-file', (_, avatarId: string, relativePath: string) => {
   getKnowledgeManager(avatarId).deleteFile(relativePath)
+  toolRouter.invalidateRetriever(avatarId)
 })
 
 // ─── 记忆管理（GAP2）────────────────────────────────────────────────────────
@@ -4897,6 +4900,7 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
   const mergedMeta = mergeFrontmatter(oldMeta, mergeFrontmatter(newSystemMeta, enhanced))
   const fmBlock = buildFrontmatterBlock(mergedMeta)
   fs.writeFileSync(filePath, fmBlock + '\n\n' + formatted, 'utf-8')
+  toolRouter.invalidateRetriever(avatarId)
 
   return { success: true }
 })

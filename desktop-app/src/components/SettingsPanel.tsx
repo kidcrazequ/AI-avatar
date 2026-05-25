@@ -489,6 +489,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const loadSeqRef = useRef(0)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- loadSettings 在文件下方 const-定义；effect 跑在 commit 后此时已 init，TDZ 仅为 lint 静态分析的误判
     loadSettings()
   }, [])
 

@@ -36,6 +36,7 @@ export default function TestPanel({ avatarId, chatModel, systemPrompt, onClose, 
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability -- loadTestCases 在文件下方 const-定义；effect 跑在 commit 后此时已 init，TDZ 仅为 lint 静态分析的误判
     loadTestCases()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTestCases 只依赖 avatarId，avatarId 变化时才需要重载
   }, [avatarId])

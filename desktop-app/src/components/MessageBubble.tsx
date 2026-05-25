@@ -574,7 +574,7 @@ function coerceCompareSwotToChildren(raw: string): string {
       // 不能是单词内部的字母——`Strengths` 中的 `S` 后面跟着 `t` 不算 letter-prefix。
       labelText = labelText
         .replace(/^[SWOT](?:\s*[.\-:：]|\s+)\s*/i, '')
-        .replace(/(?:^|\s|[\-:：(（])\s*[SWOT]\s*[)）]?\s*$/i, '')
+        .replace(/(?:^|\s|[-:：(（])\s*[SWOT]\s*[)）]?\s*$/i, '')
         .trim()
       out.push(`${labelIndent}- label ${labelText}`)
       i++

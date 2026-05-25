@@ -281,6 +281,7 @@ function questionTypeForCategory(category: QuestionCategory): RegressionQuestion
       return 'redline'
     case 'L10_personality':
       return 'personality_clarification'
+    default: { const _: never = category; throw new Error(`Unknown category: ${_ as string}`) }
   }
 }
 
@@ -302,6 +303,7 @@ function defaultUserRoleForCategory(category: QuestionCategory): RegressionUserR
       return 'solution_engineer'
     case 'L8_traceability':
       return 'delivery'
+    default: { const _: never = category; throw new Error(`Unknown category: ${_ as string}`) }
   }
 }
 
@@ -322,6 +324,7 @@ function defaultKnowledgeTypeForCategory(category: QuestionCategory): Regression
     case 'L9_redline':
     case 'L10_personality':
       return ['persona_rule']
+    default: { const _: never = category; throw new Error(`Unknown category: ${_ as string}`) }
   }
 }
 
@@ -347,6 +350,7 @@ function defaultExpectedProcessForCategory(category: QuestionCategory): string[]
       return ['识别知识库外或越权请求', '拒绝编造无来源结论', '给出可替代的合规问法']
     case 'L10_personality':
       return ['识别用户真实目标', '坚持知识库优先和第一性原理', '必要时先澄清再回答']
+    default: { const _: never = category; throw new Error(`Unknown category: ${_ as string}`) }
   }
 }
 
@@ -372,6 +376,7 @@ function defaultScoringPointsForCategory(category: QuestionCategory): string[] {
       return ['明确知识库没有覆盖', '不输出具体无来源数字', '不复述不相关相似数据']
     case 'L10_personality':
       return ['结论先行且不夸大', '知识库不足时先澄清', '拒绝无依据包装']
+    default: { const _: never = category; throw new Error(`Unknown category: ${_ as string}`) }
   }
 }
 

@@ -233,6 +233,7 @@ function renderBlockToDocx(
           bottom: { style: BorderStyle.SINGLE, size: 6, color: 'D0D7DE' },
         },
       })]
+    default: { const _: never = block; throw new Error(`Unknown block type: ${JSON.stringify(_)}`) }
   }
 }
 
@@ -397,6 +398,7 @@ function mapHeadingLevel(level: DocumentHeadingLevel): (typeof HeadingLevel)[key
     case 4: return HeadingLevel.HEADING_4
     case 5: return HeadingLevel.HEADING_5
     case 6: return HeadingLevel.HEADING_6
+    default: { const _: never = level; throw new Error(`Unknown heading level: ${_ as number}`) }
   }
 }
 
@@ -468,6 +470,7 @@ function calloutBorder(level: CalloutLevel): string {
     case 'warning': return 'BF8700'
     case 'success': return '1A7F37'
     case 'danger': return 'D1242F'
+    default: { const _: never = level; throw new Error(`Unknown callout level: ${_ as string}`) }
   }
 }
 

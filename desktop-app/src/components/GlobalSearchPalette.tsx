@@ -108,8 +108,13 @@ export default function GlobalSearchPalette({
   useEffect(() => {
     if (!isOpen) return
     const trimmed = query.trim()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- query 为空时同步清空结果，是合法的 UI 联动
-    if (!trimmed) { setMessages([]); setKnowledge([]); setMemory([]); setLoading(false); return }
+    if (!trimmed) {
+      // 也要 bump seq：用户输入关键词触发 IPC 后立刻清空时，旧 IPC 的 fresh()
+      // 检查仍会通过（searchSeqRef 没变），结果会被刷回空搜索面板。
+      ++searchSeqRef.current
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- query 为空时同步清空结果，是合法的 UI 联动
+      setMessages([]); setKnowledge([]); setMemory([]); setLoading(false); return
+    }
     setLoading(true)
     const seq = ++searchSeqRef.current  // capture：本次搜索的 sequence
     const timer = setTimeout(async () => {

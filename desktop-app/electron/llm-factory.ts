@@ -34,6 +34,7 @@ async function fetchJsonWithTimeout<T>(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(new Error('timeout')), timeoutMs)
   try {
+    // eslint-disable-next-line no-restricted-globals -- 本文件就是 fetchWithTimeout 的本地实现（与 @soul/core 的 fetchWithTimeout 平行存在，因 RequestInit JSON 解析签名不同）
     const response = await fetch(url, { ...init, signal: controller.signal })
     if (!response.ok) {
       const body = await response.text().catch(() => '')

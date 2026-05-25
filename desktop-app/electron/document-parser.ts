@@ -285,9 +285,9 @@ export class DocumentParser {
     // 预加载 CJS 版本的 worker 并挂到 globalThis，pdfjs-dist 检测到后直接使用。
     if (!(globalThis as Record<string, unknown>).pdfjsWorker) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- pdf-worker.cjs 是运行时动态产物路径，ESM import 不支持
         ;(globalThis as Record<string, unknown>).pdfjsWorker = require(
-          require('path').join(__dirname, 'pdf-worker.cjs')
+          path.join(__dirname, 'pdf-worker.cjs')
         )
       } catch (e) {
         console.warn('[DocumentParser] 预加载 pdf worker 失败（将回退到动态 import）:', e)

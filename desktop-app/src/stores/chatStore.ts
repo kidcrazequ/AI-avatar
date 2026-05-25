@@ -2953,20 +2953,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           toolCallTimeline: [...s.toolCallTimeline, entry],
         }
       }
-      // 旧路径：未传 target 时回退到"最后一条 assistant"启发式（向后兼容）
-      const lastIdx = s.messages.length - 1
-      const last = lastIdx >= 0 ? s.messages[lastIdx] : undefined
-      if (last && last.role === 'assistant') {
-        const updatedMessages = [...s.messages]
-        updatedMessages[lastIdx] = {
-          ...last,
-          toolCallTimeline: [...(last.toolCallTimeline ?? []), entry],
-        }
-        return {
-          messages: updatedMessages,
-          toolCallTimeline: [...s.toolCallTimeline, entry],
-        }
-      }
+      // 未传 target：旧版本会回退到"最后一条 assistant"启发式，但这会让同一分身
+      // 下的 late RAG/skill progress 污染当前会话的最后一条 assistant（rag-progress
+      // 事件目前不带 conversationId，ChatWindow 只按 avatarId 过滤，跨会话窜入）。
+      // 修复策略：仅写全局 transient timeline（顶部视图，切换会话会清），完全不动
+      // messages。任何想真正挂到具体 message 的调用方必须显式传 target。
+      // 未来 rag-progress 协议加 conversationId 后，可同步给 ChatWindow 派传 target。
       return { toolCallTimeline: [...s.toolCallTimeline, entry] }
     })
     // 同步进 streaming snapshot：传 target 时校验 snapshot 是同一请求的，避免误写到

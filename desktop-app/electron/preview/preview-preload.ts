@@ -62,11 +62,13 @@ function ensureReactDevtoolsShim(): void {
       renderers.set(id, renderer)
       return id
     },
+    /* eslint-disable @typescript-eslint/no-empty-function -- React DevTools hook stub，prod 不该真 inject DevTools */
     onCommitFiberRoot: () => {},
     onCommitFiberUnmount: () => {},
     onScheduleFiberRoot: () => {},
     onPostCommitFiberRoot: () => {},
     checkDCE: () => {},
+    /* eslint-enable @typescript-eslint/no-empty-function */
   }
 }
 
@@ -93,7 +95,6 @@ function stampCcIds(): number {
 
 /** 从 element 反查 React 组件名（基于 fiber tag.type.displayName / type.name） */
 function lookupReactComponentName(el: Element): string | undefined {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- React fiber 内部字段，不导出类型
   const keys = Object.keys(el).find((k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')) as keyof Element | undefined
   if (!keys) return undefined
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- React fiber 链路类型不公开

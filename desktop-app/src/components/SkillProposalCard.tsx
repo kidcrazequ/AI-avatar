@@ -41,6 +41,7 @@ export default function SkillProposalCard({ avatarId, proposals, onDismiss }: Pr
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- proposals 变化时重置已保存集合 + 正在保存项，是合法的 UI 联动
     setSaved(new Set())
     setSaving(null)
     setStatusMsg('')

@@ -109,6 +109,7 @@ export default function LifePanel({
   }, [avatarId, onToast])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refreshBundle 是 async + setState 在 await 后跑，规则误判
     refreshBundle()
   }, [refreshBundle])
 

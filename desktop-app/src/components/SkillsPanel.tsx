@@ -96,6 +96,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   }, [avatarId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadSkills 是 async + setState 在 await 后跑，规则误判
     loadSkills(false)
   }, [loadSkills])
 

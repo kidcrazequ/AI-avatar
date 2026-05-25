@@ -49,6 +49,7 @@ export default function L3EventsPanel({ conversationId, onInjectPrompt }: Props)
 
   // 切换会话时清空旧卡片
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- conversationId 变化时清空事件列表，是合法的 effect 防御性清理
     setEvents([])
   }, [conversationId])
 

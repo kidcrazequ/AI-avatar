@@ -89,6 +89,7 @@ export default function LifeEpisodeViewer({
   }, [avatarId, onToast])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- selected 切换时重置确认态/清空 content，是合法的 UI 状态联动
     setConfirmDelete(false)
     if (!selected) {
       setContent('')

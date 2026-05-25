@@ -65,6 +65,7 @@ export default function AvatarSelector({
 
   useEffect(() => {
     if (!activeAvatarId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- avatar 缺失时清空派生 state，是合法的 effect 防御性清理
       setHeroQualityScores(null)
       return
     }

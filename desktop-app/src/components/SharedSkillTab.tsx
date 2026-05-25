@@ -50,6 +50,7 @@ export default function SharedSkillTab({ avatarId }: Props) {
     }
   }, [avatarId])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- load() 是 async + setState 在 await 后跑，规则误判
   useEffect(() => { load() }, [load])
 
   const handleToggle = async (name: string, next: boolean) => {

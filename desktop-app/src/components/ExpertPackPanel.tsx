@@ -34,6 +34,7 @@ export default function ExpertPackPanel({ onClose, onInstalled, onOpenAvatar, sh
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadPacks 是 async + setState 在 await 后跑，规则误判
     loadPacks()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在面板打开时加载一次，安装后手动刷新
   }, [])

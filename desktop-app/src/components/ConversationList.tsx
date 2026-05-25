@@ -77,6 +77,7 @@ export default function ConversationList({
 
     if (searchQuery.length < 3) {
       ++searchSeq.current
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- query 短于 3 字符时同步清空搜索结果，防御性清理而非派生 state
       setFtsResults([])
       setIsSearching(false)
       return

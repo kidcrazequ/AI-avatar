@@ -52,6 +52,7 @@ export default function CommunitySkillTab({ avatarId }: Props) {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- loadData() 是 async + setState 在 await 后跑，规则误判
   useEffect(() => { loadData() }, [loadData])
 
   useEffect(() => {

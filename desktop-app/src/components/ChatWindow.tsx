@@ -139,6 +139,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   // v17 事件 viewer：调试 JSONL 事件流（记忆/模型/模式/子分身派发的真相）
   const [eventViewerOpen, setEventViewerOpen] = useState(false)
   const conversationIdRef = useRef(conversationId)
+  // eslint-disable-next-line react-hooks/refs -- 让事件回调（emit 给 main 的 async path）能拿到最新 conversationId，render-期同步写比 effect 同步更新及时（effect 写会让 event 期间读到旧值）
   conversationIdRef.current = conversationId
   /** L3 桌面工具事件触发的临时输入填充（来自 inspector / form / canva 等卡片） */
   const [l3InjectedFill, setL3InjectedFill] = useState<string | undefined>(undefined)
@@ -159,6 +160,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
 
   useEffect(() => {
     if (!isLoading) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- isLoading 切换到 false 时重置计时显示，合法的 effect 联动
       setElapsedSec(0)
       return
     }

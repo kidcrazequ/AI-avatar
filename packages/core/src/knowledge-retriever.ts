@@ -65,7 +65,30 @@ let jiebaLoaded = false
   const missing = Object.entries(_dictFiles)
     .filter(([, p]) => !_fs.existsSync(p))
     .map(([k]) => k)
-  if (missing.length === 0) {
+  // Windows 中文/非 ASCII 安装路径防御（2026-05-25 v0.16.1 修复）：
+  // cppjieba 用 C++ narrow-string std::ifstream/fopen 读词典文件，
+  // Windows 上 fopen 默认走 ANSI/CP_ACP 编码，路径含非 ASCII 字符
+  // （如中文安装目录 C:\许磊\AI分身\）时 fopen 返回 NULL，cppjieba 直接走
+  // native FATAL → abort 主进程，且发生在顶层 import 阶段、早于
+  // registerProcessCrashHandlers，表现为「双击 .exe 没反应、进程都没起」。
+  // fs.existsSync 走 Node.js Unicode API 会通过，无法挡 fopen FATAL；
+  // 必须独立 ASCII 校验路径才能安全跳过 load，走 2-gram 降级。
+  // 用 charCode 判断而非 /[^\x00-\x7f]/ —— 后者触发 no-control-regex（正则字面量
+  // 里出现 \x00 控制字符是 lint 高危信号，即便我们语义上是"否定该字符以下"也算）。
+  const hasNonAsciiPath = process.platform === 'win32'
+    && Object.values(_dictFiles).some(p => {
+      for (let i = 0; i < p.length; i++) {
+        if (p.charCodeAt(i) > 0x7f) return true
+      }
+      return false
+    })
+  if (hasNonAsciiPath) {
+    console.error(
+      '[knowledge-retriever] Windows 安装路径含非 ASCII 字符（如中文目录），',
+      '跳过 cppjieba.load 防 native FATAL abort，已降级为 2-gram 兜底；dictDir=',
+      _dictDir,
+    )
+  } else if (missing.length === 0) {
     try {
       jiebaBinary.load(_dictFiles.jieba, _dictFiles.hmm, _dictFiles.user, _dictFiles.idf, _dictFiles.stop)
       jiebaLoaded = true

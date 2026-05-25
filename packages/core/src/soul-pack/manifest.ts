@@ -177,7 +177,7 @@ export function parseSoulPack(json: string): SoulPack {
   try {
     raw = JSON.parse(json)
   } catch (err) {
-    throw new Error(`soul-pack JSON 解析失败: ${err instanceof Error ? err.message : String(err)}`)
+    throw new Error(`soul-pack JSON 解析失败: ${err instanceof Error ? err.message : String(err)}`, { cause: err })
   }
   validateSoulPackShape(raw)
   const pack = raw as SoulPack

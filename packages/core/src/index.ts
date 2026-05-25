@@ -21,7 +21,8 @@ export type { Avatar } from './avatar-manager'
 export { KnowledgeManager } from './knowledge-manager'
 export type { FileNode, KnowledgeFileInfo, ImageKnowledgeInfo } from './knowledge-manager'
 
-export { KnowledgeRetriever } from './knowledge-retriever'
+export { KnowledgeRetriever, computeCoverageHint } from './knowledge-retriever'
+export type { KnowledgeSearchCoverage } from './knowledge-retriever'
 
 export { SkillManager } from './skill-manager'
 export type { Skill } from './skill-manager'

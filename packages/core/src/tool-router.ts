@@ -1,6 +1,6 @@
 import path from 'path'
 import fs from 'fs'
-import { KnowledgeRetriever } from './knowledge-retriever'
+import { KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
 import { SubAgentManager, type SubAgentTask } from './sub-agent-manager'
@@ -90,6 +90,33 @@ export interface KnowledgeSearchResult {
   content: string
   score: number
   anchor?: KnowledgeSourceAnchor
+}
+
+/**
+ * 把召回完整度信号格式化成 LLM 看的 header 行。
+ *
+ * 写到 search_knowledge 工具结果**第一行**，让 LLM 在生成回答前先看到证据强度。
+ * empty/low 档位带 ⚠️ 警示标记 + 拒答指引，强制 LLM 在回答开头声明"召回不全"，
+ * 不能基于稀薄证据装作权威——参见 [[feedback-soul-prefer-refuse-over-placeholder]]。
+ */
+function formatCoverageHeader(coverage: KnowledgeSearchCoverage): string {
+  const { hits, totalCandidates, topScore, mode, hint } = coverage
+  const stats = `命中 ${hits} / 候选 ${totalCandidates} · 最高分 ${topScore.toFixed(mode === 'bm25' ? 2 : 4)} (${mode})`
+  switch (hint) {
+    case 'empty':
+      return `[召回完整度: empty | ${stats}] ⚠️ 知识库中没找到相关内容，请回答"知识库未收录"并明确告知用户，不要凭记忆/常识强答。`
+    case 'low':
+      return `[召回完整度: low | ${stats}] ⚠️ 召回证据稀薄（命中过少或得分偏低），回答必须以"召回不全，仅基于以下片段..."开头，明确告知用户证据有限。`
+    case 'partial':
+      return `[召回完整度: partial | ${stats}] 召回中等，可作答但需在结论旁标注"基于本次检索片段"，并建议用户用更具体的关键词再问一次以提升完整度。`
+    case 'high':
+      return `[召回完整度: high | ${stats}] 召回充分，可正常作答；仍需逐条标注来源锚点。`
+    default: {
+      // 给 TypeScript 一个 never 检查：未来加 hint 档位时这里会报错
+      const _exhaustive: never = hint
+      return `[召回完整度: ${String(_exhaustive)} | ${stats}]`
+    }
+  }
 }
 
 interface DesignSystemSearchHit {
@@ -833,7 +860,7 @@ export class ToolRouter {
     avatarId: string,
     query: string,
     options: { rawTopN?: number; maxChunks?: number; maxPerFile?: number; minDistinctFiles?: number; maxRelatedFiles?: number } = {},
-  ): KnowledgeSearchResult[] {
+  ): { results: KnowledgeSearchResult[]; coverage: KnowledgeSearchCoverage } {
     const {
       rawTopN = 14,
       maxChunks = 8,
@@ -842,10 +869,11 @@ export class ToolRouter {
       maxRelatedFiles = 4,
     } = options
 
-    const rawChunks = this.anchorKnowledgeChunks(
-      avatarId,
-      this.getKnowledgeSurfaceForContext(avatarId).searchChunks(query, rawTopN),
-    )
+    // coverage 取**原始 retrieve 信号**（rerank/diversity 之前），更能反映"知识库里
+    // 到底有没有靠谱证据"——rerank 后的 hits 受 maxChunks/maxPerFile 截断，不代表召回质量。
+    const { chunks: rawSearchChunks, coverage } =
+      this.getKnowledgeSurfaceForContext(avatarId).searchChunksWithCoverage(query, rawTopN)
+    const rawChunks = this.anchorKnowledgeChunks(avatarId, rawSearchChunks)
     const reranked = rerankChunksWithDiversity(rawChunks, {
       maxChunks,
       maxPerFile,
@@ -854,12 +882,13 @@ export class ToolRouter {
     })
     const seedFiles = reranked.slice(0, 4).map((chunk) => chunk.file)
     const relatedChunks = this.getRelatedKnowledgeChunks(avatarId, query, seedFiles, { maxRelatedFiles })
-    return rerankChunksWithDiversity([...reranked, ...relatedChunks], {
+    const results = rerankChunksWithDiversity([...reranked, ...relatedChunks], {
       maxChunks,
       maxPerFile,
       minDistinctFiles,
       similarityThreshold: 0.82,
     })
+    return { results, coverage }
   }
 
   private loadExcelSource(avatarId: string, file: string): CachedExcelSource['parsed'] {
@@ -2193,7 +2222,7 @@ ${content}` }
     if (!query) return { content: '', error: '缺少 query 参数' }
     const rawTopN = typeof args.top_n === 'number' && Number.isFinite(args.top_n) ? args.top_n : 5
     const topN = Math.min(12, Math.max(1, Math.floor(rawTopN)))
-    const results = this.buildKnowledgeSearchResults(avatarId, query, {
+    const { results, coverage } = this.buildKnowledgeSearchResults(avatarId, query, {
       rawTopN: Math.max(topN + 6, 10),
       maxChunks: topN,
       maxPerFile: 3,
@@ -2202,14 +2231,16 @@ ${content}` }
     })
     // tokens 落盘由 execute() 末尾统一处理（覆盖所有内部 searchChunks 调用方）
     if (results.length === 0) {
-      return { content: '未找到相关知识内容。' }
+      const header = formatCoverageHeader(coverage)
+      return { content: `${header}\n\n未找到相关知识内容。` }
     }
-    const content = results.map((r) => {
+    const body = results.map((r) => {
       const heading = r.heading?.trim() ? r.heading : '命中片段'
       const anchor = r.anchor ? formatSourceAnchor(r.anchor) : `[来源: knowledge/${r.file}]`
       return `### [${r.file}] ${heading}\n${anchor}\n${r.content}`
     }).join('\n\n---\n\n')
-    return { content }
+    const header = formatCoverageHeader(coverage)
+    return { content: `${header}\n\n${body}` }
   }
 
   private listKnowledgeFiles(avatarId: string): ToolCallResult {

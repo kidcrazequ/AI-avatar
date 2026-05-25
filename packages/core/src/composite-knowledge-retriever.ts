@@ -5,7 +5,7 @@
  * @date 2026-05-09
  */
 
-import type { KnowledgeRetriever } from './knowledge-retriever'
+import { computeCoverageHint, type KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
 
 const RRF_K = 60
 
@@ -50,16 +50,57 @@ export class CompositeKnowledgeRetriever {
     query: string,
     topN: number = 5,
   ): Array<{ file: string; heading: string; content: string; score: number }> {
-    const a = this.base.searchChunks(query, Math.max(topN * 2, topN + 4))
+    return this.searchChunksWithCoverage(query, topN).chunks
+  }
+
+  /**
+   * 同 {@link searchChunks}，但同时返回合并后的召回完整度信号。
+   *
+   * 合并规则：
+   * - totalCandidates = base + overlay 候选池之和
+   * - topScore = 合并 RRF 排序后的最高分（overlay 存在时强制 rrf 尺度）
+   * - mode：overlay 存在 → 'rrf'；否则沿用 base 模式
+   * - hint：以合并后 hits + topScore 用对应阈值重算
+   */
+  searchChunksWithCoverage(
+    query: string,
+    topN: number = 5,
+  ): {
+    chunks: Array<{ file: string; heading: string; content: string; score: number }>
+    coverage: KnowledgeSearchCoverage
+  } {
+    const innerTopN = Math.max(topN * 2, topN + 4)
+    const baseRes = this.base.searchChunksWithCoverage(query, innerTopN)
     if (!this.overlay) {
-      return a.slice(0, topN)
+      const chunks = baseRes.chunks.slice(0, topN)
+      const topScore = chunks[0]?.score ?? 0
+      return {
+        chunks,
+        coverage: {
+          ...baseRes.coverage,
+          hits: chunks.length,
+          topScore,
+          hint: computeCoverageHint(chunks.length, topScore, baseRes.coverage.mode),
+        },
+      }
     }
-    const rawB = this.overlay.searchChunks(query, Math.max(topN * 2, topN + 4))
-    const b = rawB.map((c) => ({
+    const overlayRes = this.overlay.searchChunksWithCoverage(query, innerTopN)
+    const b = overlayRes.chunks.map((c) => ({
       ...c,
       file: `${this.overlayFilePrefix}${c.file}`,
     }))
-    return reciprocalRankFusion([a, b], topN)
+    const fused = reciprocalRankFusion([baseRes.chunks, b], topN)
+    const topScore = fused[0]?.score ?? 0
+    return {
+      chunks: fused,
+      coverage: {
+        hits: fused.length,
+        totalCandidates: baseRes.coverage.totalCandidates + overlayRes.coverage.totalCandidates,
+        topScore,
+        mode: 'rrf',
+        hint: computeCoverageHint(fused.length, topScore, 'rrf'),
+      },
+    }
   }
 
   readFile(relPath: string): string {

@@ -140,6 +140,24 @@ describe('KnowledgeRetriever', () => {
     const results = retriever.searchChunks('xxxxxxxxxxxxxxxxx')
     assert.equal(results.length, 0)
   })
+
+  it('searchChunksWithCoverage 命中良好时 hint 应为 partial/high，无命中时为 empty', () => {
+    const retriever = new KnowledgeRetriever(tmpDir)
+    // 有命中：tmpDir 只有 2 个 chunk（overview + battery），最多召回 2 → partial 上限
+    const good = retriever.searchChunksWithCoverage('磷酸铁锂 循环寿命', 5)
+    assert.ok(good.chunks.length > 0, '应有命中')
+    assert.ok(good.coverage.hits === good.chunks.length, 'coverage.hits 应等于实际命中数')
+    assert.ok(good.coverage.totalCandidates >= good.chunks.length, 'totalCandidates 应 ≥ hits')
+    assert.ok(good.coverage.topScore > 0, 'topScore 应 > 0')
+    assert.equal(good.coverage.mode, 'bm25', '未注入 embedding 时模式应为 bm25')
+    assert.ok(['low', 'partial', 'high'].includes(good.coverage.hint), `hint=${good.coverage.hint} 应不为 empty`)
+
+    // 无命中：hint 必须为 empty
+    const empty = retriever.searchChunksWithCoverage('xxxxxxxxxxxxxxxxx', 5)
+    assert.equal(empty.chunks.length, 0)
+    assert.equal(empty.coverage.hits, 0)
+    assert.equal(empty.coverage.hint, 'empty')
+  })
 })
 
 describe('KnowledgeRetriever Excel rag_only .md 不参与 RAG', () => {

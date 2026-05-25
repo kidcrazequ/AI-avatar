@@ -119,6 +119,46 @@ interface Chunk {
 }
 
 /**
+ * 单次知识检索的"召回完整度"信号。
+ *
+ * 给 LLM 提供"是否值得信任本次召回"的判断依据——避免基于稀薄证据
+ * （1 个低分命中）大胆作答。tool 层会把它格式化进结果 header，
+ * 工具 description 里要求 LLM 看到 hint='low'/'empty' 时明示拒答。
+ *
+ * 阈值是基于 BM25 / RRF 经验值的初版：
+ *   - BM25：高质量匹配 score 通常 2-10；< 1.0 多为偶然词频命中
+ *   - RRF：score = Σ 1/(60+rank)，topN 头部一般 0.025-0.033；< 0.02 太靠后
+ */
+export interface KnowledgeSearchCoverage {
+  /** 实际返回（top-N 截断后）的 chunk 数 */
+  hits: number
+  /** 检索池里的可参与候选 chunk 总数（已剔除 metadata / 过短 chunk） */
+  totalCandidates: number
+  /** 最高得分（BM25 原始得分 或 RRF 融合得分，取决于 mode） */
+  topScore: number
+  /** 评分模式，决定 topScore 阈值；CompositeKnowledgeRetriever 有 overlay 时强制 rrf */
+  mode: 'bm25' | 'rrf'
+  /** 召回完整度档位：empty=0 命中 / low=证据稀薄 / partial=中等 / high=充分 */
+  hint: 'empty' | 'low' | 'partial' | 'high'
+}
+
+/**
+ * 由 hits + topScore + mode 推导出召回完整度档位。
+ * 公开给 composite retriever 和 tool 层共用——两侧阈值漂移会导致 LLM 收到自相矛盾的信号。
+ */
+export function computeCoverageHint(
+  hits: number,
+  topScore: number,
+  mode: 'bm25' | 'rrf',
+): KnowledgeSearchCoverage['hint'] {
+  if (hits === 0) return 'empty'
+  const minScore = mode === 'bm25' ? 1.0 : 0.02
+  if (hits === 1 || topScore < minScore) return 'low'
+  if (hits <= 3) return 'partial'
+  return 'high'
+}
+
+/**
  * 对文本进行中文分词。
  * 先按 ASCII/CJK 边界切分（保留型号如 ENS-L262），再对 CJK 部分用 nodejieba 分词。
  *
@@ -390,26 +430,51 @@ export class KnowledgeRetriever {
   }
 
   /**
-   * 检索知识库中与查询最相关的 chunk。
-   *
-   * 评分策略：
-   * - 仅 BM25：当未注入 embedding 时，用 segmentit 分词 + BM25 评分
-   * - BM25 + 向量 RRF：当注入了 embedding 时，两路检索结果用 RRF 融合
+   * 检索知识库中与查询最相关的 chunk（保留 array 返回签名，向后兼容）。
+   * 想拿到召回完整度信号请用 {@link searchChunksWithCoverage}。
    */
   searchChunks(
     query: string,
     topN: number = 5,
   ): Array<{ file: string; heading: string; content: string; score: number }> {
+    return this.searchChunksWithCoverage(query, topN).chunks
+  }
+
+  /**
+   * 检索 + 返回召回完整度信号。
+   *
+   * 评分策略：
+   * - 仅 BM25：当未注入 embedding 时，用 segmentit 分词 + BM25 评分
+   * - BM25 + 向量 RRF：当注入了 embedding 时，两路检索结果用 RRF 融合
+   *
+   * coverage 反映**本次检索**的命中健康度（非整库健康度），供 tool 层拼成
+   * 给 LLM 看的 header（参见 [[soul-rag-architecture-direction]] 的"召回不全应明示"原则）。
+   */
+  searchChunksWithCoverage(
+    query: string,
+    topN: number = 5,
+  ): {
+    chunks: Array<{ file: string; heading: string; content: string; score: number }>
+    coverage: KnowledgeSearchCoverage
+  } {
+    const mode: 'bm25' | 'rrf' = this.embeddingMap.size > 0 ? 'rrf' : 'bm25'
     // 过滤掉内容过短或纯元数据的 chunk
     const MIN_CHUNK_LENGTH = 80
     const allChunks = this.getChunks().filter(c =>
       c.content.length >= MIN_CHUNK_LENGTH && !isMetadataChunk(c.heading, c.content, c.file),
     )
-    if (allChunks.length === 0) return []
+    if (allChunks.length === 0) {
+      return { chunks: [], coverage: { hits: 0, totalCandidates: 0, topScore: 0, mode, hint: 'empty' } }
+    }
 
     // ── BM25 检索 ──
     const queryTokens = tokenize(query.toLowerCase())
-    if (queryTokens.length === 0) return []
+    if (queryTokens.length === 0) {
+      return {
+        chunks: [],
+        coverage: { hits: 0, totalCandidates: allChunks.length, topScore: 0, mode, hint: 'empty' },
+      }
+    }
 
     // 预计算所有 chunk 的分词（三层缓存）：
     //   1. chunk.tokens 内存缓存（同一 retriever 实例多次 search 复用）
@@ -487,14 +552,36 @@ export class KnowledgeRetriever {
       score: bm25Score(queryTokens, chunk.tokens!, avgDl, df, allChunks.length),
     }))
     if (this.embeddingMap.size > 0) {
-      return this.rrfFusion(query, bm25Results, allChunks, topN)
+      const fused = this.rrfFusion(query, bm25Results, allChunks, topN)
+      const topScore = fused[0]?.score ?? 0
+      return {
+        chunks: fused,
+        coverage: {
+          hits: fused.length,
+          totalCandidates: allChunks.length,
+          topScore,
+          mode: 'rrf',
+          hint: computeCoverageHint(fused.length, topScore, 'rrf'),
+        },
+      }
     }
 
     // ── 纯 BM25 ──
-    return bm25Results
+    const final = bm25Results
       .filter(c => c.score > 0)
       .sort((a, b) => (b.score - a.score) || a.file.localeCompare(b.file) || a.heading.localeCompare(b.heading))
       .slice(0, topN)
+    const topScore = final[0]?.score ?? 0
+    return {
+      chunks: final,
+      coverage: {
+        hits: final.length,
+        totalCandidates: allChunks.length,
+        topScore,
+        mode: 'bm25',
+        hint: computeCoverageHint(final.length, topScore, 'bm25'),
+      },
+    }
   }
 
   /**

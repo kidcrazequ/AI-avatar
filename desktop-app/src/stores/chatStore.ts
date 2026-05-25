@@ -3075,10 +3075,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       timestamp: requestStartedAt,
       prompt: content,
     })
-    activeChatRequest = { id: requestId, conversationId }
-    if (activeAbortController) activeAbortController.abort()
+    // hiddenRepair 完全隔离全局 request 状态：
+    //   - 不写 activeChatRequest（不让 cleanupRequest/isStale 把 outer 的 request 误判成 stale）
+    //   - 不 abort 旧的 activeAbortController（outer 还在跑，repair 是 fire-and-forget 启动）
+    //   - 不写 activeAbortController（用户下一条新消息进来时不该取消 repair；同样地，
+    //     repair 自己拿到的 abortController 也只是 local 给 fetch signal 用）
     const abortController = new AbortController()
-    activeAbortController = abortController
+    if (!_hiddenRepairEarly) {
+      activeChatRequest = { id: requestId, conversationId }
+      if (activeAbortController) activeAbortController.abort()
+      activeAbortController = abortController
+    }
     // 2026-05-24：hiddenRepair 模式（infographic validator 触发的格式修正轮）
     // 所有面向用户的副作用全部禁掉——见接口处 hiddenRepair 注释。
     const isHiddenRepair = options?.hiddenRepair === true

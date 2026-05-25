@@ -52,7 +52,8 @@ export interface PostLLMCallPayload extends HookPayload {
 export interface OnSpawnPayload extends HookPayload {
   readonly point: HookPoint.ON_SPAWN
   readonly parentAgentId: string
-  readonly childAgentType: 'explore' | 'plan' | 'worker'
+  // 与 SubAgentType (governance/spawn-guard.ts) 保持同步；inline 写出避免 hooks 反向依赖 governance
+  readonly childAgentType: 'explore' | 'plan' | 'worker' | 'verifier'
   readonly task: string
 }
 

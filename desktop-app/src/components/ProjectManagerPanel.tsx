@@ -54,6 +54,7 @@ export default function ProjectManagerPanel({ avatarId, onClose, onProjectsChang
     }
   }, [avatarId])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reload() 内 setState 在 await 后跑且有 mountedRef 守卫；规则的"同步 setState"检测在此为误判
   useEffect(() => { void reload() }, [reload])
 
   const handleSubmit = async () => {

@@ -72,6 +72,10 @@ export default function GlobalSearchPalette({
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const mountedRef = useRef(true)
+  // 防 race：每次发起新 debounced 搜索就 ++ searchSeqRef，IPC 返回后只接受
+  // 自身 seq === 当前 seq 的结果。否则用户快速输入时，旧 query 的 IPC 晚回
+  // 会覆盖新 query 的结果和 loading 状态。
+  const searchSeqRef = useRef(0)
 
   useEffect(() => {
     mountedRef.current = true
@@ -107,22 +111,26 @@ export default function GlobalSearchPalette({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- query 为空时同步清空结果，是合法的 UI 联动
     if (!trimmed) { setMessages([]); setKnowledge([]); setMemory([]); setLoading(false); return }
     setLoading(true)
+    const seq = ++searchSeqRef.current  // capture：本次搜索的 sequence
     const timer = setTimeout(async () => {
+      const fresh = (): boolean => mountedRef.current && searchSeqRef.current === seq
       try {
         const tasks: Array<Promise<unknown>> = [
-          window.electronAPI.searchMessages(trimmed).then(r => { if (mountedRef.current) setMessages(r) }),
-          window.electronAPI.searchMemory(trimmed).then(r => { if (mountedRef.current) setMemory(r) }).catch(() => { /* 记忆扫描失败静默 */ }),
+          window.electronAPI.searchMessages(trimmed).then(r => { if (fresh()) setMessages(r) }),
+          window.electronAPI.searchMemory(trimmed).then(r => { if (fresh()) setMemory(r) }).catch(() => { /* 记忆扫描失败静默 */ }),
         ]
         if (currentAvatarId) {
           tasks.push(
             window.electronAPI.searchKnowledgeChunks(currentAvatarId, trimmed, 8).then(r => {
-              if (mountedRef.current) setKnowledge(r)
+              if (fresh()) setKnowledge(r)
             }).catch(() => { /* 知识库未建索引时静默 */ }),
           )
         }
         await Promise.allSettled(tasks)
       } finally {
-        if (mountedRef.current) {
+        // setLoading(false) / setSelectedIndex(0) 也要 fresh 守卫——否则旧 IPC 晚回
+        // 会把"新 query 正在加载"的 loading 状态错误清零
+        if (fresh()) {
           setLoading(false)
           setSelectedIndex(0)
         }

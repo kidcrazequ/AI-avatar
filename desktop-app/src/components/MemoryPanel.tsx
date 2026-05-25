@@ -68,11 +68,13 @@ export default function MemoryPanel({ avatarId, onClose }: Props) {
       if (loadSeqRef.current !== seq) return
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'memory-panel-load', msg)
+      // eslint-disable-next-line react-hooks/immutability -- showStatus 在文件下方 const-定义；async catch 跑在 commit 后已 init
       showStatus('LOAD FAILED')
     }
   }, [avatarId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadAll 是 async + setState 在 await 后跑，规则误判
     void loadAll()
   }, [loadAll])
 

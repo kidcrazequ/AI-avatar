@@ -101,6 +101,7 @@ function renderSummary(ev: ConversationJsonlAnyEvent): string {
       const denyTail = ev.denyReason ? ` · ${truncate(ev.denyReason, 60)}` : ''
       return `${who} · ${truncate(ev.taskPreview, 60)}${errTail}${denyTail}`
     }
+    default: { const _: never = ev; throw new Error(`Unknown event type: ${JSON.stringify(_)}`) }
   }
 }
 
@@ -114,6 +115,7 @@ export default function EventViewer({ conversationId, isOpen, onClose }: Props) 
   useEffect(() => {
     if (!isOpen) return
     let cancelled = false
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 打开 viewer 时同步初始化 loading/error 态，是合法的 UI 联动
     setLoading(true)
     setError(null)
     window.electronAPI.readConversationEvents(conversationId)

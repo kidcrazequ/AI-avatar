@@ -66,6 +66,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- taskStartTime 重置时同步清空计时显示，是合法的 effect 防御性清理
     if (!taskStartTime) { setElapsedSeconds(0); return }
     const timer = setInterval(() => {
       setElapsedSeconds(Math.floor((Date.now() - taskStartTime) / 1000))
@@ -79,14 +80,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (!mountedRef.current) return
       const phase = data.fileName ? `${data.phase} · ${data.fileName}` : data.phase
       setImportProgress({ current: data.current, total: data.total, phase })
+      // eslint-disable-next-line react-hooks/immutability -- showStatus 在文件下方 const-定义；IPC 回调跑在 commit 后已 init
       showStatus(phase, false)
     })
     return () => unsub()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
 
   const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting || isFormatting
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 切换 busy 状态时同步管理 taskStartTime，是合法的派生联动（startTime 不可由 isBusy + 当前时间直接推出）
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
     if (!isBusy && taskStartTime) setTaskStartTime(null)
   }, [isBusy, taskStartTime])
@@ -106,6 +109,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   }, [avatarId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadTree 是 async + setState 在 await 后跑，规则误判
     loadTree()
   }, [loadTree])
 
@@ -121,6 +125,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       return false
     }
     if (exists(tree)) {
+      // eslint-disable-next-line react-hooks/immutability -- handleSelectFile 在文件下方 const-定义；effect 跑在 commit 后已 init
       void handleSelectFile(initialPath)
     } else {
       console.warn('[KnowledgePanel] initialPath 不在知识树中：', initialPath)

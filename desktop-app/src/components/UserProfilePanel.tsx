@@ -58,11 +58,13 @@ export default function UserProfilePanel({ avatarId, onClose }: Props) {
     } catch (error) {
       if (loadSeqRef.current !== seq) return
       console.error('[UserProfilePanel] 加载用户画像失败:', error)
+      // eslint-disable-next-line react-hooks/immutability -- showStatus 在文件下方 const-定义；async catch 跑在 commit 后已 init
       showStatus('LOAD FAILED')
     }
   }, [avatarId])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loadProfile 是 async + setState 在 await 后跑，规则误判
     loadProfile()
   }, [loadProfile])
 

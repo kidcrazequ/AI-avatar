@@ -81,6 +81,7 @@ export default function GlobalSearchPalette({
   // 打开时聚焦 + 拉 avatar 列表 + 重置
   useEffect(() => {
     if (!isOpen) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 打开 palette 时同步重置查询/结果，是合法的 UI 联动而非派生 state
     setQuery('')
     setMessages([])
     setKnowledge([])
@@ -103,6 +104,7 @@ export default function GlobalSearchPalette({
   useEffect(() => {
     if (!isOpen) return
     const trimmed = query.trim()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- query 为空时同步清空结果，是合法的 UI 联动
     if (!trimmed) { setMessages([]); setKnowledge([]); setMemory([]); setLoading(false); return }
     setLoading(true)
     const timer = setTimeout(async () => {

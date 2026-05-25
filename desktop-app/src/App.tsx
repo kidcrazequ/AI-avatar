@@ -324,6 +324,7 @@ function App() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount 时并行触发加载；async 链路里 setState 跑在 await 后
     loadModelConfigs().catch(err => console.error('[App] 加载模型配置失败:', err))
     refreshAvatarList().catch(err => console.error('[App] 加载分身列表失败:', err))
 
@@ -333,6 +334,7 @@ function App() {
     window.addEventListener('settings-updated', handleSettingsUpdate)
 
     const removeScheduledTest = window.electronAPI.onScheduledTestTrigger((avatarId) => {
+      // eslint-disable-next-line react-hooks/immutability -- handleSelectAvatar 在文件下方 const-定义；事件回调跑在 commit 后已 init
       handleSelectAvatar(avatarId).then(() => setActivePanel('test')).catch(err => {
         console.error('[App] 定时自检触发切换分身失败:', err instanceof Error ? err.message : String(err))
       })

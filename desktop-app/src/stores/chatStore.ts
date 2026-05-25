@@ -4940,6 +4940,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           uncertainMarkers.length > 0 ? uncertainMarkers : undefined,
           reconsiderMarkers.length > 0 ? reconsiderMarkers : undefined,
           timelineJson,
+          assistantMsgId,  // 关键：让 DB 复用前端 nextMessageId() 已生成的 ID，hidden repair 的 updateMessageContent 才能命中
         )
       } catch (saveErr) {
         const msg = saveErr instanceof Error ? saveErr.message : String(saveErr)

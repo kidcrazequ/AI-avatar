@@ -30,8 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     uncertainMarkers?: string[],
     reconsiderMarkers?: string[],
     toolCallTimelineJson?: string,
+    externalId?: string,
   ) =>
-    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson),
+    ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson, externalId),
   getMessages: (conversationId: string) => ipcRenderer.invoke('get-messages', conversationId),
 
   // 删除单条消息（v14，「重新生成」按钮专用）

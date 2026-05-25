@@ -1316,8 +1316,18 @@ export class DatabaseManager {
      * 空数组（"[]"）等价 NULL，不写入；保持 DB 行干净，节省存储。
      */
     toolCallTimelineJson?: string,
+    /**
+     * 可选外部 ID：chatStore 在 sendMessage 入口 nextMessageId() 时已生成一个
+     * assistantMsgId，并塞进 state.messages 占位气泡。如果不传 externalId 这里
+     * 重新生成，前后端 ID 就分叉（state=msg-xxx, DB=msg_xxx）—— hidden repair
+     * 的 updateMessageContent(assistantMsgId, ...) 永远更新 0 行。传 externalId
+     * 让 DB 复用同一 ID，保证前后端可互相寻址。
+     */
+    externalId?: string,
   ): string {
-    const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+    const id = externalId && externalId.length > 0
+      ? externalId
+      : `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
     const now = Date.now()
     const reasoningValue = reasoning && reasoning.trim().length > 0 ? reasoning : null
     const uncertainValue = uncertainMarkers && uncertainMarkers.length > 0 ? JSON.stringify(uncertainMarkers) : null

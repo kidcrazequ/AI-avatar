@@ -586,6 +586,8 @@ interface ElectronAPI {
     uncertainMarkers?: string[],
     reconsiderMarkers?: string[],
     toolCallTimelineJson?: string,
+    /** 可选外部 ID（hidden repair 闭环需要前后端 ID 一致；不传则 DB 自生成） */
+    externalId?: string,
   ) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
 

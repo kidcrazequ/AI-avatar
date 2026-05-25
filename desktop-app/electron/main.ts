@@ -1403,8 +1403,9 @@ wrapHandler('save-message', (
   uncertainMarkers?: string[],
   reconsiderMarkers?: string[],
   toolCallTimelineJson?: string,
+  externalId?: string,
 ) => {
-  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson)
+  return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson, externalId)
 })
 
 wrapHandler('get-messages', (_, conversationId: string) => {

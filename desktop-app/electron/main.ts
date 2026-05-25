@@ -1696,7 +1696,11 @@ wrapHandler('tool-results:open-folder', async (_, conversationId: string) => {
  * 渲染层用于在内嵌 viewer 中展示，避免用户必须打开外部编辑器。
  */
 wrapHandler('tool-results:read', async (_, absPath: string, maxBytes = 200_000) => {
-  if (typeof absPath !== 'string' || !absPath.startsWith(toolResultSpool?.getRootDir() ?? '___never___')) {
+  // 必须用 isUnderRoot（path.resolve + sep）而非裸 startsWith：原实现
+  // `<spool-root>/../xiaodu.db` 这种字符串以 spool root 开头但 resolve 后已逃逸，
+  // 会被错误地视为合法导致越权读敏感文件。
+  const spoolRoot = toolResultSpool?.getRootDir()
+  if (typeof absPath !== 'string' || !spoolRoot || !isUnderRoot(absPath, spoolRoot)) {
     throw new Error('非法路径：必须位于 tool-results 目录内')
   }
   const stat = fs.statSync(absPath)
@@ -6018,21 +6022,23 @@ wrapHandler('open-avatar-workspaces-folder', async (_, avatarId: string) => {
  * @date 2026-05-08
  */
 /**
- * 二次校验：文档相关 IPC 的 absolutePath 必须在 userData 根下。Soul 所有合法
- * 文档（attachments、generate_document 输出 exports、conversation jsonl 等）
- * 都落在 userData 内；任何超出 userData 的绝对路径都不应该被渲染层"借这条
- * IPC 通道写入或访问"。注释里把信任托付给 ToolRouter 是不够的—— IPC 边界
- * 上的渲染进程是 BrowserWindow，可以构造任意 path 进来。
+ * 通用安全 helper：判定 absPath 是否在 root 之下（含 root 本身）。
  *
- * 注：showItemInFolder/openPath 对系统路径（/etc, ~/Desktop）做 reveal 在
- * 攻击面上看是"读"+OS 软件执行；阻断这条通道防 prompt-injection 让 LLM
- * 拼出 outputPath 写到 ~/Library 等敏感位置的场景。
+ * 必须先 path.resolve（处理 .. / 符号链接 / Windows 大小写） + 末尾加 sep
+ * 防 prefix 匹配漏（`<root>_evil/...` 不该被认为属于 `<root>`）。
+ * 直接 startsWith 字符串前缀是 sibling-prefix 绕过的经典漏洞。
+ *
+ * 所有 IPC 边界 + tool 接收 untrusted path 时，必须用此 helper 而非裸 startsWith。
  */
+function isUnderRoot(absPath: string, root: string): boolean {
+  const resolvedRoot = path.resolve(root)
+  const resolvedPath = path.resolve(absPath)
+  return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep)
+}
+
+/** document:* IPC 限制：路径必须在 userData 根下。注：本根稍后会被 Bug 1 重设计取代。 */
 function isUnderUserData(absolutePath: string): boolean {
-  const userData = path.resolve(app.getPath('userData'))
-  const normalized = path.resolve(absolutePath)
-  // 末尾加 sep 防 prefix 匹配漏（`<userData>2` 不该被认为属于 `<userData>`）
-  return normalized === userData || normalized.startsWith(userData + path.sep)
+  return isUnderRoot(absolutePath, app.getPath('userData'))
 }
 
 wrapHandler('document:render-pdf', async (_, html: string, outputPath: string) => {
@@ -6615,9 +6621,18 @@ wrapHandler('regression-cleanup-conversations', (_, runId: string) => {
 wrapHandler('regression-open-report', async (_, filePath: string) => {
   if (typeof filePath !== 'string' || filePath.length === 0) throw new Error('filePath 缺失')
   const resolved = path.resolve(filePath)
-  // 必须在 avatarsPath 下且包含 tests/runs/
-  if (!resolved.startsWith(avatarsPath) || !resolved.includes(`${path.sep}tests${path.sep}runs${path.sep}`)) {
+  // 原实现 resolved.startsWith(avatarsPath) 不加 sep —— `/path/avatars_evil/...`
+  // 这种 sibling prefix 通过 startsWith 检查；只要路径里再含 tests/runs 就过。
+  // 改用 isUnderRoot（resolve + sep）+ 限制文件名后缀为 .html / .json 防越权 open。
+  if (!isUnderRoot(resolved, avatarsPath)) {
+    throw new Error(`非法报告路径（必须在 avatars/ 根下）: ${resolved}`)
+  }
+  if (!resolved.includes(`${path.sep}tests${path.sep}runs${path.sep}`)) {
     throw new Error(`非法报告路径（必须在 avatars/{id}/tests/runs/ 下）: ${resolved}`)
+  }
+  const lower = resolved.toLowerCase()
+  if (!lower.endsWith('.html') && !lower.endsWith('.json')) {
+    throw new Error(`非法报告路径（只允许 .html / .json）: ${resolved}`)
   }
   if (!fs.existsSync(resolved)) {
     throw new Error(`报告文件不存在: ${resolved}`)

@@ -38,6 +38,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteMessage: (messageId: string) =>
     ipcRenderer.invoke('delete-message', messageId),
 
+  // 原地更新单条消息 content（infographic hiddenRepair 修正回写专用，不动 role / 时间戳）
+  updateMessageContent: (messageId: string, content: string) =>
+    ipcRenderer.invoke('update-message-content', messageId, content),
+
   // 答案缓存（v14，同问不同答修复）
   getCachedAnswer: (cacheKey: string) =>
     ipcRenderer.invoke('answer-cache:get', cacheKey),

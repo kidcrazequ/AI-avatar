@@ -1414,6 +1414,12 @@ wrapHandler('delete-message', (_, messageId: string) => {
   return getDb().deleteMessage(messageId)
 })
 
+// 单条消息原地更新（infographic hiddenRepair 闭环回写）：只改 content，
+// 不动 role / 时间戳 / images。返回 0 表示 messageId 不存在。
+wrapHandler('update-message-content', (_, messageId: string, content: string) => {
+  return getDb().updateMessageContent(messageId, content)
+})
+
 // ─── 答案缓存（v14，同问不同答修复）─────────────────────────────────────
 wrapHandler('answer-cache:get', (_, cacheKey: string) => {
   return getDb().getCachedAnswer(cacheKey)

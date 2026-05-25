@@ -592,6 +592,9 @@ interface ElectronAPI {
   // 删除单条消息（v14，「重新生成」按钮专用）
   deleteMessage: (messageId: string) => Promise<number>
 
+  // 原地更新单条消息 content（infographic hiddenRepair 修正回写专用，不动 role / 时间戳）
+  updateMessageContent: (messageId: string, content: string) => Promise<number>
+
   // 答案缓存（v14，同问不同答修复）
   getCachedAnswer: (cacheKey: string) => Promise<{
     assistantContent: string

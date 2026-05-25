@@ -1186,6 +1186,18 @@ export class DatabaseManager {
   }
 
   /**
+   * 原地更新单条消息的 content（仅用于 infographic hiddenRepair 闭环：修正版
+   * 渲染结果回写已存的 assistant 消息）。不改 role / created_at / images 等，
+   * 也不滚动 conversations.updated_at —— 这是隐藏修正不应该影响"最近活动时间"。
+   *
+   * 返回受影响行数（0 = messageId 不存在）。
+   */
+  updateMessageContent(messageId: string, content: string): number {
+    const r = this.db.prepare(`UPDATE messages SET content = ? WHERE id = ?`).run(content, messageId)
+    return r.changes
+  }
+
+  /**
    * 确保指定 ID 的 conversation 存在（已存在则不动）。
    * 用于批量回归：调用方需要用稳定的 conversationId（如 `regression-{runId}-{idx}`）
    * 才能精确过滤遥测事件，普通 createConversation 会重新生成 ID 不满足要求。

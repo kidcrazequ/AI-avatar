@@ -375,7 +375,7 @@ interface ChatStore {
        */
       hiddenRepair?: boolean
     },
-  ) => Promise<void>
+  ) => Promise<{ displayText: string; assistantMsgId: string } | undefined>
   /**
    * 重新生成指定 assistant 消息（v14）。
    *
@@ -5027,12 +5027,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             // 用同一 sendMessage 链路追问：
             //   - skipInfographicRevalidate 防递归
             //   - skipCache 不污染答案缓存
-            //   - hiddenRepair（2026-05-24）让修正 prompt 对用户完全不可见：
-            //     不入历史、不入 DB、不计费、不触发自动改名 / episode 抽取
-            //     注意：当前 hiddenRepair 只做"静默化"，修正后的 infographic
-            //     **暂不自动应用回原 assistant 消息**——后续接 updateMessage
-            //     IPC 后即可补完整闭环。本次先止血对话历史污染问题。
-            await get().sendMessage(
+            //   - hiddenRepair：修正 prompt 对用户完全不可见（不入历史、不入 DB、
+            //     不计费、不触发自动改名 / episode 抽取）
+            // 修正完成后从返回的 displayText 提取新 infographic 块，替换原
+            // assistant 消息里的 bad block，并写回 DB（update-message-content
+            // IPC）+ state.messages —— 完整闭环。
+            const repairResult = await get().sendMessage(
               revisePrompt,
               conversationId,
               avatarId,
@@ -5043,6 +5043,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               undefined,
               { skipCache: true, skipInfographicRevalidate: true, hiddenRepair: true },
             )
+            if (!repairResult) return
+            const repairedBlocks = extractInfographicBlocks(repairResult.displayText)
+            const firstGood = repairedBlocks.find(b => validateInfographicBlock(b.raw).ok)
+            if (!firstGood) {
+              window.electronAPI.logEvent('warn', 'infographic-repair-still-invalid',
+                `repair output 仍无合法 infographic 块（blocks=${repairedBlocks.length}）`)
+              return
+            }
+            const newDisplayText = displayText.replace(firstBad.raw, firstGood.raw)
+            if (newDisplayText === displayText) {
+              // 修正块和原 bad 块完全相同（理论不该发生），跳过写入避免无意义 DB I/O
+              window.electronAPI.logEvent('warn', 'infographic-repair-no-diff', 'repaired block === bad block')
+              return
+            }
+            try {
+              await window.electronAPI.updateMessageContent(assistantMsgId, newDisplayText)
+              set((s) => ({
+                messages: s.messages.map(m =>
+                  m.id === assistantMsgId ? { ...m, content: newDisplayText } : m,
+                ),
+              }))
+              window.electronAPI.logEvent('info', 'infographic-repair-applied',
+                `assistantMsgId=${assistantMsgId} oldLen=${firstBad.raw.length} newLen=${firstGood.raw.length}`)
+            } catch (writeErr) {
+              const m = writeErr instanceof Error ? writeErr.message : String(writeErr)
+              window.electronAPI.logEvent('warn', 'infographic-repair-writeback-failed', m)
+            }
           } catch (validateErr) {
             const m = validateErr instanceof Error ? validateErr.message : String(validateErr)
             window.electronAPI.logEvent('warn', 'infographic-revalidate-error', m)
@@ -5060,6 +5087,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 流式完成：cleanupRequest 内部自检 requestId/abortController/assistantMsgId，
       // 即使 isStale 也是 no-op；不再依赖外层判断。
       cleanupRequest()
+      // 把 displayText 返回给调用方。常规 caller 不接收（向后兼容隐式 void），
+      // 但 infographic hiddenRepair 闭环需要拿到这条修正轮的 displayText 才能回写。
+      return { displayText, assistantMsgId }
     } catch (error) {
       if (isStale()) return
       const errMsg = error instanceof Error ? error.message : String(error)

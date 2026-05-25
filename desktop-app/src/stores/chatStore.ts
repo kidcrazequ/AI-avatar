@@ -3102,10 +3102,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         toolCallTimeline: [],
       }
     }
-    const isStale = () =>
-      !activeChatRequest
-      || activeChatRequest.id !== requestId
-      || activeChatRequest.conversationId !== conversationId
+    // hidden repair 不写 activeChatRequest（见 line ~3078 守卫），所以全局
+    // request 永远不会指向它，原 isStale 会永真 → chunk 回调 / 4151 / 4916
+    // 三处早退点全部命中 → displayText 累积为空 → repairResult.displayText
+    // 拿不到内容 → 坏 infographic 不被回写。修：hidden repair 只看本地
+    // abort signal；它是 outer 完成后 fire-and-forget 启动的独立任务，唯一
+    // 该被 stale 的场景是自身 abortController 被显式取消（目前没人取消它）。
+    const _isHiddenRepairForStale = options?.hiddenRepair === true
+    const isStale = () => {
+      if (_isHiddenRepairForStale) return abortController.signal.aborted
+      return !activeChatRequest
+        || activeChatRequest.id !== requestId
+        || activeChatRequest.conversationId !== conversationId
+    }
 
     /**
      * 早退 / 完成时统一清理本请求挂在模块级单例上的状态。

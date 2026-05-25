@@ -503,8 +503,15 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
   const handleSend = () => {
     if ((!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0) || disabled) return
-    const attachmentRefs: AttachmentRef[] | undefined = pendingDocs.length > 0
-      ? pendingDocs.map(d => ({
+    // 区分 DB-backed attachment（id=att_xxx，主进程 read_attachment 能查到）
+    // 与 synthetic inline reference（id=@web:/@knowledge:/@conversation:，前端
+    // 临时构造，主进程 DB 没行）。后者只走 inline content，不进 <attachments>
+    // 元信息——否则模型看到 <attachment id="@knowledge:..." /> 调 read_attachment
+    // 一定拿到「附件不存在」。
+    const isDbBackedAttachment = (id: string): boolean => id.startsWith('att_')
+    const dbBacked = pendingDocs.filter(d => isDbBackedAttachment(d.id))
+    const attachmentRefs: AttachmentRef[] | undefined = dbBacked.length > 0
+      ? dbBacked.map(d => ({
           id: d.id,
           name: d.name,
           mime: d.mime,

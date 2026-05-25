@@ -220,6 +220,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 父组件传 fillText 同步进本地 input state，是受控/非受控混合的合法模式
     if (fillText) setInput(fillText)
   }, [fillText])
 
@@ -533,6 +534,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   //   2) getAvailableSharedSkills(avatarId) — shared/skills/*.md 中已在该分身 skill-index.yaml 引用的
   //   同名时 local 优先（local override 是显式覆写），shared 视作备份不重复列。
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- avatarId 缺失时同步清空 skills 是防御性清理，非"派生 state"反模式
     if (!avatarId) { setAllSkills([]); return }
     let cancelled = false
     Promise.all([
@@ -563,12 +565,17 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   }, [avatarId])
 
   /** 当前 query：从 slashStartRef 到光标位置之间的内容（去掉首字符 `/`） */
+  // textareaRef / slashStartRef 是 DOM/标量 ref，render 期间读它们 stable
+  // （textarea mount 后 .current 指向不变，slashStart 只在 input handler 里写）。
+  // React 19 的 react-hooks/refs 规则一刀切禁了，但本场景不会出现 inconsistent render。
+  /* eslint-disable react-hooks/refs */
   const slashQuery = useMemo(() => {
     if (!slashOpen || slashStartRef.current < 0) return ''
     const end = textareaRef.current?.selectionStart ?? input.length
     const raw = input.slice(slashStartRef.current + 1, end)
     return raw.toLowerCase()
   }, [slashOpen, input])
+  /* eslint-enable react-hooks/refs */
 
   /** 过滤后的技能候选：优先匹配 name 前缀，其次 name 包含，再次 description 包含 */
   const filteredSkills = useMemo<SlashCommandItem[]>(() => {
@@ -738,7 +745,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.setSelectionRange(pos, pos)
       })
     }
-  }, [input, closeCtxPalette, loadCtxEntries])
+  }, [input, closeCtxPalette, loadCtxEntries, pendingImages.length, showHint])
 
   /** 选中 entry：展开为 inlineFile 推入 pendingDocs，并把输入框中 @ 起始那段移除 */
   const handleSelectEntry = useCallback(async (entry: ContextEntry) => {

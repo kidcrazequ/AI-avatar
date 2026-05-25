@@ -11,7 +11,7 @@ import RefusalCard from './RefusalCard'
 import LightboxModal from './LightboxModal'
 import { renderChildrenWithCitations } from './source-citation-utils'
 import FileCard from './FileCard'
-import { useArtifactStore, type ArtifactKind } from '../stores/artifactStore'
+import { useArtifactStore, hashRaw, type ArtifactKind } from '../stores/artifactStore'
 
 /**
  * 把任意 artifact 渲染包一层 wrapper：
@@ -21,19 +21,22 @@ import { useArtifactStore, type ArtifactKind } from '../stores/artifactStore'
 function ArtifactSlot({ kind, raw, children }: { kind: ArtifactKind; raw: string; children: ReactNode }): ReactElement {
   const openArtifact = useArtifactStore(s => s.openArtifact)
   const autoOpenThreshold = useArtifactStore(s => s.autoOpenThreshold)
-  // 同实例只自动打开一次（防止流式更新触发多次 push 出"中间状态副面板"）
-  const openedRef = useRef(false)
   // 防抖：raw 稳定 600ms 后才真正 open，避免拿到流式半成品
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (openedRef.current) return
     if (autoOpenThreshold <= 0) return
     if (raw.length < autoOpenThreshold) return
+    // 用 store 的全局 autoOpenedKeys 去重：组件 remount / 流式 raw 多次变化时，
+    // 同一 (kind, hash(raw)) 不会再被 push 出新的中间状态 tab。
+    // 之前用本地 openedRef → 实例销毁就丢，重挂载会再 push。
+    const key = hashRaw(kind, raw)
+    if (useArtifactStore.getState().autoOpenedKeys.has(key)) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      if (openedRef.current) return
-      openedRef.current = true
+      // 二次检查：debounce 期间另一处可能已经 markAutoOpened 同 key
+      if (useArtifactStore.getState().autoOpenedKeys.has(key)) return
+      useArtifactStore.getState().markAutoOpened(key)
       openArtifact({ kind, raw })
     }, 600)
     return () => {

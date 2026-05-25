@@ -51,8 +51,11 @@ interface ArtifactState {
   setAutoOpenThreshold: (n: number) => void
 }
 
-/** 简易 hash：用于同源去重；不要求加密，只要稳定 */
-function hashRaw(kind: ArtifactKind, raw: string): string {
+/**
+ * 简易 hash：用于同源去重；不要求加密，只要稳定。
+ * 导出供 MessageBubble.ArtifactSlot 复用，确保「key 计算」单源一致。
+ */
+export function hashRaw(kind: ArtifactKind, raw: string): string {
   let h = 0
   for (let i = 0; i < raw.length; i++) h = ((h << 5) - h + raw.charCodeAt(i)) | 0
   return `${kind}:${h}`

@@ -1166,12 +1166,23 @@ export class DatabaseManager {
     return id
   }
 
-  /** 列出某分身下曾出现过的项目 ID（去重排序），用于侧边栏分组 */
+  /**
+   * 列出某分身下侧边栏要展示的项目名（active only），用于侧边栏分组。
+   *
+   * 之前实现从 conversations 表去重 project_id：
+   *   - 新建但还没有会话的 project 不显示
+   *   - 归档状态完全不被考虑
+   * 修复后改读 projects 表 active rows，与 ProjectManagerPanel 数据源对齐。
+   * 历史 default / 旧 project_id 已在 v18 migration 反推插入 projects 表，
+   * 因此切换实现无遗漏；新装用户 projects 表为空时由调用方兜底 ['default']。
+   */
   listProjectIdsForAvatar(avatarId: string): string[] {
     const rows = this.db.prepare(`
-      SELECT DISTINCT project_id FROM conversations WHERE avatar_id = ? ORDER BY project_id
-    `).all(avatarId) as Array<{ project_id: string }>
-    return rows.map((r) => r.project_id)
+      SELECT name FROM projects
+      WHERE avatar_id = ? AND archived = 0
+      ORDER BY name
+    `).all(avatarId) as Array<{ name: string }>
+    return rows.map((r) => r.name)
   }
 
   /**

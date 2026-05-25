@@ -14,7 +14,7 @@
  * 但属性访问不再触发 externalize 警告。
  */
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-empty-function -- stub class/method 故意为空（infographic 间接依赖在浏览器不该真跑） */
 
 // path 模块的常用 API：返回字符串处理结果（浏览器无文件系统语义，用字符串规则模拟）
 export const isAbsolute = (p: string): boolean => typeof p === 'string' && p.startsWith('/')

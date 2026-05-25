@@ -3071,12 +3071,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let phase05SearchKnowledgeCalls = 0
     let phase05SearchKnowledgeResultLen = 0
     let phase05FirstTokenAt = 0
-    regressionTelemetry.emit({
-      type: 'conversation-started',
-      conversationId,
-      timestamp: requestStartedAt,
-      prompt: content,
-    })
+    // hidden repair 不污染 telemetry —— 与下游 safeEmit 守卫等价（这里 safeEmit
+    // 尚未定义，先用 _hiddenRepairEarly 直接守）
+    if (!_hiddenRepairEarly) {
+      regressionTelemetry.emit({
+        type: 'conversation-started',
+        conversationId,
+        timestamp: requestStartedAt,
+        prompt: content,
+      })
+    }
     // hiddenRepair 完全隔离全局 request 状态：
     //   - 不写 activeChatRequest（不让 cleanupRequest/isStale 把 outer 的 request 误判成 stale）
     //   - 不 abort 旧的 activeAbortController（outer 还在跑，repair 是 fire-and-forget 启动）
@@ -3091,6 +3095,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 2026-05-24：hiddenRepair 模式（infographic validator 触发的格式修正轮）
     // 所有面向用户的副作用全部禁掉——见接口处 hiddenRepair 注释。
     const isHiddenRepair = options?.hiddenRepair === true
+    // hidden repair 不进 regressionTelemetry：批量回归/eval 用 TelemetryCollector
+    // 按 conversationId 收集事件，而 hidden repair 是 fire-and-forget 跑在同一
+    // conversationId 上的修正轮，eval 跑题 + waitForIdle 时其 message-done /
+    // usage / tool-call 会被采进同一 case，污染 score / cost 统计。本 wrap 把
+    // hidden repair 跑出的 emit 全部 no-op；非 hidden repair 维持原 emit。
+    const safeEmit: typeof regressionTelemetry.emit = (event) => {
+      if (isHiddenRepair) return
+      regressionTelemetry.emit(event)
+    }
     // 切走→切回 streaming 回灌的 snapshot，每个 chunk 同步更新（见模块顶部说明）。
     // hiddenRepair 模式不创建——避免用户切走再切回时被 hidden 内容（修正 prompt 的
     // LLM 回复）回灌覆盖到 UI。
@@ -3865,7 +3878,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       logPerf('chart-skill:force-load', `skill=${FORCED_CHART_SKILL_ID}`)
       set({ toolCallStatus: 'load_skill' })
-      regressionTelemetry.emit({
+      safeEmit({
         type: 'tool-call-start',
         conversationId,
         timestamp: toolStartedAt,
@@ -3893,7 +3906,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       resultText = truncatedResult.content
       const toolDurationMs = Date.now() - toolStartedAt
 
-      regressionTelemetry.emit({
+      safeEmit({
         type: 'tool-call-end',
         conversationId,
         timestamp: Date.now(),
@@ -4046,7 +4059,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             cancelPendingChunk()
             // usage 在 isStale 之前先 emit：即便结果被丢弃，token 已经计费产生
             if (usage) {
-              regressionTelemetry.emit({
+              safeEmit({
                 type: 'usage',
                 conversationId,
                 timestamp: Date.now(),
@@ -4202,7 +4215,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             window.electronAPI.logEvent('warn', 'tool-args-parse-error', `${tc.function.name}: ${msg}`)
           }
 
-          regressionTelemetry.emit({
+          safeEmit({
             type: 'tool-call-start',
             conversationId,
             timestamp: toolStartedAt,
@@ -4267,7 +4280,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               ].join('\n')
 
               logPerf('tool-call:todo-write', `round=${round} merge=${merge} valid=${validTodos.length} invalid=${invalidCount} total=${all.length}`)
-              regressionTelemetry.emit({
+              safeEmit({
                 type: 'todo-write',
                 conversationId,
                 timestamp: Date.now(),
@@ -4365,7 +4378,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             'tool-call:done',
             `round=${round} name=${tc.function.name} duration=${toolDurationMs}ms resultLen=${resultText.length}`,
           )
-          regressionTelemetry.emit({
+          safeEmit({
             type: 'tool-call-end',
             conversationId,
             timestamp: Date.now(),
@@ -4478,7 +4491,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           })
           softWarnInjected = true
           logPerf('tool-loop:soft-warn', `round=${round}`)
-          regressionTelemetry.emit({
+          safeEmit({
             type: 'tool-loop:soft-warn',
             conversationId,
             timestamp: Date.now(),
@@ -4506,7 +4519,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (pendingToolCalls && pendingToolCalls.length > 0 && round >= HARD_MAX_ROUNDS) {
         logPerf('tool-loop:hard-stop', `maxRounds=${HARD_MAX_ROUNDS}`)
-        regressionTelemetry.emit({
+        safeEmit({
           type: 'tool-loop:hard-stop',
           conversationId,
           timestamp: Date.now(),
@@ -5112,7 +5125,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         })()
       }
 
-      regressionTelemetry.emit({
+      safeEmit({
         type: 'message-done',
         conversationId,
         timestamp: Date.now(),
@@ -5137,7 +5150,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         'phase05-query-summary',
         `avatar=${avatarId} status=error queryLen=${content.length} hiddenRepair=${isHiddenRepair ? 1 : 0} hasImages=${Boolean(images && images.length > 0)} hasAttachments=${Boolean(attachments && attachments.length > 0)} searchCalls=${phase05SearchKnowledgeCalls} searchResultLen=${phase05SearchKnowledgeResultLen} ttftMs=${phase05FirstTokenAt > 0 ? phase05FirstTokenAt - requestStartedAt : -1} totalMs=${Date.now() - requestStartedAt} err=${errMsg.slice(0, 80)}`,
       )
-      regressionTelemetry.emit({
+      safeEmit({
         type: 'conversation-error',
         conversationId,
         timestamp: Date.now(),

@@ -4,6 +4,9 @@
   "description": "Soul 分身框架核心 SDK，与运行环境无关（Node.js / Electron / CLI）",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "soul-mcp": "dist/mcp-server-bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

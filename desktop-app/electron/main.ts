@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type DocumentIR, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -6036,69 +6036,72 @@ function isUnderRoot(absPath: string, root: string): boolean {
   return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + path.sep)
 }
 
-/** document:* IPC 限制：路径必须在 userData 根下。注：本根稍后会被 Bug 1 重设计取代。 */
-function isUnderUserData(absolutePath: string): boolean {
-  return isUnderRoot(absolutePath, app.getPath('userData'))
+/**
+ * 把 IPC 传入的 (conversationId, filePath) 解析为受信的绝对路径。
+ * 不接受渲染层传入的任意 absolute path（之前的设计漏洞：dev 环境 workspace
+ * 不在 userData 下导致校验误杀；生产环境又允许整个 userData 覆盖 xiaodu.db）。
+ *
+ * 流程：
+ *   1) conversationId 必须 safe segment
+ *   2) 查 conversation 表 → 得 avatar_id + project_id（任何前端不知道的字段都
+ *      由 trusted DB 提供）
+ *   3) filePath 必须以 'exports/' 开头 + 不含 .. 段 + 扩展名白名单
+ *      (pdf/docx/md/xlsx)
+ *   4) resolveAvatarWorkspaceSessionRoot 算 workspace root
+ *   5) join + isUnderRoot 双校验防 traversal
+ *
+ * 返回绝对路径或 null（任一校验失败）。
+ */
+const DOC_EXT_ALLOWLIST = new Set(['.pdf', '.docx', '.md', '.xlsx'])
+function resolveTrustedDocumentPath(conversationId: string, filePath: string): string | null {
+  try {
+    assertSafeSegment(conversationId, 'conversationId')
+  } catch {
+    return null
+  }
+  if (typeof filePath !== 'string' || filePath.length === 0) return null
+  if (!filePath.startsWith('exports/')) return null
+  // 防 .. 绕过：split 后任何段是 '..' 都拒绝
+  if (filePath.split(/[\\/]/).some(seg => seg === '..')) return null
+  const ext = path.extname(filePath).toLowerCase()
+  if (!DOC_EXT_ALLOWLIST.has(ext)) return null
+
+  const conv = getDb().getConversation(conversationId)
+  if (!conv) return null
+  const projectId = conv.project_id || DEFAULT_AVATAR_PROJECT_ID
+  let workspaceRoot: string
+  try {
+    workspaceRoot = resolveAvatarWorkspaceSessionRoot(avatarsPath, conv.avatar_id, projectId, conversationId)
+  } catch {
+    return null
+  }
+  const absolutePath = path.join(workspaceRoot, filePath)
+  if (!isUnderRoot(absolutePath, workspaceRoot)) return null
+  return absolutePath
 }
-
-wrapHandler('document:render-pdf', async (_, html: string, outputPath: string) => {
-  if (typeof html !== 'string' || html.length === 0) {
-    throw new Error('document:render-pdf 缺少 html')
-  }
-  if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
-    throw new Error('document:render-pdf 缺少绝对 outputPath')
-  }
-  if (!isUnderUserData(outputPath)) {
-    throw new Error(`document:render-pdf outputPath 必须在 userData 根下: ${outputPath}`)
-  }
-  return renderDocumentPdf(html, outputPath, { logger: logger ?? undefined })
-})
-
-wrapHandler('document:render-docx', async (_, ir: DocumentIR, outputPath: string) => {
-  if (!ir || typeof ir !== 'object') {
-    throw new Error('document:render-docx 缺少 ir')
-  }
-  if (typeof outputPath !== 'string' || !path.isAbsolute(outputPath)) {
-    throw new Error('document:render-docx 缺少绝对 outputPath')
-  }
-  if (!isUnderUserData(outputPath)) {
-    throw new Error(`document:render-docx outputPath 必须在 userData 根下: ${outputPath}`)
-  }
-  return renderDocumentDocx(ir, outputPath, { logger: logger ?? undefined })
-})
 
 /**
  * 用系统默认应用打开生成的文档（FileCard 主按钮）。
+ * 主进程按 (conversationId, filePath) 反查 workspace exports/ 算绝对路径，
+ * 不接收渲染层任意 absolute path。
  * 返回错误信息字符串（成功为空串），与 shell.openPath 的语义一致。
  */
-wrapHandler('document:open', async (_, absolutePath: string) => {
-  if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
-    return '缺少绝对路径'
-  }
-  if (!isUnderUserData(absolutePath)) {
-    return `路径必须在 userData 根下: ${absolutePath}`
-  }
-  if (!fs.existsSync(absolutePath)) {
-    return `文件不存在: ${absolutePath}`
-  }
-  return shell.openPath(absolutePath)
+wrapHandler('document:open', async (_, conversationId: string, filePath: string) => {
+  const abs = resolveTrustedDocumentPath(conversationId, filePath)
+  if (!abs) return `非法路径或 conversation 不存在: ${filePath}`
+  if (!fs.existsSync(abs)) return `文件不存在: ${abs}`
+  return shell.openPath(abs)
 })
 
 /**
  * 在文件夹中显示生成的文档（FileCard 次按钮）。
  * 与 document:open 互补：不打开文件，只在系统资源管理器/Finder 中高亮。
  */
-wrapHandler('document:show-in-folder', async (_, absolutePath: string) => {
-  if (typeof absolutePath !== 'string' || !path.isAbsolute(absolutePath)) {
-    return { ok: false, error: '缺少绝对路径' }
-  }
-  if (!isUnderUserData(absolutePath)) {
-    return { ok: false, error: `路径必须在 userData 根下: ${absolutePath}` }
-  }
-  if (!fs.existsSync(absolutePath)) {
-    return { ok: false, error: `文件不存在: ${absolutePath}` }
-  }
-  shell.showItemInFolder(absolutePath)
+wrapHandler('document:show-in-folder', async (_, conversationId: string, filePath: string) => {
+  const abs = resolveTrustedDocumentPath(conversationId, filePath)
+  if (!abs) return { ok: false, error: `非法路径或 conversation 不存在: ${filePath}` }
+  if (!fs.existsSync(abs)) return { ok: false, error: `文件不存在: ${abs}` }
+  shell.showItemInFolder(abs)
   return { ok: true }
 })
 

@@ -56,7 +56,9 @@ export default function FileCard({ attachment }: Props): ReactElement {
     setOpenErr(null)
     setOpenOk(false)
     try {
-      const errMsg = await window.electronAPI.openDocument(attachment.absolutePath)
+      // 走 (conversationId, filePath) 让主进程自查 workspace exports/ 算路径，
+      // 不传 absolutePath 给 IPC（攻击模型：前端 state 可被改成 /etc/passwd）。
+      const errMsg = await window.electronAPI.openDocument(attachment.conversationId, attachment.filePath)
       if (errMsg && errMsg.length > 0) {
         setOpenErr(errMsg)
         window.electronAPI.logEvent('warn', 'file-card-open-failed', `${attachment.filename}: ${errMsg}`)
@@ -77,7 +79,7 @@ export default function FileCard({ attachment }: Props): ReactElement {
 
   const handleShowInFolder = async (): Promise<void> => {
     try {
-      const result = await window.electronAPI.showDocumentInFolder(attachment.absolutePath)
+      const result = await window.electronAPI.showDocumentInFolder(attachment.conversationId, attachment.filePath)
       if (!result.ok) {
         setOpenErr(result.error ?? '无法在文件夹中显示')
         window.electronAPI.logEvent('warn', 'file-card-reveal-failed', `${attachment.filename}: ${result.error ?? ''}`)

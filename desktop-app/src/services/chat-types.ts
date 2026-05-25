@@ -42,8 +42,14 @@ export interface DocumentAttachment {
   format: DocumentAttachmentFormat
   /** 工作区内相对路径，如 exports/收益测算.pdf（用于持久化与日志） */
   filePath: string
-  /** 绝对路径（FileCard 点击 [打开] 时直接传给 shell.openPath） */
+  /**
+   * 绝对路径——仅供 logging / 老代码 fallback，FileCard 已改为按
+   * (conversationId, filePath) 调 IPC 让主进程自查 workspace exports root，
+   * 避免渲染层持有任意 absolute path。
+   */
   absolutePath: string
+  /** conversationId：让主进程反查 conversation 算 workspace exports/ 受信根 */
+  conversationId: string
   /** 文件大小（字节，用于 UI 显示 KB/MB） */
   sizeBytes: number
   /** 含扩展名的展示文件名 */

@@ -3105,6 +3105,10 @@ ${content}` }
       format: 'xlsx' as const,
       file_path: relativePath,
       absolute_path: absolutePath,
+      // 2026-05-26：前端 IPC 改为接 (conversationId, file_path) 让主进程自查
+      // workspace exports root；带上 conversation_id 给 chat-types/FileCard 用。
+      // absolute_path 保留供 logging / 调试，**前端不再用它直接调 shell**。
+      conversation_id: conversationId,
       sheet_count: validatedSheets.length,
       total_rows: totalRows,
       file_size_bytes: fileSizeBytes,
@@ -3278,6 +3282,8 @@ ${content}` }
       format,
       file_path: relativePath,
       absolute_path: absolutePath,
+      // 见 export_excel payload 注释——conversation_id 让前端 IPC 走 conv 反查路径
+      conversation_id: conversationId,
       file_size_bytes: writtenSize,
       block_count: ir.blocks.length,
       template_name: templateName,

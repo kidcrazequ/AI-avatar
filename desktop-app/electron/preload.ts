@@ -78,15 +78,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openAttachmentFile: (id: string) =>
     ipcRenderer.invoke('open-attachment-file', id),
 
-  // 文档生成（PDF / DOCX / Markdown）— 与 generate_document 工具配套
-  renderDocumentPdf: (html: string, outputPath: string) =>
-    ipcRenderer.invoke('document:render-pdf', html, outputPath),
-  renderDocumentDocx: (ir: unknown, outputPath: string) =>
-    ipcRenderer.invoke('document:render-docx', ir, outputPath),
-  openDocument: (absolutePath: string) =>
-    ipcRenderer.invoke('document:open', absolutePath),
-  showDocumentInFolder: (absolutePath: string) =>
-    ipcRenderer.invoke('document:show-in-folder', absolutePath),
+  // 文档相关（与 generate_document 工具配套）。
+  // openDocument / showDocumentInFolder 接 (conversationId, filePath) —— 主进程
+  // 反查 conversation 得 avatarId/projectId，自己 resolve 到 workspace exports/，
+  // 完全不信任渲染层传入的绝对路径；filePath 必须以 'exports/' 开头。
+  openDocument: (conversationId: string, filePath: string) =>
+    ipcRenderer.invoke('document:open', conversationId, filePath),
+  showDocumentInFolder: (conversationId: string, filePath: string) =>
+    ipcRenderer.invoke('document:show-in-folder', conversationId, filePath),
 
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) =>

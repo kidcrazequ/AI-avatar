@@ -2667,8 +2667,9 @@ export function tryExtractDocumentAttachment(toolName: string, resultText: strin
     if (obj.success !== true) return null
     const filePath = typeof obj.file_path === 'string' ? obj.file_path : null
     const absolutePath = typeof obj.absolute_path === 'string' ? obj.absolute_path : null
+    const conversationId = typeof obj.conversation_id === 'string' ? obj.conversation_id : null
     const sizeBytes = typeof obj.file_size_bytes === 'number' ? obj.file_size_bytes : 0
-    if (!filePath || !absolutePath) return null
+    if (!filePath || !absolutePath || !conversationId) return null
     if (!filePath.startsWith('exports/')) return null
 
     // 推断 format：优先取返回字段，其次按工具名/扩展名兜底
@@ -2709,6 +2710,7 @@ export function tryExtractDocumentAttachment(toolName: string, resultText: strin
       format,
       filePath,
       absolutePath,
+      conversationId,
       sizeBytes,
       filename,
       sources,

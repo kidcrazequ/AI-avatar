@@ -636,22 +636,14 @@ interface ElectronAPI {
 
   // 文档生成（PDF / DOCX / Markdown）— 与 generate_document 工具配套（2026-05-08）
   /**
-   * 把 generateDocument 渲染好的完整 HTML 字符串落成 PDF 文件。
-   * outputPath 必须为绝对路径（已经 generateDocument 安全校验）。
-   */
-  renderDocumentPdf: (html: string, outputPath: string) => Promise<{ size: number }>
-  /**
-   * 把 DocumentIR（@soul/core 的统一中间表示）渲染为 .docx 文件。
-   * 主进程使用 docx@9.x；中文字体按平台自动选择。
-   */
-  renderDocumentDocx: (ir: unknown, outputPath: string) => Promise<{ size: number }>
-  /**
-   * 用系统默认应用打开生成的文档（FileCard 主按钮）。
+   * 用系统默认应用打开 generate_document/export_excel 生成的文档（FileCard 主按钮）。
+   * 主进程按 (conversationId, filePath) 自查 conversation → workspace exports/ 路径，
+   * 不接收任意绝对路径。filePath 必须以 'exports/' 开头。
    * 返回 shell.openPath 的错误描述：成功为 ''，失败为非空字符串。
    */
-  openDocument: (absolutePath: string) => Promise<string>
-  /** 在系统资源管理器/Finder 中显示生成的文档（FileCard 次按钮） */
-  showDocumentInFolder: (absolutePath: string) => Promise<{ ok: boolean; error?: string }>
+  openDocument: (conversationId: string, filePath: string) => Promise<string>
+  /** 在系统资源管理器/Finder 中显示文档（FileCard 次按钮）。签名同 openDocument。 */
+  showDocumentInFolder: (conversationId: string, filePath: string) => Promise<{ ok: boolean; error?: string }>
 
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) => Promise<Array<{ file: string; size: number; mtime: number }>>

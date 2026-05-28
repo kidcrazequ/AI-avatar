@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import dns from 'dns'
 import net from 'net'
+import { Agent } from 'undici'
 import { KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
@@ -357,11 +358,14 @@ function isPrivateIp(ip: string): boolean {
 }
 
 /**
- * DNS 解析 hostname 并校验所有返回 IP 都不在内网段。
+ * DNS 解析 hostname、校验所有返回 IP 都不在内网段，并返回首个 public IP 用于 pinning。
  * 之前只对 hostname 字符串做正则匹配，localtest.me / 自定义域名解析到 127.0.0.1
  * 或公网 URL 302 到内网 IP 都会绕过。
+ *
+ * 返回值用于 DNS rebinding 防护：调用方把这个 IP 灌进 undici 的 connect.lookup，
+ * 确保 fetch 实际连接的就是我们校验过的 IP，不会被攻击域名第二次解析返回内网替换。
  */
-async function assertNotPrivateHost(hostname: string): Promise<void> {
+async function resolveAndAssertNotPrivate(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
   // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单
   if (/^localhost$/i.test(hostname) || /\.localhost$/i.test(hostname)) {
     throw new Error(`拒绝内网/回环主机名：${hostname}`)
@@ -369,7 +373,7 @@ async function assertNotPrivateHost(hostname: string): Promise<void> {
   // 输入本身就是 IP：直接判
   if (net.isIP(hostname)) {
     if (isPrivateIp(hostname)) throw new Error(`拒绝抓取内网地址：${hostname}`)
-    return
+    return { address: hostname, family: net.isIPv4(hostname) ? 4 : 6 }
   }
   let addrs: Array<{ address: string; family: number }>
   try {
@@ -382,6 +386,8 @@ async function assertNotPrivateHost(hostname: string): Promise<void> {
       throw new Error(`拒绝抓取内网地址 ${addr.address}（DNS 解析自 ${hostname}）`)
     }
   }
+  const picked = addrs[0]
+  return { address: picked.address, family: picked.family === 6 ? 6 : 4 }
 }
 
 /** HTML 实体解码表（覆盖 99% 常见场景，避免引入 he 这种额外库） */
@@ -4071,31 +4077,50 @@ ${content}` }
     )
 
     try {
-      // 手动重定向 + 每跳 DNS 校验：避免公网 URL 302 到内网绕过 SSRF 防线
+      // 手动重定向 + 每跳 DNS 校验 + IP pinning：避免 DNS rebinding。
+      // 流程：lookup → 校验 IP 不是内网 → undici Agent 用 connect.lookup 把这个 IP
+      // 灌进去，fetch 实际 socket 连接就用这个 IP，不会被同一 hostname 第二次解析
+      // 返回内网替换。
       const MAX_REDIRECTS = 5
       // 16MB 硬上限：防超大响应或无限流撑爆主进程内存（在 maxChars 字符截断之外的字节级兜底）
       const HARD_BYTE_LIMIT = 16 * 1024 * 1024
       let currentUrl = parsed.href
+      const redirectChain: string[] = []
       let response: Response | null = null
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
         const u = new URL(currentUrl)
         if (u.protocol !== 'http:' && u.protocol !== 'https:') {
           return { content: '', error: `重定向跳到不支持的协议 ${u.protocol}` }
         }
-        await assertNotPrivateHost(u.hostname)
+        const pinned = await resolveAndAssertNotPrivate(u.hostname)
+        // undici Agent: 自定义 connect.lookup 把校验过的 IP pin 死。
+        // 注意：fetch 全局是 undici，Node 22+ RequestInit 不声明 dispatcher 字段，
+        // 用 init 对象 + 类型扩展规避
+        const agent = new Agent({
+          connect: {
+            lookup: (_hostname: string, _options: dns.LookupOptions, callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
+              callback(null, pinned.address, pinned.family)
+            },
+          },
+        })
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), WEB_FETCH_TIMEOUT_MS)
         let resp: Response
         try {
-          resp = await fetch(currentUrl, {
+          // dispatcher 是 undici 的扩展字段，全局 RequestInit 不声明；
+          // undici-types（@types/node 用）与本地 undici 包的 Dispatcher 类型独立声明，
+          // 互相不兼容 → 通过 unknown 桥接断言
+          const init = {
             method: 'GET',
             headers: {
               'User-Agent': 'Mozilla/5.0 (compatible; SoulBot/1.0)',
               'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,*/*',
             },
-            redirect: 'manual',  // 自己处理重定向，每跳都重新走 DNS 校验
+            redirect: 'manual' as const,  // 自己处理重定向，每跳都重新走 DNS 校验
             signal: controller.signal,
-          })
+            dispatcher: agent as unknown,
+          } as unknown as RequestInit
+          resp = await fetch(currentUrl, init)
         } finally {
           clearTimeout(timeoutId)
         }
@@ -4109,6 +4134,7 @@ ${content}` }
           if (hop >= MAX_REDIRECTS) {
             return { content: '', error: `超过最大重定向数 ${MAX_REDIRECTS}` }
           }
+          redirectChain.push(currentUrl)
           currentUrl = new URL(loc, currentUrl).href
           continue
         }
@@ -4187,8 +4213,12 @@ ${content}` }
         truncated = true
       }
 
+      const wasRedirected = currentUrl !== parsed.href
       const payload = {
         url: parsed.href,
+        // 跟随重定向后实际拉取的 URL（正文来源），与原始 URL 区分；下游做 source citation
+        // 时应该用 final_url，而不是被引导误用原始 URL
+        ...(wasRedirected ? { final_url: currentUrl, redirect_chain: redirectChain } : {}),
         status: response.status,
         content_type: contentType,
         format,
@@ -4920,15 +4950,22 @@ ${content}` }
     }
     const communityDeclaredPath = refs.community.get(skillId)
     if (communityDeclaredPath) {
-      // 按 yaml 声明的 path 加载，避免同名跨 pack 串包。path 是相对 avatarsPath/.. 的
-      // workspace 根（与 sources.yaml 安装路径对齐）
+      // 按 yaml 声明的 path 加载，避免同名跨 pack 串包。
+      // 历史 community-skill-manager 写 ../../../shared/...（相对 yaml 文件位置），
+      // 新版改成 shared/skills/community/...（相对 repo root，canonical）；都试一下。
+      // 越界校验：解析后必须落在 communityRoot 下
       const communityRoot = path.resolve(this.avatarsPath, '..', 'shared', 'skills', 'community')
-      const absPath = path.resolve(this.avatarsPath, '..', communityDeclaredPath)
-      // 防 yaml 里 path 用 ../ 越出 community 根
-      const rel = path.relative(communityRoot, absPath)
-      if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absPath)) {
-        const content = fs.readFileSync(absPath, 'utf-8')
-        return { content: `## 技能：${skillId}\n\n${content}` }
+      const yamlDir = path.join(this.avatarsPath, avatarId, 'skills')
+      const candidates = [
+        path.resolve(this.avatarsPath, '..', communityDeclaredPath),  // canonical: repo-root 相对
+        path.resolve(yamlDir, communityDeclaredPath),                 // legacy: yaml-relative
+      ]
+      for (const absPath of candidates) {
+        const rel = path.relative(communityRoot, absPath)
+        if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absPath)) {
+          const content = fs.readFileSync(absPath, 'utf-8')
+          return { content: `## 技能：${skillId}\n\n${content}` }
+        }
       }
     }
     return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }

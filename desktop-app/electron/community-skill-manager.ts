@@ -190,12 +190,17 @@ export class CommunitySkillManager {
     }
 
     const raw = fs.readFileSync(indexPath, 'utf-8')
-    if (raw.includes(`name: ${skillName}`)) return
+    // 精确 name 匹配——substring (raw.includes 'name: foo') 会被 name: foobar 误判命中
+    if (this.indexHasSkillExact(raw, skillName)) return
 
     const skillFile = this.findSkillFile(packName, skillName)
     if (!skillFile) throw new Error(`社区技能 ${skillName} 在 ${packName} 中不存在`)
 
-    const relativePath = `../../../shared/skills/community/${packName}/skills/${skillFile}`
+    // path 用 repo-root 相对（canonical）：让 load_skill 的 path.resolve(repoRoot, ...)
+    // 直接落到 shared/skills/community/。之前写 ../../../shared/... 是相对 yaml 位置的，
+    // 被 load_skill 按 repo-root 解析后会跑到 /Users/kian/shared/...，再被
+    // communityRoot 越界校验拒掉
+    const relativePath = `shared/skills/community/${packName}/skills/${skillFile}`
     const entry = [
       `  - name: ${skillName}`,
       `    path: ${relativePath}`,
@@ -226,7 +231,9 @@ export class CommunitySkillManager {
     let skipping = false
 
     for (const line of lines) {
-      if (line.trim().startsWith('- name:') && line.includes(skillName)) {
+      // 精确 name 匹配——line.includes('foo') 会误删 name: foobar 的整段
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m && m[1].replace(/['"]/g, '').trim() === skillName) {
         skipping = true
         continue
       }
@@ -244,6 +251,15 @@ export class CommunitySkillManager {
 
     fs.writeFileSync(indexPath, result.join('\n'), 'utf-8')
     this.logger.activity('community:disable', `avatar=${avatarId} skill=${skillName}`)
+  }
+
+  /** 在 skill-index.yaml 文本里精确查找 - name: <skillName> 行（不会被同前缀 name 误命中） */
+  private indexHasSkillExact(raw: string, skillName: string): boolean {
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m && m[1].replace(/['"]/g, '').trim() === skillName) return true
+    }
+    return false
   }
 
   // ─── 内部方法 ──────────────────────────────────────────────────

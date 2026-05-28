@@ -217,17 +217,38 @@ export class SkillRouter {
   // ─── 内部方法 ──────────────────────────────────────────────────
 
   private loadSkillContent(avatarId: string, entry: SkillIndexEntry): string | null {
-    const skillPath = path.join(this.avatarsPath, avatarId, entry.path)
-    if (!fs.existsSync(skillPath)) {
-      console.warn(`[SkillRouter] SKILL.md 不存在: ${skillPath}`)
-      return null
+    // source 分流：之前一律 path.join(avatarsPath, avatarId, entry.path)，
+    // shared/community 索引的 path 是 repo-root 相对（shared/skills/xxx.md），
+    // 拼出来变成 avatars/<id>/shared/skills/xxx.md，命中后 skillContent=null。
+    //   - local: 相对 avatar/skills/ 解析
+    //   - shared/community: 优先按 repo-root 相对解析（canonical）；
+    //     失败时退回按 skill-index.yaml 所在目录解析（兼容 community-skill-manager
+    //     早期写的 ../../../shared/... 形式）
+    const repoRoot = path.resolve(this.avatarsPath, '..')
+    const avatarRoot = path.join(this.avatarsPath, avatarId)
+    const yamlDir = path.join(avatarRoot, 'skills')
+    const source = entry.source ?? 'local'
+    const candidates: string[] = source === 'local'
+      ? [path.join(yamlDir, entry.path)]
+      : [path.resolve(repoRoot, entry.path), path.resolve(yamlDir, entry.path)]
+
+    for (const skillPath of candidates) {
+      // 越界校验：必须落在 avatarRoot 或 repoRoot 下，防 yaml 里的 ../ 跑出 workspace
+      const rel = path.relative(repoRoot, skillPath)
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        console.warn(`[SkillRouter] skill 路径越界（不在 repo root 下）：${skillPath}`)
+        continue
+      }
+      if (!fs.existsSync(skillPath)) continue
+      try {
+        return fs.readFileSync(skillPath, 'utf-8')
+      } catch (err) {
+        console.warn(`[SkillRouter] 读取 SKILL.md 失败 ${skillPath}: ${err instanceof Error ? err.message : String(err)}`)
+        return null
+      }
     }
-    try {
-      return fs.readFileSync(skillPath, 'utf-8')
-    } catch (err) {
-      console.warn(`[SkillRouter] 读取 SKILL.md 失败: ${err instanceof Error ? err.message : String(err)}`)
-      return null
-    }
+    console.warn(`[SkillRouter] SKILL.md 不存在（已试候选 ${candidates.length} 个）：name=${entry.name} path=${entry.path} source=${source}`)
+    return null
   }
 
   /** 从文本中提取 2-4 字符的连续中文片段作为 bigram 候选 */

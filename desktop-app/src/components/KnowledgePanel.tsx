@@ -422,6 +422,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
       const baseModel = creationModel?.apiKey ? creationModel : chatModel
       let finalContent: string
+      // 单文件导入走的是完整 LLM 逐章格式化管线。成功时标 source: enhanced，
+      // 让 enhance-knowledge-files 自动扫描跳过（与 format-knowledge-file 出口对齐）。
+      // 失败 / 跳过 LLM 时仍标 source: <fileType>，让 enhance 后续补跑。
+      let llmFormatted = false
 
       if (baseModel?.apiKey && cleanedText.length > 500) {
         showStatus('LLM 逐章格式化中...', false)
@@ -447,6 +451,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               showStatus(`格式化章节 ${progress.current}/${progress.total}：${progress.chapterTitle}`, false)
             },
           )
+          llmFormatted = true
 
           const visionAllText = visionResults.join('\n')
           const fabricated = detectFabricatedNumbers(finalContent, rawText + '\n' + visionAllText)
@@ -465,11 +470,14 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const targetPath = `${baseName}.md`
 
       // \u4e0e\u6279\u91cf\u5bfc\u5165\u8def\u5f84\uff08main.ts:batchImportFiles\uff09\u4fdd\u6301\u4e00\u81f4\uff1a
-      //   - source \u8ba9\u6eaf\u6e90 chip / enhance \u626b\u63cf\u8bc6\u522b\u8fd9\u662f\u5bfc\u5165\u6587\u4ef6\u800c\u975e\u624b\u5199\u77e5\u8bc6
+      //   - source: enhanced\uff08LLM \u6210\u529f\u683c\u5f0f\u5316\uff09/ parsed.fileType\uff08fallback \u5230\u539f\u6587\uff09
+      //     \u8ba9 enhance-knowledge-files \u81ea\u52a8\u626b\u63cf\u636e\u6b64\u51b3\u5b9a\u662f\u5426\u9700\u8981\u8865\u8dd1 LLM \u683c\u5f0f\u5316
       //   - raw_file \u6307\u5411 _raw/ \u4e0b\u539f\u59cb PDF/DOCX\uff0c\u8ba9"\u6253\u5f00\u539f\u59cb\u6587\u4ef6"\u6309\u94ae\u80fd\u8df3\u8f6c
       //   - rag_only \u9632\u6b62\u5927\u6587\u6863\u88ab SoulLoader \u6574\u6bb5\u585e\u8fdb system prompt\uff08>50KB \u65f6\u6253\u5f00\uff09
       const RAG_ONLY_THRESHOLD = 50_000
-      const generalSystemMeta: Record<string, unknown> = { source: parsed.fileType }
+      const generalSystemMeta: Record<string, unknown> = {
+        source: llmFormatted ? 'enhanced' : parsed.fileType,
+      }
       if (rawRelPath) generalSystemMeta.raw_file = rawRelPath
       if (finalContent.length > RAG_ONLY_THRESHOLD) generalSystemMeta.rag_only = true
       const generalEnhanced = extractFrontmatterFields(parsed.fileName, finalContent)

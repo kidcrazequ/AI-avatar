@@ -1167,6 +1167,10 @@ export class ToolRouter {
     // limit 上限：之前没 cap，LLM 可以传 limit: 999999 让工具吐巨量字符占满 context。
     // 5000 行已经远超任何合理「让 LLM 看一段」场景；超过即截断，并通过提示让 LLM 用 offset 翻页。
     const MAX_LIMIT_LINES = 5000
+    // 单行字符上限：阻止 minified JSON / single-line log（如 9MB 单行）整行回吐撑爆 context。
+    const MAX_LINE_CHARS = 4000
+    // 返回总字符上限：行数 cap 对单行超长无效，再加一层 grand-total 兜底。
+    const MAX_TOTAL_CHARS = 80_000
     const stat = fs.statSync(filePath)
     if (stat.size > MAX_USER_FILE_BYTES) {
       return {
@@ -1179,10 +1183,37 @@ export class ToolRouter {
     const limit = Math.min(rawLimit, MAX_LIMIT_LINES)
     const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
     const sliced = lines.slice(offset, offset + limit)
-    const tailHint = lines.length > offset + limit
-      ? `\n[hint] 文件共 ${lines.length} 行，本次只返回 ${offset + 1}-${offset + sliced.length} 行；继续读请加 offset=${offset + sliced.length}`
-      : ''
-    return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') + tailHint }
+    let truncatedLineCount = 0
+    let totalCharBudget = MAX_TOTAL_CHARS
+    const rendered: string[] = []
+    let stoppedAtIdx = sliced.length
+    for (let i = 0; i < sliced.length; i++) {
+      const raw = sliced[i]
+      let line = raw
+      if (line.length > MAX_LINE_CHARS) {
+        line = `${line.slice(0, MAX_LINE_CHARS)}…[truncated, full length ${raw.length} chars]`
+        truncatedLineCount++
+      }
+      const prefixed = `${offset + i + 1}|${line}`
+      if (prefixed.length + 1 > totalCharBudget) {
+        stoppedAtIdx = i
+        break
+      }
+      rendered.push(prefixed)
+      totalCharBudget -= prefixed.length + 1
+    }
+    const hintParts: string[] = []
+    if (lines.length > offset + limit) {
+      hintParts.push(`文件共 ${lines.length} 行，本次只返回 ${offset + 1}-${offset + sliced.length} 行；继续读请加 offset=${offset + sliced.length}`)
+    }
+    if (stoppedAtIdx < sliced.length) {
+      hintParts.push(`返回字符达 ${MAX_TOTAL_CHARS} 上限，仅返回前 ${stoppedAtIdx} 行；继续读请加 offset=${offset + stoppedAtIdx}`)
+    }
+    if (truncatedLineCount > 0) {
+      hintParts.push(`${truncatedLineCount} 行单行超 ${MAX_LINE_CHARS} 字符已截断（典型 minified JSON / single-line log）`)
+    }
+    const tailHint = hintParts.length > 0 ? `\n[hint] ${hintParts.join('；')}` : ''
+    return { content: rendered.join('\n') + tailHint }
   }
 
   /**

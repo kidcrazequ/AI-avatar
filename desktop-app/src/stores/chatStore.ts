@@ -2670,26 +2670,36 @@ export function tryExtractDocumentAttachment(
     const obj = parsed as Record<string, unknown>
     if (obj.success !== true) return null
     const filePath = typeof obj.file_path === 'string' ? obj.file_path : null
-    const absolutePath = typeof obj.absolute_path === 'string' ? obj.absolute_path : null
+    // absolute_path 仅供 logging。FileCard 已改用 (conversationId, filePath)
+    // 让主进程自查 workspace exports/，前端不再需要 absolute_path 来开文件。
+    // 老 payload 可能完全没这个字段，缺失时降级为空字符串，不再卡掉解析。
+    const absolutePath = typeof obj.absolute_path === 'string' ? obj.absolute_path : ''
     // conversation_id 是 2026-05 加上的字段；老 payload 没有，传入 fallback
     // （恢复历史会话时用当前 conversationId）兜底，否则文件卡片会从 UI 消失。
     const conversationId = typeof obj.conversation_id === 'string'
       ? obj.conversation_id
       : (fallbackConversationId ?? null)
     const sizeBytes = typeof obj.file_size_bytes === 'number' ? obj.file_size_bytes : 0
-    if (!filePath || !absolutePath || !conversationId) return null
+    if (!filePath || !conversationId) return null
     if (!filePath.startsWith('exports/')) return null
 
-    // 推断 format：优先取返回字段，其次按工具名/扩展名兜底
+    // 推断 format：优先取返回 format 字段，次用文件扩展名，再用 toolName 兜底
+    // 顺序原因：file_path 扩展名是数据本身的事实，比 toolName / payload format
+    // 字段更可信；toolName 放最后是因为 DB 恢复路径下所有 tool 行都被同一个
+    // 占位 name 标记（实际 tool name 没入库），用它兜底容易把 generate_document
+    // 的 .pdf 误判成 export_excel 的 .xlsx。
     let format: DocumentAttachmentFormat | null = null
-    const formatRaw = obj.format
-    if (typeof formatRaw === 'string' && ['md', 'pdf', 'docx', 'xlsx'].includes(formatRaw)) {
-      format = formatRaw as DocumentAttachmentFormat
-    } else if (toolName === 'export_excel') {
-      format = 'xlsx'
+    const SUPPORTED_FORMATS = ['md', 'pdf', 'docx', 'xlsx'] as const
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
+    if ((SUPPORTED_FORMATS as readonly string[]).includes(ext)) {
+      format = ext as DocumentAttachmentFormat
     } else {
-      const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
-      if (['md', 'pdf', 'docx', 'xlsx'].includes(ext)) format = ext as DocumentAttachmentFormat
+      const formatRaw = obj.format
+      if (typeof formatRaw === 'string' && (SUPPORTED_FORMATS as readonly string[]).includes(formatRaw)) {
+        format = formatRaw as DocumentAttachmentFormat
+      } else if (toolName === 'export_excel') {
+        format = 'xlsx'
+      }
     }
     if (!format) return null
 

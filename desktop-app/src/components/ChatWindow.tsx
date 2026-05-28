@@ -55,7 +55,12 @@ function collectDocumentAttachmentsByAssistantId(
     if (message.role === 'tool') {
       // 老 payload（2026-05 之前）没有 conversation_id 字段；用当前会话兜底，
       // 否则 tryExtractDocumentAttachment 会返回 null，历史 FileCard 全丢。
-      const attachment = tryExtractDocumentAttachment('export_excel', message.content, conversationId)
+      //
+      // toolName 传 ''——历史 tool 行实际 name 没入库，统一传 'export_excel'
+      // 会让无 format 字段的 generate_document 结果被兜底成 xlsx 误判格式。
+      // tryExtractDocumentAttachment 内部已改为优先按 file_path 扩展名推断，
+      // toolName 只在两条都识别不出时兜底，传空就是放弃兜底（安全选择）。
+      const attachment = tryExtractDocumentAttachment('', message.content, conversationId)
       if (attachment) pending = [...pending, attachment]
       continue
     }

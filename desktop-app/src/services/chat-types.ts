@@ -45,7 +45,7 @@ export interface DocumentAttachment {
   /**
    * 绝对路径——仅供 logging / 老代码 fallback，FileCard 已改为按
    * (conversationId, filePath) 调 IPC 让主进程自查 workspace exports root，
-   * 避免渲染层持有任意 absolute path。
+   * 避免渲染层持有任意 absolute path。老 payload 可能不带，置空字符串。
    */
   absolutePath: string
   /** conversationId：让主进程反查 conversation 算 workspace exports/ 受信根 */

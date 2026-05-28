@@ -369,6 +369,7 @@ export class DatabaseManager {
         reasoning_content TEXT,
         uncertain_markers TEXT,
         reconsider_markers TEXT,
+        tool_call_timeline_json TEXT,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
       )
@@ -637,6 +638,23 @@ export class DatabaseManager {
       CREATE INDEX IF NOT EXISTS idx_sub_agent_tasks_running
       ON sub_agent_tasks(status) WHERE status = 'running'
     `)
+
+    // v18 projects 表（与 conversations.project_id 字符串保持兼容；projects.name 等于该字符串）。
+    // fresh install 必须含此表——否则 list-project-ids / projects:create 等 IPC 报
+    // "no such table: projects"，新用户首次打开应用即崩。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        avatar_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(avatar_id, name)
+      )
+    `)
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_projects_avatar ON projects(avatar_id)`)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */

@@ -892,6 +892,8 @@ export class WikiCompiler {
     }
 
     await fs.promises.copyFile(originalFilePath, targetPath)
-    return path.relative(knowledgePath, targetPath)
+    // 统一返回 POSIX 风格相对路径——frontmatter 是跨平台的文本，Windows 写 `_raw\foo.pdf`
+    // 同步到 mac/Linux 会让 resolve/open handler 命中失败，溯源 chip 整体失效。
+    return path.relative(knowledgePath, targetPath).split(path.sep).join('/')
   }
 }

@@ -2010,7 +2010,11 @@ wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: 
   if (!rawValue) return null
 
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const rawAbsPath = path.resolve(knowledgePath, rawValue)
+  // 历史数据 / Windows 端写入的 raw_file 可能含反斜杠（_raw\foo.pdf）；
+  // POSIX 上 path.resolve 不会拆 `\`，会把整段当文件名命中失败。先 normalize 成 `/`，
+  // 再让 path.resolve 按当前平台规则解析。
+  const normalizedRaw = rawValue.split('\\').join('/')
+  const rawAbsPath = path.resolve(knowledgePath, normalizedRaw)
   const rawRoot = path.join(knowledgePath, '_raw') + path.sep
   if (!rawAbsPath.startsWith(rawRoot)) {
     if (logger) logger.error('knowledge:resolve-raw-file', new Error(`raw_file 路径越界：${rawValue} → ${rawAbsPath}`))
@@ -2039,7 +2043,10 @@ wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: 
 wrapHandler('knowledge:open-raw-file', async (_, avatarId: string, rawRelPath: string) => {
   assertSafeSegment(avatarId, '分身ID')
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const absPath = path.resolve(knowledgePath, rawRelPath)
+  // 同 knowledge:resolve-raw-file：跨平台 frontmatter 可能写 `_raw\foo.pdf`，
+  // 先 normalize 反斜杠避免 POSIX 上把整段当文件名。
+  const normalizedRel = rawRelPath.split('\\').join('/')
+  const absPath = path.resolve(knowledgePath, normalizedRel)
   const rawRoot = path.join(knowledgePath, '_raw') + path.sep
   if (!absPath.startsWith(rawRoot)) {
     const msg = `raw 路径越界：${rawRelPath}`

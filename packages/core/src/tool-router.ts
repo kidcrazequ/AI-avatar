@@ -1231,14 +1231,40 @@ export class ToolRouter {
     if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
       return { content: '', error: `目录不存在或不是目录: ${dirPath}` }
     }
+    // entries 数量上限 + 总字符上限，避免授权了大目录（如 ~/Downloads 数万项）
+    // 一次性把所有 entries join 出来撑爆工具输出 / context
+    const MAX_ENTRIES = 500
+    const MAX_TOTAL_CHARS = 50_000
     const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-    const lines = entries
+    const allLines = entries
       .map((e) => {
         const tag = e.isDirectory() ? 'DIR ' : e.isFile() ? 'FILE' : 'OTHER'
         return `${tag}\t${e.name}`
       })
       .sort()
-    return { content: lines.join('\n') || '(空目录)' }
+    const sliced = allLines.slice(0, MAX_ENTRIES)
+    const rendered: string[] = []
+    let budget = MAX_TOTAL_CHARS
+    let stoppedAt = sliced.length
+    for (let i = 0; i < sliced.length; i++) {
+      const line = sliced[i]
+      if (line.length + 1 > budget) {
+        stoppedAt = i
+        break
+      }
+      rendered.push(line)
+      budget -= line.length + 1
+    }
+    const hintParts: string[] = []
+    if (allLines.length > MAX_ENTRIES) {
+      hintParts.push(`目录共 ${allLines.length} 项，本次只返回前 ${sliced.length} 项；可改用 read_user_file 精读特定子项`)
+    }
+    if (stoppedAt < sliced.length) {
+      hintParts.push(`返回字符达 ${MAX_TOTAL_CHARS} 上限，仅返回前 ${stoppedAt} 项`)
+    }
+    const tailHint = hintParts.length > 0 ? `\n[hint] ${hintParts.join('；')}` : ''
+    const body = rendered.join('\n') || '(空目录)'
+    return { content: body + tailHint }
   }
 
   /**

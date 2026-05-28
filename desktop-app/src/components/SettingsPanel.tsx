@@ -1009,6 +1009,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       ])
       const endpoint = await persistDoubaoAsrSettings()
       setDoubaoAsrEndpoint(endpoint)
+      // 广播：MessageInput 镜像 web_search_enabled，否则用户开/关后旧 input 仍按 mount 时的值显示 @web 入口
+      window.dispatchEvent(new CustomEvent('settings-updated'))
       setDoubaoAsrStatusMsg('SAVED')
       setIntegrationsStatusMsg('SAVED')
       clearTimeout(doubaoAsrTimerRef.current)

@@ -240,10 +240,19 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
   useEffect(() => {
     let cancelled = false
-    void window.electronAPI.getSetting('web_search_enabled').then((v) => {
-      if (!cancelled) setWebSearchEnabled(v === 'true')
-    }).catch(() => { /* 读 setting 失败按关闭处理 */ })
-    return () => { cancelled = true }
+    const sync = () => {
+      void window.electronAPI.getSetting('web_search_enabled').then((v) => {
+        if (!cancelled) setWebSearchEnabled(v === 'true')
+      }).catch(() => { /* 读 setting 失败按关闭处理 */ })
+    }
+    sync()
+    // SettingsPanel 保存联网开关后会广播 settings-updated；订阅刷新，
+    // 否则用户开/关后旧 input 仍按 mount 时的值显示 @web 入口
+    window.addEventListener('settings-updated', sync)
+    return () => {
+      cancelled = true
+      window.removeEventListener('settings-updated', sync)
+    }
   }, [])
 
   useEffect(() => {
@@ -726,6 +735,8 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       const cursor = ta?.selectionStart ?? input.length
       const before = input.slice(0, ctxStartRef.current)
       const after = input.slice(cursor)
+      // 记录原始 @web 段，取消/空 query 时还原；与 handleSelectEntry 的失败恢复模式一致
+      const originalAtToken = input.slice(ctxStartRef.current, cursor)
       // 移除 input 中 @web 文本
       const cleaned = (before + after).replace(/[ \t]+$/, '')
       setInput(cleaned)
@@ -736,7 +747,11 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.setSelectionRange(before.length, before.length)
       })
       const query = window.prompt('联网搜索关键词：', '')
-      if (!query || !query.trim()) return
+      if (!query || !query.trim()) {
+        // 用户取消或空 query：把 @web token 还原回输入框，避免静默吞掉用户输入
+        setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
+        return
+      }
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
         showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件`)
         return

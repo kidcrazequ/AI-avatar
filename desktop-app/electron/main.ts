@@ -1258,19 +1258,16 @@ wrapHandler('create-conversation', (_, title: string, avatarId: string, projectI
 
 wrapHandler('list-project-ids', (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  // 真源合并（2026-05-24 修复 P1 #4）：
-  //   ① projects 表中所有 name（含未关联 conversation 的"空 project"）
+  // 真源合并：
+  //   ① projects 表中所有 active name（含未关联 conversation 的"空 project"）
   //   ② conversations 反推（容老数据：v18 之前 projects 表不存在，project_id 散在 conversations 里）
-  //
-  // 原实现只走 ②，导致 ProjectManagerPanel 新建的空 project 不出现在侧栏，
-  // 用户没法新建对话到空 project 里。改为合并后，新建空 project 立刻可见；
-  // 老数据反推路径仍保留，保证向后兼容。
+  //   ③ DEFAULT_AVATAR_PROJECT_ID 固定保留——default 不是真实 project 行，是
+  //      "未归属任何任务包"的会话桶。新装用户 projects 表为空，若用户先建了
+  //      其它项目再切换，没有 default 入口就再也回不到默认会话（P2 修复）。
   const db = getDb()
-  // 只取 active project：listProjects() 返回全部（含 archived=1，因为
-  // ProjectManagerPanel 需要显示归档项让用户解档），但侧边栏不该列归档。
   const fromTable = db.listProjects(avatarId).filter((p) => !p.archived).map((p) => p.name)
   const fromConvs = db.listProjectIdsForAvatar(avatarId)
-  return [...new Set([...fromTable, ...fromConvs])].sort()
+  return [...new Set([DEFAULT_AVATAR_PROJECT_ID, ...fromTable, ...fromConvs])].sort()
 })
 
 // ─── Projects 任务包 CRUD（v18，#5 Step B1）──────────────────────────────
@@ -1337,15 +1334,18 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
   }
   db.updateProject(id, patch)
   if (before && isRename) {
+    const avatarRoot = path.join(avatarsPath, before.avatar_id)
+    const canonicalOld = path.join(avatarRoot, 'projects', before.name)
+    const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
+    const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
+    // 记录已完成的文件操作；失败时反向回滚，避免 DB 已回滚但文件仍留在新目录
+    let movedCanonical = false
     try {
-      const avatarRoot = path.join(avatarsPath, before.avatar_id)
-      const canonicalOld = path.join(avatarRoot, 'projects', before.name)
-      const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
-      const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
       // 优先迁 canonical 路径（projects/<name>）
       if (fs.existsSync(canonicalOld)) {
         fs.mkdirSync(path.dirname(canonicalNew), { recursive: true })
         fs.renameSync(canonicalOld, canonicalNew)
+        movedCanonical = true
       }
       // 老数据兼容：knowledge/projects/<name>/ → projects/<name>/knowledge/
       if (fs.existsSync(legacyOld)) {
@@ -1359,8 +1359,19 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
       }
     } catch (mvErr) {
       // preflight 已经把"目标存在"挡在 DB commit 前，这里残留风险是 mv 本身失败
-      // （权限/磁盘满/symlink 链路）。回滚 DB 改名：让 UI 与磁盘状态保持一致。
+      // （权限/磁盘满/symlink 链路）。回滚 DB + 反向回滚已完成的文件操作。
       const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
+      // 反向回滚 canonical：如果 legacy 迁移失败，canonical 已搬到新目录，
+      // 不回滚就出现 DB 名旧、文件名新的不一致。
+      if (movedCanonical) {
+        try {
+          fs.renameSync(canonicalNew, canonicalOld)
+          console.warn(`[projects:update] mv 失败已反向恢复 canonical 目录（${canonicalNew} → ${canonicalOld}）`)
+        } catch (revErr) {
+          const revMsg = revErr instanceof Error ? revErr.message : String(revErr)
+          console.error(`[projects:update] canonical 反向恢复失败！文件系统残留在新目录 ${canonicalNew}：${revMsg}`)
+        }
+      }
       try {
         db.updateProject(id, { name: before.name })
         console.warn(`[projects:update] mv 失败已回滚 DB（${before.name} → ${patch.name} → ${before.name}）: ${msg}`)

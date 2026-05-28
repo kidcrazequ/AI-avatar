@@ -152,7 +152,7 @@ interface Props {
     message: string,
     images?: string[],
     attachments?: AttachmentRef[],
-    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
   ) => void
   disabled: boolean
   /** 外部传入文本以填充输入框（用于提示词模板一键填入） */
@@ -211,12 +211,39 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   const lastAsrTextRef = useRef('')
   /** 同步追踪图片 + 文档总数，用于异步流程的提前检查 */
   const totalCountRef = useRef(0)
+  /**
+   * 异步解析中的 @ 引用计数：handleSelectEntry / @web 都是先把 @... 从输入框移除，
+   * 再异步去拉内容。期间用户如果按 Enter 发送，引用 chip 还没塞进 pendingDocs，
+   * 消息直接以"没引用"的状态发出去——P2 报告里的引用丢失 race。
+   *
+   * 计数 >0 时禁用发送（handleSend 早返），异步流程在 finally 里减 1。失败时
+   * 还原 @... 文本提示用户重试，避免静默掉引用。
+   */
+  const [pendingReferenceCount, setPendingReferenceCount] = useState(0)
   /** 组件是否仍挂载，防止异步压缩/IPC 完成后 setState 到已卸载组件 */
   const mountedRef = useRef(true)
+  /**
+   * 联网总开关镜像。SettingsPanel 文案承诺关闭时分身不联网，但 webSearch IPC
+   * 之前没有任何检查——前端 @web 也好、被注入代码也好都能绕过。
+   *
+   * 现在主进程 IPC 入口已经校验该 setting；前端再读一次镜像用来：
+   *   - 关闭时从 namespace 列表过滤掉 @web，UI 上看不到这个入口
+   *   - 用户键入 @web/ 直接拦截 + toast 引导去设置面板
+   * 这条本地状态可能与设置面板存在数百毫秒的滞后，IPC 校验才是权威。
+   */
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false)
 
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void window.electronAPI.getSetting('web_search_enabled').then((v) => {
+      if (!cancelled) setWebSearchEnabled(v === 'true')
+    }).catch(() => { /* 读 setting 失败按关闭处理 */ })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -503,6 +530,12 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
   const handleSend = () => {
     if ((!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0) || disabled) return
+    // 异步 @ 引用解析中：直接发送会让引用 chip 加入前消息已经飞出去 → 引用丢失。
+    // 等 setPendingReferenceCount 回到 0（解析完成或失败回退）再让用户发送。
+    if (pendingReferenceCount > 0) {
+      showHint('info', '引用解析中，请稍候再发送…')
+      return
+    }
     // 区分 DB-backed attachment（id=att_xxx，主进程 read_attachment 能查到）
     // 与 synthetic inline reference（id=@web:/@knowledge:/@conversation:，前端
     // 临时构造，主进程 DB 没行）。后者只走 inline content，不进 <attachments>
@@ -667,16 +700,26 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
   /** 按 namespace 前缀过滤 Level 1 列表（输 @k 时只列 knowledge） */
   const filteredNamespaces = useMemo(() => {
-    if (!ctxNsQuery) return [...AVAILABLE_NAMESPACES]
+    // 联网未启用时把 @web 从候选里过滤掉——SettingsPanel 文案承诺"关闭时不会联网"，
+    // 入口完全消失才能兑现承诺；IPC 已校验是权威，这里只是 UI 兑现。
+    const available = AVAILABLE_NAMESPACES.filter(n => n.key !== 'web' || webSearchEnabled)
+    if (!ctxNsQuery) return [...available]
     const q = ctxNsQuery.toLowerCase()
-    return AVAILABLE_NAMESPACES.filter(n =>
+    return available.filter(n =>
       n.key.toLowerCase().startsWith(q) || n.label.toLowerCase().startsWith(q),
     )
-  }, [ctxNsQuery])
+  }, [ctxNsQuery, webSearchEnabled])
 
   /** 选中 namespace（Level 1 → 进入 Level 2） */
   const handleSelectNamespace = useCallback((ns: ContextNamespace) => {
     if (ns.key === 'web') {
+      // 联网总开关关闭时拦截——filteredNamespaces 已经过滤掉 @web，但用户也可能
+      // 直接键入 @web/xxx 触发 handleInputChange 路径。同步守一次防御。
+      if (!webSearchEnabled) {
+        showHint('warn', '联网功能未启用，请到「设置 → 联网与工具」开启后再使用 @web')
+        closeCtxPalette()
+        return
+      }
       // @web 完整版：弹 prompt 收集 query → 调 webSearch → 把结果作为 inline file 塞 pendingDocs
       if (ctxStartRef.current < 0) return
       const ta = textareaRef.current
@@ -699,6 +742,9 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         return
       }
       showHint('info', `正在联网搜索：${query.slice(0, 40)}...`)
+      // 同 handleSelectEntry：异步流程期间禁用发送，避免用户 Enter 把"无 @web 引用"
+      // 的版本发出去——webSearch 一返回才能塞 chip。
+      setPendingReferenceCount(c => c + 1)
       void window.electronAPI.webSearch(query.trim()).then(({ query: q, results, abstract, abstractSource }) => {
         if (!mountedRef.current) return
         const parts: string[] = [`# 联网搜索：${q}`]
@@ -739,6 +785,8 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         const msg = err instanceof Error ? err.message : String(err)
         showHint('error', `联网搜索失败：${msg}`)
         window.electronAPI.logEvent('warn', 'web-search-failed', msg)
+      }).finally(() => {
+        if (mountedRef.current) setPendingReferenceCount(c => Math.max(0, c - 1))
       })
       return
     }
@@ -762,7 +810,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.setSelectionRange(pos, pos)
       })
     }
-  }, [input, closeCtxPalette, loadCtxEntries, pendingImages.length, showHint])
+  }, [input, closeCtxPalette, loadCtxEntries, pendingImages.length, showHint, webSearchEnabled])
 
   /** 选中 entry：展开为 inlineFile 推入 pendingDocs，并把输入框中 @ 起始那段移除 */
   const handleSelectEntry = useCallback(async (entry: ContextEntry) => {
@@ -776,7 +824,8 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
     const cursor = ta?.selectionStart ?? input.length
     const before = input.slice(0, ctxStartRef.current)
     const after = input.slice(cursor)
-    // 先把输入框中 @... 那段移除
+    // 记录原始 @... 段，解析失败时还原；先把输入框中 @... 那段移除
+    const originalAtToken = input.slice(ctxStartRef.current, cursor)
     const cleaned = (before + after).replace(/[ \t]+$/, '')
     setInput(cleaned)
     closeCtxPalette()
@@ -785,32 +834,43 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       ta.focus()
       ta.setSelectionRange(before.length, before.length)
     })
-    // 异步展开内容并塞进 pendingDocs（作为 inline 附件，已有 chip UI 渲染）
-    const resolved = await resolveEntryContent(entry, avatarId, {
-      conversationMessageCount: entry.namespace === 'conversation' ? ctxConvMsgCount : undefined,
-    })
-    if (!resolved || !mountedRef.current) return
-    setPendingDocs(prev => {
-      if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
-      const fakeId = `@${entry.namespace}:${entry.id}:${Date.now()}`
-      const next: PendingDocAttachment[] = [
-        ...prev,
-        {
-          id: fakeId,
-          name: `@${entry.namespace}/${resolved.name}`,
-          mime: resolved.mime,
-          size: resolved.text.length,
-          ext: resolved.ext,
-          route: 'inline',
-          inlineText: resolved.text,
-          summary: null,
-          outline: null,
-        },
-      ]
-      totalCountRef.current = pendingImages.length + next.length
-      return next
-    })
-    showHint('info', `已引用 @${entry.namespace}/${entry.title}`)
+    // 进入异步解析：计数 +1，handleSend 期间会拒绝发送，避免引用 chip 还没加入消息就发出去
+    setPendingReferenceCount(c => c + 1)
+    try {
+      const resolved = await resolveEntryContent(entry, avatarId, {
+        conversationMessageCount: entry.namespace === 'conversation' ? ctxConvMsgCount : undefined,
+      })
+      if (!mountedRef.current) return
+      if (!resolved) {
+        // 还原 @... 让用户看到自己确实输入过，引导重试，而不是静默丢失
+        setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
+        showHint('warn', `引用解析失败：@${entry.namespace}/${entry.title}（已恢复输入，可重试或编辑）`)
+        return
+      }
+      setPendingDocs(prev => {
+        if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
+        const fakeId = `@${entry.namespace}:${entry.id}:${Date.now()}`
+        const next: PendingDocAttachment[] = [
+          ...prev,
+          {
+            id: fakeId,
+            name: `@${entry.namespace}/${resolved.name}`,
+            mime: resolved.mime,
+            size: resolved.text.length,
+            ext: resolved.ext,
+            route: 'inline',
+            inlineText: resolved.text,
+            summary: null,
+            outline: null,
+          },
+        ]
+        totalCountRef.current = pendingImages.length + next.length
+        return next
+      })
+      showHint('info', `已引用 @${entry.namespace}/${entry.title}`)
+    } finally {
+      if (mountedRef.current) setPendingReferenceCount(c => Math.max(0, c - 1))
+    }
   }, [avatarId, closeCtxPalette, ctxConvMsgCount, input, pendingImages.length, showHint])
 
   /** textarea onChange：检测 slash / @ 起始 + 同步 query */
@@ -1184,7 +1244,11 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
           <button
             onClick={handleSend}
-            disabled={disabled || (!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0)}
+            disabled={
+              disabled
+              || pendingReferenceCount > 0
+              || (!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0)
+            }
             aria-label="发送消息"
             className="px-5 py-3 bg-px-primary text-white border-2 border-px-primary
               font-game text-[13px] tracking-wider

@@ -44,13 +44,18 @@ const TIER_BADGE_STYLE: Record<'local' | 'cloud', { label: string; cls: string; 
 
 const QUICK_QUESTIONS: string[] = []
 
-function collectDocumentAttachmentsByAssistantId(dbMessages: DbMessage[]): Map<string, DocumentAttachment[]> {
+function collectDocumentAttachmentsByAssistantId(
+  dbMessages: DbMessage[],
+  conversationId: string,
+): Map<string, DocumentAttachment[]> {
   const byAssistantId = new Map<string, DocumentAttachment[]>()
   let pending: DocumentAttachment[] = []
 
   for (const message of dbMessages) {
     if (message.role === 'tool') {
-      const attachment = tryExtractDocumentAttachment('export_excel', message.content)
+      // 老 payload（2026-05 之前）没有 conversation_id 字段；用当前会话兜底，
+      // 否则 tryExtractDocumentAttachment 会返回 null，历史 FileCard 全丢。
+      const attachment = tryExtractDocumentAttachment('export_excel', message.content, conversationId)
       if (attachment) pending = [...pending, attachment]
       continue
     }
@@ -278,7 +283,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           list.push(ref)
           attachmentsByMsgId.set(att.message_id, list)
         }
-        const documentAttachmentsByAssistantId = collectDocumentAttachmentsByAssistantId(dbMessages)
+        const documentAttachmentsByAssistantId = collectDocumentAttachmentsByAssistantId(dbMessages, conversationId)
 
         setMessages(
           dbMessages

@@ -2659,7 +2659,11 @@ function upsertLastAssistant(
  * @author zhi.qu
  * @date 2026-05-08
  */
-export function tryExtractDocumentAttachment(toolName: string, resultText: string): DocumentAttachment | null {
+export function tryExtractDocumentAttachment(
+  toolName: string,
+  resultText: string,
+  fallbackConversationId?: string,
+): DocumentAttachment | null {
   try {
     const parsed: unknown = JSON.parse(resultText)
     if (!parsed || typeof parsed !== 'object') return null
@@ -2667,7 +2671,11 @@ export function tryExtractDocumentAttachment(toolName: string, resultText: strin
     if (obj.success !== true) return null
     const filePath = typeof obj.file_path === 'string' ? obj.file_path : null
     const absolutePath = typeof obj.absolute_path === 'string' ? obj.absolute_path : null
-    const conversationId = typeof obj.conversation_id === 'string' ? obj.conversation_id : null
+    // conversation_id 是 2026-05 加上的字段；老 payload 没有，传入 fallback
+    // （恢复历史会话时用当前 conversationId）兜底，否则文件卡片会从 UI 消失。
+    const conversationId = typeof obj.conversation_id === 'string'
+      ? obj.conversation_id
+      : (fallbackConversationId ?? null)
     const sizeBytes = typeof obj.file_size_bytes === 'number' ? obj.file_size_bytes : 0
     if (!filePath || !absolutePath || !conversationId) return null
     if (!filePath.startsWith('exports/')) return null
@@ -4439,7 +4447,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // hiddenRepair 模式跳过 UI 更新——修正轮的工具产物不应展示在原 assistant 气泡。
           // collectedDocumentAttachments 仍 push（无害；本轮不落盘 assistant 消息，attachments 不会持久化）。
           if (toolOk && (tc.function.name === 'generate_document' || tc.function.name === 'export_excel')) {
-            const attachment = tryExtractDocumentAttachment(tc.function.name, resultText)
+            const attachment = tryExtractDocumentAttachment(tc.function.name, resultText, conversationId)
             if (attachment) {
               collectedDocumentAttachments.push(attachment)
               if (isViewedConv() && !isHiddenRepair) {

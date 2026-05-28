@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { runSuite, JsonlEvaluationStore, type EvalCase } from '../agent-runtime'
+import { runSuite, JsonlEvaluationStore, type EvalCase, type EvalCaseResult } from '../agent-runtime'
 
 describe('Phase 7 — runSuite', () => {
   it('全部通过', async () => {
@@ -71,7 +71,7 @@ describe('Phase 7 — runSuite', () => {
         id: 'slow',
         kind: 'unit',
         title: 't',
-        run: () => new Promise(() => {}), // 永不 resolve
+        run: () => new Promise<EvalCaseResult>(() => { /* 永不 resolve，用于验证超时熔断 */ }),
       },
     ]
     const r = await runSuite(cases, { caseTimeoutMs: 50 })

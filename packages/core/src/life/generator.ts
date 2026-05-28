@@ -42,7 +42,6 @@ import {
   OUTLINE_SYSTEM_PROMPT,
 } from './prompts'
 import {
-  appendLifeTimelineEntry,
   ensureLifeDir,
   listLifeEpisodeIds,
   readLifeManifest,
@@ -630,7 +629,6 @@ async function writeProgressAndNotify(
       opts.onProgress({ ...progress, failedEpisodes: [...progress.failedEpisodes] })
     } catch (notifyErr) {
       // 只记录到 stderr，不抛
-      // eslint-disable-next-line no-console -- core 模块无 logger，依赖调用方
       console.warn(`[life-generator] onProgress 回调异常: ${notifyErr instanceof Error ? notifyErr.message : String(notifyErr)}`)
     }
   }

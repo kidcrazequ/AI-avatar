@@ -71,7 +71,6 @@ function setupSandbox(): Sandbox {
       try {
         fs.rmSync(root, { recursive: true, force: true })
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn(`[gen-doc-test] 清理沙盒失败: ${root}: ${e instanceof Error ? e.message : String(e)}`)
       }
     },

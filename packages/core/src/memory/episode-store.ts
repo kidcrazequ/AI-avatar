@@ -52,7 +52,6 @@ function parseEpisodeFile(raw: string, sourcePath: string): ConversationEpisode 
     if (typeof obj.title !== 'string' || typeof obj.summary !== 'string') return null
     return obj as ConversationEpisode
   } catch (err) {
-    // eslint-disable-next-line no-console -- core 模块无 logger，依赖调用方主进程 logger
     console.warn(
       `[episode-store] 解析失败 ${sourcePath}: ${err instanceof Error ? err.message : String(err)}`,
     )

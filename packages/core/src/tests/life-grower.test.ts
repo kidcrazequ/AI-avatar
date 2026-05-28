@@ -626,7 +626,7 @@ describe('advanceLife - 集成', () => {
     await writeLifeTimeline(tmpRoot, AVATAR, [])
 
     // 让 LLM 等一拍才返回（模拟长时间 LLM call）
-    let resolveOutline: (v: string) => void = () => {}
+    let resolveOutline: (v: string) => void = () => { /* placeholder，下行立即重新赋值 */ }
     const slowOutlinePromise = new Promise<string>((res) => { resolveOutline = res })
     const callLLM = async (system: string): Promise<string> => {
       if (system.includes('人生编剧')) return slowOutlinePromise

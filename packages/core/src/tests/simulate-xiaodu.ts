@@ -259,7 +259,7 @@ const VISION_PROMPT = `请仔细分析这张技术文档页面图片，提取所
 - 禁止使用任何 emoji 图标（如 ⚠️ ✅ ℹ️ 等）
 - 不要在末尾附加总结、说明或自评`
 
-async function visionAnalyze(base64DataUrl: string, pageNum: number): Promise<string> {
+async function visionAnalyze(base64DataUrl: string, _pageNum: number): Promise<string> {
   const result = await callDashScope(VISION_MODEL, [
     {
       role: 'user',

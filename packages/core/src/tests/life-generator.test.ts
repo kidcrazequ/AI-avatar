@@ -33,10 +33,7 @@ import {
   readLifeManifest,
   readLifeProgress,
   readLifeTimeline,
-  writeLifeEpisode,
-  writeLifeManifest,
   writeLifeProgress,
-  writeLifeTimeline,
 } from '../life/store'
 import type { LifeManifest, LifeProgress, LifeTimelineEntry } from '../life/types'
 

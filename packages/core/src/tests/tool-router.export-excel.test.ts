@@ -73,7 +73,6 @@ function setupSandbox(): Sandbox {
         fs.rmSync(root, { recursive: true, force: true })
       } catch (e) {
         // 测试沙盒清理失败不应让 case 标红，但要打印出来方便排查泄漏
-        // eslint-disable-next-line no-console
         console.warn(`[export-excel-test] 清理临时目录失败: ${root}: ${e instanceof Error ? e.message : String(e)}`)
       }
     },

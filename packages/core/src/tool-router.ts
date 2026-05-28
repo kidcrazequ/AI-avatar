@@ -2327,7 +2327,6 @@ ${content}` }
       }
       roots = roots
         .map((r) => {
-          const sub = path.join(r.absRoot, scopeRaw)
           // resolveUnderRoot 确保 scope 解析后仍在 absRoot 内
           let resolved: string
           try {

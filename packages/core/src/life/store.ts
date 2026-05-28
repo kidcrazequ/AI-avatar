@@ -50,7 +50,6 @@ async function atomicWrite(filePath: string, content: string): Promise<void> {
       const code = (cleanupErr as NodeJS.ErrnoException).code
       if (code !== 'ENOENT') {
         // 清理失败但不影响主错误传播；记录到 stderr 仅供排障
-        // eslint-disable-next-line no-console -- core 模块无 logger，依赖调用方主进程 logger
         console.warn(
           `[life-store] 临时文件清理失败 ${tmpPath}: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
         )

@@ -204,7 +204,7 @@ async function main() {
       const [queryEmb] = await callEmbedding([q])
       embeddingMap.set('__query__', queryEmb)
       retriever.setEmbeddings(embeddingMap)
-    } catch (err) {
+    } catch {
       console.log(`  ⚠️ 查询 embedding 失败，退回纯 BM25`)
     }
 

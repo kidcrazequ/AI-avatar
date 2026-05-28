@@ -3255,28 +3255,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (anchorErr) {
       void anchorErr
     }
-    // synthetic @ 引用元数据 footer：MessageInput 把 @knowledge/foo 解析后塞到
-    // inlineFiles 里走 LLM，但 inlineFiles 之前不入库——纯引用发送时用户气泡空，
-    // 刷新 / 重新生成 / 下一轮追问都不知道当时引用了什么。
+    // synthetic @ 引用 snapshot：MessageInput 把 @knowledge/foo 解析后塞到
+    // inlineFiles 里走 LLM，之前 inlineFiles 完全不入库——纯引用发送时用户气泡
+    // 空、刷新 / 重新生成 / 下一轮追问都不知道当时引用了什么。
     //
-    // 这里只持久化引用列表（轻量元数据，不带 snapshot 正文），换用户气泡有内容、
-    // LLM 历史里能看到"曾引用 X"。完整 snapshot 持久化需要 DB 改 schema，作为
-    // follow-up；当前最小可行 footer 已能避免主要 UX 退化。
+    // 上一轮先做了元数据 footer（只存引用名）止血，本轮升级到完整 snapshot：
+    //   - 把 inline fence block（与 LLM 看到的同一份）拼到 taggedContent
+    //   - 用户气泡能看到当时引用的正文（markdown 代码块原生折叠）
+    //   - regenerate 时 rawContent 已含 snapshot，下一轮 LLM 历史里能完整复现
+    //     模型当时看到的引用内容；inlineFiles 参数为 undefined 时不重复拼接
+    //   - cache-key 派生函数会 strip [id:m\d+] 前缀，保留 fence 文本——同问 +
+    //     不同引用 = 不同 cache，是正确行为
     //
-    // content 为空时（纯引用发送）不留 "anchor + 空格 + 空 content" 的难看格式，
-    // 把 footer 紧贴 anchor。regenerate 时 rawContent 已含 footer 但无 inlineFiles
-    // 参数，referenceFooter='' → 不会双重 footer。
+    // 代价：user bubble 体积增大。引用变化（同名文件内容更新）时下一次会重新
+    // 拼最新内容；老历史里仍是当时 snapshot——这是 snapshot 持久化的固有取舍。
     const hasInlineRefs = inlineFiles && inlineFiles.length > 0
-    const referenceFooter = hasInlineRefs
-      ? `[引用] ${inlineFiles!.map(f => f.name).join(' · ')}`
+    const inlineSnapshotBlock = hasInlineRefs
+      ? inlineFiles!.map(f => {
+        const lang = (f.ext || '').replace(/^\./, '').toLowerCase() || 'text'
+        return `【附件正文 · ${f.name}】\n\`\`\`${lang}\n${f.text}\n\`\`\``
+      }).join('\n\n')
       : ''
     const baseAnchor = messageAnchor ? `[id:${messageAnchor}] ` : ''
     const trimmedContent = content.trim()
     let taggedContent: string
-    if (referenceFooter && !trimmedContent) {
-      taggedContent = `${baseAnchor}${referenceFooter}`
-    } else if (referenceFooter) {
-      taggedContent = `${baseAnchor}${content}\n\n${referenceFooter}`
+    if (inlineSnapshotBlock && !trimmedContent) {
+      taggedContent = `${baseAnchor}${inlineSnapshotBlock}`
+    } else if (inlineSnapshotBlock) {
+      taggedContent = `${baseAnchor}${content}\n\n${inlineSnapshotBlock}`
     } else {
       taggedContent = `${baseAnchor}${content}`
     }

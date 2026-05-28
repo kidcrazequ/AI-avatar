@@ -803,7 +803,17 @@ export class SoulLoader {
     }
   }
 
-  /** 快速判断文件头部是否含 rag_only: true frontmatter */
+  /**
+   * 快速判断文件头部 frontmatter 是否让此文件不进 system prompt 正文。
+   *
+   * 必须和 loadAvatar 的分流条件（`fm.rag_only === true || fm.source`）严格对齐——
+   * 否则 fast-path 会把"按 source 排除"的导入文件按非 rag_only 当全文读取，
+   * 浪费 IO 又把 body 透到下游再丢，违背 rag_only fast-path 的初衷。
+   *
+   * 同 loadAvatar 的注释：任何带 source 字段的知识文件（pdf/word/excel/pptx/
+   * enhanced 等）运行时都按 rag_only 处理，不塞 system prompt，保留 search_knowledge
+   * 按需检索能力。
+   */
   private isRagOnly(header: string): boolean {
     if (!header.startsWith('---\n') && !header.startsWith('---\r\n')) return false
     const endIdx = header.indexOf('\n---\n')
@@ -811,7 +821,9 @@ export class SoulLoader {
     const end = endIdx >= 0 ? endIdx : endIdx2
     if (end < 0) return false
     const fm = header.slice(0, end)
-    return /\brag_only\s*:\s*true\b/.test(fm)
+    if (/\brag_only\s*:\s*true\b/.test(fm)) return true
+    // source 字段存在（非空值）即按 rag_only 处理
+    return /^\s*source\s*:\s*\S/m.test(fm)
   }
 
   private extractAvatarName(claudeMd: string): string {

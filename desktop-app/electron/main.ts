@@ -1312,22 +1312,36 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
   // 同时兼容老版本写在 `knowledge/projects/<name>/` 的目录——尝试两个 source
   // 但只迁到 canonical target，让老数据顺势归位。
   //
-  // 顺序：读旧 name → 改 DB（会校验新 name 合法性）→ 再 mv 目录。
-  // DB 校验失败时不动目录；目录 mv 失败时 DB 已 committed，仅 warn。
+  // 顺序：读旧 name → preflight 目标目录不存在 → 改 DB → mv 目录。
+  // 之前先 updateProject 再检查目录冲突，冲突时 DB 已 committed 但文件还在旧目录，
+  // 用户看到的项目名与实际知识库目录不一致；现在 preflight 把 conflict 拦在
+  // DB 提交前，把 DB / 文件系统一致性的窗口缩到最小。
   const db = getDb()
   const before = db.getProject(id)
+  const isRename = Boolean(before && patch.name && patch.name !== before.name)
+  if (before && isRename) {
+    assertSafeSegment(before.name, 'oldProjectName')
+    assertSafeSegment(patch.name!, 'newProjectName')
+    const avatarRoot = path.join(avatarsPath, before.avatar_id)
+    const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
+    // preflight：目标目录已存在直接拒绝，DB 不改、文件不动，状态保持一致
+    if (fs.existsSync(canonicalNew)) {
+      throw new Error(`目标项目目录已存在：projects/${patch.name}（请手动合并或先备份）`)
+    }
+    // 老路径 legacy 目录冲突也 preflight——如果 legacy knowledge/projects/<new>/
+    // 与新 canonical 都要写到 projects/<new>/knowledge/，会被 fs.renameSync 静默覆盖
+    const legacyNew = path.join(avatarRoot, 'knowledge', 'projects', patch.name!)
+    if (fs.existsSync(legacyNew)) {
+      throw new Error(`老路径目录已存在：knowledge/projects/${patch.name}/（请先备份或手动迁移）`)
+    }
+  }
   db.updateProject(id, patch)
-  if (before && patch.name && patch.name !== before.name) {
+  if (before && isRename) {
     try {
-      assertSafeSegment(before.name, 'oldProjectName')
-      assertSafeSegment(patch.name, 'newProjectName')
       const avatarRoot = path.join(avatarsPath, before.avatar_id)
       const canonicalOld = path.join(avatarRoot, 'projects', before.name)
-      const canonicalNew = path.join(avatarRoot, 'projects', patch.name)
+      const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
       const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
-      if (fs.existsSync(canonicalNew)) {
-        throw new Error(`目标目录已存在: projects/${patch.name}`)
-      }
       // 优先迁 canonical 路径（projects/<name>）
       if (fs.existsSync(canonicalOld)) {
         fs.mkdirSync(path.dirname(canonicalNew), { recursive: true })
@@ -1344,11 +1358,17 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
         }
       }
     } catch (mvErr) {
+      // preflight 已经把"目标存在"挡在 DB commit 前，这里残留风险是 mv 本身失败
+      // （权限/磁盘满/symlink 链路）。回滚 DB 改名：让 UI 与磁盘状态保持一致。
       const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
-      console.warn(
-        `[projects:update] 项目目录迁移失败（DB 已更新；请手动 mv "projects/${before.name}" → "projects/${patch.name}"）:`,
-        msg,
-      )
+      try {
+        db.updateProject(id, { name: before.name })
+        console.warn(`[projects:update] mv 失败已回滚 DB（${before.name} → ${patch.name} → ${before.name}）: ${msg}`)
+      } catch (rollbackErr) {
+        const rmsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)
+        console.error(`[projects:update] mv 失败 + DB 回滚失败！需手工修复: mv error=${msg}, rollback error=${rmsg}`)
+      }
+      throw new Error(`项目目录迁移失败：${msg}`)
     }
   }
 })
@@ -6544,6 +6564,12 @@ wrapHandler('web-search', async (_, query: string): Promise<{
   abstract?: string
   abstractSource?: string
 }> => {
+  // 检查总开关：SettingsPanel 文案承诺关闭时分身不会联网，但 IPC 之前直接放过——
+  // 前端 @web 按钮也好、潜在被注入的代码也好，绕开总开关都能拿到外网内容。
+  // 必须在 IPC 入口校验，与 web_search_enabled 设置对齐。
+  if (getDb().getSetting('web_search_enabled') !== 'true') {
+    throw new Error('联网功能未启用：请到「设置 → 联网与工具」开启「启用联网功能」后再使用 @web / web_search')
+  }
   const q = (query || '').trim()
   if (!q) throw new Error('搜索关键词不能为空')
   if (q.length > 200) throw new Error('搜索关键词不能超过 200 字符')

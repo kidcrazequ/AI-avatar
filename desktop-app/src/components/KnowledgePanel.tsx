@@ -12,7 +12,12 @@ import PanelHeader from './shared/PanelHeader'
 interface Props {
   avatarId: string
   onClose: () => void
-  onSaved?: () => void
+  /**
+   * 知识文件落盘后回调。App.handleKnowledgeSaved 是 async（重跑 loadAvatarConfig
+   * 重建 system prompt），所有调用方都必须 await——不 await 的话用户立刻发问
+   * 还会用旧 system prompt（缺新文件 / 仍包大 Excel）。
+   */
+  onSaved?: () => void | Promise<void>
   ocrModel?: ModelConfig
   chatModel?: ModelConfig
   creationModel?: ModelConfig
@@ -178,7 +183,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       setFileContent(editedContent)
       setIsEditMode(false)
       showStatus('✓ 已保存')
-      onSaved?.()
+      await onSaved?.()
     } catch (error) {
       console.error('保存知识文件失败:', error)
       showStatus('✗ 保存失败')
@@ -259,8 +264,10 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const filePath = result.filePaths[0]
 
       // 保留原始文件到 knowledge/_raw/（Karpathy 融合：source of truth 不丢失）
+      // rawRelPath 形如 `_raw/<filename>`；写回 frontmatter 让 enhance / 溯源 chip 能找回。
+      let rawRelPath: string | null = null
       try {
-        await window.electronAPI.preserveRawFile(avatarId, filePath)
+        rawRelPath = await window.electronAPI.preserveRawFile(avatarId, filePath)
       } catch (rawErr) {
         console.warn('原始文件保留失败（不影响导入）:', rawErr)
       }
@@ -285,6 +292,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           source: 'excel',
           excel_json: `_excel/${baseName}.json`,
         }
+        if (rawRelPath) systemMeta.raw_file = rawRelPath
         if (parsed.sheetNames?.length) systemMeta.sheets = parsed.sheetNames
         const enhanced = extractFrontmatterFields(parsed.fileName, parsed.text)
         const frontmatter = buildFrontmatterBlock(mergeFrontmatter(systemMeta, enhanced))
@@ -348,6 +356,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
         const pptxSystemMeta: Record<string, unknown> = { rag_only: true, source: 'pptx' }
+        if (rawRelPath) pptxSystemMeta.raw_file = rawRelPath
         const pptxEnhanced = extractFrontmatterFields(parsed.fileName, parsed.text)
         const frontmatter = buildFrontmatterBlock(mergeFrontmatter(pptxSystemMeta, pptxEnhanced)) + '\n\n'
         const finalContent = frontmatter + `# ${parsed.fileName.replace(/\.[^.]+$/, '')}\n\n${parsed.text}\n`
@@ -455,6 +464,18 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
       const targetPath = `${baseName}.md`
 
+      // \u4e0e\u6279\u91cf\u5bfc\u5165\u8def\u5f84\uff08main.ts:batchImportFiles\uff09\u4fdd\u6301\u4e00\u81f4\uff1a
+      //   - source \u8ba9\u6eaf\u6e90 chip / enhance \u626b\u63cf\u8bc6\u522b\u8fd9\u662f\u5bfc\u5165\u6587\u4ef6\u800c\u975e\u624b\u5199\u77e5\u8bc6
+      //   - raw_file \u6307\u5411 _raw/ \u4e0b\u539f\u59cb PDF/DOCX\uff0c\u8ba9"\u6253\u5f00\u539f\u59cb\u6587\u4ef6"\u6309\u94ae\u80fd\u8df3\u8f6c
+      //   - rag_only \u9632\u6b62\u5927\u6587\u6863\u88ab SoulLoader \u6574\u6bb5\u585e\u8fdb system prompt\uff08>50KB \u65f6\u6253\u5f00\uff09
+      const RAG_ONLY_THRESHOLD = 50_000
+      const generalSystemMeta: Record<string, unknown> = { source: parsed.fileType }
+      if (rawRelPath) generalSystemMeta.raw_file = rawRelPath
+      if (finalContent.length > RAG_ONLY_THRESHOLD) generalSystemMeta.rag_only = true
+      const generalEnhanced = extractFrontmatterFields(parsed.fileName, finalContent)
+      const generalFmBlock = buildFrontmatterBlock(mergeFrontmatter(generalSystemMeta, generalEnhanced))
+      finalContent = `${generalFmBlock}\n\n${finalContent}`
+
       await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, finalContent)
 
       try {
@@ -537,7 +558,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
 
       await loadTree()
       handleSelectFile(targetPath)
-      onSaved?.()
+      await onSaved?.()
     } catch (error) {
       console.error('导入文档失败:', error)
       showStatus('✗ 导入失败')
@@ -577,7 +598,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         setShowBatchLog(true)
       }
       await loadTree()
-      onSaved?.()
+      await onSaved?.()
     } catch (err) {
       console.error('批量导入文件夹失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -623,7 +644,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         setShowBatchLog(true)
       }
       await loadTree()
-      onSaved?.()
+      await onSaved?.()
     } catch (err) {
       console.error('批量导入归档失败:', err)
       showStatus('✗ 批量导入失败: ' + (err instanceof Error ? err.message : String(err)))
@@ -986,7 +1007,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                                   showStatus(`✓ ${selectedPath} 格式化完成`)
                                   await loadTree()
                                   handleSelectFile(selectedPath)
-                                  onSaved?.()
+                                  await onSaved?.()
                                 } else {
                                   showStatus(`✗ ${result.error || '格式化失败'}`)
                                 }

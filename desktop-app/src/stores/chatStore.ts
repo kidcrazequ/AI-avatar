@@ -354,7 +354,14 @@ interface ChatStore {
     images?: string[],
     visionModel?: ModelConfig,
     attachments?: AttachmentRef[],
-    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    /**
+     * inlineFiles：本轮 prompt 的 inline 附件正文。
+     *
+     * `persist?: false` 用于 system-context 类条目（如 ChatWindow 自动注入的项目
+     * README/notes）——仍参与本轮 LLM prompt 拼接，但**不**进用户消息的 snapshot
+     * 持久化。默认 `persist !== false` → 走完整 snapshot（用户自己 @ 出来的引用）。
+     */
+    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
     proxyOpts?: SendMessageProxyOptions,
     options?: {
       skipCache?: boolean
@@ -3037,7 +3044,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     images?: string[],
     visionModel?: ModelConfig,
     attachments?: AttachmentRef[],
-    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
     proxyOpts?: SendMessageProxyOptions,
     options?: { skipCache?: boolean; skipInfographicRevalidate?: boolean; hiddenRepair?: boolean },
   ) => {
@@ -3269,9 +3276,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     //
     // 代价：user bubble 体积增大。引用变化（同名文件内容更新）时下一次会重新
     // 拼最新内容；老历史里仍是当时 snapshot——这是 snapshot 持久化的固有取舍。
-    const hasInlineRefs = inlineFiles && inlineFiles.length > 0
-    const inlineSnapshotBlock = hasInlineRefs
-      ? inlineFiles!.map(f => {
+    // 只把 persist !== false 的 inline 条目写进 snapshot——
+    // ChatWindow 自动注入的项目 README/notes 标 persist:false，每轮都新拼，
+    // 不持久化（否则每条用户消息都带一份 README/notes，DB / 历史 / 气泡爆炸）。
+    const persistableInlineFiles = (inlineFiles || []).filter(f => f.persist !== false)
+    const hasPersistableInlineRefs = persistableInlineFiles.length > 0
+    const inlineSnapshotBlock = hasPersistableInlineRefs
+      ? persistableInlineFiles.map(f => {
         const lang = (f.ext || '').replace(/^\./, '').toLowerCase() || 'text'
         return `【附件正文 · ${f.name}】\n\`\`\`${lang}\n${f.text}\n\`\`\``
       }).join('\n\n')

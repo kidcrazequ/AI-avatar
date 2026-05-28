@@ -419,16 +419,25 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     content: string,
     images?: string[],
     attachments?: AttachmentRef[],
-    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string }>,
+    inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
   ) => {
     if (content.trim() === '/test-self') {
       await handleTestSelf()
       return
     }
-    // 自动注入 project 上下文（prepend 到 inlineFiles，让分身在 system / user prompt 拼装时看到）
+    // 自动注入 project 上下文（prepend 到 inlineFiles，让分身在 system / user prompt 拼装时看到）。
+    // persist:false——项目 README/notes 每轮重新加载并拼装，不进用户消息 snapshot；
+    // 否则每条用户消息都会带一份 README/notes，对话历史 / DB / 气泡线性膨胀。
+    // 用户自己 @ 出来的引用走 sendMessage 默认（persist 缺省 = true）正常 snapshot。
     const finalInlineFiles = projectContext
       ? [
-          { name: `@project/${projectContext.name}.md`, ext: '.md', mime: 'text/markdown', text: projectContext.text },
+          {
+            name: `@project/${projectContext.name}.md`,
+            ext: '.md',
+            mime: 'text/markdown',
+            text: projectContext.text,
+            persist: false,
+          },
           ...(inlineFiles || []),
         ]
       : inlineFiles

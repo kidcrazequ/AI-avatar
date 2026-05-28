@@ -461,11 +461,26 @@ function App() {
     }
   }
 
-  /** 全局搜索结果跳转到对话：切分身 + 选会话 */
+  /** 全局搜索结果跳转到对话：切分身 + 同步切 project + 选会话 */
   const handleNavigateToConversation = useCallback(async (avatarId: string, conversationId: string) => {
     try {
       if (avatarId && avatarId !== activeAvatarId) {
         await handleSelectAvatar(avatarId)
+      }
+      // 同步 activeProjectId：跳到属于另一个 project 的会话时，不切 project
+      // 会让后续 sendMessage 用上一个 project 的工作区/知识/system prompt——
+      // ChatWindow 注入的 project README + tool-router knowledge overlay 都按
+      // activeProjectId 走，不是按 conversation.project_id 反查。
+      // 直接查 DB 拿 project_id，避开 conversations state 在 handleSelectAvatar
+      // 中异步刷新可能还没到的 race。
+      try {
+        const conv = await window.electronAPI.getConversation(conversationId)
+        const pid = conv?.project_id && conv.project_id.length > 0 ? conv.project_id : 'default'
+        setActiveProjectId(pid)
+      } catch (pidErr) {
+        // 查询失败回退到 default，至少不会用过期 project 上下文
+        console.warn('[App] 全局搜索跳转读 project_id 失败，回退 default:', pidErr instanceof Error ? pidErr.message : String(pidErr))
+        setActiveProjectId('default')
       }
       setActiveConversationId(conversationId)
       setActivePanel(null)
@@ -543,7 +558,7 @@ function App() {
     setActiveProjectId(projectId)
   }
 
-  const handleCreateProjectId = () => {
+  const handleCreateProjectId = async () => {
     if (!activeAvatarId) return
     const raw = window.prompt('新项目 ID（字母、数字、下划线、连字符；将用于工作区与知识子目录）', '')
     if (raw === null) return
@@ -552,6 +567,19 @@ function App() {
     if (!/^[\w-]+$/.test(id)) {
       showToast('项目 ID 仅允许字母数字下划线与连字符', 'error')
       return
+    }
+    // 必须先 projects:create 落库——不写 projects 表的话，刷新后侧栏 listProjectIds
+    // 从 projects 表读不到这个空 project，新建的项目立刻消失。重复 create
+    // 同名 (avatar, name) 的 UNIQUE 约束会抛错，UI 提示用户已存在即可。
+    try {
+      await window.electronAPI.projectsCreate(activeAvatarId, id, '')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // UNIQUE 冲突视为"项目已存在"，不算错——继续切到这个项目即可。
+      if (!/UNIQUE|exists|already/i.test(msg)) {
+        showToast(`创建项目失败：${msg}`, 'error')
+        return
+      }
     }
     setKnownProjectIds((prev) => [...new Set([...prev, id])].sort())
     setActiveProjectId(id)

@@ -213,7 +213,11 @@ export class SoulLoader {
     const conversationEpisodes = this.readConversationEpisodesSafe(avatarPath)
 
     // 递归读取 knowledge/ 目录下所有知识文件（含子目录如 imports/）注入 system prompt
-    const knowledgeRootFiles = this.readDirectory(path.join(avatarPath, 'knowledge'))
+    // 排除 projects/——历史版本 projects:create 曾把 README/notes 写到
+    // knowledge/projects/<name>/ 下，会让 A 项目的 README 被所有会话当全局
+    // 知识加载。projects/<name>/knowledge/ 才是 canonical 项目知识目录，由
+    // mergeProjectKnowledgeMarkdown 按 conversation.project_id 精确叠加。
+    const knowledgeRootFiles = this.readDirectory(path.join(avatarPath, 'knowledge'), 0, ['projects'])
 
     // GAP3: 通过 SkillManager 获取已启用技能内容（而非读取全部 skills/ 文件）
     // Feature 5: 渐进式披露——默认只注入摘要，AI 通过 load_skill 工具按需加载完整内容
@@ -756,7 +760,15 @@ export class SoulLoader {
    * frontmatter 里的 source 字段生成索引条目。500+ 文件场景下从读取全量内容
    * （10+ 秒阻塞）降到只读头部（< 1 秒）。
    */
-  private readDirectory(dirPath: string, depth = 0): Array<{ path: string; content: string }> {
+  /**
+   * @param skipTopLevelDirs 仅在 depth === 0 时排除的顶层目录名（按 entry.name 比对）。
+   *   全局 knowledge/ 扫描时传 ['projects'] 把项目目录隔离开。
+   */
+  private readDirectory(
+    dirPath: string,
+    depth = 0,
+    skipTopLevelDirs: readonly string[] = [],
+  ): Array<{ path: string; content: string }> {
     if (depth > SoulLoader.MAX_DIR_DEPTH) {
       console.warn(`[SoulLoader] 目录递归深度超过上限(${SoulLoader.MAX_DIR_DEPTH})，停止: ${dirPath}`)
       return []
@@ -767,6 +779,7 @@ export class SoulLoader {
       for (const entry of entries) {
         const fullPath = path.join(dirPath, entry.name)
         if (entry.isDirectory()) {
+          if (depth === 0 && skipTopLevelDirs.includes(entry.name)) continue
           files.push(...this.readDirectory(fullPath, depth + 1))
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
           // 先只读头部 512 字节探测 rag_only frontmatter

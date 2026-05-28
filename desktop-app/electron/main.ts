@@ -1227,6 +1227,19 @@ wrapHandler('create-conversation', (_, title: string, avatarId: string, projectI
       ? projectId.trim()
       : DEFAULT_AVATAR_PROJECT_ID
   if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
+  // 兜底：确保 projects 表有这个 (avatar, name) 行——否则 listProjectIds
+  // 刷新时读不到，新建对话的 project 立刻"消失"。createProject 同名会 UNIQUE
+  // 报错（"已存在"），这里捕获后忽略；其他错误不阻塞会话创建。
+  if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
+    try {
+      getDb().createProject(avatarId, pid, '')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (!/已存在|UNIQUE/i.test(msg)) {
+        console.warn(`[create-conversation] 兜底 createProject 失败（不影响会话创建）: ${msg}`)
+      }
+    }
+  }
   const conversationId = getDb().createConversation(title, avatarId, pid)
   // v17 事件：会话创建。让 JSONL 自身能定位"这个文件最初什么时候、谁创建的"——
   // 不依赖 sqlite 也能从 JSONL 重建基础元信息。
@@ -1268,37 +1281,72 @@ wrapHandler('projects:list', (_, avatarId?: string) => {
 wrapHandler('projects:create', async (_, avatarId: string, name: string, description?: string) => {
   assertSafeSegment(avatarId, '分身ID')
   const id = getDb().createProject(avatarId, name, description ?? '')
-  // 副作用：在知识库下建立 projects/<name>/ 模板目录（README.md / notes.md / decisions/.gitkeep）
-  // 失败不阻塞 create（DB 已经写入）；只 warn
+  // 副作用：在 projects/<name>/knowledge/ 下建模板（README.md / notes.md / decisions/.gitkeep）。
+  //
+  // 路径选 projects/<name>/knowledge/（与 avatars/<id>/knowledge/ 并列），不再写
+  // knowledge/projects/<name>/，原因有二：
+  //   1) SoulLoader.mergeProjectKnowledgeMarkdown / ToolRouter.getKnowledgeSurfaceForContext /
+  //      CompositeKnowledgeRetriever 都从 projects/<pid>/knowledge/ 读项目知识，
+  //      之前写 knowledge/projects/<name>/ 三个读路径全找不到内容
+  //   2) knowledge/ 会被 loadAvatar 递归扫描进全局 system prompt，
+  //      把 A 项目的 README 泄漏给所有会话；sibling 布局把项目边界落到目录层
+  //
+  // 失败不阻塞 create（DB 已 committed），只 warn。
   try {
-    const km = getKnowledgeManager(avatarId)
+    assertSafeSegment(name, 'projectName')
+    const projectKnowledgeRoot = path.join(avatarsPath, avatarId, 'projects', name, 'knowledge')
+    fs.mkdirSync(path.join(projectKnowledgeRoot, 'decisions'), { recursive: true })
     const readme = `# 任务包：${name}\n\n${description ?? ''}\n\n## 关键资料\n\n（把本任务包独有的资料放在这个目录下；分身在引用 @project-context 时会优先看这里。）\n\n## 决策记录\n\n参见 \`decisions/\` 子目录（grill-against-knowledge 写 ADR 时会自动落到这里）。\n`
-    km.writeFile(`projects/${name}/README.md`, readme)
-    km.writeFile(`projects/${name}/notes.md`, `# ${name} · 工作笔记\n\n（记录会议纪要、客户反馈、临时想法。）\n`)
-    km.writeFile(`projects/${name}/decisions/.gitkeep`, '')
+    fs.writeFileSync(path.join(projectKnowledgeRoot, 'README.md'), readme, 'utf-8')
+    fs.writeFileSync(path.join(projectKnowledgeRoot, 'notes.md'), `# ${name} · 工作笔记\n\n（记录会议纪要、客户反馈、临时想法。）\n`, 'utf-8')
+    fs.writeFileSync(path.join(projectKnowledgeRoot, 'decisions', '.gitkeep'), '', 'utf-8')
   } catch (err) {
-    console.warn('[projects:create] 创建知识库模板失败（不影响 DB）:', err instanceof Error ? err.message : String(err))
+    console.warn('[projects:create] 创建项目知识模板失败（不影响 DB）:', err instanceof Error ? err.message : String(err))
   }
   return id
 })
 wrapHandler('projects:update', (_, id: string, patch: { name?: string; description?: string }) => {
-  // rename 时同步迁移 knowledge/projects/<old>/ → <new>/（2026-05-24 修复 P1 #4）：
-  // ChatWindow 注入 project 上下文时读 `projects/<pid>/README.md`，如果只改 DB 不动 knowledge 目录，
-  // 改名后 project 上下文会全部丢失。
+  // rename 时同步迁移项目知识目录。
   //
-  // 顺序很重要：必须先读旧 name → 改 DB（会校验 name 合法性）→ 再 mv 目录。
-  // DB 校验失败时不动目录；目录 mv 失败时 DB 已 committed，仅 warn 并提示用户手动迁移。
+  // canonical 路径是 `avatars/<aid>/projects/<name>/`（与 knowledge/ 并列），
+  // 同时兼容老版本写在 `knowledge/projects/<name>/` 的目录——尝试两个 source
+  // 但只迁到 canonical target，让老数据顺势归位。
+  //
+  // 顺序：读旧 name → 改 DB（会校验新 name 合法性）→ 再 mv 目录。
+  // DB 校验失败时不动目录；目录 mv 失败时 DB 已 committed，仅 warn。
   const db = getDb()
   const before = db.getProject(id)
   db.updateProject(id, patch)
   if (before && patch.name && patch.name !== before.name) {
     try {
-      const km = getKnowledgeManager(before.avatar_id)
-      km.renameDirectory(`projects/${before.name}`, `projects/${patch.name}`)
+      assertSafeSegment(before.name, 'oldProjectName')
+      assertSafeSegment(patch.name, 'newProjectName')
+      const avatarRoot = path.join(avatarsPath, before.avatar_id)
+      const canonicalOld = path.join(avatarRoot, 'projects', before.name)
+      const canonicalNew = path.join(avatarRoot, 'projects', patch.name)
+      const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
+      if (fs.existsSync(canonicalNew)) {
+        throw new Error(`目标目录已存在: projects/${patch.name}`)
+      }
+      // 优先迁 canonical 路径（projects/<name>）
+      if (fs.existsSync(canonicalOld)) {
+        fs.mkdirSync(path.dirname(canonicalNew), { recursive: true })
+        fs.renameSync(canonicalOld, canonicalNew)
+      }
+      // 老数据兼容：knowledge/projects/<name>/ → projects/<name>/knowledge/
+      if (fs.existsSync(legacyOld)) {
+        const canonicalNewKnowledge = path.join(canonicalNew, 'knowledge')
+        if (!fs.existsSync(canonicalNew)) fs.mkdirSync(canonicalNew, { recursive: true })
+        if (fs.existsSync(canonicalNewKnowledge)) {
+          console.warn(`[projects:update] legacy knowledge/projects/${before.name} 与 canonical projects/${patch.name}/knowledge 同时存在，跳过 legacy 迁移以避免覆盖`)
+        } else {
+          fs.renameSync(legacyOld, canonicalNewKnowledge)
+        }
+      }
     } catch (mvErr) {
       const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
       console.warn(
-        `[projects:update] knowledge 目录迁移失败（DB 已更新；请手动 mv "projects/${before.name}" → "projects/${patch.name}"）:`,
+        `[projects:update] 项目目录迁移失败（DB 已更新；请手动 mv "projects/${before.name}" → "projects/${patch.name}"）:`,
         msg,
       )
     }
@@ -1309,6 +1357,38 @@ wrapHandler('projects:archive', (_, id: string, archived: boolean) => {
 })
 wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsTo?: string }) => {
   getDb().deleteProject(id, options)
+})
+
+/**
+ * projects:read-context-file
+ *
+ * ChatWindow 用——按 conversation 注入 project README + notes 时读这个 IPC。
+ * 只允许 README.md / notes.md（白名单），路径锁死在 `projects/<pid>/knowledge/`。
+ * 不存在时按顺序回退到老路径 `knowledge/projects/<pid>/<file>`（兼容历史数据），
+ * 都不存在则返回空串。
+ *
+ * 不复用 readKnowledgeFile：那个 root 是 knowledge/，新 canonical 路径是
+ * knowledge/ 的兄弟目录 projects/，不在 KnowledgeManager 管辖范围内。
+ */
+const PROJECT_CONTEXT_FILES = new Set(['README.md', 'notes.md'])
+wrapHandler('projects:read-context-file', (_, avatarId: string, projectId: string, fileName: string): string => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(projectId, 'projectId')
+  if (!PROJECT_CONTEXT_FILES.has(fileName)) {
+    throw new Error(`非法 project 上下文文件名: ${fileName}`)
+  }
+  const avatarRoot = path.join(avatarsPath, avatarId)
+  // 优先 canonical：projects/<pid>/knowledge/<file>
+  const canonical = path.join(avatarRoot, 'projects', projectId, 'knowledge', fileName)
+  if (fs.existsSync(canonical)) {
+    return fs.readFileSync(canonical, 'utf-8')
+  }
+  // 兼容老数据：knowledge/projects/<pid>/<file>
+  const legacy = path.join(avatarRoot, 'knowledge', 'projects', projectId, fileName)
+  if (fs.existsSync(legacy)) {
+    return fs.readFileSync(legacy, 'utf-8')
+  }
+  return ''
 })
 
 wrapHandler('get-conversations', (_, avatarId?: string) => {

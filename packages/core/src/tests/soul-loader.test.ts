@@ -302,3 +302,65 @@ describe('SoulLoader — MEMORY.entries.json（渐进升级）', () => {
     assert.ok(!config.systemPrompt.includes('结构化记忆（白盒）'), '无 JSON 时不应凭空出现结构化小节标题')
   })
 })
+
+// ─── case: 项目知识隔离 —— A 项目资料不会进入 B/default 系统提示 ──────────────
+
+describe('SoulLoader — 项目知识隔离', () => {
+  /** 写一个 canonical project knowledge 文件：avatars/<aid>/projects/<pid>/knowledge/<rel> */
+  function writeProjectKnowledge(projectId: string, relativePath: string, content: string): void {
+    const fullPath = path.join(avatarPath, 'projects', projectId, 'knowledge', relativePath)
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+    fs.writeFileSync(fullPath, content, 'utf-8')
+  }
+
+  /** 写一个 legacy 路径文件（早期版本 projects:create 写到 knowledge/projects/<pid>/） */
+  function writeLegacyProjectFile(projectId: string, fileName: string, content: string): void {
+    const fullPath = path.join(avatarPath, 'knowledge', 'projects', projectId, fileName)
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+    fs.writeFileSync(fullPath, content, 'utf-8')
+  }
+
+  it('A 项目的 projects/A/knowledge/ 不会出现在 default 会话的 system prompt', () => {
+    writeProjectKnowledge('proj-a', 'secret.md', '# A 的秘密\n\nA-PROJECT-SECRET-MARKER\n')
+    writeProjectKnowledge('proj-b', 'b-data.md', '# B 数据\n\nB-PROJECT-MARKER\n')
+
+    const loader = new SoulLoader(avatarsRoot)
+    const defaultConfig = loader.loadAvatar(AVATAR_ID) // 不传 projectId → default
+
+    assert.ok(
+      !defaultConfig.systemPrompt.includes('A-PROJECT-SECRET-MARKER'),
+      'default 会话不应看到 A 项目的私有知识',
+    )
+    assert.ok(
+      !defaultConfig.systemPrompt.includes('B-PROJECT-MARKER'),
+      'default 会话不应看到 B 项目的私有知识',
+    )
+  })
+
+  it('B 项目的 system prompt 只含 B 自己的项目知识，不含 A 的', () => {
+    writeProjectKnowledge('proj-a', 'a-data.md', '# A 数据\n\nA-EXCLUSIVE-CONTENT\n')
+    writeProjectKnowledge('proj-b', 'b-data.md', '# B 数据\n\nB-EXCLUSIVE-CONTENT\n')
+
+    const loader = new SoulLoader(avatarsRoot)
+    const configB = loader.loadAvatar(AVATAR_ID, 'proj-b')
+
+    assert.ok(configB.systemPrompt.includes('B-EXCLUSIVE-CONTENT'), 'B 会话应注入 B 自己的项目知识')
+    assert.ok(
+      !configB.systemPrompt.includes('A-EXCLUSIVE-CONTENT'),
+      'B 会话不应看到 A 项目的私有知识（防跨项目泄漏）',
+    )
+  })
+
+  it('legacy knowledge/projects/<pid>/ 数据不会泄漏到 default 全局知识', () => {
+    // 模拟早期版本：projects:create 写到 knowledge/projects/legacy-proj/README.md
+    writeLegacyProjectFile('legacy-proj', 'README.md', '# 老 project 模板\n\nLEGACY-LEAK-CANARY\n')
+
+    const loader = new SoulLoader(avatarsRoot)
+    const defaultConfig = loader.loadAvatar(AVATAR_ID)
+
+    assert.ok(
+      !defaultConfig.systemPrompt.includes('LEGACY-LEAK-CANARY'),
+      '老数据 knowledge/projects/ 不应被 readDirectory 顶层 skip 拦截后再泄漏',
+    )
+  })
+})

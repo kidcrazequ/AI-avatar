@@ -301,6 +301,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('projects:archive', id, archived),
   projectsDelete: (id: string, options?: { migrateConversationsTo?: string }) =>
     ipcRenderer.invoke('projects:delete', id, options),
+  /** 读取 projects/<pid>/knowledge/{README,notes}.md（带老路径 fallback） */
+  projectsReadContextFile: (avatarId: string, projectId: string, fileName: 'README.md' | 'notes.md') =>
+    ipcRenderer.invoke('projects:read-context-file', avatarId, projectId, fileName),
   writeMemory: (avatarId: string, content: string) => ipcRenderer.invoke('write-memory', avatarId, content),
   getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>

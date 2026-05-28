@@ -814,6 +814,8 @@ interface ElectronAPI {
   projectsUpdate: (id: string, patch: { name?: string; description?: string }) => Promise<void>
   projectsArchive: (id: string, archived: boolean) => Promise<void>
   projectsDelete: (id: string, options?: { migrateConversationsTo?: string }) => Promise<void>
+  /** 读 projects/<pid>/knowledge/{README,notes}.md，缺失时回退老路径 knowledge/projects/<pid>/<file> */
+  projectsReadContextFile: (avatarId: string, projectId: string, fileName: 'README.md' | 'notes.md') => Promise<string>
   writeMemory: (avatarId: string, content: string) => Promise<void>
   getMemoryStats: (avatarId: string) => Promise<{ chars: number; ratio: number; entries: number }>
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>

@@ -155,8 +155,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const [l3InjectedFill, setL3InjectedFill] = useState<string | undefined>(undefined)
   /**
    * Project 上下文缓存：当 conversation.project_id 不是 default 时，
-   * 自动读 knowledge/projects/<pid>/README.md + notes.md，发送时作为 inline file 注入。
-   * key 用 `${conversationId}` 隔离。
+   * 自动读 projects/<pid>/knowledge/{README,notes}.md，发送时作为 inline file 注入。
+   * 通过 projectsReadContextFile IPC，主进程会优先 canonical 路径并回退到
+   * 老路径 knowledge/projects/<pid>/<file>。key 用 `${conversationId}` 隔离。
    */
   const [projectContext, setProjectContext] = useState<{
     name: string
@@ -388,11 +389,11 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         if (pid === 'default') { setProjectContext(null); return }
         const parts: string[] = []
         try {
-          const readme = await window.electronAPI.readKnowledgeFile(avatarId, `projects/${pid}/README.md`)
+          const readme = await window.electronAPI.projectsReadContextFile(avatarId, pid, 'README.md')
           if (readme && readme.trim()) parts.push(`## README\n\n${readme}`)
         } catch { /* 不存在 OK */ }
         try {
-          const notes = await window.electronAPI.readKnowledgeFile(avatarId, `projects/${pid}/notes.md`)
+          const notes = await window.electronAPI.projectsReadContextFile(avatarId, pid, 'notes.md')
           if (notes && notes.trim()) parts.push(`## NOTES\n\n${notes}`)
         } catch { /* 不存在 OK */ }
         if (cancelled) return

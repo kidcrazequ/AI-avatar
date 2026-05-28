@@ -1449,6 +1449,9 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
   // 早校验 target：避免后续磁盘改动跑完才让 DB 抛错。DB 层 deleteProject 还会再校验
   // 一次（defense in depth）
   const target = options?.migrateConversationsTo ?? DEFAULT_AVATAR_PROJECT_ID
+  if (target === existing.name) {
+    throw new Error(`migrateConversationsTo 不能指向正在删除的项目自身：${target}`)
+  }
   if (target !== DEFAULT_AVATAR_PROJECT_ID) {
     const targetExists = db.listProjects(existing.avatar_id).some(p => p.name === target && !p.archived)
     if (!targetExists) {
@@ -1482,6 +1485,7 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
   // Step A: workspace 迁移
   const oldWsRoot = path.join(avatarRoot, 'workspaces', existing.name)
   const newWsRoot = path.join(avatarRoot, 'workspaces', target)
+  let didStepA = false
   if (fs.existsSync(oldWsRoot)) {
     let convDirs: string[] = []
     try {
@@ -1509,8 +1513,10 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
         rollbackAll(`workspace 迁移失败 ${from} → ${to}：${mvErr instanceof Error ? mvErr.message : String(mvErr)}`)
       }
     }
-    // best-effort 清理空的 workspaces/<old>/ 根；非空（极端 race）就留着无害
-    try { fs.rmdirSync(oldWsRoot) } catch { /* 不影响主流程 */ }
+    didStepA = true
+    // 注意：oldWsRoot 的 rmdirSync 推迟到 Step C 成功后；否则 Step B/C 失败时
+    // rollbackAll 把 newWsRoot/<conv> rename 回 oldWsRoot/<conv>，但父目录已被
+    // 删除，rename 会失败留下错位状态。
   }
 
   // Step B: knowledge 目录归档（canonical + legacy）
@@ -1539,6 +1545,11 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
   } catch (dbErr) {
     const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr)
     rollbackAll(`DB 删除失败：${dbMsg}（已反向恢复磁盘归档）`)
+  }
+
+  // 全部成功——best-effort 清理空的 workspaces/<old>/ 根；非空就留着无害
+  if (didStepA) {
+    try { fs.rmdirSync(oldWsRoot) } catch { /* 不影响主流程 */ }
   }
 })
 

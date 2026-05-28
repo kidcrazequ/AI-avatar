@@ -1683,6 +1683,13 @@ export class DatabaseManager {
     if (!existing) return
     if (existing.name === 'default') throw new Error('"default" 是保留项目桶，不能删除')
     const target = options.migrateConversationsTo ?? 'default'
+    // target 不能指向正在被删的项目自身：否则下面 UPDATE 把会话 project_id 改成
+    // existing.name（其实没改），紧接 DELETE projects WHERE id 把这个 project 行
+    // 删了，会话就挂在一个不存在的 project name 上。UI 已过滤 self，但 IPC/未来
+    // 代码传错值会触发。
+    if (target === existing.name) {
+      throw new Error(`migrateConversationsTo 不能指向正在删除的项目自身：${target}`)
+    }
     // 校验 target：必须是 'default' 或同 avatar 下未归档 project；UI 已限制，
     // 但 IPC/未来代码传错值会把会话迁到不存在的 project，sidebar 看不到 = 相当于丢失。
     if (target !== 'default') {

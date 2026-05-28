@@ -258,7 +258,12 @@ export class DatabaseManager {
         `SELECT * FROM conversations WHERE id = ?`
       ),
       getMessages: this.db.prepare(
-        `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC`
+        // 二级排序用 rowid：saveMessage 用 Date.now() 毫秒时间戳，tool 和 assistant
+        // 连续落库（同一 sendMessage 流式回合内）经常同毫秒。仅按 created_at 排序
+        // 时同毫秒行的相对顺序由 SQLite 内部实现决定（不稳定），
+        // collectDocumentAttachmentsByAssistantId 依赖 tool 出现在 assistant 之前
+        // 才能挂到正确的回答上，必须 rowid 兜底单调递增的插入顺序。
+        `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC`
       ),
       insertMessage: this.db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, tool_call_timeline_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`

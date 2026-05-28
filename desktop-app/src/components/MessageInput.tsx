@@ -867,23 +867,22 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       if (!mountedRef.current) return
       if (!resolved) {
         // 还原 @... 让用户看到自己确实输入过，引导重试，而不是静默丢失。
-        // 解析期间用户未继续输入（prev === cleaned）→ before + token + after 原位还原 + 光标定位；
-        // 用户已继续输入（prev !== cleaned）→ 退回到追加末尾，避免覆盖用户输入。
-        let restoredAtOrigin = false
-        setInput(prev => {
-          if (prev === cleaned) {
-            restoredAtOrigin = true
-            return before + originalAtToken + after
-          }
-          return prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`
-        })
-        if (restoredAtOrigin) {
+        // 在 setInput 之前先从 textarea DOM value 读当前输入（受控 input，DOM 与
+        // state 同步），决定恢复策略：避免在 setInput updater 里改外部变量——
+        // React 可能延后/重复执行 updater，外层立即判断 restoredAtOrigin 不可靠。
+        //   - DOM value === cleaned：解析期间用户没继续输入 → 原位还原 + 光标定位
+        //   - DOM value !== cleaned 或 ta 已卸载：用户已继续输入 → 追加末尾保留输入
+        const canRestoreAtOrigin = ta !== null && ta.value === cleaned
+        if (canRestoreAtOrigin) {
+          setInput(before + originalAtToken + after)
           requestAnimationFrame(() => {
             if (!ta) return
             const pos = before.length + originalAtToken.length
             ta.focus()
             ta.setSelectionRange(pos, pos)
           })
+        } else {
+          setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
         }
         showHint('warn', `引用解析失败：@${entry.namespace}/${entry.title}（已恢复输入，可重试或编辑）`)
         return

@@ -1683,6 +1683,16 @@ export class DatabaseManager {
     if (!existing) return
     if (existing.name === 'default') throw new Error('"default" 是保留项目桶，不能删除')
     const target = options.migrateConversationsTo ?? 'default'
+    // 校验 target：必须是 'default' 或同 avatar 下未归档 project；UI 已限制，
+    // 但 IPC/未来代码传错值会把会话迁到不存在的 project，sidebar 看不到 = 相当于丢失。
+    if (target !== 'default') {
+      const valid = this.db.prepare(`
+        SELECT 1 FROM projects WHERE avatar_id = ? AND name = ? AND archived = 0
+      `).get(existing.avatar_id, target)
+      if (!valid) {
+        throw new Error(`migrateConversationsTo 目标不存在或已归档：${target}（必须是 default 或同 avatar 下未归档项目）`)
+      }
+    }
     this.db.transaction(() => {
       this.db.prepare(`
         UPDATE conversations SET project_id = ?, updated_at = ?

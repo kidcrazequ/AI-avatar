@@ -1342,6 +1342,13 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
     if (fs.existsSync(legacyNew)) {
       throw new Error(`老路径目录已存在：knowledge/projects/${patch.name}/（请先备份或手动迁移）`)
     }
+    // workspaces 目录冲突：rename 后 conversations.project_id 会同步迁到 newName，
+    // resolveAvatarWorkspaceSessionRoot 按 workspaces/<newName>/<convId>/ 找 exports；
+    // 若 workspaces/<newName>/ 已存在（如冲掉的同名旧项目残留），后续 mv 会冲突。
+    const wsNew = path.join(avatarRoot, 'workspaces', patch.name!)
+    if (fs.existsSync(wsNew)) {
+      throw new Error(`workspaces 目录已存在：workspaces/${patch.name}/（请先备份或手动迁移）`)
+    }
   }
   db.updateProject(id, patch)
   if (before && isRename) {
@@ -1349,6 +1356,8 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
     const canonicalOld = path.join(avatarRoot, 'projects', before.name)
     const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
     const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
+    const wsOld = path.join(avatarRoot, 'workspaces', before.name)
+    const wsNew = path.join(avatarRoot, 'workspaces', patch.name!)
     // 记录已完成的文件操作；失败时反向回滚，避免 DB 已回滚但文件仍留在新目录
     let movedCanonical = false
     // legacy-only 场景：canonicalOld 不存在但 legacyOld 存在时，下面会 mkdirSync
@@ -1356,6 +1365,10 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
     // DB 回滚但空 canonicalNew 留下，下一次重试会被 preflight 拦住。记录这个状态
     // 让失败路径删掉它。
     let createdCanonicalNew = false
+    // workspaces/<oldName>/ 也要跟着 rename，否则 document:open 按新 project_id 算
+    // workspaces/<newName>/<convId>/，但 exports 还在 workspaces/<oldName>/<convId>/，
+    // 历史生成文件打不开。**workspace mv 故意放最后**：失败时它还没真正搬走，无需
+    // 反向回滚；若后续插入新步骤，必须在此处加 movedWorkspace 跟踪 + catch 反向 rename。
     try {
       // 优先迁 canonical 路径（projects/<name>）
       if (fs.existsSync(canonicalOld)) {
@@ -1377,6 +1390,10 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
           // legacy 内容落位，目录已非空，不再视为残留
           createdCanonicalNew = false
         }
+      }
+      // workspaces：单次 rename 整目录，convId 子目录跟着走（必须是 try 块最后一步）
+      if (fs.existsSync(wsOld)) {
+        fs.renameSync(wsOld, wsNew)
       }
     } catch (mvErr) {
       // preflight 已经把"目标存在"挡在 DB commit 前，这里残留风险是 mv 本身失败
@@ -1421,47 +1438,108 @@ wrapHandler('projects:archive', (_, id: string, archived: boolean) => {
   getDb().archiveProject(id, !!archived)
 })
 wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsTo?: string }) => {
-  const existing = getDb().getProject(id)
+  const db = getDb()
+  const existing = db.getProject(id)
   if (!existing) {
-    getDb().deleteProject(id, options)
+    db.deleteProject(id, options)
     return
   }
   if (existing.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
 
-  // 先把磁盘目录归档到 .deleted-<ts>/，再删 DB 行。
-  // 原实现只改 DB + 迁会话，留下 projects/<name>/knowledge/{README,notes}.md；
-  // 之后用户新建同名 project 会被 projects:create 的 writeFileSync 静默覆盖
-  // README/notes，丢失原有笔记。归档后目录从 projects/ 下消失，重建走干净路径。
-  // canonical + legacy 两条都要处理。
+  // 早校验 target：避免后续磁盘改动跑完才让 DB 抛错。DB 层 deleteProject 还会再校验
+  // 一次（defense in depth）
+  const target = options?.migrateConversationsTo ?? DEFAULT_AVATAR_PROJECT_ID
+  if (target !== DEFAULT_AVATAR_PROJECT_ID) {
+    const targetExists = db.listProjects(existing.avatar_id).some(p => p.name === target && !p.archived)
+    if (!targetExists) {
+      throw new Error(`migrateConversationsTo 目标不存在或已归档：${target}（必须是 default 或同 avatar 下未归档项目）`)
+    }
+  }
+
+  // 完整删除链路：
+  //   Step A: workspaces/<old>/<conv>/ 逐个迁到 workspaces/<target>/<conv>/——否则
+  //           会话 project_id 已切到 target，但 document:open 按 workspaces/<target>/<conv>/
+  //           找 exports 找不到（实际还在 workspaces/<old>/<conv>/），历史生成文件打不开
+  //   Step B: projects/<old>/ 和 knowledge/projects/<old>/ 归档到 .deleted-<ts>/——
+  //           避免重建同名 project 时 writeFileSync 覆盖原 README/notes
+  //   Step C: DB 删除（含会话迁移 transaction）
+  //
+  // 任何一步失败 → rollbackAll 反向 rename 所有已完成 mv → throw
   const avatarRoot = path.join(avatarsPath, existing.avatar_id)
   const ts = Date.now()
-  const trashOps: Array<{ from: string; to: string }> = []
+  const allMoved: Array<{ from: string; to: string }> = []
+
+  const rollbackAll = (reason: string): never => {
+    for (const op of [...allMoved].reverse()) {
+      try { fs.renameSync(op.to, op.from) } catch (revErr) {
+        const revMsg = revErr instanceof Error ? revErr.message : String(revErr)
+        console.error(`[projects:delete] 反向恢复失败 ${op.to} → ${op.from}：${revMsg}`)
+      }
+    }
+    throw new Error(reason)
+  }
+
+  // Step A: workspace 迁移
+  const oldWsRoot = path.join(avatarRoot, 'workspaces', existing.name)
+  const newWsRoot = path.join(avatarRoot, 'workspaces', target)
+  if (fs.existsSync(oldWsRoot)) {
+    let convDirs: string[] = []
+    try {
+      convDirs = fs.readdirSync(oldWsRoot)
+    } catch (readErr) {
+      rollbackAll(`workspace 列目录失败：${readErr instanceof Error ? readErr.message : String(readErr)}`)
+    }
+    if (convDirs.length > 0) {
+      try {
+        fs.mkdirSync(newWsRoot, { recursive: true })
+      } catch (mkErr) {
+        rollbackAll(`workspace 目标目录创建失败：${mkErr instanceof Error ? mkErr.message : String(mkErr)}`)
+      }
+    }
+    for (const convDir of convDirs) {
+      const from = path.join(oldWsRoot, convDir)
+      const to = path.join(newWsRoot, convDir)
+      if (fs.existsSync(to)) {
+        rollbackAll(`workspace 冲突：${to} 已存在；同 conv id 不应同时落在两个 project 下`)
+      }
+      try {
+        fs.renameSync(from, to)
+        allMoved.push({ from, to })
+      } catch (mvErr) {
+        rollbackAll(`workspace 迁移失败 ${from} → ${to}：${mvErr instanceof Error ? mvErr.message : String(mvErr)}`)
+      }
+    }
+    // best-effort 清理空的 workspaces/<old>/ 根；非空（极端 race）就留着无害
+    try { fs.rmdirSync(oldWsRoot) } catch { /* 不影响主流程 */ }
+  }
+
+  // Step B: knowledge 目录归档（canonical + legacy）
+  const trashCandidates: Array<{ from: string; to: string }> = []
   const canonicalDir = path.join(avatarRoot, 'projects', existing.name)
   if (fs.existsSync(canonicalDir)) {
-    trashOps.push({ from: canonicalDir, to: path.join(avatarRoot, 'projects', `${existing.name}.deleted-${ts}`) })
+    trashCandidates.push({ from: canonicalDir, to: path.join(avatarRoot, 'projects', `${existing.name}.deleted-${ts}`) })
   }
   const legacyDir = path.join(avatarRoot, 'knowledge', 'projects', existing.name)
   if (fs.existsSync(legacyDir)) {
-    trashOps.push({ from: legacyDir, to: path.join(avatarRoot, 'knowledge', 'projects', `${existing.name}.deleted-${ts}`) })
+    trashCandidates.push({ from: legacyDir, to: path.join(avatarRoot, 'knowledge', 'projects', `${existing.name}.deleted-${ts}`) })
   }
-  const moved: Array<{ from: string; to: string }> = []
-  try {
-    for (const op of trashOps) {
+  for (const op of trashCandidates) {
+    try {
       fs.renameSync(op.from, op.to)
-      moved.push(op)
+      allMoved.push(op)
+    } catch (mvErr) {
+      rollbackAll(`项目目录归档失败 ${op.from} → ${op.to}：${mvErr instanceof Error ? mvErr.message : String(mvErr)}`)
     }
-  } catch (mvErr) {
-    const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
-    // 反向回滚已 moved 的，保持 DB 与磁盘一致
-    for (const op of moved.reverse()) {
-      try { fs.renameSync(op.to, op.from) } catch (revErr) {
-        const revMsg = revErr instanceof Error ? revErr.message : String(revErr)
-        console.error(`[projects:delete] 归档失败后反向恢复也失败：${op.to} → ${op.from}：${revMsg}`)
-      }
-    }
-    throw new Error(`项目目录归档失败，删除已中止：${msg}`)
   }
-  getDb().deleteProject(id, options)
+
+  // Step C: DB 删除——失败时反向恢复磁盘归档（之前只做 Step B 时缺这一环：
+  // DB 删除失败留下 .deleted-* 目录但 DB 仍有项目，状态错位）
+  try {
+    db.deleteProject(id, options)
+  } catch (dbErr) {
+    const dbMsg = dbErr instanceof Error ? dbErr.message : String(dbErr)
+    rollbackAll(`DB 删除失败：${dbMsg}（已反向恢复磁盘归档）`)
+  }
 })
 
 /**

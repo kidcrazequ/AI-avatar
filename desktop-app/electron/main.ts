@@ -4356,21 +4356,29 @@ wrapHandler('get-evolution-report', async (_, avatarId: string) => {
 })
 
 /**
- * preserve-raw-file: 保存原始导入文件到 knowledge/_raw/。
- * 保留原始 PDF/Word 等文件供追溯，不影响 .md 知识文件过滤。
+ * 用户文件读写的统一边界守卫。
  *
- * @author zhi.qu
- * @date 2026-04-09
+ * preserve-raw-file / parse-document 都接收渲染层传入的绝对路径——一旦渲染被污染
+ * （恶意 webview、被 inject 的 devtools、第三方 widget 等），主进程会被指令读
+ * 任意本地文件（SSH 私钥、AWS 凭证、~/.env 等）。
+ *
+ * 这里只放过用户主目录下的文件，并排除常见敏感子目录。两个 IPC 都走同一份策略，
+ * 避免一边收紧一边漏掉。
+ *
+ * @throws 当路径越界或落在敏感目录时
+ * @returns resolved 后的绝对路径
  */
-wrapHandler('preserve-raw-file', async (_, avatarId: string, originalFilePath: string) => {
-  assertSafeSegment(avatarId, '分身ID')
+function assertUserOwnedFile(originalFilePath: string): string {
+  if (typeof originalFilePath !== 'string' || !path.isAbsolute(originalFilePath)) {
+    throw new Error(`非法文件路径（必须为绝对路径）: ${originalFilePath}`)
+  }
   const resolved = path.resolve(originalFilePath)
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
     throw new Error(`文件不存在或不是文件: ${originalFilePath}`)
   }
   const homedir = os.homedir()
   if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
-    throw new Error(`安全限制：仅允许保存用户主目录下的文件`)
+    throw new Error(`安全限制：仅允许读取用户主目录下的文件`)
   }
   // 排除敏感目录，防止泄露密钥、凭证等
   const SENSITIVE_DIRS = ['.ssh', '.gnupg', '.aws', '.env', '.credentials']
@@ -4379,6 +4387,19 @@ wrapHandler('preserve-raw-file', async (_, avatarId: string, originalFilePath: s
   if (SENSITIVE_DIRS.includes(firstSegment)) {
     throw new Error(`安全限制：禁止访问敏感目录 ${firstSegment}`)
   }
+  return resolved
+}
+
+/**
+ * preserve-raw-file: 保存原始导入文件到 knowledge/_raw/。
+ * 保留原始 PDF/Word 等文件供追溯，不影响 .md 知识文件过滤。
+ *
+ * @author zhi.qu
+ * @date 2026-04-09
+ */
+wrapHandler('preserve-raw-file', async (_, avatarId: string, originalFilePath: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const resolved = assertUserOwnedFile(originalFilePath)
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   const relativePath = await WikiCompiler.preserveRawFile(knowledgePath, resolved)
   if (logger) logger.activity('preserve-raw-file', `avatarId=${avatarId}, file=${relativePath}`)
@@ -4397,13 +4418,14 @@ wrapHandler('show-open-dialog', async (_, options: Electron.OpenDialogOptions) =
 /**
  * parse-document: 解析文件（PDF/Word/Excel/图片/文本）。
  * 返回提取的文本和图片（base64 data URL），图片由渲染进程进一步 OCR。
+ *
+ * 走 assertUserOwnedFile 同款 home + 敏感目录排除——一旦渲染层被污染，
+ * parseFile 可以解析 PDF/DOCX/XLSX 等大量格式，文本会原样回到渲染层，
+ * 等同于任意文件读，要和 preserve-raw-file 用一份策略。
  */
 wrapHandler('parse-document', async (_, filePath: string) => {
-  if (!path.isAbsolute(filePath)) {
-    throw new Error(`非法文件路径（必须为绝对路径）: ${filePath}`)
-  }
-  // parseFile 内部已有 fs.promises.stat 校验，无需重复同步检查
-  return documentParser.parseFile(filePath)
+  const resolved = assertUserOwnedFile(filePath)
+  return documentParser.parseFile(resolved)
 })
 
 /**
@@ -4800,8 +4822,17 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
  */
 wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: string): Promise<{ success: boolean; error?: string }> => {
   assertSafeSegment(avatarId, '分身ID')
+  // 必须是 .md 相对路径——禁止 ../ 越界写其它扩展（避免 IPC 被用作任意写）
+  if (typeof relativePath !== 'string' || !relativePath.toLowerCase().endsWith('.md')) {
+    throw new Error(`非法相对路径或扩展名（必须以 .md 结尾）: ${relativePath}`)
+  }
   const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const filePath = path.join(knowledgePath, relativePath)
+  let filePath: string
+  try {
+    filePath = resolveUnderRoot(knowledgePath, relativePath)
+  } catch {
+    throw new Error(`非法相对路径（越出 knowledge/ 根）: ${relativePath}`)
+  }
   if (!fs.existsSync(filePath)) throw new Error(`文件不存在: ${relativePath}`)
 
   // 读取 API Key（creation > ocr > chat）
@@ -4821,14 +4852,23 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
   let parsedFileType = 'text'
 
   // 尝试从 frontmatter 找到 raw_file
+  // raw_file 只允许指向 _raw/ 子目录，且必须 resolveUnderRoot 到 knowledge 根下；
+  // 防止恶意 .md 把 frontmatter 写成 `raw_file: ../../../etc/passwd` 让格式化管线读任意文件。
   const currentContent = fs.readFileSync(filePath, 'utf-8')
   const fmMatch = currentContent.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   let rawFilePath: string | null = null
   if (fmMatch) {
     const rawFileMatch = fmMatch[1].match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
     if (rawFileMatch) {
-      const candidate = path.join(knowledgePath, rawFileMatch[1].trim())
-      if (fs.existsSync(candidate)) rawFilePath = candidate
+      const rawRel = rawFileMatch[1].trim().replace(/^["']|["']$/g, '')
+      // 规范化分隔符 + 强制 _raw/ 前缀
+      const normalized = rawRel.replace(/\\/g, '/')
+      if (normalized.startsWith('_raw/') && !normalized.split('/').includes('..')) {
+        try {
+          const candidate = resolveUnderRoot(knowledgePath, normalized)
+          if (fs.existsSync(candidate)) rawFilePath = candidate
+        } catch { /* 越界则忽略 raw_file */ }
+      }
     }
   }
 
@@ -4996,9 +5036,14 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
   }
 
   if (targetFiles && targetFiles.length > 0) {
+    // 防 ../ 越界写 + 限制 .md 扩展（同 format-knowledge-file 的边界）。
+    // 渲染端能传任意字符串，主进程必须 resolveUnderRoot 双校验。
     allFiles = targetFiles
-      .map(f => path.join(knowledgePath, f))
-      .filter(f => fs.existsSync(f) && !isAlreadyEnhanced(f))
+      .filter(f => typeof f === 'string' && f.toLowerCase().endsWith('.md'))
+      .map(f => {
+        try { return resolveUnderRoot(knowledgePath, f) } catch { return null }
+      })
+      .filter((f): f is string => f !== null && fs.existsSync(f) && !isAlreadyEnhanced(f))
   } else {
     allFiles = []
     function scanDir(dir: string): void {

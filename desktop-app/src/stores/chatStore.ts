@@ -3982,38 +3982,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
          * 没有任何真实的 reasoning_content 可以原样回传——空串 / 占位串 / 省略字段都会被 400 拒绝
          * （报错文案：The `reasoning_content` in the thinking mode must be passed back to the API）。
          *
-         * 因此对 thinking 模型彻底放弃"伪 tool round-trip"注入策略：直接把 skill 内容拼到 system
-         * prompt 末尾，让模型在第一轮就具备 skill 知识，apiMessages 的对话流保持
-         * `[system, ...history, user]` 形态，不混入任何合成 assistant 消息。
+         * 因此对 thinking 模型彻底放弃"伪 tool round-trip"注入策略：直接把 skill 内容追加到
+         * systemBlocks 末尾（非 cacheable，因为 resultText 随每次工具调用变），让模型在第一轮就
+         * 具备 skill 知识，apiMessages 的对话流保持 `[...history, user]` 形态，不混入任何
+         * 合成 assistant 消息。
+         *
+         * 旧实现写 apiMessages[0].content：自 systemBlocks 重构后 apiMessages 不再包含 role=system
+         * （line 3691 注释），那条分支永远走 warn 跳过，reasoning 模型实际看不到 skill 定义。
          *
          * 同时跳过 saveMessage——避免 DB 里残留孤立的 tool 消息（下次加载时会成为不配对的 tool，
          * 传给 thinking 模型时同样会 400）。telemetry 与 loadSkillCallCount 已在前面发出，
          * 回归测试的工具调用统计不受影响。
          */
-        const systemMsg = apiMessages[0]
-        if (systemMsg && systemMsg.role === 'system' && typeof systemMsg.content === 'string') {
-          // 注入文案要够强：旧版只写"[已自动加载技能：xxx]"，DeepSeek-Reasoner 等
-          // thinking 模型仍会按习惯 load_skill 一次（导致工具调用时间线出现"1 失败"的
-          // 拦截记录，看着像 bug）。改用明确禁令 + 后续可调 skill 名单，让模型直接
-          // 跳过冗余的 load_skill('chart-from-knowledge') 调用。
-          systemMsg.content =
-            `${systemMsg.content}\n\n` +
-            `[系统预加载技能 · 必读]\n` +
+        systemBlocks.push({
+          text:
+            `\n\n[系统预加载技能 · 必读]\n` +
             `技能 \`${FORCED_CHART_SKILL_ID}\` 的完整定义已经预加载在下面，` +
             `**请直接使用，禁止再调用 \`load_skill('${FORCED_CHART_SKILL_ID}')\`**——` +
             `重复加载会被守卫拦截并显示为"工具失败"，徒增噪声。\n` +
             `如需进一步加载其它技能（如 \`draw-chart\` 基础画图规则），照常调 \`load_skill\` 即可。\n\n` +
             `===== ${FORCED_CHART_SKILL_ID} 技能定义开始 =====\n` +
             `${resultText}\n` +
-            `===== ${FORCED_CHART_SKILL_ID} 技能定义结束 =====`
-          logPerf('chart-skill:inject-into-system', `model=${activeModel.model} contentLen=${resultText.length}`)
-        } else {
-          window.electronAPI.logEvent(
-            'warn',
-            'chart-skill-inject-system-failed',
-            `apiMessages[0] 不是 string content 的 system 消息，跳过 thinking 模型 skill 注入`,
-          )
-        }
+            `===== ${FORCED_CHART_SKILL_ID} 技能定义结束 =====`,
+          // 不标 cacheable：resultText 是工具实时返回，prefix 不稳定，缓存反而拖累
+        })
+        logPerf('chart-skill:inject-into-system-block', `model=${activeModel.model} contentLen=${resultText.length}`)
       } else {
         apiMessages.push({
           role: 'assistant',

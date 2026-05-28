@@ -603,16 +603,71 @@ export class SkillManager {
    * 获取启用技能的摘要列表（用于渐进式披露）。
    * 只返回技能名称和说明，不包含完整实现内容，减少 token 占用。
    * AI 在需要使用某技能时，通过 load_skill 工具加载完整内容。
+   *
+   * 合并三个来源（同 id 时本地覆写优先）：
+   *   1. avatars/<id>/skills/ 下的本地实体 .md / SKILL.md（getSkills）
+   *   2. skill-index.yaml 里 source: shared 的引用
+   *   3. skill-index.yaml 里 source: community 的引用
+   *
+   * 之前只扫 ①，导致 orchestrator 这类"只引用 shared、本地无文件"的分身
+   * UI 显示已启用但 prompt 摘要里看不见，模型实际不知道这些技能 ID。
    */
   getSkillsSummary(avatarId: string): string {
     assertSafeSegment(avatarId, '分身ID')
-    const skills = this.getSkills(avatarId).filter(s => s.enabled)
-
-    if (skills.length === 0) {
-      return ''
+    const byId = new Map<string, Skill>()
+    for (const s of this.getSkills(avatarId).filter(s => s.enabled)) {
+      byId.set(s.id, s)
     }
-
-    const lines = skills.map(s => `- **${s.name}** (id: \`${s.id}\`)：${s.description || '无描述'}`)
+    for (const ref of this.readEnabledNonLocalSkillRefsFromIndex(avatarId)) {
+      if (byId.has(ref)) continue // 本地覆写优先
+      try {
+        const resolved = this.getSkill(avatarId, ref)
+        if (resolved && resolved.enabled) byId.set(ref, resolved)
+      } catch { /* 单个 ref 解析失败不阻塞其它 */ }
+    }
+    if (byId.size === 0) return ''
+    const lines = [...byId.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(s => `- **${s.name}** (id: \`${s.id}\`)：${s.description || '无描述'}`)
     return `\n\n# 可用技能（摘要）\n\n以下是可用的技能列表。需要使用某技能时，请调用 \`load_skill\` 工具加载完整定义。\n\n${lines.join('\n')}`
+  }
+
+  /**
+   * 读 skill-index.yaml 里所有 source: shared / source: community 的 name 列表。
+   * 与 readSharedSkillNamesFromIndex 区别：放宽到 community；getSkillsSummary 用。
+   * 仍是文本扫描（不引 yaml 库）。
+   */
+  private readEnabledNonLocalSkillRefsFromIndex(avatarId: string): string[] {
+    const indexPath = path.join(this.avatarsPath, avatarId, 'skills', 'skill-index.yaml')
+    if (!fs.existsSync(indexPath)) return []
+    let raw: string
+    try {
+      raw = fs.readFileSync(indexPath, 'utf-8')
+    } catch {
+      return []
+    }
+    const names: string[] = []
+    const lines = raw.split('\n')
+    let currentName: string | null = null
+    let currentBlock: string[] = []
+    const flush = () => {
+      if (!currentName) return
+      const blockText = currentBlock.join('\n')
+      if (/^\s+source:\s*(shared|community)\s*$/m.test(blockText)) {
+        names.push(currentName)
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m) {
+        flush()
+        currentName = m[1].replace(/['"]/g, '').trim()
+        currentBlock = [line]
+      } else {
+        currentBlock.push(line)
+      }
+    }
+    flush()
+    return names
   }
 }

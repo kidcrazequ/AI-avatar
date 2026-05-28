@@ -3414,6 +3414,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             toolCallStatus: '',
           }))
           try {
+            // externalId = assistantMsgId：让 DB row id 与 UI bubble id 一致，
+            // 否则刷新后用户点"重新生成" deleteMessage(uiId) 在 DB 找不到行，
+            // 旧回答又回来重复（与主路径 line ~5032 同款修复）
             await window.electronAPI.saveMessage(
               conversationId,
               'assistant',
@@ -3421,6 +3424,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               undefined,
               undefined,
               cached.reasoningContent ?? undefined,
+              undefined,
+              undefined,
+              undefined,
+              assistantMsgId,
             )
           } catch (saveErr) {
             const m = saveErr instanceof Error ? saveErr.message : String(saveErr)
@@ -3459,7 +3466,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             isLoading: false,
             toolCallStatus: '',
           }))
-          await window.electronAPI.saveMessage(conversationId, 'assistant', cacheResult.assistantContent)
+          // externalId = assistantMsgId（同 answer-cache 早返路径，保持 UI/DB id 一致）
+          await window.electronAPI.saveMessage(
+            conversationId,
+            'assistant',
+            cacheResult.assistantContent,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            assistantMsgId,
+          )
           // 早返路径统一走 cleanupRequest（含 snapshot / activeChatRequest / abortController），
           // 避免切回会话时被空 snapshot 覆盖 cache 答案。
           cleanupRequest()

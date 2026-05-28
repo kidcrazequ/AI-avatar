@@ -4076,6 +4076,9 @@ ${content}` }
         : WEB_FETCH_DEFAULT_MAX_CHARS,
     )
 
+    // 收集所有 hop 创建的 Agent，最终 finally 统一 close()——否则每次 web_fetch
+     // 都泄漏 socket pool / timer。声明在 try 外面，finally 才能读到。
+    const agents: Agent[] = []
     try {
       // 手动重定向 + 每跳 DNS 校验 + IP pinning：避免 DNS rebinding。
       // 流程：lookup → 校验 IP 不是内网 → undici Agent 用 connect.lookup 把这个 IP
@@ -4103,6 +4106,7 @@ ${content}` }
             },
           },
         })
+        agents.push(agent)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), WEB_FETCH_TIMEOUT_MS)
         let resp: Response
@@ -4131,6 +4135,9 @@ ${content}` }
             response = resp
             break
           }
+          // 跳转前 cancel 这一跳的 body——不消费的话 undici 会保持 socket 等读完，
+          // 长跳转链会积累空闲连接
+          try { await resp.body?.cancel() } catch { /* swallow */ }
           if (hop >= MAX_REDIRECTS) {
             return { content: '', error: `超过最大重定向数 ${MAX_REDIRECTS}` }
           }
@@ -4234,6 +4241,11 @@ ${content}` }
       }
       const msg = err instanceof Error ? err.message : String(err)
       return { content: '', error: `web_fetch 异常: ${msg}` }
+    } finally {
+      // 释放所有 hop 创建的 Agent。close() 是异步的，失败也不能再 throw（finally 内）
+      for (const agent of agents) {
+        try { await agent.close() } catch { /* swallow */ }
+      }
     }
   }
 

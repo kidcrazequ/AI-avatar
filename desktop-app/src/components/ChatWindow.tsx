@@ -159,9 +159,12 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
    * 通过 projectsReadContextFile IPC，主进程会优先 canonical 路径并回退到
    * 老路径 knowledge/projects/<pid>/<file>。key 用 `${conversationId}` 隔离。
    */
+  // 绑 conversationId：切换会话时立刻失效，handleSendMessage 校验匹配再注入；
+  // 否则切到 default/B 项目立刻发送会带上 A 项目的 README/notes（"幽灵上下文"）
   const [projectContext, setProjectContext] = useState<{
     name: string
     text: string
+    conversationId: string
   } | null>(null)
   const handleInjectPrompt = useCallback((text: string) => {
     setL3InjectedFill(text)
@@ -339,8 +342,10 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
                 return undefined
               }
               return {
-                // 用 DB 的真实 messageId，便于后续 attachments 用 message_id 精确关联
-                id: `db-${conversationId}-${m.id || i}`,
+                // 直接用 DB 的 messageId 作为 UI bubble id——便于 deleteMessage(uiId)
+                // 直接命中 DB 行（"重新生成"按钮路径）。之前包成 db-${conv}-${id}
+                // 让 DB 删不到导致旧回答刷新后复活。i 兜底防 m.id 缺失（理论不发生）
+                id: m.id || `local-${conversationId}-${i}`,
                 role,
                 content: m.content,
                 imageUrls,
@@ -381,6 +386,10 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   // 加载当前 conversation 的 project 上下文（README + notes），用于发送时自动注入
   useEffect(() => {
     let cancelled = false
+    // effect 开头先清掉旧 context——异步加载期间用户可能立刻发送；不清就把上一个
+    // conversation/project 的 README 注进新会话（即"幽灵上下文"）
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 切 conv 必须同步清掉旧 context 才能挡住"切完立刻发送"的窗口
+    setProjectContext(null)
     void (async () => {
       try {
         const conv = await window.electronAPI.getConversation(conversationId)
@@ -401,6 +410,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           setProjectContext({
             name: pid,
             text: `# 当前任务包：${pid}\n\n（以下内容由系统自动注入，作为本次对话的背景上下文。）\n\n${parts.join('\n\n')}`,
+            conversationId,
           })
         } else {
           setProjectContext(null)
@@ -429,7 +439,11 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     // persist:false——项目 README/notes 每轮重新加载并拼装，不进用户消息 snapshot；
     // 否则每条用户消息都会带一份 README/notes，对话历史 / DB / 气泡线性膨胀。
     // 用户自己 @ 出来的引用走 sendMessage 默认（persist 缺省 = true）正常 snapshot。
-    const finalInlineFiles = projectContext
+    // 校验 projectContext.conversationId === 当前 conversationId：切换会话时 effect
+    // 异步加载新 context，期间用户立刻发送会读到 stale state（上一会话的项目）；
+    // 不匹配就跳过注入，避免 A 的 README 漏进 B 的会话
+    const ctxMatches = projectContext && projectContext.conversationId === conversationId
+    const finalInlineFiles = ctxMatches
       ? [
           {
             name: `@project/${projectContext.name}.md`,

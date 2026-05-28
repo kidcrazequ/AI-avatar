@@ -415,4 +415,3 @@ async function extractRar(archivePath: string, destDir: string): Promise<void> {
     await fs.promises.writeFile(outPath, Buffer.from(file.extraction))
   }
 }
-

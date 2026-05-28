@@ -1,5 +1,7 @@
 import path from 'path'
 import fs from 'fs'
+import dns from 'dns'
+import net from 'net'
 import { KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
 import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
@@ -331,20 +333,56 @@ const IMAGE_GEN_POLL_TIMEOUT_MS = 90 * 1000
 const IMAGE_GEN_POLL_INTERVAL_MS = 2 * 1000
 /** 图片下载超时（30 秒） */
 const IMAGE_GEN_DOWNLOAD_TIMEOUT_MS = 30 * 1000
-/** 内网/回环地址正则（防 SSRF）*/
-const PRIVATE_IP_PATTERNS: readonly RegExp[] = [
-  /^localhost$/i,
-  /^127\./,
-  /^10\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,  // 172.16.0.0–172.31.255.255
-  /^169\.254\./,                  // link-local
-  /^0\.0\.0\.0$/,
-  /^::1$/,                        // IPv6 loopback
-  /^fe80:/i,                      // IPv6 link-local
-  /^fc00:/i,                      // IPv6 ULA
-  /^fd00:/i,                      // IPv6 ULA
-]
+/**
+ * 判断 IP 是否在内网/回环段（防 SSRF）。
+ * 仅接受 net.isIPv4/IPv6 通过的字符串；非 IP 字符串调用方应单独处理（如 localhost）。
+ */
+function isPrivateIp(ip: string): boolean {
+  // IPv4-mapped IPv6（::ffff:127.0.0.1）→ 剥前缀按 IPv4 判
+  if (ip.toLowerCase().startsWith('::ffff:')) ip = ip.slice('::ffff:'.length)
+  if (net.isIPv6(ip)) {
+    const lower = ip.toLowerCase()
+    if (lower === '::' || lower === '::1') return true
+    if (lower.startsWith('fe80:')) return true            // link-local
+    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true     // ULA fc00::/7
+    return false
+  }
+  if (!net.isIPv4(ip)) return false
+  const [a, b] = ip.split('.').map(Number)
+  if (a === 10 || a === 127 || a === 0) return true
+  if (a === 169 && b === 254) return true                 // link-local
+  if (a === 172 && b >= 16 && b <= 31) return true        // 172.16.0.0/12
+  if (a === 192 && b === 168) return true
+  return false
+}
+
+/**
+ * DNS 解析 hostname 并校验所有返回 IP 都不在内网段。
+ * 之前只对 hostname 字符串做正则匹配，localtest.me / 自定义域名解析到 127.0.0.1
+ * 或公网 URL 302 到内网 IP 都会绕过。
+ */
+async function assertNotPrivateHost(hostname: string): Promise<void> {
+  // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单
+  if (/^localhost$/i.test(hostname) || /\.localhost$/i.test(hostname)) {
+    throw new Error(`拒绝内网/回环主机名：${hostname}`)
+  }
+  // 输入本身就是 IP：直接判
+  if (net.isIP(hostname)) {
+    if (isPrivateIp(hostname)) throw new Error(`拒绝抓取内网地址：${hostname}`)
+    return
+  }
+  let addrs: Array<{ address: string; family: number }>
+  try {
+    addrs = await dns.promises.lookup(hostname, { all: true, verbatim: true })
+  } catch (err) {
+    throw new Error(`DNS 解析失败 ${hostname}：${err instanceof Error ? err.message : String(err)}`, { cause: err })
+  }
+  for (const addr of addrs) {
+    if (isPrivateIp(addr.address)) {
+      throw new Error(`拒绝抓取内网地址 ${addr.address}（DNS 解析自 ${hostname}）`)
+    }
+  }
+}
 
 /** HTML 实体解码表（覆盖 99% 常见场景，避免引入 he 这种额外库） */
 const HTML_ENTITIES: Readonly<Record<string, string>> = {
@@ -4021,12 +4059,6 @@ ${content}` }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return { content: '', error: `仅支持 http/https 协议，拒绝 ${parsed.protocol}` }
     }
-    if (PRIVATE_IP_PATTERNS.some((re) => re.test(parsed.hostname))) {
-      return {
-        content: '',
-        error: `拒绝抓取内网/回环地址 ${parsed.hostname}（防 SSRF）。如确需抓取本地服务，请用 read_file。`,
-      }
-    }
 
     const format = (args.format === 'text' || args.format === 'json' || args.format === 'raw')
       ? args.format
@@ -4039,22 +4071,99 @@ ${content}` }
     )
 
     try {
-      const response = await fetchWithTimeout(parsed.href, {
-        method: 'GET',
-        // 假装是浏览器，避免被部分站点的 UA 黑名单拦截
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SoulBot/1.0)',
-          'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,*/*',
-        },
-        timeoutMs: WEB_FETCH_TIMEOUT_MS,
-      })
+      // 手动重定向 + 每跳 DNS 校验：避免公网 URL 302 到内网绕过 SSRF 防线
+      const MAX_REDIRECTS = 5
+      // 16MB 硬上限：防超大响应或无限流撑爆主进程内存（在 maxChars 字符截断之外的字节级兜底）
+      const HARD_BYTE_LIMIT = 16 * 1024 * 1024
+      let currentUrl = parsed.href
+      let response: Response | null = null
+      for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        const u = new URL(currentUrl)
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return { content: '', error: `重定向跳到不支持的协议 ${u.protocol}` }
+        }
+        await assertNotPrivateHost(u.hostname)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), WEB_FETCH_TIMEOUT_MS)
+        let resp: Response
+        try {
+          resp = await fetch(currentUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SoulBot/1.0)',
+              'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,*/*',
+            },
+            redirect: 'manual',  // 自己处理重定向，每跳都重新走 DNS 校验
+            signal: controller.signal,
+          })
+        } finally {
+          clearTimeout(timeoutId)
+        }
+        if (resp.status >= 300 && resp.status < 400) {
+          const loc = resp.headers.get('location')
+          if (!loc) {
+            // 3xx 但没 Location header，视作终止（拿 status/headers 给上层看）
+            response = resp
+            break
+          }
+          if (hop >= MAX_REDIRECTS) {
+            return { content: '', error: `超过最大重定向数 ${MAX_REDIRECTS}` }
+          }
+          currentUrl = new URL(loc, currentUrl).href
+          continue
+        }
+        response = resp
+        break
+      }
+      if (!response) {
+        return { content: '', error: '请求未返回响应（manual redirect 循环异常）' }
+      }
 
       const contentType = response.headers.get('content-type') ?? ''
-      const rawText = await response.text()
+      // Content-Length 预检：明显超 HARD_BYTE_LIMIT 直接拒，不下载
+      const clHeader = response.headers.get('content-length')
+      if (clHeader) {
+        const cl = parseInt(clHeader, 10)
+        if (Number.isFinite(cl) && cl > HARD_BYTE_LIMIT) {
+          return {
+            content: '',
+            error: `响应 Content-Length=${cl} 字节超过上限 ${HARD_BYTE_LIMIT}（16MB），已拒绝下载`,
+          }
+        }
+      }
+
+      // 流式读取 + abort：达到字节/字符上限立即 cancel reader，避免整包读入再截断
+      const reader = response.body?.getReader()
+      let rawText = ''
+      let totalBytes = 0
+      let truncated = false
+      if (reader) {
+        const decoder = new TextDecoder('utf-8')
+        // 字符上限取大点（×2）做软停，给最终格式化 / json 留余量；最终再 slice 到 maxChars
+        const softCharLimit = maxChars * 2
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          totalBytes += value.byteLength
+          if (totalBytes > HARD_BYTE_LIMIT) {
+            await reader.cancel()
+            return {
+              content: '',
+              error: `响应已读取 ${totalBytes} 字节超过上限 ${HARD_BYTE_LIMIT}（16MB），已中止下载`,
+            }
+          }
+          rawText += decoder.decode(value, { stream: true })
+          if (rawText.length >= softCharLimit) {
+            await reader.cancel()
+            truncated = true
+            break
+          }
+        }
+        rawText += decoder.decode()  // flush
+      }
 
       // 按 format 处理
       let body: string
-      let truncated = false
       if (format === 'json') {
         try {
           const json = JSON.parse(rawText)
@@ -4758,6 +4867,15 @@ ${content}` }
   /**
    * Feature 5: 按需加载技能完整内容（渐进式披露）。
    * system prompt 中只注入技能摘要，AI 在需要执行技能时调用此工具获取完整定义。
+   *
+   * 启用状态强制（修复 P2 绕过）：
+   *   - local 技能：必须不在 .config.json 的 disabledSkills 列表里
+   *   - shared 技能：必须在 skill-index.yaml 里 source: shared 引用
+   *   - community 技能：必须在 skill-index.yaml 里 source: community 引用，
+   *     且按 index 里声明的具体 path 加载（避免同名 pack 串包）
+   *
+   * 之前直接按 local/shared/community 路径全盘扫描，被禁用 / 未启用 / 同名跨 pack
+   * 的技能只要猜到 ID 就能加载，绕过 UI 启用状态。
    */
   private loadSkill(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const skillId = args.skill_id as string
@@ -4767,34 +4885,113 @@ ${content}` }
     } catch (e) {
       return { content: '', error: e instanceof Error ? e.message : String(e) }
     }
-    // 候选路径优先级（与 SkillRouter 的三级技能体系一致：local > shared > community）：
-    //   1) local 单文件 / 目录形式
-    //   2) shared 单文件 / 目录形式（SkillRouter 已根据 skill-index.yaml 注入描述，这里需要能读出实际内容）
-    //   3) community 技能（shared/skills/community/<pack>/skills/<id>.md 或目录形式）
-    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
-    const candidates: string[] = [
-      path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`),
-      path.join(this.avatarsPath, avatarId, 'skills', skillId, 'SKILL.md'),
-      path.join(sharedRoot, `${skillId}.md`),
-      path.join(sharedRoot, skillId, 'SKILL.md'),
-    ]
-    // community：扫一遍 shared/skills/community/<pack>/skills/<id>.md
-    try {
-      const communityRoot = path.join(sharedRoot, 'community')
-      const packs = fs.existsSync(communityRoot) ? fs.readdirSync(communityRoot, { withFileTypes: true }) : []
-      for (const pack of packs) {
-        if (!pack.isDirectory()) continue
-        candidates.push(path.join(communityRoot, pack.name, 'skills', `${skillId}.md`))
-        candidates.push(path.join(communityRoot, pack.name, 'skills', skillId, 'SKILL.md'))
+    // 1) local：优先扫，但要尊重 .config.json 的 disabledSkills
+    const disabled = this.readDisabledSkillIds(avatarId)
+    if (!disabled.has(skillId)) {
+      const localCandidates = [
+        path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`),
+        path.join(this.avatarsPath, avatarId, 'skills', skillId, 'SKILL.md'),
+      ]
+      for (const p of localCandidates) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8')
+          return { content: `## 技能：${skillId}\n\n${content}` }
+        }
       }
-    } catch { /* community 扫描失败不阻塞主路径 */ }
-    for (const p of candidates) {
-      try {
-        const content = fs.readFileSync(p, 'utf-8')
-        return { content: `## 技能：${skillId}\n\n${content}` }
-      } catch { /* 继续下一个候选 */ }
+    } else {
+      // local 同名禁用：明确告诉模型，避免它去试 shared 同名（虽然下面已挡）
+      return { content: '', error: `技能 ${skillId} 已在分身设置里禁用（.config.json 的 disabledSkills）` }
     }
-    return { content: '', error: `技能不存在: ${skillId}（已尝试 local / shared / community 路径）` }
+
+    // 2/3) shared/community：必须在 skill-index.yaml 里被显式引用
+    const refs = this.readEnabledSkillRefsFromIndex(avatarId)
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    if (refs.shared.has(skillId)) {
+      const sharedCandidates = [
+        path.join(sharedRoot, `${skillId}.md`),
+        path.join(sharedRoot, skillId, 'SKILL.md'),
+      ]
+      for (const p of sharedCandidates) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8')
+          return { content: `## 技能：${skillId}\n\n${content}` }
+        }
+      }
+    }
+    const communityDeclaredPath = refs.community.get(skillId)
+    if (communityDeclaredPath) {
+      // 按 yaml 声明的 path 加载，避免同名跨 pack 串包。path 是相对 avatarsPath/.. 的
+      // workspace 根（与 sources.yaml 安装路径对齐）
+      const communityRoot = path.resolve(this.avatarsPath, '..', 'shared', 'skills', 'community')
+      const absPath = path.resolve(this.avatarsPath, '..', communityDeclaredPath)
+      // 防 yaml 里 path 用 ../ 越出 community 根
+      const rel = path.relative(communityRoot, absPath)
+      if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absPath)) {
+        const content = fs.readFileSync(absPath, 'utf-8')
+        return { content: `## 技能：${skillId}\n\n${content}` }
+      }
+    }
+    return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
+  }
+
+  /** 读 avatars/<id>/skills/.config.json 的 disabledSkills 列表 */
+  private readDisabledSkillIds(avatarId: string): Set<string> {
+    const out = new Set<string>()
+    const p = path.join(this.avatarsPath, avatarId, 'skills', '.config.json')
+    if (!fs.existsSync(p)) return out
+    try {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf-8')) as { disabledSkills?: unknown[] }
+      if (Array.isArray(parsed.disabledSkills)) {
+        for (const id of parsed.disabledSkills) {
+          if (typeof id === 'string') out.add(id)
+        }
+      }
+    } catch { /* 配置解析失败不阻塞，按"无禁用"兜底 */ }
+    return out
+  }
+
+  /**
+   * 读 skill-index.yaml，按 source 分桶：
+   *   - shared: Set<skillId>
+   *   - community: Map<skillId, declaredPath>（path 来自 yaml 的 path 字段，避免同名跨 pack）
+   * 纯文本切块，不引 yaml 库。
+   */
+  private readEnabledSkillRefsFromIndex(avatarId: string): { shared: Set<string>; community: Map<string, string> } {
+    const shared = new Set<string>()
+    const community = new Map<string, string>()
+    const indexPath = path.join(this.avatarsPath, avatarId, 'skills', 'skill-index.yaml')
+    if (!fs.existsSync(indexPath)) return { shared, community }
+    let raw: string
+    try { raw = fs.readFileSync(indexPath, 'utf-8') } catch { return { shared, community } }
+    const lines = raw.split('\n')
+    let currentName: string | null = null
+    let currentBlock: string[] = []
+    const flush = () => {
+      if (!currentName) return
+      const blockText = currentBlock.join('\n')
+      const sourceMatch = blockText.match(/^\s+source:\s*(shared|community)\s*$/m)
+      if (!sourceMatch) return
+      if (sourceMatch[1] === 'shared') {
+        shared.add(currentName)
+      } else {
+        const pathMatch = blockText.match(/^\s+path:\s*(.+?)\s*$/m)
+        if (pathMatch) {
+          community.set(currentName, pathMatch[1].replace(/['"]/g, '').trim())
+        }
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m) {
+        flush()
+        currentName = m[1].replace(/['"]/g, '').trim()
+        currentBlock = [line]
+      } else {
+        currentBlock.push(line)
+      }
+    }
+    flush()
+    return { shared, community }
   }
 
   /**

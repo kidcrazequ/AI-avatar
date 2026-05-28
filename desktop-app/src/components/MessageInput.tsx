@@ -735,7 +735,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       const cursor = ta?.selectionStart ?? input.length
       const before = input.slice(0, ctxStartRef.current)
       const after = input.slice(cursor)
-      // 记录原始 @web 段，取消/空 query 时还原；与 handleSelectEntry 的失败恢复模式一致
+      // 记录原始 @web 段，所有失败路径（取消/空 query/容量满/搜索失败）统一恢复
       const originalAtToken = input.slice(ctxStartRef.current, cursor)
       // 移除 input 中 @web 文本
       const cleaned = (before + after).replace(/[ \t]+$/, '')
@@ -746,23 +746,33 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.focus()
         ta.setSelectionRange(before.length, before.length)
       })
+      // 统一恢复 helper：DOM value === cleaned（用户没继续输入）→ 原位还原 + 光标；
+      // 否则末尾追加避免覆盖用户输入。所有失败/取消路径共用这个，避免漏一处把 token 吞了
+      const restoreAtToken = () => {
+        const canRestoreAtOrigin = ta !== null && ta.value === cleaned
+        if (canRestoreAtOrigin) {
+          setInput(before + originalAtToken + after)
+          requestAnimationFrame(() => {
+            if (!ta) return
+            const pos = before.length + originalAtToken.length
+            ta.focus()
+            ta.setSelectionRange(pos, pos)
+          })
+        } else {
+          setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
+        }
+      }
       const query = window.prompt('联网搜索关键词：', '')
       if (!query || !query.trim()) {
-        // 用户取消或空 query：把 @web token 还原到原位置（before + token + after），
-        // 不是简单追加到末尾——例如「请 @web 继续」取消后追加会变成「请 继续 @web」，
-        // 用户重新编辑要找回原位置。window.prompt 阻塞事件循环，prompt 期间不会有
-        // 其它输入变化，before/after 保持有效。
-        setInput(before + originalAtToken + after)
-        const restoredCursor = before.length + originalAtToken.length
-        requestAnimationFrame(() => {
-          if (!ta) return
-          ta.focus()
-          ta.setSelectionRange(restoredCursor, restoredCursor)
-        })
+        // 用户取消或空 query：原位还原 @web token
+        restoreAtToken()
         return
       }
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
-        showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件`)
+        // 容量满：之前只 toast 错误就 return，@web token 被吞掉了，用户下一次发送
+        // 会缺失原本要引用的 web 上下文。改为同步还原
+        restoreAtToken()
+        showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
         return
       }
       showHint('info', `正在联网搜索：${query.slice(0, 40)}...`)
@@ -771,6 +781,12 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       setPendingReferenceCount(c => c + 1)
       void window.electronAPI.webSearch(query.trim()).then(({ query: q, results, abstract, abstractSource }) => {
         if (!mountedRef.current) return
+        // 搜索返回后再检一次容量：异步期间可能其它路径加了附件把额度占满
+        if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
+          restoreAtToken()
+          showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
+          return
+        }
         const parts: string[] = [`# 联网搜索：${q}`]
         if (abstract) {
           parts.push(`\n## 摘要${abstractSource ? `（来源：${abstractSource}）` : ''}\n${abstract}`)
@@ -786,7 +802,6 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         const text = parts.join('\n')
         const fakeId = `@web:${Date.now()}`
         setPendingDocs(prev => {
-          if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
           const next: PendingDocAttachment[] = [
             ...prev,
             {
@@ -806,8 +821,11 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         })
         showHint('info', `已引用 @web/${q.slice(0, 20)}（${results.length} 条结果）`)
       }).catch((err: unknown) => {
+        if (!mountedRef.current) return
+        // 搜索失败：之前只 toast 错误，@web token 被吞掉了。还原让用户能直接重试
+        restoreAtToken()
         const msg = err instanceof Error ? err.message : String(err)
-        showHint('error', `联网搜索失败：${msg}`)
+        showHint('error', `联网搜索失败：${msg}；@web 引用已恢复`)
         window.electronAPI.logEvent('warn', 'web-search-failed', msg)
       }).finally(() => {
         if (mountedRef.current) setPendingReferenceCount(c => Math.max(0, c - 1))

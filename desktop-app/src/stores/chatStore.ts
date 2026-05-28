@@ -4534,8 +4534,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         compressOldToolResults(apiMessages)
 
         if (round === SOFT_WARN_ROUNDS && !softWarnInjected) {
+          // role 'user' 而非 'system'：systemBlocks 模式下 apiMessages 里 role=system
+          // 会被 Provider 过滤（OpenAI-compat 删掉、Claude 用 systemBlocks 覆盖），
+          // 运行时提示根本到不了模型；改 user 才能确保注入生效。与同段下面的
+          // converge-hint（已是 user）对齐。
           apiMessages.push({
-            role: 'system',
+            role: 'user',
             content: `[系统提示] 已执行 ${SOFT_WARN_ROUNDS} 轮工具调用。
 如果当前任务接近完成，请基于已有信息直接给最终答案；
 如果确实需要继续，请在下一条回复开头说明"继续工具调用的原因：xxx"，然后继续。
@@ -4577,8 +4581,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           timestamp: Date.now(),
           round,
         })
+        // role 'user'：同 soft-warn 的修复——systemBlocks 模式下 apiMessages 里
+        // role=system 会被 Provider 过滤掉，硬上限提示到不了模型，工具就会继续被调
         apiMessages.push({
-          role: 'system',
+          role: 'user',
           content: `[系统硬上限] 工具调用已达到 ${HARD_MAX_ROUNDS} 轮，必须停止继续调用工具。请基于当前已获得的信息给出最终答案；若信息不足，请明确说明已尝试的工具路径和缺失数据。`,
         })
         forceConvergeNoTools = true

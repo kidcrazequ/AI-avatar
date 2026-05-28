@@ -1445,6 +1445,10 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
     return
   }
   if (existing.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
+  // 路径段安全：existing.name 进 path.join 拼磁盘路径。createProject 的 name 校验是
+  // 字母数字下划线连字符；但 v18 migration 把老 conversations.project_id 原样灌进
+  // projects.name，老脏数据可能含 ../。同理 target（非 default）也直接拼路径。
+  assertSafeSegment(existing.name, 'oldProjectName')
 
   // 早校验 target：避免后续磁盘改动跑完才让 DB 抛错。DB 层 deleteProject 还会再校验
   // 一次（defense in depth）
@@ -1453,6 +1457,7 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
     throw new Error(`migrateConversationsTo 不能指向正在删除的项目自身：${target}`)
   }
   if (target !== DEFAULT_AVATAR_PROJECT_ID) {
+    assertSafeSegment(target, 'migrateConversationsTo')
     const targetExists = db.listProjects(existing.avatar_id).some(p => p.name === target && !p.archived)
     if (!targetExists) {
       throw new Error(`migrateConversationsTo 目标不存在或已归档：${target}（必须是 default 或同 avatar 下未归档项目）`)

@@ -1051,7 +1051,20 @@ export class DatabaseManager {
           INSERT OR IGNORE INTO projects (id, avatar_id, name, description, archived, created_at, updated_at)
           VALUES (?, ?, ?, '', 0, ?, ?)
         `)
+        // 老 conversations.project_id 可能含 createProject 之外通道写入的脏数据（path
+        // 分隔符、..、null byte 等）；原样灌进 projects.name 后被磁盘路径拼接会路径
+        // 穿越。校验同 createProject 的正则；非法的把该 (avatar, project_id) 下所有
+        // 会话迁到 default 桶，避免会话挂在无法访问的 project name 上。
+        const sanitizeConvStmt = this.db.prepare(`
+          UPDATE conversations SET project_id = 'default', updated_at = ?
+          WHERE avatar_id = ? AND project_id = ?
+        `)
         for (const r of rows) {
+          if (!/^[\w-]+$/.test(r.project_id)) {
+            console.warn(`[v18 migration] 非法 project_id ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})：会话已迁到 default 桶`)
+            sanitizeConvStmt.run(now, r.avatar_id, r.project_id)
+            continue
+          }
           const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
           insertStmt.run(id, r.avatar_id, r.project_id, now, now)
         }

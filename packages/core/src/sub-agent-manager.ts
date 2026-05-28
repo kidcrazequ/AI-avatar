@@ -239,6 +239,12 @@ export class SubAgentManager {
           this.tasks.delete(id)
           this.cleanupTimers.delete(id)
         }, 5 * 60 * 1000)
+        // unref：不阻塞 Node 进程退出。否则测试断言全过但 cleanup timer 还在
+        // pending，node --test 进程挂住 5 分钟才结束（packages/core npm test 卡死）。
+        // 生产环境主进程靠 Electron 事件循环常驻，unref 不改变行为。
+        if (typeof (timer as { unref?: () => void }).unref === 'function') {
+          (timer as { unref: () => void }).unref()
+        }
         this.cleanupTimers.set(id, timer)
       }
     }

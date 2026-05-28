@@ -2077,11 +2077,54 @@ function extractRawFileFromFrontmatter(src: string): string | null {
  *
  * 任何一层校验失败、frontmatter 缺字段、或 .md 不存在都返回 null，由渲染层降级展示。
  */
+/**
+ * source citation 锚点的 md 相对路径解析。
+ *
+ * 支持两种格式：
+ *   - 全局知识：`<file>.md` → `<avatar>/knowledge/<file>.md`，knowledgeRoot=knowledge/
+ *   - 项目知识：`projects/<id>/knowledge/<file>.md` → `<avatar>/projects/<id>/knowledge/<file>.md`，
+ *     knowledgeRoot=projects/<id>/knowledge/
+ *
+ * 项目知识来源：composite-knowledge-retriever 给项目 overlay 的 chunk 加了
+ * `projects/<pid>/knowledge/` 前缀，formatKnowledgeSourceAnchor 把它写成
+ * `[来源: knowledge/projects/<pid>/knowledge/<file>.md]`。前端
+ * MD_PATH_GLOBAL_REGEX 抓出的相对路径是 `projects/<pid>/knowledge/<file>.md`。
+ *
+ * @returns { mdAbsPath, knowledgeRoot } 或 null（越界 / projectId 非法）
+ */
+function resolveCitationMdPath(
+  avatarId: string,
+  mdRelPath: string,
+): { mdAbsPath: string; knowledgeRoot: string } | null {
+  const normalized = mdRelPath.split('\\').join('/')
+  const avatarRoot = path.join(avatarsPath, avatarId)
+  const projMatch = normalized.match(/^projects\/([^/]+)\/knowledge\/(.+)$/)
+  if (projMatch) {
+    const [, pid, rest] = projMatch
+    try { assertSafeSegment(pid, 'projectId') } catch { return null }
+    const projKnowledgeRoot = path.join(avatarRoot, 'projects', pid, 'knowledge')
+    try {
+      const mdAbsPath = resolveUnderRoot(projKnowledgeRoot, rest)
+      return { mdAbsPath, knowledgeRoot: projKnowledgeRoot }
+    } catch { return null }
+  }
+  const knowledgeRoot = path.join(avatarRoot, 'knowledge')
+  try {
+    const mdAbsPath = resolveUnderRoot(knowledgeRoot, normalized)
+    return { mdAbsPath, knowledgeRoot }
+  } catch { return null }
+}
+
 wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: string) => {
-  const km = getKnowledgeManager(avatarId)
+  assertSafeSegment(avatarId, '分身ID')
+  const resolved = resolveCitationMdPath(avatarId, mdRelativePath)
+  if (!resolved) {
+    if (logger) logger.activity('knowledge:resolve-raw-file', `路径解析失败 avatarId=${avatarId} path=${mdRelativePath}`)
+    return null
+  }
   let mdContent: string
   try {
-    mdContent = km.readFile(mdRelativePath)
+    mdContent = fs.readFileSync(resolved.mdAbsPath, 'utf-8')
   } catch (err) {
     if (logger) logger.activity('knowledge:resolve-raw-file', `read .md 失败 avatarId=${avatarId} path=${mdRelativePath} err=${err instanceof Error ? err.message : String(err)}`)
     return null
@@ -2089,13 +2132,13 @@ wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: 
   const rawValue = extractRawFileFromFrontmatter(mdContent)
   if (!rawValue) return null
 
-  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   // 历史数据 / Windows 端写入的 raw_file 可能含反斜杠（_raw\foo.pdf）；
   // POSIX 上 path.resolve 不会拆 `\`，会把整段当文件名命中失败。先 normalize 成 `/`，
-  // 再让 path.resolve 按当前平台规则解析。
+  // 再让 path.resolve 按当前平台规则解析。raw_file 相对的 root 是 .md 所在的
+  // knowledgeRoot——项目知识的 raw 在 projects/<id>/knowledge/_raw/。
   const normalizedRaw = rawValue.split('\\').join('/')
-  const rawAbsPath = path.resolve(knowledgePath, normalizedRaw)
-  const rawRoot = path.join(knowledgePath, '_raw') + path.sep
+  const rawAbsPath = path.resolve(resolved.knowledgeRoot, normalizedRaw)
+  const rawRoot = path.join(resolved.knowledgeRoot, '_raw') + path.sep
   if (!rawAbsPath.startsWith(rawRoot)) {
     if (logger) logger.error('knowledge:resolve-raw-file', new Error(`raw_file 路径越界：${rawValue} → ${rawAbsPath}`))
     return null
@@ -2104,8 +2147,16 @@ wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: 
   const displayName = path.basename(rawAbsPath)
   const ext = path.extname(rawAbsPath).slice(1).toLowerCase()
   const exists = fs.existsSync(rawAbsPath)
-  // 统一用相对 knowledge/ 的相对路径（POSIX 风格保持与入参 _raw/xxx 一致）
-  const rawRelPath = path.relative(knowledgePath, rawAbsPath).split(path.sep).join('/')
+  // 路径约定（与 open-raw-file IPC 双向对齐）：
+  //   - 全局知识：`_raw/<file>`（沿用历史 convention，相对 knowledge/）
+  //   - 项目知识：`projects/<id>/knowledge/_raw/<file>`（相对 avatar root，
+  //     open-raw-file IPC 见到 projects/ 前缀就走项目根）
+  // 这样不破坏老缓存（全局还是 `_raw/foo.pdf`），同时支持项目知识 raw 跳转。
+  const knowledgeRel = path.relative(resolved.knowledgeRoot, rawAbsPath).split(path.sep).join('/')
+  const isProject = resolved.knowledgeRoot !== path.join(avatarsPath, avatarId, 'knowledge')
+  const rawRelPath = isProject
+    ? path.relative(path.join(avatarsPath, avatarId), rawAbsPath).split(path.sep).join('/')
+    : knowledgeRel
   return { rawRelPath, displayName, ext, exists }
 })
 
@@ -2122,12 +2173,26 @@ wrapHandler('knowledge:resolve-raw-file', (_, avatarId: string, mdRelativePath: 
  */
 wrapHandler('knowledge:open-raw-file', async (_, avatarId: string, rawRelPath: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
   // 同 knowledge:resolve-raw-file：跨平台 frontmatter 可能写 `_raw\foo.pdf`，
   // 先 normalize 反斜杠避免 POSIX 上把整段当文件名。
   const normalizedRel = rawRelPath.split('\\').join('/')
-  const absPath = path.resolve(knowledgePath, normalizedRel)
-  const rawRoot = path.join(knowledgePath, '_raw') + path.sep
+  // 路径约定与 resolve-raw-file 一致：
+  //   - `projects/<id>/knowledge/_raw/<file>` → 项目知识 raw（相对 avatar root）
+  //   - 其他（如 `_raw/<file>`）→ 全局知识 raw（相对 knowledge/）
+  let absPath: string
+  let rawRoot: string
+  const projMatch = normalizedRel.match(/^projects\/([^/]+)\/knowledge\/(_raw\/.+)$/)
+  if (projMatch) {
+    const [, pid, rest] = projMatch
+    try { assertSafeSegment(pid, 'projectId') } catch { return { ok: false, error: `非法 projectId: ${pid}` } }
+    const projKnowledgeRoot = path.join(avatarsPath, avatarId, 'projects', pid, 'knowledge')
+    absPath = path.resolve(projKnowledgeRoot, rest)
+    rawRoot = path.join(projKnowledgeRoot, '_raw') + path.sep
+  } else {
+    const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
+    absPath = path.resolve(knowledgePath, normalizedRel)
+    rawRoot = path.join(knowledgePath, '_raw') + path.sep
+  }
   if (!absPath.startsWith(rawRoot)) {
     const msg = `raw 路径越界：${rawRelPath}`
     if (logger) logger.error('knowledge:open-raw-file', new Error(msg))
@@ -2162,14 +2227,15 @@ wrapHandler('knowledge:open-raw-file', async (_, avatarId: string, rawRelPath: s
  */
 wrapHandler('knowledge:open-md-file', async (_, avatarId: string, mdRelPath: string) => {
   assertSafeSegment(avatarId, '分身ID')
-  const knowledgePath = path.join(avatarsPath, avatarId, 'knowledge')
-  const absPath = path.resolve(knowledgePath, mdRelPath)
-  const knowledgeRoot = knowledgePath + path.sep
-  if (!absPath.startsWith(knowledgeRoot)) {
-    const msg = `md 路径越界：${mdRelPath}`
+  // 复用 resolveCitationMdPath：自动识别 projects/<id>/knowledge/<file> 与全局
+  // knowledge/<file> 两种入参，路由到对应 knowledgeRoot 下做 resolveUnderRoot。
+  const resolved = resolveCitationMdPath(avatarId, mdRelPath)
+  if (!resolved) {
+    const msg = `md 路径越界或 projectId 非法：${mdRelPath}`
     if (logger) logger.error('knowledge:open-md-file', new Error(msg))
     return { ok: false, error: msg }
   }
+  const absPath = resolved.mdAbsPath
   if (!absPath.toLowerCase().endsWith('.md')) {
     return { ok: false, error: `仅支持 .md 源文件：${mdRelPath}` }
   }
@@ -2225,7 +2291,10 @@ wrapHandler('knowledge:list-excel-files', (_, avatarId: string) => {
     try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
     for (const entry of entries) {
       const full = path.join(dir, entry.name)
-      const rel = path.relative(knowledgeRoot, full)
+      // path.relative 在 Windows 用 `\` 分隔，但 context-resolver / readKnowledgeFile
+      // 后续都按 POSIX `/` split / 拼接（如 entry.id.split('/') 找 basename）。
+      // 出口统一转 POSIX，避免子目录 xlsx 在 Windows 上找不到 _excel/<basename>.json。
+      const rel = path.relative(knowledgeRoot, full).split(path.sep).join('/')
       if (entry.isDirectory()) {
         if (entry.name === '_index' || entry.name === '_raw') continue
         walk(full, depth + 1)
@@ -2235,7 +2304,7 @@ wrapHandler('knowledge:list-excel-files', (_, avatarId: string) => {
       const lower = entry.name.toLowerCase()
       if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
         results.push({ path: rel, name: entry.name, kind: 'xlsx' })
-      } else if (lower.endsWith('.json') && (rel.startsWith('_excel/') || rel.startsWith('_excel\\'))) {
+      } else if (lower.endsWith('.json') && rel.startsWith('_excel/')) {
         results.push({ path: rel, name: entry.name, kind: 'excel-json' })
       }
     }

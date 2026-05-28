@@ -155,7 +155,10 @@ export async function resolveEntryContent(
     if (entry.namespace === 'knowledge' || entry.namespace === 'decision' || entry.namespace === 'excel') {
       // .xlsx 引用：读 knowledge/_excel/<basename>.json schema + samples，转 markdown 表格
       if (/\.(xlsx|xls)$/i.test(entry.id)) {
-        const basename = (entry.id.split('/').pop() || '').replace(/\.(xlsx|xls)$/i, '')
+        // entry.id 来自 IPC（主进程已 normalize 成 POSIX），但兜底 replace `\` → `/`，
+        // 防止外部数据（旧 IPC / 用户复制粘贴 Windows 路径）混入导致 basename 错位。
+        const idPosix = entry.id.replace(/\\/g, '/')
+        const basename = (idPosix.split('/').pop() || '').replace(/\.(xlsx|xls)$/i, '')
         const jsonPath = `_excel/${basename}.json`
         try {
           const raw = await window.electronAPI.readKnowledgeFile(avatarId, jsonPath)

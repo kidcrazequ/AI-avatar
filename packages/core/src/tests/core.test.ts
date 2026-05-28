@@ -184,6 +184,19 @@ describe('KnowledgeRetriever Excel rag_only .md 不参与 RAG', () => {
     const results = retriever.searchChunks('215 设备侧效率 2601', 10)
     assert.ok(!results.some(r => r.file === 'dashboard-fake.md'), 'Excel rag_only 导出 .md 不应进入检索结果')
   })
+
+  it('warmUpAsync 路径同样跳过 Excel rag_only .md（与同步 buildChunks 一致）', async () => {
+    // 之前 warmUpAsync 没有 isExcelStructuredRagOnlyMd 跳过逻辑——预热先完成时
+    // Excel schema 类 rag_only md 会进入 search_knowledge，和「行级数据只走
+    // query_excel」的约束冲突。共享 helper 后两条路径必须同步过滤。
+    const retriever = new KnowledgeRetriever(tmpExcelDir)
+    await retriever.warmUpAsync()
+    const results = retriever.searchChunks('215 设备侧效率 2601', 10)
+    assert.ok(
+      !results.some(r => r.file === 'dashboard-fake.md'),
+      'warm 路径也必须跳过 Excel rag_only 导出 .md',
+    )
+  })
 })
 
 // ---------------------------------------------------------------------------

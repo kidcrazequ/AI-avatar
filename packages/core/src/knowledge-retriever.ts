@@ -347,17 +347,7 @@ export class KnowledgeRetriever {
         console.warn(`[KnowledgeRetriever] 预热跳过 ${relativePath}: ${err instanceof Error ? err.message : String(err)}`)
         continue
       }
-      const sections = content.split(/^#{2,3}\s+/m)
-      const headingMatches = [...content.matchAll(/^#{2,3}\s+(.+)$/gm)]
-      if (sections.length <= 1) {
-        this.pushChunks(chunks, relativePath, relativePath, content)
-      } else {
-        sections.forEach((section, i) => {
-          if (!section.trim()) return
-          const heading = headingMatches[i - 1]?.[1] ?? relativePath
-          this.pushChunks(chunks, relativePath, heading, section)
-        })
-      }
+      this.appendChunksFromFileContent(chunks, relativePath, content)
     }
     // 仅在 chunksCache 仍为空时写入（防止与同步 buildChunks 竞态）
     if (!this.chunksCache) {
@@ -368,6 +358,28 @@ export class KnowledgeRetriever {
       }
       this.chunksCache = chunks
     }
+  }
+
+  /**
+   * 共享 chunk 构建：warmUpAsync 和 buildChunks 都用这个 helper。
+   *
+   * 之前两条路径各自手写：buildChunks 跳过 Excel rag_only，warmUpAsync 没跳——
+   * 预热先完成时 _excel/Excel schema 类 rag_only md 就进了 search_knowledge，
+   * 和「行级数据只走 query_excel」的约束冲突。统一到一处，过滤逻辑必然同步。
+   */
+  private appendChunksFromFileContent(chunks: Chunk[], relativePath: string, content: string): void {
+    if (isExcelStructuredRagOnlyMd(content)) return
+    const sections = content.split(/^#{2,3}\s+/m)
+    const headingMatches = [...content.matchAll(/^#{2,3}\s+(.+)$/gm)]
+    if (sections.length <= 1) {
+      this.pushChunks(chunks, relativePath, relativePath, content)
+      return
+    }
+    sections.forEach((section, i) => {
+      if (!section.trim()) return
+      const heading = headingMatches[i - 1]?.[1] ?? relativePath
+      this.pushChunks(chunks, relativePath, heading, section)
+    })
   }
 
   /**
@@ -800,23 +812,7 @@ export class KnowledgeRetriever {
         console.warn(`[KnowledgeRetriever] 跳过文件 ${relativePath}: ${err instanceof Error ? err.message : String(err)}`)
         continue
       }
-
-      if (isExcelStructuredRagOnlyMd(content)) {
-        continue
-      }
-
-      const sections = content.split(/^#{2,3}\s+/m)
-      const headingMatches = [...content.matchAll(/^#{2,3}\s+(.+)$/gm)]
-
-      if (sections.length <= 1) {
-        this.pushChunks(chunks, relativePath, relativePath, content)
-      } else {
-        sections.forEach((section, i) => {
-          if (!section.trim()) return
-          const heading = headingMatches[i - 1]?.[1] ?? relativePath
-          this.pushChunks(chunks, relativePath, heading, section)
-        })
-      }
+      this.appendChunksFromFileContent(chunks, relativePath, content)
     }
 
     return chunks

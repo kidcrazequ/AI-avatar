@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 19
+const CURRENT_SCHEMA_VERSION = 20
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -1060,6 +1060,10 @@ export class DatabaseManager {
           WHERE avatar_id = ? AND project_id = ?
         `)
         for (const r of rows) {
+          // 'default' 是虚拟桶（list-project-ids 固定保留），不作为实体 project 行存在。
+          // 与 createProject 拒绝 default 保持一致，避免 ProjectManagerPanel 把它算进
+          // 活跃数。conversations.project_id='default' 数据继续留着，不需要迁。
+          if (r.project_id === 'default') continue
           if (!/^[\w-]+$/.test(r.project_id)) {
             console.warn(`[v18 migration] 非法 project_id ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})：会话已迁到 default 桶`)
             sanitizeConvStmt.run(now, r.avatar_id, r.project_id)
@@ -1080,6 +1084,48 @@ export class DatabaseManager {
       this.db.transaction(() => {
         this.safeAddColumn('messages', 'tool_call_timeline_json', 'TEXT')
         version = 19
+      })()
+    }
+
+    if (version < 20) {
+      // v19 → v20: 修复已升过 v18 的库里残留的脏 project 数据。
+      // v18 早期版本没做正则校验也没跳过 default，留下两类问题：
+      //   ① 'default' 被插成实体 project 行（与虚拟桶语义冲突，ProjectManagerPanel 会
+      //      把它算进活跃数 + 渲染"保留"占位）
+      //   ② 含 ../ / 路径分隔符 / null byte 的 name 行（projects:delete 等会拼到
+      //      path.join，路径穿越）
+      //   ③ conversations.project_id 有非法值且 projects 表没有对应行（孤儿）
+      // 一次性扫描清理：会话迁到 default，相关 projects 行删掉。
+      this.db.transaction(() => {
+        const now = Date.now()
+        // ①：删除 default 项目行（不影响 conversations.project_id='default' 数据）
+        this.db.prepare(`DELETE FROM projects WHERE name = 'default'`).run()
+        // ②：扫描非法 name 行
+        const projRows = this.db.prepare(`SELECT id, avatar_id, name FROM projects`).all() as Array<{ id: string; avatar_id: string; name: string }>
+        const updateConvStmt = this.db.prepare(`
+          UPDATE conversations SET project_id = 'default', updated_at = ?
+          WHERE avatar_id = ? AND project_id = ?
+        `)
+        const deleteProjStmt = this.db.prepare(`DELETE FROM projects WHERE id = ?`)
+        for (const r of projRows) {
+          if (!/^[\w-]+$/.test(r.name)) {
+            updateConvStmt.run(now, r.avatar_id, r.name)
+            deleteProjStmt.run(r.id)
+            console.warn(`[v20 migration] 清扫非法 project name ${JSON.stringify(r.name)} (avatar=${r.avatar_id})；会话已迁到 default`)
+          }
+        }
+        // ③：扫描非法 project_id 的孤儿会话
+        const convRows = this.db.prepare(`
+          SELECT DISTINCT avatar_id, project_id FROM conversations
+          WHERE project_id != '' AND project_id != 'default'
+        `).all() as Array<{ avatar_id: string; project_id: string }>
+        for (const r of convRows) {
+          if (!/^[\w-]+$/.test(r.project_id)) {
+            updateConvStmt.run(now, r.avatar_id, r.project_id)
+            console.warn(`[v20 migration] 清扫非法 conversation project_id ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})；已迁到 default`)
+          }
+        }
+        version = 20
       })()
     }
 

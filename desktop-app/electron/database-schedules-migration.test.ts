@@ -122,11 +122,11 @@ test('schedules migration: v9 老库升级到 v10 后建出 schedules + schedule
   assert.ok(tables.includes('schedules'), `升级后 schedules 表缺失：${tables.join(',')}`)
   assert.ok(tables.includes('schedule_runs'), `升级后 schedule_runs 表缺失：${tables.join(',')}`)
 
-  // 校验 schema_version 已升到 10
+  // 校验 schema_version 至少升到 10（DatabaseManager 会推到 CURRENT_SCHEMA_VERSION）
   const verDb = new DatabaseCtor(dbPath, { readonly: true })
   const ver = verDb.prepare('SELECT version FROM schema_version').get() as { version: number }
   verDb.close()
-  assert.equal(ver.version, 10)
+  assert.ok(ver.version >= 10, `schema_version 应 >=10，实际 ${ver.version}`)
 })
 
 test('schedules migration: 二次构造 DatabaseManager 不抛错（迁移幂等）', { skip: skipReason ?? false }, () => {

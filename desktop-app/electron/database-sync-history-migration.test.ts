@@ -162,7 +162,7 @@ test('sync_history migration: 全新安装 createBaseSchema 包含 sync_history 
   assert.equal(byName.get('remote_filename')!.notnull, 0)
   assert.equal(byName.get('error_message')!.notnull, 0)
 
-  assert.equal(readSchemaVersion(dbPath), 12)
+  assert.ok(readSchemaVersion(dbPath) >= 12, `schema_version 应 >=12，实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('sync_history migration: v11 老库升级到 v12 后建出 sync_history 表', { skip: skipReason ?? false }, () => {
@@ -227,7 +227,7 @@ test('sync_history migration: v11 老库升级到 v12 后建出 sync_history 表
     `升级后 idx_sync_history_direction_status 缺失：${indexes.join(',')}`,
   )
 
-  assert.equal(readSchemaVersion(dbPath), 12)
+  assert.ok(readSchemaVersion(dbPath) >= 12, `schema_version 应 >=12，实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('sync_history migration: 二次构造 DatabaseManager 不抛错（迁移幂等）', { skip: skipReason ?? false }, () => {
@@ -240,7 +240,7 @@ test('sync_history migration: 二次构造 DatabaseManager 不抛错（迁移幂
   dm2.close()
 
   // schema_version 仍是 12
-  assert.equal(readSchemaVersion(dbPath), 12)
+  assert.ok(readSchemaVersion(dbPath) >= 12, `schema_version 应 >=12，实际 ${readSchemaVersion(dbPath)}`)
 
   // sync_history 表还在、且只有一份（重复创建会抛错而不是悄悄变成两份）
   const tables = listTables(dbPath)

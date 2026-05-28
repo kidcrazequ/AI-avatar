@@ -1141,10 +1141,15 @@ export class DatabaseManager {
           VALUES (?, ?, ?, '', 0, ?, ?)
         `)
         for (const r of orphanLegalRows) {
-          if (/^[\w-]+$/.test(r.project_id)) {
+          // avatar_id 也走 createProject 同款正则——历史脏数据可能含 ../，
+          // 一旦写进 projects 行，后续 rename/delete 用 existing.avatar_id 拼
+          // path.join(avatarsPath, existing.avatar_id) 就会路径穿越
+          if (/^[\w-]+$/.test(r.project_id) && /^[\w-]+$/.test(r.avatar_id)) {
             const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
             insertProjStmt.run(id, r.avatar_id, r.project_id, now, now)
             console.warn(`[v20 migration] 补回孤儿 project ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})；保留用户分组`)
+          } else {
+            console.warn(`[v20 migration] 跳过孤儿 project ${JSON.stringify(r.project_id)} (avatar=${JSON.stringify(r.avatar_id)})：含非法字符，未补回 projects 行`)
           }
         }
         version = 20

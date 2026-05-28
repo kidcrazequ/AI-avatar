@@ -113,7 +113,7 @@ test('sub_agent_tasks: 全新安装 createBaseSchema 包含表 + 索引 + agent_
   raw.close()
   assert.ok(cols.some((c) => c.name === 'agent_type'), `agent_type 列缺失，实际列：${cols.map((c) => c.name).join(',')}`)
 
-  assert.equal(readSchemaVersion(dbPath), 16)
+  assert.ok(readSchemaVersion(dbPath) >= 16, `schema_version 应 >=16，实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('sub_agent_tasks: v14 老库一路升到 v16，sub_agent_tasks 表 + agent_type 列齐备', { skip: skipReason ?? false }, () => {
@@ -143,20 +143,22 @@ test('sub_agent_tasks: v14 老库一路升到 v16，sub_agent_tasks 表 + agent_
   const dm = new DatabaseManagerCtor(dbPath)
   dm.close()
 
-  assert.equal(readSchemaVersion(dbPath), 16)
+  assert.ok(readSchemaVersion(dbPath) >= 16, `schema_version 应 >=16，实际 ${readSchemaVersion(dbPath)}`)
   const tables = listTables(dbPath)
   assert.ok(tables.includes('sub_agent_tasks'), '迁移后应包含 sub_agent_tasks 表')
 
   // agent_type 列在 v16 补齐
-  const raw = new DatabaseCtor(dbPath, { readonly: true })
-  const cols = raw.prepare(`PRAGMA table_info(sub_agent_tasks)`).all() as Array<{ name: string }>
-  raw.close()
+  // 上面已有同名 raw（造种子库时声明），ESM/tsx 在同一函数 scope 重复 const 会编译失败；
+  // 改名 rawRO 区分（这次是只读探查）
+  const rawRO = new DatabaseCtor(dbPath, { readonly: true })
+  const cols = rawRO.prepare(`PRAGMA table_info(sub_agent_tasks)`).all() as Array<{ name: string }>
+  rawRO.close()
   assert.ok(cols.some((c) => c.name === 'agent_type'), 'v16 迁移后应有 agent_type 列')
 
   // 再开一次：迁移应幂等，不抛
   const dm2 = new DatabaseManagerCtor(dbPath)
   dm2.close()
-  assert.equal(readSchemaVersion(dbPath), 16)
+  assert.ok(readSchemaVersion(dbPath) >= 16, `schema_version 应 >=16，实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('upsertSubAgentTask + listSubAgentTasksByConversation：插入、覆盖、排序', { skip: skipReason ?? false }, () => {

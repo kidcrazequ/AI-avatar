@@ -1330,6 +1330,9 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
   if (before && isRename) {
     assertSafeSegment(before.name, 'oldProjectName')
     assertSafeSegment(patch.name!, 'newProjectName')
+    // before.avatar_id 进 path.join 拼 avatarsPath；老脏数据可能含 ../，
+    // v20 migration 已挡，这里再兜一次防御
+    assertSafeSegment(before.avatar_id, 'avatarId')
     const avatarRoot = path.join(avatarsPath, before.avatar_id)
     const canonicalNew = path.join(avatarRoot, 'projects', patch.name!)
     // preflight：目标目录已存在直接拒绝，DB 不改、文件不动，状态保持一致
@@ -1445,10 +1448,13 @@ wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsT
     return
   }
   if (existing.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
-  // 路径段安全：existing.name 进 path.join 拼磁盘路径。createProject 的 name 校验是
-  // 字母数字下划线连字符；但 v18 migration 把老 conversations.project_id 原样灌进
-  // projects.name，老脏数据可能含 ../。同理 target（非 default）也直接拼路径。
+  // 路径段安全：existing.name + existing.avatar_id 都会拼到 path.join。
+  // createProject 校验 name 是字母数字下划线连字符；但 v18 migration 把老
+  // conversations.project_id 原样灌进 projects.name，老脏数据可能含 ../。
+  // avatar_id 同理（projects.avatar_id 也来自 conversations）。target（非 default）
+  // 也直接拼路径。v20 migration 已清理大部分，这里再兜一次防御。
   assertSafeSegment(existing.name, 'oldProjectName')
+  assertSafeSegment(existing.avatar_id, 'avatarId')
 
   // 早校验 target：避免后续磁盘改动跑完才让 DB 抛错。DB 层 deleteProject 还会再校验
   // 一次（defense in depth）

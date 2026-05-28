@@ -161,5 +161,5 @@ test('v20 migration: schema_version 推进到 20', { skip: skipReason ?? undefin
   const raw = new BetterSqliteCtor!(dbFile)
   const row = raw.prepare('SELECT version FROM schema_version').get() as { version: number } | undefined
   raw.close()
-  assert.ok(row && row.version === 20, `v20 migration 后 schema_version 应 === 20，实际 ${row?.version}`)
+  assert.ok(row && row.version >= 20, `v20 migration 后 schema_version 应 >=20，实际 ${row?.version}`)
 })

@@ -112,7 +112,9 @@ test('embeds migration: 全新安装 createBaseSchema 包含 embeds 表 + 索引
   assert.ok(indexes.includes('idx_embeds_avatar_id'), `idx_embeds_avatar_id 缺失：${indexes.join(',')}`)
   assert.ok(indexes.includes('idx_embeds_enabled'), `idx_embeds_enabled 缺失：${indexes.join(',')}`)
 
-  assert.equal(readSchemaVersion(dbPath), 11)
+  // DatabaseManager 打开新库会推进到 CURRENT_SCHEMA_VERSION（>=11 即 v11 已跑过）；
+  // 不能断言 ===11，否则后续每次 bump CURRENT_SCHEMA_VERSION 都要改这堆测试
+  assert.ok(readSchemaVersion(dbPath) >= 11, `schema_version 应 >=11（v11 已迁过），实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('embeds migration: v10 老库升级到 v11 后建出 embeds 表', { skip: skipReason ?? false }, () => {
@@ -165,7 +167,7 @@ test('embeds migration: v10 老库升级到 v11 后建出 embeds 表', { skip: s
   assert.ok(indexes.includes('idx_embeds_avatar_id'), `升级后 idx_embeds_avatar_id 缺失：${indexes.join(',')}`)
   assert.ok(indexes.includes('idx_embeds_enabled'), `升级后 idx_embeds_enabled 缺失：${indexes.join(',')}`)
 
-  assert.equal(readSchemaVersion(dbPath), 11)
+  assert.ok(readSchemaVersion(dbPath) >= 11, `schema_version 应 >=11，实际 ${readSchemaVersion(dbPath)}`)
 })
 
 test('embeds migration: 二次构造 DatabaseManager 不抛错（迁移幂等）', { skip: skipReason ?? false }, () => {
@@ -177,6 +179,6 @@ test('embeds migration: 二次构造 DatabaseManager 不抛错（迁移幂等）
   const dm2 = new DatabaseManagerCtor(dbPath)
   dm2.close()
 
-  // schema_version 仍是 11
-  assert.equal(readSchemaVersion(dbPath), 11)
+  // schema_version 仍 >= 11
+  assert.ok(readSchemaVersion(dbPath) >= 11, `schema_version 应 >=11，实际 ${readSchemaVersion(dbPath)}`)
 })

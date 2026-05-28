@@ -819,26 +819,9 @@ function ChartCodeBlock(props: ComponentPropsWithoutRef<'code'> & { inline?: boo
       )
     }
     const coerced = coerceInfographicDsl(raw)
-    // 详细诊断日志：每次完成检测后打印 raw 和 coerced 全文（便于无 DevTools 时也能 grep 到）
-    // eslint-disable-next-line no-console
-    console.groupCollapsed('[Infographic DSL] 渲染前完整诊断（点击展开）')
-    // eslint-disable-next-line no-console
-    console.log('=== RAW（LLM 原输出）===')
-    // eslint-disable-next-line no-console
-    console.log(raw)
-    // eslint-disable-next-line no-console
-    console.log('=== COERCED（前端 coerce 后实际送 renderer 的内容）===')
-    // eslint-disable-next-line no-console
-    console.log(coerced)
-    // eslint-disable-next-line no-console
-    console.log(`=== raw === ${raw.length} chars / coerced ${coerced.length} chars`)
-    // eslint-disable-next-line no-console
-    console.groupEnd()
-    // 同时写主进程日志（事件 viewer 可查；最多保留 4KB）
-    window.electronAPI.logEvent('info', 'infographic-dsl-raw', raw.slice(0, 4000))
-    if (coerced !== raw) {
-      window.electronAPI.logEvent('info', 'infographic-dsl-coerced', coerced.slice(0, 4000))
-    }
+    // 历史版本在这里 console.group + logEvent 写 raw/coerced DSL，但 ChartCodeBlock
+    // 在 render 路径——历史消息每次父层重渲染都会重复打日志，正文也会被写进 app log。
+    // 需要诊断时改用 effect + message/block key 去重；当前生产路径不需要这条噪声。
     return <ArtifactSlot kind="infographic" raw={coerced}><InfographicRenderer dsl={coerced} /></ArtifactSlot>
   }
 

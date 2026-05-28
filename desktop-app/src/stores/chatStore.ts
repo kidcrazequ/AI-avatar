@@ -5136,7 +5136,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 `repair output 仍无合法 infographic 块（blocks=${repairedBlocks.length}）`)
               return
             }
-            const newDisplayText = displayText.replace(firstBad.raw, firstGood.raw)
+            // 按 fence 范围 splice 整段，避免 replace 命中正文里相同 DSL 文本或重复块。
+            // firstBad.fenceStart/fenceEnd 是含围栏的索引（参见 infographic-validator 注释），
+            // firstGood.raw 不含围栏，写回时补上 ```infographic / ``` 围栏。
+            const newDisplayText = displayText.slice(0, firstBad.fenceStart)
+              + '```infographic\n' + firstGood.raw + '\n```'
+              + displayText.slice(firstBad.fenceEnd)
             if (newDisplayText === displayText) {
               // 修正块和原 bad 块完全相同（理论不该发生），跳过写入避免无意义 DB I/O
               window.electronAPI.logEvent('warn', 'infographic-repair-no-diff', 'repaired block === bad block')

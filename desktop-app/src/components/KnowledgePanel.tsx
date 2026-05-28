@@ -405,18 +405,30 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         cleanedText = stripDocxToc(cleanedText)
       }
 
-      if (visionResultsRaw.length > 0 && parsed.perPageChars) {
-        const visionForMerge: Array<{ pageNum: number; content: string }> = []
-        for (let i = 0; i < visionResultsRaw.length; i++) {
-          const content = visionResultsRaw[i]
-          if (content === null) continue
-          visionForMerge.push({
-            pageNum: parsed.imagePageNumbers?.[i] ?? (i + 1),
-            content,
-          })
-        }
-        if (visionForMerge.length > 0) {
-          cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+      if (visionResultsRaw.length > 0) {
+        if (parsed.perPageChars) {
+          // PDF 路径：按页号 merge 回原文本（保留 perPage 结构）
+          const visionForMerge: Array<{ pageNum: number; content: string }> = []
+          for (let i = 0; i < visionResultsRaw.length; i++) {
+            const content = visionResultsRaw[i]
+            if (content === null) continue
+            visionForMerge.push({
+              pageNum: parsed.imagePageNumbers?.[i] ?? (i + 1),
+              content,
+            })
+          }
+          if (visionForMerge.length > 0) {
+            cleanedText = mergeVisionIntoText(cleanedText, visionForMerge, parsed.perPageChars)
+          }
+        } else {
+          // 纯图片 / 图片型 docx：无 perPage 结构，OCR 结果直接作正文
+          // 与批量导入（main.ts:4916 / 5563）保持一致的 fallback，否则 .jpg/.png/.docx
+          // 图片单文件导入 OCR 成功但正文为空，md 永远空
+          const ocrTexts = visionResultsRaw.filter((r): r is string => r !== null && r.trim().length > 0)
+          if (ocrTexts.length > 0) {
+            const joined = ocrTexts.join('\n\n')
+            cleanedText = cleanedText.trim() ? `${cleanedText}\n\n${joined}` : joined
+          }
         }
       }
 

@@ -63,6 +63,8 @@ export default function ProjectManagerPanel({ avatarId, onClose, onProjectsChang
     const description = editing.description.trim()
     if (!name) { setError('名称不能为空'); return }
     if (!/^[\w-]+$/.test(name)) { setError('名称仅允许字母数字下划线连字符'); return }
+    // 'default' 是保留项目桶（侧栏固定显示，不是实体项目），不能创建/rename 到 default
+    if (name === 'default') { setError('"default" 是保留名，请换一个名称'); return }
     setError('')
     setBusy(true)
     try {
@@ -153,10 +155,17 @@ export default function ProjectManagerPanel({ avatarId, onClose, onProjectsChang
                     <span className="font-game text-[11px] text-px-text-dim">{p.conversation_count} 个会话</span>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => { setError(''); setEditing({ id: p.id, name: p.name, description: p.description }) }} className="pixel-btn-ghost text-[11px] px-2 py-0.5" disabled={busy}>编辑</button>
-                    <button onClick={() => handleArchive(p.id, !p.archived)} className="pixel-btn-ghost text-[11px] px-2 py-0.5" disabled={busy}>{p.archived ? '取消归档' : '归档'}</button>
-                    {p.name !== 'default' && (
-                      <button onClick={() => { setDeleteTarget('default'); setConfirmDeleteId(p.id) }} className="pixel-btn-ghost text-[11px] px-2 py-0.5 text-px-danger" disabled={busy}>删除</button>
+                    {p.name === 'default' ? (
+                      // default 是保留项目桶（侧栏固定显示，不是实体 project 行），
+                      // 不允许编辑/归档/删除——IPC + DB 层也会拦，但 UI 层把按钮去掉
+                      // 比让用户点了再吃报错更好
+                      <span className="font-game text-[10px] text-px-text-dim tracking-wider px-1.5 py-0.5">保留</span>
+                    ) : (
+                      <>
+                        <button onClick={() => { setError(''); setEditing({ id: p.id, name: p.name, description: p.description }) }} className="pixel-btn-ghost text-[11px] px-2 py-0.5" disabled={busy}>编辑</button>
+                        <button onClick={() => handleArchive(p.id, !p.archived)} className="pixel-btn-ghost text-[11px] px-2 py-0.5" disabled={busy}>{p.archived ? '取消归档' : '归档'}</button>
+                        <button onClick={() => { setDeleteTarget('default'); setConfirmDeleteId(p.id) }} className="pixel-btn-ghost text-[11px] px-2 py-0.5 text-px-danger" disabled={busy}>删除</button>
+                      </>
                     )}
                   </div>
                 </div>

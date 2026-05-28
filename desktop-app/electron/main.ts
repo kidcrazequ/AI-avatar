@@ -1277,6 +1277,9 @@ wrapHandler('projects:list', (_, avatarId?: string) => {
 })
 wrapHandler('projects:create', async (_, avatarId: string, name: string, description?: string) => {
   assertSafeSegment(avatarId, '分身ID')
+  // 'default' 保留字：在 IPC 层先拦一次，避免文件系统模板创建（projectKnowledgeRoot
+  // 那段）跑完才让 DB 抛错。DB 层 createProject 还会再校验一次（defense in depth）
+  if (name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留名，不能作为项目名创建')
   const id = getDb().createProject(avatarId, name, description ?? '')
   // 副作用：在 projects/<name>/knowledge/ 下建模板（README.md / notes.md / decisions/.gitkeep）。
   //
@@ -1315,6 +1318,10 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
   // DB 提交前，把 DB / 文件系统一致性的窗口缩到最小。
   const db = getDb()
   const before = db.getProject(id)
+  // 'default' 保留字：编辑现有 default 项目或把任意项目 rename 到 default 都拒绝；
+  // DB 层 updateProject 还会再校验一次（defense in depth）
+  if (before?.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能编辑')
+  if (patch.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留名，不能 rename 到 default')
   const isRename = Boolean(before && patch.name && patch.name !== before.name)
   if (before && isRename) {
     assertSafeSegment(before.name, 'oldProjectName')
@@ -1340,6 +1347,11 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
     const legacyOld = path.join(avatarRoot, 'knowledge', 'projects', before.name)
     // 记录已完成的文件操作；失败时反向回滚，避免 DB 已回滚但文件仍留在新目录
     let movedCanonical = false
+    // legacy-only 场景：canonicalOld 不存在但 legacyOld 存在时，下面会 mkdirSync
+    // 出空的 canonicalNew 再 renameSync legacy 进去；如果 legacy rename 失败，
+    // DB 回滚但空 canonicalNew 留下，下一次重试会被 preflight 拦住。记录这个状态
+    // 让失败路径删掉它。
+    let createdCanonicalNew = false
     try {
       // 优先迁 canonical 路径（projects/<name>）
       if (fs.existsSync(canonicalOld)) {
@@ -1350,11 +1362,16 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
       // 老数据兼容：knowledge/projects/<name>/ → projects/<name>/knowledge/
       if (fs.existsSync(legacyOld)) {
         const canonicalNewKnowledge = path.join(canonicalNew, 'knowledge')
-        if (!fs.existsSync(canonicalNew)) fs.mkdirSync(canonicalNew, { recursive: true })
+        if (!fs.existsSync(canonicalNew)) {
+          fs.mkdirSync(canonicalNew, { recursive: true })
+          createdCanonicalNew = true
+        }
         if (fs.existsSync(canonicalNewKnowledge)) {
           console.warn(`[projects:update] legacy knowledge/projects/${before.name} 与 canonical projects/${patch.name}/knowledge 同时存在，跳过 legacy 迁移以避免覆盖`)
         } else {
           fs.renameSync(legacyOld, canonicalNewKnowledge)
+          // legacy 内容落位，目录已非空，不再视为残留
+          createdCanonicalNew = false
         }
       }
     } catch (mvErr) {
@@ -1371,6 +1388,16 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
           const revMsg = revErr instanceof Error ? revErr.message : String(revErr)
           console.error(`[projects:update] canonical 反向恢复失败！文件系统残留在新目录 ${canonicalNew}：${revMsg}`)
         }
+      } else if (createdCanonicalNew) {
+        // legacy-only 场景下我们自己 mkdir 了空的 canonicalNew，但 legacy rename
+        // 失败、内容没进来。删掉空目录，避免下次重试被 preflight 拦截。
+        try {
+          fs.rmdirSync(canonicalNew)
+          console.warn(`[projects:update] mv 失败已清理空 canonicalNew 目录：${canonicalNew}`)
+        } catch (rmErr) {
+          const rmMsg = rmErr instanceof Error ? rmErr.message : String(rmErr)
+          console.error(`[projects:update] 清理空 canonicalNew 失败，下次 rename 重试可能被 preflight 拦截：${rmMsg}`)
+        }
       }
       try {
         db.updateProject(id, { name: before.name })
@@ -1384,9 +1411,14 @@ wrapHandler('projects:update', (_, id: string, patch: { name?: string; descripti
   }
 })
 wrapHandler('projects:archive', (_, id: string, archived: boolean) => {
+  // 'default' 保留字：DB 层会再 throw，这里提前拦一次让错误更明确
+  const existing = getDb().getProject(id)
+  if (existing?.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能归档')
   getDb().archiveProject(id, !!archived)
 })
 wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsTo?: string }) => {
+  const existing = getDb().getProject(id)
+  if (existing?.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
   getDb().deleteProject(id, options)
 })
 

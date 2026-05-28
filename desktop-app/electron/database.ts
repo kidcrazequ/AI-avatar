@@ -1611,6 +1611,9 @@ export class DatabaseManager {
   createProject(avatarId: string, name: string, description = ''): string {
     if (!avatarId) throw new Error('avatarId 必填')
     if (!/^[\w-]+$/.test(name)) throw new Error('project name 仅允许字母数字下划线连字符')
+    // 'default' 是"未归属任何任务包"的虚拟桶（参见 list-project-ids 兜底逻辑），
+    // 不允许作为真实 project 行存在，否则 UI/DB 语义会冲突
+    if (name === 'default') throw new Error('"default" 是保留名，不能作为项目名创建')
     const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
     const now = Date.now()
     try {
@@ -1630,11 +1633,14 @@ export class DatabaseManager {
   updateProject(id: string, patch: { name?: string; description?: string }): void {
     const existing = this.getProject(id)
     if (!existing) throw new Error(`project 不存在: ${id}`)
+    // 'default' 是保留名，既不能改它的 name/description，也不能 rename 任何项目到 default
+    if (existing.name === 'default') throw new Error('"default" 是保留项目桶，不能编辑')
     const sets: string[] = []
     const args: unknown[] = []
     let newName = existing.name
     if (patch.name !== undefined && patch.name !== existing.name) {
       if (!/^[\w-]+$/.test(patch.name)) throw new Error('project name 仅允许字母数字下划线连字符')
+      if (patch.name === 'default') throw new Error('"default" 是保留名，不能 rename 到 default')
       sets.push('name = ?')
       args.push(patch.name)
       newName = patch.name
@@ -1661,6 +1667,8 @@ export class DatabaseManager {
 
   /** 归档 / 取消归档 project（不删除数据） */
   archiveProject(id: string, archived: boolean): void {
+    const existing = this.getProject(id)
+    if (existing?.name === 'default') throw new Error('"default" 是保留项目桶，不能归档')
     this.db.prepare(`UPDATE projects SET archived = ?, updated_at = ? WHERE id = ?`)
       .run(archived ? 1 : 0, Date.now(), id)
   }
@@ -1673,6 +1681,7 @@ export class DatabaseManager {
   deleteProject(id: string, options: { migrateConversationsTo?: string } = {}): void {
     const existing = this.getProject(id)
     if (!existing) return
+    if (existing.name === 'default') throw new Error('"default" 是保留项目桶，不能删除')
     const target = options.migrateConversationsTo ?? 'default'
     this.db.transaction(() => {
       this.db.prepare(`

@@ -748,8 +748,17 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       })
       const query = window.prompt('联网搜索关键词：', '')
       if (!query || !query.trim()) {
-        // 用户取消或空 query：把 @web token 还原回输入框，避免静默吞掉用户输入
-        setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
+        // 用户取消或空 query：把 @web token 还原到原位置（before + token + after），
+        // 不是简单追加到末尾——例如「请 @web 继续」取消后追加会变成「请 继续 @web」，
+        // 用户重新编辑要找回原位置。window.prompt 阻塞事件循环，prompt 期间不会有
+        // 其它输入变化，before/after 保持有效。
+        setInput(before + originalAtToken + after)
+        const restoredCursor = before.length + originalAtToken.length
+        requestAnimationFrame(() => {
+          if (!ta) return
+          ta.focus()
+          ta.setSelectionRange(restoredCursor, restoredCursor)
+        })
         return
       }
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {

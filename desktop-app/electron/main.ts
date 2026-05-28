@@ -2198,6 +2198,52 @@ wrapHandler('search-knowledge', (_, avatarId: string, query: string) => {
   return getKnowledgeManager(avatarId).searchFiles(query)
 })
 
+/**
+ * knowledge:list-excel-files
+ *
+ * 给 @excel 引用面板用——返回分身 knowledge/ 下的：
+ *   - 原始 xlsx / xls 文件（用户导入的源文件）
+ *   - _excel/*.json 结构化数据（write-excel-data 产物，query_excel 工具使用）
+ *
+ * 不复用 getKnowledgeTree：KnowledgeManager.buildTree 故意跳过 `_` 开头目录
+ * （_index / _raw / _excel）且只收 .md，所以 xlsx 和 _excel/*.json 都不出现。
+ * @excel 引用偏偏需要这两类入口，得绕开 tree 直接扫。
+ *
+ * 安全：assertSafeSegment + 限制扫描根为 avatars/<aid>/knowledge/。
+ */
+wrapHandler('knowledge:list-excel-files', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const knowledgeRoot = path.join(avatarsPath, avatarId, 'knowledge')
+  if (!fs.existsSync(knowledgeRoot)) return [] as Array<{ path: string; name: string; kind: 'xlsx' | 'excel-json' }>
+
+  const results: Array<{ path: string; name: string; kind: 'xlsx' | 'excel-json' }> = []
+
+  // 递归找 xlsx/xls——只跳过 _index / _raw 这类纯生成目录，_excel 仍要进（看 json）
+  function walk(dir: string, depth: number): void {
+    if (depth > 6) return
+    let entries: fs.Dirent[]
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      const rel = path.relative(knowledgeRoot, full)
+      if (entry.isDirectory()) {
+        if (entry.name === '_index' || entry.name === '_raw') continue
+        walk(full, depth + 1)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const lower = entry.name.toLowerCase()
+      if (lower.endsWith('.xlsx') || lower.endsWith('.xls')) {
+        results.push({ path: rel, name: entry.name, kind: 'xlsx' })
+      } else if (lower.endsWith('.json') && (rel.startsWith('_excel/') || rel.startsWith('_excel\\'))) {
+        results.push({ path: rel, name: entry.name, kind: 'excel-json' })
+      }
+    }
+  }
+  walk(knowledgeRoot, 0)
+  return results
+})
+
 // v18 Letta .af 借鉴：soul-pack 可移植打包格式
 //
 // 之前签名是 `export-to-file(avatarId, outputFilePath, options)`，

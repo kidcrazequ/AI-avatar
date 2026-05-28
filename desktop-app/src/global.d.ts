@@ -727,6 +727,12 @@ interface ElectronAPI {
   openMdFile: (avatarId: string, mdRelPath: string) => Promise<{ ok: boolean; error?: string }>
   writeKnowledgeFile: (avatarId: string, relativePath: string, content: string) => Promise<void>
   searchKnowledge: (avatarId: string, query: string) => Promise<SearchResult[]>
+  /** @excel 引用面板：列 knowledge/ 下 xlsx/xls 以及 _excel/*.json，绕开 getKnowledgeTree 的 _ 目录与 .md 限制 */
+  listKnowledgeExcelFiles: (avatarId: string) => Promise<Array<{
+    path: string
+    name: string
+    kind: 'xlsx' | 'excel-json'
+  }>>
   // Lorebook keyword-trigger（SillyTavern 借鉴）：装配 prompt 时按关键词被动注入知识片段
   lorebookMatchAndBuild: (avatarId: string, userMessage: string) => Promise<{
     text: string

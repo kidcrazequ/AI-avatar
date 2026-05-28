@@ -105,12 +105,10 @@ export async function listEntries(
   }
 
   if (namespace === 'excel') {
-    const tree = await window.electronAPI.getKnowledgeTree(avatarId)
-    // 兼容两种位置：knowledge/_excel/*.json（中间产物）和 knowledge/**/*.xlsx（原始文件）
-    const xlsx = flattenFiles(tree, (p) => /\.(xlsx|xls)$/i.test(p))
-    const excelMd = flattenFiles(tree, (p) => p.endsWith('.md') && (p.includes('/_excel/') || p.startsWith('_excel/')))
-    const all = [...xlsx, ...excelMd]
-    const entries: ContextEntry[] = all.map(f => ({
+    // getKnowledgeTree 故意跳过 _ 目录且只收 .md，xlsx 和 _excel/*.json 都不出现。
+    // 改用专门的 listKnowledgeExcelFiles IPC 拿 xlsx + _excel/*.json 两类入口。
+    const files = await window.electronAPI.listKnowledgeExcelFiles(avatarId)
+    const entries: ContextEntry[] = files.map(f => ({
       id: f.path,
       title: f.name,
       subtitle: f.path,

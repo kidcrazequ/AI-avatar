@@ -1160,11 +1160,29 @@ export class ToolRouter {
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
       return { content: '', error: `文件不存在或不是普通文件: ${filePath}` }
     }
+    // 大小硬上限：之前 readFileSync 整文件读入再 split，授权了大目录后 LLM 让工具去读
+    // GB 级日志会直接 OOM 主进程。10 MB 已经够 ~10 万行普通文本日志，足够单次工具调用
+    // 决策；用户需要超大文件请走 offset 分页或换专用工具。
+    const MAX_USER_FILE_BYTES = 10 * 1024 * 1024
+    // limit 上限：之前没 cap，LLM 可以传 limit: 999999 让工具吐巨量字符占满 context。
+    // 5000 行已经远超任何合理「让 LLM 看一段」场景；超过即截断，并通过提示让 LLM 用 offset 翻页。
+    const MAX_LIMIT_LINES = 5000
+    const stat = fs.statSync(filePath)
+    if (stat.size > MAX_USER_FILE_BYTES) {
+      return {
+        content: '',
+        error: `文件过大（${(stat.size / 1024 / 1024).toFixed(1)}MB > ${MAX_USER_FILE_BYTES / 1024 / 1024}MB 上限）；请缩窄目标或换专用工具`,
+      }
+    }
     const offset = typeof args.offset === 'number' ? Math.max(0, Math.floor(args.offset)) : 0
-    const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000
+    const rawLimit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000
+    const limit = Math.min(rawLimit, MAX_LIMIT_LINES)
     const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
     const sliced = lines.slice(offset, offset + limit)
-    return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') }
+    const tailHint = lines.length > offset + limit
+      ? `\n[hint] 文件共 ${lines.length} 行，本次只返回 ${offset + 1}-${offset + sliced.length} 行；继续读请加 offset=${offset + sliced.length}`
+      : ''
+    return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') + tailHint }
   }
 
   /**

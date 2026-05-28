@@ -4355,6 +4355,22 @@ wrapHandler('get-evolution-report', async (_, avatarId: string) => {
   return getWikiCompiler(avatarId).getEvolutionReport()
 })
 
+/** 敏感目录黑名单——SSH 私钥、GPG、AWS 凭证、~/.env、通用 credentials 等 */
+const SENSITIVE_HOME_DIRS = ['.ssh', '.gnupg', '.aws', '.env', '.credentials']
+
+/**
+ * 把绝对路径规整成 realpath（穿透 symlink），失败回退 path.resolve。
+ * 用于 home 白名单 / 敏感目录黑名单校验前——纯 lexical 比较会被
+ * `~/tmp/link.pdf -> ~/.ssh/id_rsa` 这类符号链接绕过。
+ */
+function canonicalize(p: string): string {
+  try {
+    return fs.realpathSync.native(path.resolve(p))
+  } catch {
+    return path.resolve(p)
+  }
+}
+
 /**
  * 用户文件读写的统一边界守卫。
  *
@@ -4363,10 +4379,11 @@ wrapHandler('get-evolution-report', async (_, avatarId: string) => {
  * 任意本地文件（SSH 私钥、AWS 凭证、~/.env 等）。
  *
  * 这里只放过用户主目录下的文件，并排除常见敏感子目录。两个 IPC 都走同一份策略，
- * 避免一边收紧一边漏掉。
+ * 避免一边收紧一边漏掉。穿透 symlink（realpathSync.native）后再校验——避免
+ * 攻击者用 `link.pdf -> ~/.ssh/id_rsa` 把白名单当反射镜面。
  *
  * @throws 当路径越界或落在敏感目录时
- * @returns resolved 后的绝对路径
+ * @returns canonicalize 后的真实绝对路径
  */
 function assertUserOwnedFile(originalFilePath: string): string {
   if (typeof originalFilePath !== 'string' || !path.isAbsolute(originalFilePath)) {
@@ -4376,18 +4393,55 @@ function assertUserOwnedFile(originalFilePath: string): string {
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
     throw new Error(`文件不存在或不是文件: ${originalFilePath}`)
   }
-  const homedir = os.homedir()
-  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
+  // 穿透 symlink + 同步穿透 homedir，避免 macOS /Users 是 /System/Volumes/Data/Users
+  // 的链接 / 攻击者放的 ~/tmp/link → ~/.ssh/secret 都能绕过白名单。
+  const realPath = canonicalize(resolved)
+  const realHome = canonicalize(os.homedir())
+  if (!realPath.startsWith(realHome + path.sep) && realPath !== realHome) {
     throw new Error(`安全限制：仅允许读取用户主目录下的文件`)
   }
   // 排除敏感目录，防止泄露密钥、凭证等
-  const SENSITIVE_DIRS = ['.ssh', '.gnupg', '.aws', '.env', '.credentials']
-  const relToHome = path.relative(homedir, resolved)
+  const relToHome = path.relative(realHome, realPath)
   const firstSegment = relToHome.split(path.sep)[0]
-  if (SENSITIVE_DIRS.includes(firstSegment)) {
+  if (SENSITIVE_HOME_DIRS.includes(firstSegment)) {
     throw new Error(`安全限制：禁止访问敏感目录 ${firstSegment}`)
   }
-  return resolved
+  return realPath
+}
+
+/**
+ * 目录版的 assertUserOwnedFile：import-folder / import-archive 接收文件夹路径
+ * （或 archive 文件），渲染层被污染时同样可以批量爬 ~/Documents 下的 PDF/XLSX
+ * 进知识库。和文件版共用 home 白名单 + 敏感目录黑名单 + symlink 穿透。
+ *
+ * @param kind 'directory' 或 'archive'，控制 stat 校验和错误文案
+ */
+function assertUserOwnedPath(originalPath: string, kind: 'directory' | 'archive'): string {
+  if (typeof originalPath !== 'string' || !path.isAbsolute(originalPath)) {
+    throw new Error(`非法路径（必须为绝对路径）: ${originalPath}`)
+  }
+  const resolved = path.resolve(originalPath)
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`路径不存在: ${originalPath}`)
+  }
+  const stat = fs.statSync(resolved)
+  if (kind === 'directory' && !stat.isDirectory()) {
+    throw new Error(`不是文件夹: ${originalPath}`)
+  }
+  if (kind === 'archive' && !stat.isFile()) {
+    throw new Error(`不是文件: ${originalPath}`)
+  }
+  const realPath = canonicalize(resolved)
+  const realHome = canonicalize(os.homedir())
+  if (!realPath.startsWith(realHome + path.sep) && realPath !== realHome) {
+    throw new Error(`安全限制：仅允许导入用户主目录下的${kind === 'directory' ? '文件夹' : '归档'}`)
+  }
+  const relToHome = path.relative(realHome, realPath)
+  const firstSegment = relToHome.split(path.sep)[0]
+  if (SENSITIVE_HOME_DIRS.includes(firstSegment)) {
+    throw new Error(`安全限制：禁止从敏感目录 ${firstSegment} 导入`)
+  }
+  return realPath
 }
 
 /**
@@ -4753,15 +4807,7 @@ async function buildIndexAfterBatchImport(avatarId: string): Promise<void> {
  */
 wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Promise<BatchImportResult> => {
   assertSafeSegment(avatarId, '分身ID')
-  if (!path.isAbsolute(folderPath)) {
-    throw new Error(`非法文件夹路径（必须为绝对路径）: ${folderPath}`)
-  }
-  // 安全限制：仅允许用户主目录下
-  const homedir = os.homedir()
-  const resolved = path.resolve(folderPath)
-  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
-    throw new Error(`安全限制：仅允许导入用户主目录下的文件夹`)
-  }
+  const resolved = assertUserOwnedPath(folderPath, 'directory')
 
   const { files, skipped, tempDirs } = await walkFolder(resolved)
   try {
@@ -4782,14 +4828,7 @@ wrapHandler('import-folder', async (_, avatarId: string, folderPath: string): Pr
  */
 wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): Promise<BatchImportResult> => {
   assertSafeSegment(avatarId, '分身ID')
-  if (!path.isAbsolute(archivePath)) {
-    throw new Error(`非法归档路径（必须为绝对路径）: ${archivePath}`)
-  }
-  const homedir = os.homedir()
-  const resolved = path.resolve(archivePath)
-  if (!resolved.startsWith(homedir + path.sep) && resolved !== homedir) {
-    throw new Error(`安全限制：仅允许导入用户主目录下的归档`)
-  }
+  const resolved = assertUserOwnedPath(archivePath, 'archive')
 
   const tempDir = await makeTempExtractDir()
   let nestedTempDirs: string[] = []
@@ -5045,6 +5084,18 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
       })
       .filter((f): f is string => f !== null && fs.existsSync(f) && !isAlreadyEnhanced(f))
   } else {
+    // 自动扫描：找未经 LLM 格式化的导入文件。
+    //
+    // 原实现要求 content.includes('批量导入')，但批量导入只把"批量导入"写进
+    // README.md 表格 cell，.md 文件本身没有这个字符串 → 自动扫描永远命中空集。
+    //
+    // 现在改成解析 frontmatter：
+    //   - rag_only: true → 大文件，最需要 LLM 格式化（小文件可直接进 system prompt）
+    //   - source 不属于 [enhanced, excel, pptx] → enhanced 已格式化过；
+    //     excel / pptx 走结构化路径不需要 LLM 重排
+    //
+    // excel/pptx 即使被误格式化也只是浪费 token，不会损坏数据；保守起见仍排除。
+    const NON_ENHANCEABLE_SOURCES = new Set(['enhanced', 'excel', 'pptx'])
     allFiles = []
     function scanDir(dir: string): void {
       const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -5053,9 +5104,15 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
         if (entry.isDirectory() && !entry.name.startsWith('_')) {
           scanDir(full)
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          const content = fs.readFileSync(full, 'utf-8')
-          if (content.includes('rag_only: true') && content.includes('批量导入') && !content.includes('source: enhanced')) {
+          try {
+            const head = fs.readFileSync(full, 'utf-8').slice(0, 2000)
+            const meta = parseFrontmatterCore(head).meta
+            if (meta.rag_only !== true) continue
+            const source = typeof meta.source === 'string' ? meta.source : ''
+            if (!source || NON_ENHANCEABLE_SOURCES.has(source)) continue
             allFiles.push(full)
+          } catch {
+            // 读取或解析失败 → 跳过（不阻塞其他文件）
           }
         }
       }
@@ -5091,6 +5148,8 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
     try {
       // 优先从 frontmatter 的 raw_file 字段读取原始文件相对路径（精确，新文件）。
       // 老文件（无 raw_file 字段）fallback 到 findRawFile 按文件名反查（脆弱但兼容）。
+      // 同 format-knowledge-file：raw_file 必须 _raw/ 前缀 + resolveUnderRoot 校验，
+      // 防止恶意 .md 的 frontmatter 借 raw_file: ../../../etc/passwd 让 parseFile 读任意文件。
       let rawFilePath: string | null = null
       try {
         const head = fs.readFileSync(filePath, 'utf-8').slice(0, 500)
@@ -5098,8 +5157,14 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
         if (fmMatch) {
           const rawFileMatch = fmMatch[1].match(/^\s*raw_file\s*:\s*(.+?)\s*$/m)
           if (rawFileMatch) {
-            const candidate = path.join(knowledgePath, rawFileMatch[1].trim())
-            if (fs.existsSync(candidate)) rawFilePath = candidate
+            const rawRel = rawFileMatch[1].trim().replace(/^["']|["']$/g, '')
+            const normalized = rawRel.replace(/\\/g, '/')
+            if (normalized.startsWith('_raw/') && !normalized.split('/').includes('..')) {
+              try {
+                const candidate = resolveUnderRoot(knowledgePath, normalized)
+                if (fs.existsSync(candidate)) rawFilePath = candidate
+              } catch { /* 越界则忽略 raw_file，fallback 到 findRawFile */ }
+            }
           }
         }
       } catch (fmErr) {

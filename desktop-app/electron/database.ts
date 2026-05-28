@@ -1089,13 +1089,16 @@ export class DatabaseManager {
 
     if (version < 20) {
       // v19 → v20: 修复已升过 v18 的库里残留的脏 project 数据。
-      // v18 早期版本没做正则校验也没跳过 default，留下两类问题：
+      // v18 早期版本没做正则校验也没跳过 default，留下四类问题：
       //   ① 'default' 被插成实体 project 行（与虚拟桶语义冲突，ProjectManagerPanel 会
       //      把它算进活跃数 + 渲染"保留"占位）
       //   ② 含 ../ / 路径分隔符 / null byte 的 name 行（projects:delete 等会拼到
       //      path.join，路径穿越）
-      //   ③ conversations.project_id 有非法值且 projects 表没有对应行（孤儿）
-      // 一次性扫描清理：会话迁到 default，相关 projects 行删掉。
+      //   ③ conversations.project_id 有非法值且 projects 表没有对应行（孤儿非法）
+      //   ④ conversations.project_id 是合法字符串但 projects 表没行（孤儿合法）——
+      //      list-project-ids 只读 projects 表，这种会话在侧栏看不到入口
+      // 一次性扫描：①② 清掉脏行 + 会话迁 default；③ 同 ②；④ 补回 projects 行
+      // 保留用户分组（workspaces/<name>/ 路径不变，无需迁移）
       this.db.transaction(() => {
         const now = Date.now()
         // ①：删除 default 项目行（不影响 conversations.project_id='default' 数据）
@@ -1123,6 +1126,25 @@ export class DatabaseManager {
           if (!/^[\w-]+$/.test(r.project_id)) {
             updateConvStmt.run(now, r.avatar_id, r.project_id)
             console.warn(`[v20 migration] 清扫非法 conversation project_id ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})；已迁到 default`)
+          }
+        }
+        // ④：合法但 projects 表无对应行的孤儿 project_id → 补 projects 行
+        // LEFT JOIN 在 ②③ 清理之后跑，保证只剩合法但缺行的真孤儿
+        const orphanLegalRows = this.db.prepare(`
+          SELECT DISTINCT c.avatar_id, c.project_id
+          FROM conversations c
+          LEFT JOIN projects p ON p.avatar_id = c.avatar_id AND p.name = c.project_id
+          WHERE c.project_id != '' AND c.project_id != 'default' AND p.id IS NULL
+        `).all() as Array<{ avatar_id: string; project_id: string }>
+        const insertProjStmt = this.db.prepare(`
+          INSERT OR IGNORE INTO projects (id, avatar_id, name, description, archived, created_at, updated_at)
+          VALUES (?, ?, ?, '', 0, ?, ?)
+        `)
+        for (const r of orphanLegalRows) {
+          if (/^[\w-]+$/.test(r.project_id)) {
+            const id = `proj_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`
+            insertProjStmt.run(id, r.avatar_id, r.project_id, now, now)
+            console.warn(`[v20 migration] 补回孤儿 project ${JSON.stringify(r.project_id)} (avatar=${r.avatar_id})；保留用户分组`)
           }
         }
         version = 20

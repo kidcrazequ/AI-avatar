@@ -34,6 +34,7 @@
     "backfill:life": "tsx ../scripts/backfill-life.ts",
     "knowledge:inspect": "tsx scripts/knowledge-inspect.ts",
     "test:simulation": "NODE_PATH=./test-support/node_modules npx --yes tsx --test src/stores/deliberation-extractors.test.ts src/services/batch-report-generator.test.ts src/services/batch-regression-runner.test.ts src/services/manual-qa-scenarios.test.ts src/services/regression-telemetry.test.ts src/services/raw-file-resolver.test.ts src/services/llm-providers/cost-tracker.test.ts src/services/eval/eval.test.ts",
+    "test:db-migrations": "npx --yes tsx scripts/test-db-migrations.ts",
     "test:manual-qa-scenarios": "NODE_PATH=./test-support/node_modules npx --yes tsx --test src/services/manual-qa-scenarios.test.ts",
     "test:manual-qa-smoke": "NODE_PATH=./test-support/node_modules npx --yes tsx scripts/manual-qa-scenarios-smoke.ts",
     "test:qa-gate": "npm run test:simulation",

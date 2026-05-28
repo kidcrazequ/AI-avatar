@@ -1,0 +1,58 @@
+name: DB migrations
+
+# DB schema migration 测试需要 better-sqlite3 与 runner Node ABI 匹配。
+# 本 workflow 用 system Node 22 + npm rebuild better-sqlite3 --build-from-source
+# 跑全部 electron/database-*.test.ts；只在 DB 相关文件变动时触发，
+# 避免每个 PR 都跑（节省 Actions 时间）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop-app/electron/database*.ts'
+      - 'desktop-app/electron/db-*.ts'
+      - 'desktop-app/scripts/test-db-migrations.ts'
+      - 'desktop-app/package.json'
+  pull_request:
+    paths:
+      - 'desktop-app/electron/database*.ts'
+      - 'desktop-app/electron/db-*.ts'
+      - 'desktop-app/scripts/test-db-migrations.ts'
+      - 'desktop-app/package.json'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            desktop-app/package-lock.json
+            packages/core/package-lock.json
+
+      - name: Build @soul/core
+        working-directory: packages/core
+        run: npm ci && npm run build
+
+      - name: Install desktop-app deps
+        working-directory: desktop-app
+        # postinstall (electron-builder install-app-deps) 把 better-sqlite3 rebuild
+        # 成 Electron ABI；下一步会再 rebuild 成 Node ABI
+        run: npm ci
+
+      - name: Rebuild better-sqlite3 for Node ABI
+        working-directory: desktop-app
+        # CI 是一次性环境，不需要 rebuild 回 Electron（不会用到 dev/dist）
+        run: npm rebuild better-sqlite3 --build-from-source
+
+      - name: Run all DB migration tests
+        working-directory: desktop-app
+        # 用 shell glob 展开 electron/database-*.test.ts；与 test:db-migrations.ts
+        # 本地脚本对齐（脚本里用 fs.readdirSync 枚举，效果一致）
+        run: npx --yes tsx --test electron/database-*.test.ts

@@ -316,7 +316,13 @@ async function extractTarGz(archivePath: string, destDir: string): Promise<void>
 
 /**
  * 7z 解压 — 使用 node-7z + 7zip-bin 提供的平台二进制。
- * 解压成功后扫描解压目录累加文件大小，发现超限就清空并报错。
+ *
+ * 与 zip/tar/rar 一致的预扫策略：先 SevenZip.list() 累加 entry size，
+ * 超 4GB 上限或路径穿越直接拒绝；不再做"先写盘再事后扫描目录"的补救
+ * （小体积 .7z 可在事后清理之前先把临时目录撑爆）。
+ *
+ * size 缺失的条目（加密 / 损坏 / 老格式 7z）保守策略——直接拒绝；
+ * 用户可手动解压后用文件夹导入。
  */
 async function extract7z(archivePath: string, destDir: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -324,24 +330,50 @@ async function extract7z(archivePath: string, destDir: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const sevenBin = require('7zip-bin')
 
-  const stream = SevenZip.extractFull(archivePath, destDir, {
+  // Step 1: 预扫 — list 累加 size + 路径穿越校验
+  let inflated = 0
+  const sizeMissingEntries: string[] = []
+  const listStream = SevenZip.list(archivePath, { $bin: sevenBin.path7za })
+  await new Promise<void>((resolve, reject) => {
+    listStream.on('data', (raw: unknown) => {
+      const entry = raw as { file: string; size?: number; attributes?: string }
+      // 路径穿越优先校验（目录条目也要查，避免 ../foo/ 一类）
+      const resolved7z = path.resolve(destDir, entry.file)
+      if (!resolved7z.startsWith(destDir + path.sep) && resolved7z !== destDir) {
+        listStream.destroy(new Error(`7z 含非法路径条目（路径穿越）: ${entry.file}`))
+        return
+      }
+      // 目录项不计 inflated（7z list 用 attributes 首字符 D 标记目录）
+      const isDir = typeof entry.attributes === 'string' && entry.attributes.startsWith('D')
+      if (isDir) return
+      if (typeof entry.size === 'number') {
+        inflated += entry.size
+        if (inflated > ARCHIVE_MAX_INFLATED_BYTES) {
+          listStream.destroy(new Error(`7z 解压后总大小超过 ${ARCHIVE_MAX_INFLATED_BYTES}，疑似炸弹，已拒绝`))
+        }
+      } else {
+        sizeMissingEntries.push(entry.file)
+      }
+    })
+    listStream.on('end', () => resolve())
+    listStream.on('error', (err: unknown) => reject(err instanceof Error ? err : new Error(String(err))))
+  })
+
+  if (sizeMissingEntries.length > 0) {
+    throw new Error(
+      `7z 列表中 ${sizeMissingEntries.length} 个条目缺少 size 字段（加密 / 损坏 / 老格式），无法预扫炸弹大小，已拒绝。建议解压后用文件夹导入`,
+    )
+  }
+
+  // Step 2: 预扫通过，正式解压
+  const extractStream = SevenZip.extractFull(archivePath, destDir, {
     $bin: sevenBin.path7za,
     recursive: true,
   })
-
   await new Promise<void>((resolve, reject) => {
-    stream.on('end', () => resolve())
-    stream.on('error', (err: Error) => reject(err))
+    extractStream.on('end', () => resolve())
+    extractStream.on('error', (err: Error) => reject(err))
   })
-
-  // 7z 没法在预解压阶段拿到精确 inflated 大小，退而求其次：解压完后查
-  const inflated = await calcDirSize(destDir)
-  if (inflated > ARCHIVE_MAX_INFLATED_BYTES) {
-    await fs.promises.rm(destDir, { recursive: true, force: true })
-    throw new Error(
-      `7z 解压后总大小超过 ${ARCHIVE_MAX_INFLATED_BYTES}，已清理，疑似炸弹`,
-    )
-  }
 }
 
 /**
@@ -384,17 +416,3 @@ async function extractRar(archivePath: string, destDir: string): Promise<void> {
   }
 }
 
-/** 递归计算目录总字节数（仅用于 7z 后置检查） */
-async function calcDirSize(dir: string): Promise<number> {
-  let total = 0
-  const entries = await fs.promises.readdir(dir, { withFileTypes: true })
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name)
-    if (entry.isDirectory()) {
-      total += await calcDirSize(full)
-    } else if (entry.isFile()) {
-      total += (await fs.promises.stat(full)).size
-    }
-  }
-  return total
-}

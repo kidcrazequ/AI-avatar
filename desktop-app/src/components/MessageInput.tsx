@@ -746,32 +746,39 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.focus()
         ta.setSelectionRange(before.length, before.length)
       })
-      // 统一恢复 helper：DOM value === cleaned（用户没继续输入）→ 原位还原 + 光标；
-      // 否则末尾追加避免覆盖用户输入。所有失败/取消路径共用这个，避免漏一处把 token 吞了
-      const restoreAtToken = () => {
-        const canRestoreAtOrigin = ta !== null && ta.value === cleaned
-        if (canRestoreAtOrigin) {
-          setInput(before + originalAtToken + after)
-          requestAnimationFrame(() => {
-            if (!ta) return
-            const pos = before.length + originalAtToken.length
-            ta.focus()
-            ta.setSelectionRange(pos, pos)
-          })
+      // 同步路径还原：直接原位写回（before + token + after）。
+      // 不能用 ta.value === cleaned 判定——setInput(cleaned) 在 prompt() 同步
+      // 阻塞之前 schedule，但 React 不会在同步代码块里 flush DOM；prompt 返回
+      // 后立即检 DOM 仍是 user 原输入而非 cleaned，导致每次同步取消都误判
+      // "用户继续输入了" → 退回末尾追加（例如「请 @web 继续」会变成「请 继续 @web」）
+      const restoreAtTokenSync = () => {
+        setInput(before + originalAtToken + after)
+        requestAnimationFrame(() => {
+          if (!ta) return
+          const pos = before.length + originalAtToken.length
+          ta.focus()
+          ta.setSelectionRange(pos, pos)
+        })
+      }
+      // 异步路径还原：webSearch 在事件循环让出后才 resolve，期间用户可能继续
+      // 输入。这时 DOM 已被 React flush 到 cleaned；ta.value !== cleaned 才能
+      // 真实反映"用户改过"，启发式有意义
+      const restoreAtTokenAsync = () => {
+        if (ta !== null && ta.value === cleaned) {
+          restoreAtTokenSync()
         } else {
           setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
         }
       }
       const query = window.prompt('联网搜索关键词：', '')
       if (!query || !query.trim()) {
-        // 用户取消或空 query：原位还原 @web token
-        restoreAtToken()
+        // 用户取消或空 query：同步路径，强制原位还原
+        restoreAtTokenSync()
         return
       }
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
-        // 容量满：之前只 toast 错误就 return，@web token 被吞掉了，用户下一次发送
-        // 会缺失原本要引用的 web 上下文。改为同步还原
-        restoreAtToken()
+        // 容量满（同步路径）：之前只 toast 错误就 return，@web token 被吞掉了
+        restoreAtTokenSync()
         showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
         return
       }
@@ -783,7 +790,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         if (!mountedRef.current) return
         // 搜索返回后再检一次容量：异步期间可能其它路径加了附件把额度占满
         if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
-          restoreAtToken()
+          restoreAtTokenAsync()
           showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
           return
         }
@@ -823,7 +830,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       }).catch((err: unknown) => {
         if (!mountedRef.current) return
         // 搜索失败：之前只 toast 错误，@web token 被吞掉了。还原让用户能直接重试
-        restoreAtToken()
+        restoreAtTokenAsync()
         const msg = err instanceof Error ? err.message : String(err)
         showHint('error', `联网搜索失败：${msg}；@web 引用已恢复`)
         window.electronAPI.logEvent('warn', 'web-search-failed', msg)

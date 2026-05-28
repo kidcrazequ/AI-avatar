@@ -267,12 +267,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   lorebookMatchAndBuild: (avatarId: string, userMessage: string) =>
     ipcRenderer.invoke('lorebook:match-and-build', avatarId, userMessage),
   // v18 Letta .af 借鉴：soul-pack 可移植打包
-  soulPackExportToFile: (avatarId: string, outputFilePath: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }) =>
-    ipcRenderer.invoke('soul-pack:export-to-file', avatarId, outputFilePath, options),
-  soulPackImportFromFile: (inputFilePath: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean }) =>
-    ipcRenderer.invoke('soul-pack:import-from-file', inputFilePath, options),
-  soulPackPreview: (inputFilePath: string) =>
-    ipcRenderer.invoke('soul-pack:preview', inputFilePath),
+  // export/preview 走主进程的 showSaveDialog / showOpenDialog——渲染层不传路径，
+  // 完全不持有文件系统句柄。import 需要先 preview 拿一次性 token 才能用。
+  soulPackExportToFile: (avatarId: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }) =>
+    ipcRenderer.invoke('soul-pack:export-to-file', avatarId, options),
+  soulPackImportFromFile: (token: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean }) =>
+    ipcRenderer.invoke('soul-pack:import-from-file', token, options),
+  soulPackPreview: () =>
+    ipcRenderer.invoke('soul-pack:preview'),
 
   // v18 OpenClaw 借鉴：Standing Orders 永久规则
   appendStandingOrder: (avatarId: string, order: string, source?: string) =>

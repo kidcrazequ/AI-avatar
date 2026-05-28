@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions, type ImportSoulPackResult } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -2119,18 +2119,62 @@ wrapHandler('search-knowledge', (_, avatarId: string, query: string) => {
 })
 
 // v18 Letta .af 借鉴：soul-pack 可移植打包格式
-// export-to-file：把分身打包并写到指定路径（renderer 通过 showSaveDialog 拿路径）
-// import-from-file：从指定路径读 JSON 解析并写回 avatars/
-wrapHandler('soul-pack:export-to-file', (_, avatarId: string, outputFilePath: string, options?: ExportSoulPackOptions) => {
+//
+// 之前签名是 `export-to-file(avatarId, outputFilePath, options)`，
+// renderer 可以传任意绝对路径让主进程 writeFileSync——一旦渲染层被污染，
+// 这就是任意文件写。现在改成主进程主导对话框：
+//   - export：主进程 showSaveDialog，用户挑路径，主进程才落盘
+//   - preview：主进程 showOpenDialog，读 + parse + 发放一次性 path token
+//   - import：renderer 拿 token 调，主进程根据 token 反查路径再读
+//
+// path token 5 分钟过期 + 用一次销毁，避免 renderer 缓存 token 重复操作；
+// 同时 preview 必须先跑，import 才能拿到对应 token——杜绝直接传任意路径的入口。
+
+interface SoulPackPathToken {
+  filePath: string
+  expiresAt: number
+}
+const soulPackPathTokens = new Map<string, SoulPackPathToken>()
+const SOUL_PACK_TOKEN_TTL_MS = 5 * 60 * 1000
+
+function issueSoulPackPathToken(filePath: string): string {
+  const token = crypto.randomBytes(16).toString('hex')
+  soulPackPathTokens.set(token, { filePath, expiresAt: Date.now() + SOUL_PACK_TOKEN_TTL_MS })
+  return token
+}
+
+/** 消费 token：找到 → 删除并返回 filePath；缺失或过期 → null */
+function consumeSoulPackPathToken(token: string): string | null {
+  if (typeof token !== 'string' || token.length === 0) return null
+  const entry = soulPackPathTokens.get(token)
+  if (!entry) return null
+  soulPackPathTokens.delete(token)
+  if (entry.expiresAt < Date.now()) return null
+  return entry.filePath
+}
+
+wrapHandler('soul-pack:export-to-file', async (_, avatarId: string, options?: ExportSoulPackOptions) => {
   assertSafeSegment(avatarId, '分身ID')
-  if (typeof outputFilePath !== 'string' || !outputFilePath) {
-    throw new Error('outputFilePath 不能为空')
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  if (!win) {
+    return { ok: false as const, canceled: true, error: '无活动窗口' }
   }
+  const defaultName = `${avatarId}.soul.json`
+  const saveResult = await dialog.showSaveDialog(win, {
+    title: '导出分身包',
+    defaultPath: defaultName,
+    filters: [{ name: 'Soul Pack (JSON)', extensions: ['json'] }],
+  })
+  if (saveResult.canceled || !saveResult.filePath) {
+    return { ok: false as const, canceled: true }
+  }
+  const outputFilePath = saveResult.filePath
   const pack = exportSoulPack(avatarsPath, avatarId, options ?? {})
   const json = serializeSoulPack(pack)
   fs.mkdirSync(path.dirname(outputFilePath), { recursive: true })
   fs.writeFileSync(outputFilePath, json, 'utf-8')
   return {
+    ok: true as const,
     outputFilePath,
     size: Buffer.byteLength(json, 'utf-8'),
     filesCount: pack.files.length,
@@ -2138,22 +2182,32 @@ wrapHandler('soul-pack:export-to-file', (_, avatarId: string, outputFilePath: st
     memoryIncluded: pack.memory_included,
   }
 })
-wrapHandler('soul-pack:import-from-file', (_, inputFilePath: string, options?: ImportSoulPackOptions): ImportSoulPackResult => {
-  if (typeof inputFilePath !== 'string' || !inputFilePath) {
-    throw new Error('inputFilePath 不能为空')
+
+/**
+ * preview：主进程开 showOpenDialog 让用户挑一个 .soul.json，
+ * 读 + parse 校验通过后发放一次性 path token——后续 import 必须用此 token。
+ * 渲染层永远拿不到、也不需要绝对路径。
+ */
+wrapHandler('soul-pack:preview', async () => {
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  if (!win) {
+    return { ok: false as const, canceled: true, error: '无活动窗口' }
   }
+  const openResult = await dialog.showOpenDialog(win, {
+    title: '选择分身包',
+    filters: [{ name: 'Soul Pack (JSON)', extensions: ['json'] }],
+    properties: ['openFile'],
+  })
+  if (openResult.canceled || openResult.filePaths.length === 0) {
+    return { ok: false as const, canceled: true }
+  }
+  const inputFilePath = openResult.filePaths[0]
   const json = fs.readFileSync(inputFilePath, 'utf-8')
   const pack = parseSoulPack(json)
-  return importSoulPack(avatarsPath, pack, options ?? {})
-})
-/** 预览 pack 元数据（不实际 import），让 UI 给用户确认 */
-wrapHandler('soul-pack:preview', (_, inputFilePath: string) => {
-  if (typeof inputFilePath !== 'string' || !inputFilePath) {
-    throw new Error('inputFilePath 不能为空')
-  }
-  const json = fs.readFileSync(inputFilePath, 'utf-8')
-  const pack = parseSoulPack(json)
+  const token = issueSoulPackPathToken(inputFilePath)
   return {
+    ok: true as const,
+    token,
     name: pack.name,
     display_name: pack.display_name,
     description: pack.description,
@@ -2169,6 +2223,16 @@ wrapHandler('soul-pack:preview', (_, inputFilePath: string) => {
     externalSkillsCommunity: pack.external_skills.community.length,
     manifestSha256: pack.manifest_sha256,
   }
+})
+
+wrapHandler('soul-pack:import-from-file', (_, token: string, options?: ImportSoulPackOptions) => {
+  const inputFilePath = consumeSoulPackPathToken(token)
+  if (!inputFilePath) {
+    throw new Error('soul-pack 路径 token 无效或已过期，请重新选择文件')
+  }
+  const json = fs.readFileSync(inputFilePath, 'utf-8')
+  const pack = parseSoulPack(json)
+  return importSoulPack(avatarsPath, pack, options ?? {})
 })
 
 // v18 OpenClaw 借鉴：Standing Orders 永久规则 CRUD（只读 + append，不提供 remove）

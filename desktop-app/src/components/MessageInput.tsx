@@ -622,14 +622,24 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
     })
   }, [input])
 
+  /**
+   * @ 引用 entries 加载请求序号——防止快速输入时旧 query 晚返回覆盖新候选。
+   * 仿 GlobalSearchPalette 的 searchSeqRef 模式：每次发起请求 +1，返回时只接受
+   * 序号 = 当前序号 的结果。
+   */
+  const ctxEntriesSeqRef = useRef(0)
+
   /** 选定 namespace 后异步加载 entries */
   const loadCtxEntries = useCallback(async (ns: ContextNamespace, query: string) => {
     if (!avatarId) { setCtxEntries([]); return }
     if (ns.key === 'web') { setCtxEntries([]); return } // @web 不进 entries 列表
+    const seq = ++ctxEntriesSeqRef.current
     setCtxLoading(true)
     try {
       const list = await listEntries(ns.key, avatarId, query, conversationId)
       if (!mountedRef.current) return
+      // race guard：旧 query 晚返回时 seq 已不等于 current，丢弃结果
+      if (seq !== ctxEntriesSeqRef.current) return
       setCtxEntries(list)
     } catch (err) {
       window.electronAPI.logEvent(
@@ -637,9 +647,9 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         'context-resolver-list-failed',
         `${ns.key}: ${err instanceof Error ? err.message : String(err)}`,
       )
-      if (mountedRef.current) setCtxEntries([])
+      if (mountedRef.current && seq === ctxEntriesSeqRef.current) setCtxEntries([])
     } finally {
-      if (mountedRef.current) setCtxLoading(false)
+      if (mountedRef.current && seq === ctxEntriesSeqRef.current) setCtxLoading(false)
     }
   }, [avatarId, conversationId])
 

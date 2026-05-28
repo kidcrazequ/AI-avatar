@@ -97,32 +97,39 @@ export default function SourceCitation({ anchor, avatarId }: Props) {
   // useMemo 避免每次渲染都重新跑全局正则扫描
   const mdPaths = useMemo(() => extractMdPathsFromAnchor(anchor), [anchor])
 
-  // 注意：初值就是 undefined（加载中），不要在 effect 内同步 setResults(undefined)，
-  // 否则会触发 react-hooks/set-state-in-effect 警告（commit 阶段同步 setState）。
-  // 当 anchor / avatarId 变化时，effect 通过 alive 守卫丢弃过期请求；
-  // 中间一帧短暂展示旧 results 是可接受的代价。
-  const [results, setResults] = useState<Array<ResolveRawFileResult | null> | undefined>(undefined)
+  // 把 results 和它对应的 (avatarId, anchor) 绑在一起。
+  // 之前只存 results：anchor/avatarId 切换时旧 results 仍渲染一帧，用户点 chip
+  // 会跳到上一条 anchor 的来源。现在用 currentKey 比对，key 不匹配 → 视作 undefined
+  // (加载中)，等新 effect 的 Promise resolve 后再展示新 results。
+  // 注意不要在 effect 内同步 setResolved(null) —— 触发 react-hooks/set-state-in-effect。
+  const currentKey = `${avatarId}|${anchor}`
+  const [resolved, setResolved] = useState<{ key: string; res: Array<ResolveRawFileResult | null> } | null>(null)
 
   useEffect(() => {
     // mdPaths 为空时不发起任何 IPC，直接走降级渲染分支
     if (mdPaths.length === 0) return
     let alive = true
+    const keyAtStart = `${avatarId}|${anchor}`
     Promise.all(mdPaths.map((mdPath) => resolveRawFile(avatarId, mdPath)))
       .then((res) => {
-        if (alive) setResults(res)
+        if (alive) setResolved({ key: keyAtStart, res })
       })
       .catch((err: unknown) => {
         const detail = describeError(err)
         console.error('[SourceCitation] resolveRawFile 批量失败:', anchor, detail)
         safeLogEvent('error', 'source-citation-resolve-failed', `${anchor} | ${detail}`)
         // 失败时把每一项置为 null，触发"全部为 null"的灰色占位分支
-        if (alive) setResults(mdPaths.map(() => null))
+        if (alive) setResolved({ key: keyAtStart, res: mdPaths.map(() => null) })
       })
     return () => {
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarId, anchor])
+
+  // key 不匹配（anchor/avatarId 已切换，新 Promise 还没 resolve）→ 视作加载中
+  const results: Array<ResolveRawFileResult | null> | undefined =
+    resolved && resolved.key === currentKey ? resolved.res : undefined
 
   const handleOpen = async (rawRelPath: string, displayName: string) => {
     try {

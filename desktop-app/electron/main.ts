@@ -1228,15 +1228,19 @@ wrapHandler('create-conversation', (_, title: string, avatarId: string, projectI
       : DEFAULT_AVATAR_PROJECT_ID
   if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
   // 兜底：确保 projects 表有这个 (avatar, name) 行——否则 listProjectIds
-  // 刷新时读不到，新建对话的 project 立刻"消失"。createProject 同名会 UNIQUE
-  // 报错（"已存在"），这里捕获后忽略；其他错误不阻塞会话创建。
+  // 刷新时读不到（listProjectIdsForAvatar v18 后只读 projects 表，不再从
+  // conversations 反推），新建对话的 project 立刻"消失"。
+  //
+  // UNIQUE / 已存在 → 已经在表里，吞掉继续；其它错误（保留字、validation、
+  // 磁盘问题等）→ 直接抛，阻断会话创建。原实现只 warn 后继续，会出现"会话
+  // 存在但 sidebar 看不到入口"的孤儿状态。
   if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
     try {
       getDb().createProject(avatarId, pid, '')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (!/已存在|UNIQUE/i.test(msg)) {
-        console.warn(`[create-conversation] 兜底 createProject 失败（不影响会话创建）: ${msg}`)
+        throw new Error(`无法创建项目 "${pid}"，会话创建已中止：${msg}`)
       }
     }
   }
@@ -1418,7 +1422,45 @@ wrapHandler('projects:archive', (_, id: string, archived: boolean) => {
 })
 wrapHandler('projects:delete', (_, id: string, options?: { migrateConversationsTo?: string }) => {
   const existing = getDb().getProject(id)
-  if (existing?.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
+  if (!existing) {
+    getDb().deleteProject(id, options)
+    return
+  }
+  if (existing.name === DEFAULT_AVATAR_PROJECT_ID) throw new Error('"default" 是保留项目桶，不能删除')
+
+  // 先把磁盘目录归档到 .deleted-<ts>/，再删 DB 行。
+  // 原实现只改 DB + 迁会话，留下 projects/<name>/knowledge/{README,notes}.md；
+  // 之后用户新建同名 project 会被 projects:create 的 writeFileSync 静默覆盖
+  // README/notes，丢失原有笔记。归档后目录从 projects/ 下消失，重建走干净路径。
+  // canonical + legacy 两条都要处理。
+  const avatarRoot = path.join(avatarsPath, existing.avatar_id)
+  const ts = Date.now()
+  const trashOps: Array<{ from: string; to: string }> = []
+  const canonicalDir = path.join(avatarRoot, 'projects', existing.name)
+  if (fs.existsSync(canonicalDir)) {
+    trashOps.push({ from: canonicalDir, to: path.join(avatarRoot, 'projects', `${existing.name}.deleted-${ts}`) })
+  }
+  const legacyDir = path.join(avatarRoot, 'knowledge', 'projects', existing.name)
+  if (fs.existsSync(legacyDir)) {
+    trashOps.push({ from: legacyDir, to: path.join(avatarRoot, 'knowledge', 'projects', `${existing.name}.deleted-${ts}`) })
+  }
+  const moved: Array<{ from: string; to: string }> = []
+  try {
+    for (const op of trashOps) {
+      fs.renameSync(op.from, op.to)
+      moved.push(op)
+    }
+  } catch (mvErr) {
+    const msg = mvErr instanceof Error ? mvErr.message : String(mvErr)
+    // 反向回滚已 moved 的，保持 DB 与磁盘一致
+    for (const op of moved.reverse()) {
+      try { fs.renameSync(op.to, op.from) } catch (revErr) {
+        const revMsg = revErr instanceof Error ? revErr.message : String(revErr)
+        console.error(`[projects:delete] 归档失败后反向恢复也失败：${op.to} → ${op.from}：${revMsg}`)
+      }
+    }
+    throw new Error(`项目目录归档失败，删除已中止：${msg}`)
+  }
   getDb().deleteProject(id, options)
 })
 

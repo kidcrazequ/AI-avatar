@@ -866,8 +866,25 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       })
       if (!mountedRef.current) return
       if (!resolved) {
-        // 还原 @... 让用户看到自己确实输入过，引导重试，而不是静默丢失
-        setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
+        // 还原 @... 让用户看到自己确实输入过，引导重试，而不是静默丢失。
+        // 解析期间用户未继续输入（prev === cleaned）→ before + token + after 原位还原 + 光标定位；
+        // 用户已继续输入（prev !== cleaned）→ 退回到追加末尾，避免覆盖用户输入。
+        let restoredAtOrigin = false
+        setInput(prev => {
+          if (prev === cleaned) {
+            restoredAtOrigin = true
+            return before + originalAtToken + after
+          }
+          return prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`
+        })
+        if (restoredAtOrigin) {
+          requestAnimationFrame(() => {
+            if (!ta) return
+            const pos = before.length + originalAtToken.length
+            ta.focus()
+            ta.setSelectionRange(pos, pos)
+          })
+        }
         showHint('warn', `引用解析失败：@${entry.namespace}/${entry.title}（已恢复输入，可重试或编辑）`)
         return
       }

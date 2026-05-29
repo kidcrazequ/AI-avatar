@@ -335,25 +335,146 @@ const IMAGE_GEN_POLL_INTERVAL_MS = 2 * 1000
 /** 图片下载超时（30 秒） */
 const IMAGE_GEN_DOWNLOAD_TIMEOUT_MS = 30 * 1000
 /**
- * 判断 IP 是否在内网/回环段（防 SSRF）。
- * 仅接受 net.isIPv4/IPv6 通过的字符串；非 IP 字符串调用方应单独处理（如 localhost）。
+ * IPv4 special-use / 非 global-unicast 段（RFC 5735 / 6598 等），命中即拒。
+ * 之前只拦 10/8、127/8、172.16/12、192.168/16、169.254/16，漏掉 CGNAT(100.64/10)、
+ * benchmarking(198.18/15)、TEST-NET、多播(224/4)、保留(240/4) 等——启用联网后 LLM
+ * 可借 web_fetch 打到用户机所在的 Tailscale/CGNAT/实验网。改为枚举全部 special-use 段。
  */
-function isPrivateIp(ip: string): boolean {
-  // IPv4-mapped IPv6（::ffff:127.0.0.1）→ 剥前缀按 IPv4 判
-  if (ip.toLowerCase().startsWith('::ffff:')) ip = ip.slice('::ffff:'.length)
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase()
-    if (lower === '::' || lower === '::1') return true
-    if (lower.startsWith('fe80:')) return true            // link-local
-    if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true     // ULA fc00::/7
-    return false
+const IPV4_BLOCKED_CIDRS: ReadonlyArray<readonly [string, number]> = [
+  ['0.0.0.0', 8],        // "this host"（含 0.0.0.0）
+  ['10.0.0.0', 8],       // private
+  ['100.64.0.0', 10],    // CGNAT / Tailscale (RFC 6598)
+  ['127.0.0.0', 8],      // loopback
+  ['169.254.0.0', 16],   // link-local
+  ['172.16.0.0', 12],    // private
+  ['192.0.0.0', 24],     // IETF protocol assignments
+  ['192.0.2.0', 24],     // TEST-NET-1
+  ['192.88.99.0', 24],   // 6to4 relay anycast
+  ['192.168.0.0', 16],   // private
+  ['198.18.0.0', 15],    // benchmarking (RFC 2544)
+  ['198.51.100.0', 24],  // TEST-NET-2
+  ['203.0.113.0', 24],   // TEST-NET-3
+  ['224.0.0.0', 4],      // multicast 224.0.0.0/4
+  ['240.0.0.0', 4],      // reserved 240.0.0.0/4 + 255.255.255.255 broadcast
+]
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return null
+  let n = 0
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null
+    const v = Number(p)
+    if (v > 255) return null
+    n = n * 256 + v
   }
-  if (!net.isIPv4(ip)) return false
-  const [a, b] = ip.split('.').map(Number)
-  if (a === 10 || a === 127 || a === 0) return true
-  if (a === 169 && b === 254) return true                 // link-local
-  if (a === 172 && b >= 16 && b <= 31) return true        // 172.16.0.0/12
-  if (a === 192 && b === 168) return true
+  return n >>> 0
+}
+
+function isBlockedIpv4Int(ipInt: number): boolean {
+  for (const [base, prefix] of IPV4_BLOCKED_CIDRS) {
+    const baseInt = ipv4ToInt(base)!
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+    if (((ipInt & mask) >>> 0) === ((baseInt & mask) >>> 0)) return true
+  }
+  return false
+}
+
+function isBlockedIpv4(ip: string): boolean {
+  const n = ipv4ToInt(ip)
+  if (n === null) return true   // 解析不出 = 不可信，fail closed
+  return isBlockedIpv4Int(n)
+}
+
+/** IPv6 → 8 个 16-bit hextet；处理 :: 压缩、zone id、尾部内嵌 IPv4。无法解析返回 null。 */
+function expandIpv6(ip: string): number[] | null {
+  let s = ip.toLowerCase()
+  const pct = s.indexOf('%')
+  if (pct >= 0) s = s.slice(0, pct)               // 去 zone id（fe80::1%eth0）
+  // 尾部内嵌 IPv4（::ffff:127.0.0.1 / 64:ff9b::1.2.3.4）→ 转成两个 hextet 的十六进制
+  if (s.includes('.')) {
+    const lastColon = s.lastIndexOf(':')
+    if (lastColon < 0) return null
+    const v4 = ipv4ToInt(s.slice(lastColon + 1))
+    if (v4 === null) return null
+    s = `${s.slice(0, lastColon + 1)}${((v4 >>> 16) & 0xffff).toString(16)}:${(v4 & 0xffff).toString(16)}`
+  }
+  let groups: string[]
+  if (s.includes('::')) {
+    if (s.indexOf('::') !== s.lastIndexOf('::')) return null  // 只能有一个 ::
+    const [head, tail] = s.split('::')
+    const headGroups = head ? head.split(':') : []
+    const tailGroups = tail ? tail.split(':') : []
+    const missing = 8 - headGroups.length - tailGroups.length
+    if (missing < 0) return null
+    groups = [...headGroups, ...Array<string>(missing).fill('0'), ...tailGroups]
+  } else {
+    groups = s.split(':')
+  }
+  if (groups.length !== 8) return null
+  const out: number[] = []
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null
+    out.push(parseInt(g, 16))
+  }
+  return out
+}
+
+/**
+ * 落在 global unicast 2000::/3 内、但 IANA registry 标 Globally Reachable=false 的
+ * special-purpose 段（来源：IANA IPv6 Special-Purpose Address Registry）。
+ * 仅 2000::/3 之外的段由下方 top-3-bit 判定统一拦掉，这里只补 2000::/3 内的漏网段。
+ * 不拦同一父段内 GR=true 的更具体段（如 2001:1::1 PCP/2001:20::/28 ORCHIDv2/
+ * 2001:4:112::/48 AS112），所以按精确 CIDR 而非整个 2001::/23 拦。
+ */
+const IPV6_BLOCKED_IN_GLOBAL: ReadonlyArray<readonly [string, number]> = [
+  ['2001:0000::', 32],   // Teredo（内嵌 IPv4）
+  ['2001:2::', 48],      // Benchmarking (RFC 5180)
+  ['2001:10::', 28],     // ORCHID（已废弃）
+  ['2001:db8::', 32],    // Documentation
+  ['2002::', 16],        // 6to4（内嵌 IPv4）
+  ['3fff::', 20],        // Documentation (RFC 9637)
+  ['5f00::', 16],        // Segment Routing SRv6 (RFC 9602)
+]
+
+/** 比较 IPv6 hextet 数组的前 prefix bit 是否与 base 相同（CIDR 前缀匹配）。 */
+function ipv6Match(h: number[], base: number[], prefix: number): boolean {
+  let bits = prefix
+  for (let i = 0; i < 8 && bits > 0; i++) {
+    const take = Math.min(16, bits)
+    const mask = take === 16 ? 0xffff : (0xffff << (16 - take)) & 0xffff
+    if ((h[i] & mask) !== (base[i] & mask)) return false
+    bits -= take
+  }
+  return true
+}
+
+function isBlockedIpv6(ip: string): boolean {
+  const h = expandIpv6(ip)
+  if (h === null) return true   // fail closed
+  // IPv4-mapped ::ffff:0:0/96 → 用内嵌 IPv4 重新判（::ffff:8.8.8.8 之类公网应放行）
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0xffff) {
+    return isBlockedIpv4Int((((h[6] << 16) | h[7]) >>> 0))
+  }
+  // 只允许 global unicast 2000::/3（首 3 bit = 001）。其余（::、::1、fc00::/7、
+  // fe80::/10、ff00::/8、64:ff9b:: NAT64 等所有 special-use）一律拒。
+  if (((h[0] >> 13) & 0x7) !== 0b001) return true
+  // 2000::/3 内 Globally Reachable=false 的 special-purpose 段补拦
+  for (const [base, prefix] of IPV6_BLOCKED_IN_GLOBAL) {
+    if (ipv6Match(h, expandIpv6(base)!, prefix)) return true
+  }
+  return false
+}
+
+/**
+ * 判断 IP 是否【不是公网 global-unicast 地址】（防 SSRF）——内网/回环/链路本地/CGNAT/
+ * 多播/保留/文档等 special-use 段均返回 true（拒绝）。
+ * 仅接受 net.isIPv4/IPv6 通过的字符串；非 IP 字符串返回 false（调用方单独处理，如 localhost）。
+ * 导出供单测。
+ */
+export function isPrivateIp(ip: string): boolean {
+  if (net.isIPv4(ip)) return isBlockedIpv4(ip)
+  if (net.isIPv6(ip)) return isBlockedIpv6(ip)
   return false
 }
 
@@ -365,7 +486,12 @@ function isPrivateIp(ip: string): boolean {
  * 返回值用于 DNS rebinding 防护：调用方把这个 IP 灌进 undici 的 connect.lookup，
  * 确保 fetch 实际连接的就是我们校验过的 IP，不会被攻击域名第二次解析返回内网替换。
  */
-async function resolveAndAssertNotPrivate(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
+export async function resolveAndAssertNotPrivate(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
+  // IPv6 literal URL（http://[2606:...]/）的 URL.hostname 在 Node 里带 []，
+  // net.isIP('[...]')=0 会误走 DNS lookup 失败。先剥外层方括号按 IP 直判。
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    hostname = hostname.slice(1, -1)
+  }
   // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单
   if (/^localhost$/i.test(hostname) || /\.localhost$/i.test(hostname)) {
     throw new Error(`拒绝内网/回环主机名：${hostname}`)

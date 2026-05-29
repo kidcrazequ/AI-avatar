@@ -423,18 +423,29 @@ function expandIpv6(ip: string): number[] | null {
 /**
  * 落在 global unicast 2000::/3 内、但 IANA registry 标 Globally Reachable=false 的
  * special-purpose 段（来源：IANA IPv6 Special-Purpose Address Registry）。
- * 仅 2000::/3 之外的段由下方 top-3-bit 判定统一拦掉，这里只补 2000::/3 内的漏网段。
- * 不拦同一父段内 GR=true 的更具体段（如 2001:1::1 PCP/2001:20::/28 ORCHIDv2/
- * 2001:4:112::/48 AS112），所以按精确 CIDR 而非整个 2001::/23 拦。
+ * 2000::/3 之外的段由下方 top-3-bit 判定统一拦掉；2001::/23 父段单独走“默认拦 +
+ * allowlist”（见 isBlockedIpv6）。这里只列 2001::/23 之外、2000::/3 之内的 GR=false 段。
  */
 const IPV6_BLOCKED_IN_GLOBAL: ReadonlyArray<readonly [string, number]> = [
-  ['2001:0000::', 32],   // Teredo（内嵌 IPv4）
-  ['2001:2::', 48],      // Benchmarking (RFC 5180)
-  ['2001:10::', 28],     // ORCHID（已废弃）
-  ['2001:db8::', 32],    // Documentation
+  ['2001:db8::', 32],    // Documentation（在 2001::/23 之外）
   ['2002::', 16],        // 6to4（内嵌 IPv4）
   ['3fff::', 20],        // Documentation (RFC 9637)
   ['5f00::', 16],        // Segment Routing SRv6 (RFC 9602)
+]
+
+/**
+ * 2001::/23（IETF Protocol Assignments）父段 IANA 默认标 Globally Reachable=false，
+ * 仅以下更具体分配是 GR=true，需放行；其余（含 Teredo 2001::/32、Benchmarking
+ * 2001:2::/48、已废弃 ORCHID 2001:10::/28、2001:5::/2001:100:: 等未分配段）一律拦。
+ */
+const IPV6_2001_23_GLOBALLY_REACHABLE: ReadonlyArray<readonly [string, number]> = [
+  ['2001:1::1', 128],    // Port Control Protocol Anycast
+  ['2001:1::2', 128],    // TURN Anycast
+  ['2001:1::3', 128],    // DNS-SD Service Registration Anycast
+  ['2001:3::', 32],      // AMT
+  ['2001:4:112::', 48],  // AS112-v6
+  ['2001:20::', 28],     // ORCHIDv2
+  ['2001:30::', 28],     // Drone Remote ID Protocol Entity Tags (DETs)
 ]
 
 /** 比较 IPv6 hextet 数组的前 prefix bit 是否与 base 相同（CIDR 前缀匹配）。 */
@@ -459,7 +470,15 @@ function isBlockedIpv6(ip: string): boolean {
   // 只允许 global unicast 2000::/3（首 3 bit = 001）。其余（::、::1、fc00::/7、
   // fe80::/10、ff00::/8、64:ff9b:: NAT64 等所有 special-use）一律拒。
   if (((h[0] >> 13) & 0x7) !== 0b001) return true
-  // 2000::/3 内 Globally Reachable=false 的 special-purpose 段补拦
+  // 2001::/23 父段默认 GR=false：默认拦，仅放行 registry 里 GR=true 的更具体段。
+  // /23 = h[0]==0x2001 且 h[1] 高 7 bit 为 0（即 2001:0000:: – 2001:01ff::）。
+  if (h[0] === 0x2001 && (h[1] & 0xfe00) === 0x0000) {
+    for (const [base, prefix] of IPV6_2001_23_GLOBALLY_REACHABLE) {
+      if (ipv6Match(h, expandIpv6(base)!, prefix)) return false
+    }
+    return true
+  }
+  // 其余 2000::/3 内 Globally Reachable=false 段补拦
   for (const [base, prefix] of IPV6_BLOCKED_IN_GLOBAL) {
     if (ipv6Match(h, expandIpv6(base)!, prefix)) return true
   }

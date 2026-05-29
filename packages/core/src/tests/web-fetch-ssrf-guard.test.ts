@@ -25,6 +25,8 @@ const BLOCKED = [
   '2001:db8::1', '2002:c0a8:0101::1', '64:ff9b::808:808', '2001::1',
   // 2000::/3 内 Globally Reachable=false 段（IANA registry，之前漏放行）
   '2001:2::1', '2001:2:0:ffff::1', '2001:10::1', '3fff::1', '3fff:0fff:ffff::1', '5f00::1',
+  // 2001::/23（IETF Protocol Assignments）父段默认 GR=false：未分配/非 allowlist 子段也要拦
+  '2001:5::1', '2001:100::1', '2001:1ff:ffff::1', '2001:1::4',
   // IPv4-mapped → 内嵌私网
   '::ffff:127.0.0.1', '::ffff:10.0.0.1', '::ffff:169.254.0.1',
 ]
@@ -36,10 +38,12 @@ const ALLOWED = [
   '198.17.255.255', '198.20.0.0', '223.255.255.255', '9.9.9.9',
   // 公网 IPv6 + mapped 公网
   '2606:4700:4700::1111', '2001:4860:4860::8888', '::ffff:8.8.8.8',
-  // 2000::/3 内 Globally Reachable=true 的更具体段（不能被父段误杀）
+  // 2001::/23 内 Globally Reachable=true 的更具体段（不能被父段默认拦误杀）
   '2001:20::1',          // ORCHIDv2（GR=true，区别于已废弃的 2001:10::/28）
+  '2001:30::1',          // Drone Remote ID DET（GR=true）
+  '2001:3::1',           // AMT（GR=true）
   '2001:4:112::1',       // AS112-v6（GR=true）
-  '2001:1::1',           // Port Control Protocol Anycast（GR=true，区别于 Teredo 2001:0000::/32）
+  '2001:1::1', '2001:1::2', '2001:1::3',  // PCP / TURN / DNS-SD Anycast（GR=true）
 ]
 
 // 非 IP 字符串：契约是返回 false（由调用方按 hostname 黑名单单独处理 localhost 等）

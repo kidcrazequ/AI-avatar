@@ -220,7 +220,11 @@ export class SkillRouter {
     // source 分流：之前一律 path.join(avatarsPath, avatarId, entry.path)，
     // shared/community 索引的 path 是 repo-root 相对（shared/skills/xxx.md），
     // 拼出来变成 avatars/<id>/shared/skills/xxx.md，命中后 skillContent=null。
-    //   - local: 相对 avatar/skills/ 解析
+    //   - local: path 约定相对【分身根目录】（skills/xxx.md，见 skill-index.yaml 头注 +
+    //     finalizeSkillEntry 默认值）。所以优先 avatarRoot + entry.path；之前用
+    //     yamlDir(=avatarRoot/skills) + entry.path 会拼成 skills/skills/xxx.md → 命中但
+    //     skillContent=null（前端显示“加载技能”却不注入正文）。保留 yamlDir + entry.path
+    //     作为兼容 fallback（兼容只写裸文件名 xxx.md 的旧索引）。
     //   - shared/community: 优先按 repo-root 相对解析（canonical）；
     //     失败时退回按 skill-index.yaml 所在目录解析（兼容 community-skill-manager
     //     早期写的 ../../../shared/... 形式）
@@ -228,15 +232,18 @@ export class SkillRouter {
     const avatarRoot = path.join(this.avatarsPath, avatarId)
     const yamlDir = path.join(avatarRoot, 'skills')
     const source = entry.source ?? 'local'
+    // 越界根按 source 收紧：local 必须落在【分身目录】内，shared/community 才放宽到 repo root。
+    // 否则 local 索引写 ../../desktop-app/.env 这类路径仍会落在 repoRoot 下、绕过校验读任意仓库文件。
+    const containmentRoot = source === 'local' ? avatarRoot : repoRoot
     const candidates: string[] = source === 'local'
-      ? [path.join(yamlDir, entry.path)]
+      ? [path.join(avatarRoot, entry.path), path.join(yamlDir, entry.path)]
       : [path.resolve(repoRoot, entry.path), path.resolve(yamlDir, entry.path)]
 
     for (const skillPath of candidates) {
-      // 越界校验：必须落在 avatarRoot 或 repoRoot 下，防 yaml 里的 ../ 跑出 workspace
-      const rel = path.relative(repoRoot, skillPath)
+      // 越界校验：必须落在 containmentRoot 下，防 yaml 里的 ../ 跑出边界
+      const rel = path.relative(containmentRoot, skillPath)
       if (rel.startsWith('..') || path.isAbsolute(rel)) {
-        console.warn(`[SkillRouter] skill 路径越界（不在 repo root 下）：${skillPath}`)
+        console.warn(`[SkillRouter] skill 路径越界（不在 ${source === 'local' ? 'avatar 目录' : 'repo root'} 下）：${skillPath}`)
         continue
       }
       if (!fs.existsSync(skillPath)) continue

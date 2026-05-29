@@ -4079,6 +4079,10 @@ ${content}` }
     // 收集所有 hop 创建的 Agent，最终 finally 统一 close()——否则每次 web_fetch
      // 都泄漏 socket pool / timer。声明在 try 外面，finally 才能读到。
     const agents: Agent[] = []
+    // 终态响应对应的超时句柄：必须覆盖整个 body 流式读取阶段，不能在拿到 headers 后就 clear
+    // （否则慢/恶意服务器先发 headers 再挂起 body 会让 read 无限等待）。声明在 try 外面，
+    // finally 才能读到——统一在 finally 清，覆盖所有出口。
+    let bodyTimeoutId: ReturnType<typeof setTimeout> | null = null
     try {
       // 手动重定向 + 每跳 DNS 校验 + IP pinning：避免 DNS rebinding。
       // 流程：lookup → 校验 IP 不是内网 → undici Agent 用 connect.lookup 把这个 IP
@@ -4090,6 +4094,8 @@ ${content}` }
       let currentUrl = parsed.href
       const redirectChain: string[] = []
       let response: Response | null = null
+      // 重定向 hop 的 timer 在本跳内 clear；只有 break 出来的终态响应才把 timer 记到
+      // bodyTimeoutId（声明在 try 外），延后到 body 读完 / 出错才在 finally 里 clear。
       for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
         const u = new URL(currentUrl)
         if (u.protocol !== 'http:' && u.protocol !== 'https:') {
@@ -4125,18 +4131,23 @@ ${content}` }
             dispatcher: agent as unknown,
           } as unknown as RequestInit
           resp = await fetch(currentUrl, init)
-        } finally {
+        } catch (e) {
+          // fetch 自身失败（含 abort 超时）：本跳 timer 立即清，避免泄漏
           clearTimeout(timeoutId)
+          throw e
         }
         if (resp.status >= 300 && resp.status < 400) {
           const loc = resp.headers.get('location')
           if (!loc) {
-            // 3xx 但没 Location header，视作终止（拿 status/headers 给上层看）
+            // 3xx 但没 Location header，视作终止（拿 status/headers 给上层看）。
+            // 终态响应：timer 不在这里清，留给 body 读取阶段（见下方 bodyTimeoutId）。
             response = resp
+            bodyTimeoutId = timeoutId
             break
           }
           // 跳转前 cancel 这一跳的 body——不消费的话 undici 会保持 socket 等读完，
-          // 长跳转链会积累空闲连接
+          // 长跳转链会积累空闲连接。本跳到此结束，timer 清掉。
+          clearTimeout(timeoutId)
           try { await resp.body?.cancel() } catch { /* swallow */ }
           if (hop >= MAX_REDIRECTS) {
             return { content: '', error: `超过最大重定向数 ${MAX_REDIRECTS}` }
@@ -4145,7 +4156,9 @@ ${content}` }
           currentUrl = new URL(loc, currentUrl).href
           continue
         }
+        // 终态响应：timer 延后到 body 读完再清（覆盖整个流式读取阶段）
         response = resp
+        bodyTimeoutId = timeoutId
         break
       }
       if (!response) {
@@ -4158,6 +4171,9 @@ ${content}` }
       if (clHeader) {
         const cl = parseInt(clHeader, 10)
         if (Number.isFinite(cl) && cl > HARD_BYTE_LIMIT) {
+          // 提前 return 前必须 cancel body，否则未消费的响应体会拖住 socket/agent，
+          // 拖累 finally 的 agent.close()
+          try { await response.body?.cancel() } catch { /* swallow */ }
           return {
             content: '',
             error: `响应 Content-Length=${cl} 字节超过上限 ${HARD_BYTE_LIMIT}（16MB），已拒绝下载`,
@@ -4242,6 +4258,9 @@ ${content}` }
       const msg = err instanceof Error ? err.message : String(err)
       return { content: '', error: `web_fetch 异常: ${msg}` }
     } finally {
+      // 终态响应的 body 读取超时句柄在此统一清——覆盖正常读完 / json 解析失败 / 字节超限
+      // / 抛错等所有出口，保证 abort deadline 一直管到 body 读完或出错才解除。
+      if (bodyTimeoutId !== null) clearTimeout(bodyTimeoutId)
       // 释放所有 hop 创建的 Agent。close() 是异步的，失败也不能再 throw（finally 内）
       for (const agent of agents) {
         try { await agent.close() } catch { /* swallow */ }

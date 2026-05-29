@@ -3206,12 +3206,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const errorMsg = chatModelMode === 'local'
         ? '端侧模型未配置 API Key（Ollama 默认为 "ollama"，本地 vllm 等可填任意非空字符串）。请在设置 → 端侧（本地）填写。'
         : '请先在设置中配置 API Key'
+      const userMsgIdNoKey = nextMessageId()
+      const assistantMsgIdNoKey = nextMessageId()
       set({
-        messages: [...messages, { id: nextMessageId(), role: 'user', content }, { id: nextMessageId(), role: 'assistant', content: errorMsg }],
+        messages: [...messages, { id: userMsgIdNoKey, role: 'user', content }, { id: assistantMsgIdNoKey, role: 'assistant', content: errorMsg }],
         isLoading: false,
       })
-      await window.electronAPI.saveMessage(conversationId, 'user', content)
-      await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
+      await window.electronAPI.saveMessage(conversationId, 'user', content, undefined, undefined, undefined, undefined, undefined, undefined, userMsgIdNoKey)
+      await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgIdNoKey)
       await invokeProxyComplete({ ok: false, error: errorMsg })
       cleanupRequest()
       return
@@ -3801,7 +3803,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
           isLoading: false,
         }))
-        await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg)
+        await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
       }
       await invokeProxyComplete({ ok: false, error: errorMsg })
       cleanupRequest()
@@ -5251,7 +5253,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }))
         }
         try {
-          await window.electronAPI.saveMessage(conversationId, 'assistant', errorMessage)
+          await window.electronAPI.saveMessage(conversationId, 'assistant', errorMessage, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
         } catch (saveErr) {
           console.error('[chatStore] 保存错误消息失败:', saveErr instanceof Error ? saveErr.message : String(saveErr))
         }

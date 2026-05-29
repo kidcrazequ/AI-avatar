@@ -358,6 +358,33 @@ describe('soul-pack / import 行为', () => {
     }
   })
 
+  it('force=true 覆盖时，非法 file path 不删原分身（preflight 先于 rmSync）', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar()
+    try {
+      // 目标 id = 已存在的原分身；包 manifest/hash 合法但 file path 含 ../
+      const malicious = {
+        schema_version: SOUL_PACK_SCHEMA_VERSION,
+        name: avatarId,
+        display_name: avatarId,
+        description: '',
+        created_at: new Date().toISOString(),
+        pack_version: '1.0.0',
+        files: [{ path: '../escape.md', content: 'pwn', sha256: sha256Hex('pwn'), size: 3 }],
+        binary_refs: [],
+        external_skills: { shared: [], community: [] },
+        memory_included: false,
+      }
+      const pack = { ...malicious, manifest_sha256: computeManifestSha256(malicious) } as SoulPack
+      const survivorFile = path.join(avatarsRoot, avatarId, 'skills', 'my-skill.md')
+      assert.ok(fs.existsSync(survivorFile), '前置：原分身文件应存在')
+      assert.throws(() => importSoulPack(avatarsRoot, pack, { force: true }), /路径穿越/)
+      // 关键：preflight 在 rmSync 之前拦下，原分身目录与文件未被删除
+      assert.ok(fs.existsSync(survivorFile), '原分身应保留，未被覆盖删除')
+    } finally {
+      cleanup()
+    }
+  })
+
   it('memory_included=true 时 restoreMemory 默认开启，写回 memory/', () => {
     const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withMemory: true })
     try {

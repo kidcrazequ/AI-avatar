@@ -59,13 +59,18 @@ export function importSoulPack(
   const targetId = options.targetAvatarId ?? pack.name
   assertSafeSegment(targetId, 'targetAvatarId')
 
+  // 完整 preflight：在任何破坏性操作之前把所有「可静态校验」的非法输入全部拦掉。
+  // 否则 force=true 覆盖模式下，一个 manifest/hash 合法但含 ../ 路径的包会先 rmSync 删掉
+  // 原分身、再在写入循环报错 → 原分身数据丢失。必须先校验、再删除、再写入。
+  preflightImport(pack)
+
   const targetRoot = path.join(avatarsPath, targetId)
   const exists = fs.existsSync(targetRoot)
   if (exists && !options.force) {
     throw new Error(`目标分身已存在: ${targetId}。传 force=true 覆盖（会清空原目录后再写）。`)
   }
   if (exists && options.force) {
-    // 覆盖前清理（递归删除）。这是破坏性操作；调用方应已确认 force。
+    // 覆盖前清理（递归删除）。这是破坏性操作；调用方应已确认 force，且 preflight 已通过。
     fs.rmSync(targetRoot, { recursive: true, force: true })
   }
   fs.mkdirSync(targetRoot, { recursive: true })
@@ -119,6 +124,35 @@ export function importSoulPack(
     externalSkillsRequired: pack.external_skills,
     memoryRestored,
     warnings,
+  }
+}
+
+/** import 上限：防资源炸弹（force 删除前就拦下，不污染原分身）。 */
+const MAX_PACK_FILES = 10_000
+const MAX_PACK_INLINE_BYTES = 500 * 1024 * 1024 // 500MB inline 文本总量
+
+/**
+ * 纯校验，不触碰文件系统：在 rmSync / 写入之前发现任何「会导致写入阶段 throw」的非法输入即抛，
+ * 保证破坏性操作前已通过全部静态校验。
+ * 只覆盖 throw 类问题（file path 穿越、数量/大小上限）；memory 里非法的 episode/daily 条目
+ * 由 restoreMemory 跳过+warn（不 throw），不会造成"删除后失败"，故不在此拦截。
+ */
+function preflightImport(pack: SoulPack): void {
+  if (!Array.isArray(pack.files)) {
+    throw new Error('soul-pack 非法：files 不是数组')
+  }
+  if (pack.files.length > MAX_PACK_FILES) {
+    throw new Error(`soul-pack 文件数 ${pack.files.length} 超过上限 ${MAX_PACK_FILES}`)
+  }
+  let totalBytes = 0
+  for (const f of pack.files) {
+    if (!isSafeRelativePath(f.path)) {
+      throw new Error(`非法 file path（可能路径穿越）: ${f.path}`)
+    }
+    totalBytes += Buffer.byteLength(typeof f.content === 'string' ? f.content : '', 'utf-8')
+    if (totalBytes > MAX_PACK_INLINE_BYTES) {
+      throw new Error(`soul-pack inline 内容总大小超过上限 ${MAX_PACK_INLINE_BYTES} 字节`)
+    }
   }
 }
 

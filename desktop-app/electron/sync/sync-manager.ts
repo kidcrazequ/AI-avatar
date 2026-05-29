@@ -859,7 +859,7 @@ export class SyncManager {
     try {
       // 覆盖目标 DB：句柄被占用时此处会抛错，此时 avatars 尚未被触碰 → 干净失败。
       await fs.promises.copyFile(snapshotDb, targetDb)
-      this.logger.info(`restore: SQLite replaced (old kept at ${bakPath})`)
+      this.logger.info(`restore: SQLite replaced (old staged at ${bakPath})`)
 
       // avatars：整目录替换（保证旧分身不残留）。shared/conversations：合并覆盖
       // （开发场景下通常包含未同步的本地资源，故保留本地后再叠加快照）。
@@ -883,6 +883,16 @@ export class SyncManager {
         await s.commit().catch((cmErr) => {
           this.logger.warn(
             'restore: staged backup cleanup failed',
+            cmErr instanceof Error ? cmErr : new Error(String(cmErr)),
+          )
+        })
+      }
+      // DB 旧库暂存同样在成功后清理，避免每次成功 restore 累积 xiaodu.db.restore-bak.*。
+      // 完整的恢复前快照已由 buildPreRestoreBackup 落到 sync-pre-restore/，是真正的兜底。
+      if (oldDbBak) {
+        await fs.promises.rm(oldDbBak, { force: true }).catch((cmErr) => {
+          this.logger.warn(
+            'restore: old DB backup cleanup failed',
             cmErr instanceof Error ? cmErr : new Error(String(cmErr)),
           )
         })
@@ -972,6 +982,8 @@ export class SyncManager {
   private async rollbackRestoredDb(targetDb: string, oldDbBak: string | null): Promise<void> {
     if (oldDbBak && (await fileExists(oldDbBak))) {
       await fs.promises.copyFile(oldDbBak, targetDb)
+      // 回滚后旧库暂存已无用，删除以免遗留（与成功路径一致），best-effort。
+      await fs.promises.rm(oldDbBak, { force: true }).catch(() => undefined)
       this.logger.warn('restore: 后续步骤失败，已将 DB 回滚到恢复前状态')
     } else {
       await fs.promises.rm(targetDb, { force: true })

@@ -277,6 +277,9 @@ export class Logger {
   /** 读取指定 channel 当天的日志，便于设置面板展示 */
   readChannelLog(channel: string, date?: string): string {
     if (!/^[a-z0-9-]{1,32}$/.test(channel)) return ''
+    // date 必须是严格 YYYY-MM-DD：否则 "2024-01-01/../../etc/passwd" 之类会让 path.join
+    // 逃出 logsDir 读到任意文件（claudebridge:read-log 把渲染端传入的 date 直接送到这里）
+    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return ''
     const file = path.join(this.logsDir, `${channel}-${date ?? this.today()}.log`)
     return this.readLog(file)
   }

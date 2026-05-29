@@ -1913,6 +1913,21 @@ export class DatabaseManager {
   }
 
   /**
+   * 解除某条消息上所有附件的关联（message_id 置空），供「重新生成」删除原 user 消息前调用。
+   * attachments 表对 message_id 无外键（只有 conversation_id CASCADE），删消息不清 message_id；
+   * 不先解绑的话重发时 linkAttachmentToMessage（只认 message_id IS NULL 的行）无法把附件迁到
+   * 新 user 消息，刷新后会丢 chip。附件行本身保留（文件仍在盘上），等重发重新关联。
+   *
+   * @returns 实际更新的行数
+   */
+  unlinkAttachmentsFromMessage(messageId: string, conversationId: string): number {
+    const result = this.db
+      .prepare('UPDATE attachments SET message_id = NULL WHERE message_id = ? AND conversation_id = ?')
+      .run(messageId, conversationId)
+    return result.changes
+  }
+
+  /**
    * 异步抽取摘要 / 大纲完成后，回填附件行的解析结果。
    * 仅当目标行存在时更新，避免被并发删除后又复活脏数据。
    *

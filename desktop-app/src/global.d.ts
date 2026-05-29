@@ -631,6 +631,7 @@ interface ElectronAPI {
   listAttachments: (conversationId: string) => Promise<Attachment[]>
   /** 把刚上传的附件挂到刚保存的 user 消息上。返回实际更新行数。 */
   linkAttachmentToMessage: (messageId: string, attachmentIds: string[], conversationId: string) => Promise<number>
+  unlinkAttachmentsFromMessage: (messageId: string, conversationId: string) => Promise<number>
   /** 用系统默认应用打开附件本体（chip 点击时调用） */
   openAttachmentFile: (id: string) => Promise<{ ok: true; path: string }>
 
@@ -660,9 +661,9 @@ interface ElectronAPI {
   onAsrPartial: (callback: (payload: AsrPartialPayload) => void) => (() => void)
   onAsrError: (callback: (payload: AsrErrorPayload) => void) => (() => void)
   onAsrEnd: (callback: (payload: AsrEndPayload) => void) => (() => void)
-  claudeBridgeComplete: (conversationId: string, input: string | { messages?: Array<{ role: string; content: string }> }, filePath?: string) => Promise<string>
-  claudeBridgeGetLimits: () => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
-  claudeBridgeSetLimits: (limits: Record<string, number>) => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number }>
+  // claudeBridgeComplete 仅在 preview-preload.ts（persist:soul-preview）暴露，主渲染进程不再提供
+  claudeBridgeGetLimits: () => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number; maxInputChars: number }>
+  claudeBridgeSetLimits: (limits: Record<string, number>) => Promise<{ perMinute: number; perFilePerMinute: number; perConversationTokens: number; perAvatarDailyTokens: number; maxInputChars: number }>
   claudeBridgeReadLog: (date?: string) => Promise<string>
 
   /** P0+ Anthropic 兼容 Proxy（主进程 HTTP → renderer sendMessage） */

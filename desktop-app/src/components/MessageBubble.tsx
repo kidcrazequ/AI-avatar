@@ -953,6 +953,11 @@ interface Props {
   isLive?: boolean
   /** 本轮 sendMessage 累计耗时（秒），仅 isLive=true 时有意义。 */
   elapsedSec?: number
+  /**
+   * 是否允许「重新生成」：仅对最后一轮（其后无 user 消息的 assistant）开放。
+   * 历史轮重生成会把新答案追加到末尾、破坏时间线，故按钮隐藏（见 MessageList / chatStore）。
+   */
+  canRegenerate?: boolean
 }
 
 /**
@@ -1011,7 +1016,7 @@ function safeUrlTransform(url: string): string {
   return ''
 }
 
-const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLive = false, elapsedSec }: Props) {
+const MessageBubble = memo(function MessageBubble({ message, previousUserMessage, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLive = false, elapsedSec, canRegenerate = false }: Props) {
   const isUser = message.role === 'user'
   const [saved, setSaved] = useState(false)
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -1292,7 +1297,8 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               */}
               {!isUser && previousUserMessage && (
                 <div className="not-prose mt-3 pt-2 border-t border-px-border/40 flex items-center gap-3 text-px-text-dim/70">
-                  {currentConversationId && avatarId && (
+                  {/* 重新生成仅对最后一轮开放：历史轮重生成会破坏时间线（见 chatStore） */}
+                  {currentConversationId && avatarId && canRegenerate && (
                     <button
                       type="button"
                       onClick={() => {

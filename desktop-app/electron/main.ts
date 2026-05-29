@@ -219,7 +219,12 @@ const BRIDGE_LIMITS = {
   perFilePerMinute: 5,
   perConversationTokens: 50_000,
   perAvatarDailyTokens: 100_000,
+  // 单次调用序列化后 input 的字符上限：HTML 工件可传超长 input 撑爆请求体 / 输入 token，
+  // 之前只记输出 token 不受任何约束。超限直接拒，并把 input 估算也计入下面的 token 限额。
+  maxInputChars: 20_000,
 }
+/** 单次 bridge 调用允许的最大 output token（既是 callLLM 上限，也是调用前限额投影的预留量） */
+const BRIDGE_OUTPUT_MAX_TOKENS = 1024
 /**
  * 同会话内 LLM 产物 mNNNN 单调自增计数器。
  * Phase I（snip）用：每条消息打 [id:mNNNN] 锚点，便于裁剪上下文时按 ID 范围摘要。
@@ -747,7 +752,7 @@ function initManagers() {
  * 任何字段缺失时回退默认值；非数字字符串静默忽略。
  */
 function loadBridgeLimits(): void {
-  const fields: Array<keyof typeof BRIDGE_LIMITS> = ['perMinute', 'perFilePerMinute', 'perConversationTokens', 'perAvatarDailyTokens']
+  const fields: Array<keyof typeof BRIDGE_LIMITS> = ['perMinute', 'perFilePerMinute', 'perConversationTokens', 'perAvatarDailyTokens', 'maxInputChars']
   for (const f of fields) {
     const v = parseInt(getDb().getSetting(`bridge_${f}`) ?? '', 10)
     if (Number.isFinite(v) && v > 0) BRIDGE_LIMITS[f] = v
@@ -1871,6 +1876,16 @@ wrapHandler('link-attachment-to-message', (_, messageId: string, attachmentIds: 
 })
 
 /**
+ * unlink-attachments-from-message: 解除某条消息所有附件的关联（message_id 置空）。
+ * 「重新生成」删除原 user 消息前调用，让重发时附件能重新关联到新 user 消息（否则丢 chip）。
+ */
+wrapHandler('unlink-attachments-from-message', (_, messageId: string, conversationId: string) => {
+  assertSafeSegment(conversationId, '会话ID')
+  if (typeof messageId !== 'string' || !messageId) throw new Error('messageId 必填')
+  return getDb().unlinkAttachmentsFromMessage(messageId, conversationId)
+})
+
+/**
  * open-attachment-file: 用系统默认应用打开附件本体（chip 点击）。
  * 必须先校验 attachment 属于已存在会话，再调 shell.openPath。
  */
@@ -2078,15 +2093,21 @@ wrapHandler('asr:cancel', () => {
  */
 wrapHandler('claudebridge:complete', async (event, conversationId: string, input: string | { messages?: Array<{ role: string; content: string }> }, filePath?: string) => {
   const now = Date.now()
-  const { avatarId } = resolveWorkspaceContext(conversationId)
 
-  // 1) 起源校验：senderFrame 必须存在且是 file:// 协议
-  const frame = event.senderFrame
-  const senderUrl = frame ? frame.url : ''
-  if (!senderUrl.startsWith('file://')) {
-    if (logger) logger.channel('claudebridge', 'origin-rejected', `avatarId=${avatarId}, senderUrl=${senderUrl}`)
-    throw new Error(`claudebridge: 拒绝非 file:// 起源的调用 (${senderUrl || 'unknown'})`)
+  // 1) 起源校验：必须来自 persist:soul-preview 分区的 WebContents（预览面板的 user/hidden view）。
+  // 只校验 file:// 不够——主聊天页生产环境同样是 file:// 加载，任意主渲染脚本 / XSS 都能调到
+  // chat_api_key 背后的 LLM bridge。改为按 session 身份白名单：仅 PreviewManager 用
+  // persist:soul-preview 分区创建的视图放行；主窗口走默认 session，被拒。
+  // 必须先于 resolveWorkspaceContext：否则被拒方仍触发 DB 查询 / workspace 目录创建，
+  // 还能借异常信息探测任意 conversationId 是否存在。
+  const previewSession = electronSession.fromPartition('persist:soul-preview')
+  if (event.sender.session !== previewSession) {
+    const senderUrl = event.senderFrame?.url ?? ''
+    if (logger) logger.channel('claudebridge', 'origin-rejected', `senderUrl=${senderUrl}`)
+    throw new Error('claudebridge: 仅允许预览面板（persist:soul-preview 分区）调用')
   }
+
+  const { avatarId } = resolveWorkspaceContext(conversationId)
 
   // 2) 限流（多层）
   const minuteCount = pushWindowAndCount(bridgeMinuteWindow, avatarId, now, 60_000)
@@ -2102,16 +2123,9 @@ wrapHandler('claudebridge:complete', async (event, conversationId: string, input
     }
   }
   const convTotal = bridgeConversationTokens.get(conversationId) ?? 0
-  if (convTotal > BRIDGE_LIMITS.perConversationTokens) {
-    if (logger) logger.channel('claudebridge', 'rate-limit-conv-tokens', `conv=${conversationId}, total=${convTotal}/${BRIDGE_LIMITS.perConversationTokens}`)
-    throw new Error(`rate_limit: 对话累计 tokens 已超过 ${BRIDGE_LIMITS.perConversationTokens}`)
-  }
   const day = localDateString()
   const dayState = bridgeDailyTokens.get(avatarId) ?? { day, tokens: 0 }
-  if (dayState.day === day && dayState.tokens > BRIDGE_LIMITS.perAvatarDailyTokens) {
-    if (logger) logger.channel('claudebridge', 'rate-limit-daily', `avatarId=${avatarId}, daily=${dayState.tokens}/${BRIDGE_LIMITS.perAvatarDailyTokens}`)
-    throw new Error(`rate_limit: 分身每日 tokens 已超过 ${BRIDGE_LIMITS.perAvatarDailyTokens}`)
-  }
+  const dailyBase = dayState.day === day ? dayState.tokens : 0
 
   // 3) 调用 LLM
   const apiKey = getDb().getSetting('chat_api_key') ?? ''
@@ -2122,29 +2136,57 @@ wrapHandler('claudebridge:complete', async (event, conversationId: string, input
   const prompt = typeof input === 'string'
     ? input
     : (input.messages ?? []).map((m) => `[${m.role}] ${m.content}`).join('\n')
-  const text = await callLLM('你是 HTML 工件内的轻量补全助手，回复简洁直接。', prompt, 1024)
+  // input 长度上限：超长 input 会撑爆请求体并消耗大量输入 token，之前完全不受约束。
+  if (prompt.length > BRIDGE_LIMITS.maxInputChars) {
+    if (logger) logger.channel('claudebridge', 'rate-limit-input', `conv=${conversationId}, inputChars=${prompt.length}/${BRIDGE_LIMITS.maxInputChars}`)
+    throw new Error(`rate_limit: 输入长度 ${prompt.length} 超过上限 ${BRIDGE_LIMITS.maxInputChars} 字符`)
+  }
+  // token 硬上限（调用前投影）：用「已累计 + 本次 input 估算 + 预留 output」判定，超限直接拒。
+  // 旧实现只用 > 比较旧累计值、且 input/output 在调用后才记账：累计等于/接近上限时仍会放行
+  // 一次越限请求。改为 projected check，确保单次请求不会跨过 conversation / daily cap。
+  const projectedTokens = Math.ceil(prompt.length / 2) + BRIDGE_OUTPUT_MAX_TOKENS
+  if (convTotal + projectedTokens > BRIDGE_LIMITS.perConversationTokens) {
+    if (logger) logger.channel('claudebridge', 'rate-limit-conv-tokens', `conv=${conversationId}, projected=${convTotal + projectedTokens}/${BRIDGE_LIMITS.perConversationTokens}`)
+    throw new Error(`rate_limit: 对话累计 tokens 将超过 ${BRIDGE_LIMITS.perConversationTokens}`)
+  }
+  if (dailyBase + projectedTokens > BRIDGE_LIMITS.perAvatarDailyTokens) {
+    if (logger) logger.channel('claudebridge', 'rate-limit-daily', `avatarId=${avatarId}, projected=${dailyBase + projectedTokens}/${BRIDGE_LIMITS.perAvatarDailyTokens}`)
+    throw new Error(`rate_limit: 分身每日 tokens 将超过 ${BRIDGE_LIMITS.perAvatarDailyTokens}`)
+  }
+  const text = await callLLM('你是 HTML 工件内的轻量补全助手，回复简洁直接。', prompt, BRIDGE_OUTPUT_MAX_TOKENS)
 
-  // 4) 计费记账
-  const outputTokensEstimate = Math.ceil(text.length / 2)
-  bridgeConversationTokens.set(conversationId, convTotal + outputTokensEstimate)
-  const sameDay = dayState.day === day
-  const nextDayTokens = (sameDay ? dayState.tokens : 0) + outputTokensEstimate
+  // 4) 计费记账：input + output 都计入（之前只记 output，超长 input 可绕过 token 限额）。
+  const tokensEstimate = Math.ceil(prompt.length / 2) + Math.ceil(text.length / 2)
+  bridgeConversationTokens.set(conversationId, convTotal + tokensEstimate)
+  const nextDayTokens = dailyBase + tokensEstimate
   bridgeDailyTokens.set(avatarId, { day, tokens: nextDayTokens })
 
   if (logger) {
-    logger.channel('claudebridge', 'complete', `avatarId=${avatarId}, conv=${conversationId}, file=${filePath ?? '-'}, outTokens≈${outputTokensEstimate}, daily=${nextDayTokens}`)
+    logger.channel('claudebridge', 'complete', `avatarId=${avatarId}, conv=${conversationId}, file=${filePath ?? '-'}, tokens≈${tokensEstimate} (in≈${Math.ceil(prompt.length / 2)}), daily=${nextDayTokens}`)
   }
   return text
 })
 
 /** 设置面板可调阈值的便捷 IPC */
 wrapHandler('claudebridge:get-limits', () => ({ ...BRIDGE_LIMITS }))
+// 单字段上界：防止把阈值设成 MAX_SAFE_INTEGER 变相绕过限流；也作为 sanity clamp
+const BRIDGE_LIMIT_MAX: Record<keyof typeof BRIDGE_LIMITS, number> = {
+  perMinute: 1_000,
+  perFilePerMinute: 1_000,
+  perConversationTokens: 5_000_000,
+  perAvatarDailyTokens: 10_000_000,
+  maxInputChars: 200_000,
+}
 wrapHandler('claudebridge:set-limits', (_event, limits: Partial<typeof BRIDGE_LIMITS>) => {
-  for (const k of Object.keys(limits) as Array<keyof typeof BRIDGE_LIMITS>) {
+  // 只认 BRIDGE_LIMITS 的已知字段，拒绝调用方注入任意 key（含 __proto__）污染对象 / settings 表
+  const known = Object.keys(BRIDGE_LIMITS) as Array<keyof typeof BRIDGE_LIMITS>
+  for (const k of known) {
+    if (!Object.prototype.hasOwnProperty.call(limits, k)) continue
     const v = Number(limits[k])
     if (!Number.isFinite(v) || v <= 0) continue
-    BRIDGE_LIMITS[k] = Math.floor(v)
-    getDb().setSetting(`bridge_${k}`, String(Math.floor(v)))
+    const clamped = Math.min(Math.floor(v), BRIDGE_LIMIT_MAX[k])
+    BRIDGE_LIMITS[k] = clamped
+    getDb().setSetting(`bridge_${k}`, String(clamped))
   }
   return { ...BRIDGE_LIMITS }
 })

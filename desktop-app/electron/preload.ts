@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('list-attachments', conversationId),
   linkAttachmentToMessage: (messageId: string, attachmentIds: string[], conversationId: string) =>
     ipcRenderer.invoke('link-attachment-to-message', messageId, attachmentIds, conversationId),
+  unlinkAttachmentsFromMessage: (messageId: string, conversationId: string) =>
+    ipcRenderer.invoke('unlink-attachments-from-message', messageId, conversationId),
   openAttachmentFile: (id: string) =>
     ipcRenderer.invoke('open-attachment-file', id),
 
@@ -117,8 +119,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('asr:end', handler)
     return () => { ipcRenderer.removeListener('asr:end', handler) }
   },
-  claudeBridgeComplete: (conversationId: string, input: string | { messages?: Array<{ role: string; content: string }> }, filePath?: string) =>
-    ipcRenderer.invoke('claudebridge:complete', conversationId, input, filePath),
+  // 注意：window.claude.complete 桥接走 preview-preload.ts（persist:soul-preview 分区），
+  // 不在主渲染进程暴露 claudeBridgeComplete——主聊天页 / XSS 无法触达 chat_api_key 背后的
+  // LLM bridge（主进程同时按 session 白名单兜底校验）。下方仅保留设置面板用的限额/日志查询。
   claudeBridgeGetLimits: () => ipcRenderer.invoke('claudebridge:get-limits'),
   claudeBridgeSetLimits: (limits: Record<string, number>) => ipcRenderer.invoke('claudebridge:set-limits', limits),
   claudeBridgeReadLog: (date?: string) => ipcRenderer.invoke('claudebridge:read-log', date),

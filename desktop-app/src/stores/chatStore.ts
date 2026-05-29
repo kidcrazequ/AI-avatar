@@ -3329,7 +3329,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let savedUserMessageId: string | null = null
     if (!isHiddenRepair) {
       try {
-        savedUserMessageId = await window.electronAPI.saveMessage(conversationId, 'user', taggedContent, undefined, images)
+        // externalId=userMessage.id：让 user 消息的 DB id 与 UI id 一致，否则「重新生成」
+        // 删除原 user 轮时 deleteMessage(uiId) 删不到 DB 行，刷新后旧问题会重现。
+        savedUserMessageId = await window.electronAPI.saveMessage(conversationId, 'user', taggedContent, undefined, images, undefined, undefined, undefined, undefined, userMessage.id)
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error)
         window.electronAPI.logEvent('error', 'save-user-message-error', errMsg)
@@ -5311,6 +5313,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const state = get()
     const idx = state.messages.findIndex((m) => m.id === messageId && m.role === 'assistant')
     if (idx < 0) return false
+    // 只允许「最后一轮」重新生成：sendMessage 重建整轮时是追加到末尾，若对历史轮重生成会
+    // 把新回答接到对话末尾、破坏时间线。历史轮的按钮也已禁用（见 MessageList canRegenerate）。
+    if (state.messages.slice(idx + 1).some((m) => m.role === 'user')) return false
     // 向上找最近的 user 消息
     let userIdx = -1
     for (let i = idx - 1; i >= 0; i--) {
@@ -5321,15 +5326,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 还原带 anchor 的 content 为原始 user 输入（去掉 [id:mxxxx] 前缀）
     const rawContent = userMsg.content.replace(/^\[id:m\d+\]\s*/, '')
 
-    // 从 UI 删除该 assistant 消息（及其后续 tool/follow-up 消息）。
-    // 保守起见仅删该条；多轮 tool 消息留给下次清理。
-    set({ messages: state.messages.filter((_, i) => i !== idx) })
-
-    try {
-      await window.electronAPI.deleteMessage(messageId)
-    } catch (delErr) {
-      const m = delErr instanceof Error ? delErr.message : String(delErr)
-      window.electronAPI.logEvent('warn', 'regenerate-delete-message-error', m)
+    // 删除原 user 及其后整轮（assistant + 可能的 tool/follow-up），UI 与 DB 同步删除，再用
+    // sendMessage 重建整轮。旧实现只删 assistant 后重发，会重新插入并落库同一条 user → 每点
+    // 一次「重新生成」就多一轮重复问题。user 落库已带 externalId（见 sendMessage），UI id 与
+    // DB id 一致，deleteMessage 能删到 DB 行。
+    const removed = state.messages.slice(userIdx)
+    set({ messages: state.messages.slice(0, userIdx) })
+    // 删除原 user 前先解绑其附件（message_id 置空）：attachments 表对 message_id 无外键，
+    // 删消息不会清空它，重发时 linkAttachmentToMessage 只认 message_id IS NULL 的行，
+    // 不解绑就无法把附件迁到新 user 消息 → 刷新丢 chip、后续追问也拿不到附件上下文。
+    if (userMsg.attachments && userMsg.attachments.length > 0) {
+      try {
+        await window.electronAPI.unlinkAttachmentsFromMessage(userMsg.id, conversationId)
+      } catch (unlinkErr) {
+        window.electronAPI.logEvent('warn', 'regenerate-unlink-attachments-error', unlinkErr instanceof Error ? unlinkErr.message : String(unlinkErr))
+      }
+    }
+    for (const m of removed) {
+      try {
+        await window.electronAPI.deleteMessage(m.id)
+      } catch (delErr) {
+        window.electronAPI.logEvent('warn', 'regenerate-delete-message-error', delErr instanceof Error ? delErr.message : String(delErr))
+      }
     }
 
     // skipCache=true：跳过读 + 跳过写，原 cache 保留为"稳定档"。

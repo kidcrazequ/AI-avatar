@@ -47,11 +47,21 @@ export default function MessageList({ messages, isLoading, elapsedSec, quickQues
     return map
   }, [messages])
 
+  // 最后一条 user 消息的下标：重新生成只对「最后一轮」开放（其后无 user 消息的 assistant），
+  // 否则 sendMessage 重建会把新答案追加到末尾、破坏历史时间线（见 regenerateAssistantMessage）。
+  const lastUserIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return i
+    }
+    return -1
+  }, [messages])
+
   const itemContent = useCallback((index: number) => {
     const message = messages[index]
     // 判定本条是不是"还在直播"：最后一条 assistant + 全局 isLoading
     // 用于让 MessageBubble 在自己的工具调用时间线末尾追加"思考中... · Xs"占位行。
     const isLive = isLoading === true && index === messages.length - 1 && message.role === 'assistant'
+    const canRegenerate = message.role === 'assistant' && index > lastUserIdx
     return (
       <div className="px-6 py-3">
         <MessageBubble
@@ -63,11 +73,12 @@ export default function MessageList({ messages, isLoading, elapsedSec, quickQues
           avatarRole={avatarRole}
           avatarId={avatarId}
           isLive={isLive}
+          canRegenerate={canRegenerate}
           elapsedSec={isLive ? elapsedSec : undefined}
         />
       </div>
     )
-  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLoading, elapsedSec])
+  }, [messages, prevUserMap, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId, isLoading, elapsedSec, lastUserIdx])
 
   /** 空对话且正在 loading：首条消息生成中，显示加载占位 */
   if (messages.length === 0 && isLoading) {

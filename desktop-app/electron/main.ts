@@ -395,11 +395,42 @@ function resolveWorkspaceContext(
  * IPC 包装器：统一记录操作日志和错误日志。
  * 所有 ipcMain.handle 调用改由此函数注册，不改变业务逻辑。
  */
-/** 含敏感参数（apiKey）的 channel，日志需脱敏 */
+/** 含敏感参数（apiKey）的 channel，活动日志只记 avatarId、不记其余参数 */
 const SENSITIVE_CHANNELS = new Set([
   'consolidate-memory', 'build-knowledge-index', 'rag-retrieve',
   'compile-wiki', 'lint-knowledge', 'detect-evolution', 'enhance-knowledge-files',
 ])
+
+/**
+ * 这些 channel 的密钥/令牌按「位置参数」传入（裸字符串，不是带 key 名的对象字段），
+ * redactSensitiveArgs 靠字段名命中不到，必须按参数下标显式隐藏。
+ * - set-setting(key, value)：保留 key（如 chat_api_key，便于审计改了哪项）、隐藏 value
+ * - github:connect(token)：隐藏整串 PAT
+ */
+const POSITIONAL_SECRET_ARGS: Record<string, readonly number[]> = {
+  'set-setting': [1],
+  'github:connect': [0],
+}
+
+/**
+ * 生成写入活动日志的参数预览，统一脱敏。
+ * 默认对所有参数走 redactSensitiveArgs（命中 password/token/secret 等字段名），
+ * 再叠加 POSITIONAL_SECRET_ARGS 的位置隐藏，最后截断到 200 字符。
+ */
+function formatIpcPreview(channel: string, args: unknown[]): string {
+  if (SENSITIVE_CHANNELS.has(channel)) {
+    return `avatarId=${typeof args[0] === 'string' ? args[0] : '?'}`
+  }
+  const positional = POSITIONAL_SECRET_ARGS[channel]
+  const masked = positional
+    ? args.map((a, i) => (positional.includes(i) ? '[REDACTED]' : a))
+    : args
+  try {
+    return JSON.stringify(redactSensitiveArgs(masked)).slice(0, 200)
+  } catch {
+    return '[unstringifiable args]'
+  }
+}
 
 function wrapHandler(
   channel: string,
@@ -409,13 +440,7 @@ function wrapHandler(
   ipcMain.handle(channel, async (event, ...args) => {
     const isHighFreq = ['save-message', 'get-messages', 'get-conversations', 'get-knowledge-tree'].includes(channel)
     if (!isHighFreq && logger) {
-      let preview: string
-      if (SENSITIVE_CHANNELS.has(channel)) {
-        preview = `avatarId=${typeof args[0] === 'string' ? args[0] : '?'}`
-      } else {
-        preview = JSON.stringify(args).slice(0, 200)
-      }
-      logger.activity(channel, preview)
+      logger.activity(channel, formatIpcPreview(channel, args))
     }
     try {
       return await handler(event, ...args)

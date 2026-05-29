@@ -186,6 +186,7 @@ export class Logger {
    * 不存在或读取失败时返回空字符串。
    */
   readToolCallLog(date?: string): string {
+    if (!this.isSafeLogDate(date)) return ''
     const file = path.join(this.toolCallsDir, `${date ?? this.today()}.jsonl`)
     return this.readLog(file)
   }
@@ -248,11 +249,13 @@ export class Logger {
 
   /** 读取指定日期（默认今天）的活动日志文本 */
   readActivityLog(date?: string): string {
+    if (!this.isSafeLogDate(date)) return ''
     return this.readLog(this.activityFile(date))
   }
 
   /** 读取指定日期（默认今天）的错误日志文本 */
   readErrorLog(date?: string): string {
+    if (!this.isSafeLogDate(date)) return ''
     return this.readLog(this.errorFile(date))
   }
 
@@ -277,9 +280,7 @@ export class Logger {
   /** 读取指定 channel 当天的日志，便于设置面板展示 */
   readChannelLog(channel: string, date?: string): string {
     if (!/^[a-z0-9-]{1,32}$/.test(channel)) return ''
-    // date 必须是严格 YYYY-MM-DD：否则 "2024-01-01/../../etc/passwd" 之类会让 path.join
-    // 逃出 logsDir 读到任意文件（claudebridge:read-log 把渲染端传入的 date 直接送到这里）
-    if (date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return ''
+    if (!this.isSafeLogDate(date)) return ''
     const file = path.join(this.logsDir, `${channel}-${date ?? this.today()}.log`)
     return this.readLog(file)
   }
@@ -321,6 +322,15 @@ export class Logger {
   /** 错误日志文件路径，按天轮转 */
   private errorFile(date?: string): string {
     return path.join(this.logsDir, `error-${date ?? this.today()}.log`)
+  }
+
+  /**
+   * 校验渲染端传入的日期参数：必须严格 YYYY-MM-DD（或 undefined 走默认今天）。
+   * 否则 "2024-01-01/../../etc/passwd"、"x/../error-2026-05-29" 之类会让 path.join
+   * 逃出 logsDir 读到任意文件。所有接受 renderer date 的读日志入口必须先过这一关。
+   */
+  private isSafeLogDate(date: string | undefined): boolean {
+    return date === undefined || /^\d{4}-\d{2}-\d{2}$/.test(date)
   }
 
   private today(): string {

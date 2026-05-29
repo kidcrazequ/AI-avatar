@@ -136,6 +136,29 @@ test('Logger.readToolCallLog: 不存在的日期返回空字符串', () => {
   assert.equal(txt, '')
 })
 
+test('read*Log: 非法 date 参数（路径穿越）返回空字符串而非读到 logsDir 外文件', () => {
+  const userData = makeTempUserData()
+  const logger = new Logger(userData)
+  // 在 userData 根（logsDir 的上一级）放一个机密文件，模拟被穿越读取的目标
+  const secretPath = path.join(userData, 'outside.log')
+  fs.writeFileSync(secretPath, 'TOP-SECRET', 'utf-8')
+
+  // 这些 date 一旦被直接 path.join 进文件名，会解析到 logs/ 之外
+  const traversals = [
+    '../outside',                 // logs/activity-../outside.log → userData/outside.log
+    'x/../../outside',
+    '2026-05-29/../../outside',
+    '..%2foutside',
+  ]
+  for (const bad of traversals) {
+    assert.equal(logger.readActivityLog(bad), '', `readActivityLog 应拒绝 ${bad}`)
+    assert.equal(logger.readErrorLog(bad), '', `readErrorLog 应拒绝 ${bad}`)
+    assert.equal(logger.readToolCallLog(bad), '', `readToolCallLog 应拒绝 ${bad}`)
+  }
+  // 合法日期仍正常工作（不存在则空串，但不被 guard 拦截）
+  assert.equal(logger.readActivityLog('2099-01-01'), '')
+})
+
 test('redactSensitiveArgs: 顶层敏感字段值被替换为 [REDACTED]', () => {
   const out = redactSensitiveArgs({
     file: 'a.xlsx',

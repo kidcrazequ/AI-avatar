@@ -305,6 +305,8 @@ export function startSoulProxyServer(deps: SoulProxyServerDeps): void {
       log?.channel('soul-proxy', 'dispatched', `job=${jobId} stream=${stream} conv=${conversationId.trim()}`)
     } catch (e) {
       releaseJob(jobId)
+      // dispatch 失败也要结束 recorder，否则开启录制时本次 request 段会永久留在 pending map
+      void flowRecorder.onFinish(jobId, { error: 'dispatch_failed' })
       const msg = e instanceof Error ? e.message : String(e)
       sendJson(res, 500, { error: 'dispatch_failed', message: msg })
     }

@@ -413,6 +413,13 @@ const POSITIONAL_SECRET_ARGS: Record<string, readonly number[]> = {
 }
 
 /**
+ * 这些 channel 的入参整体携带任意命名的密钥（如 MCP server 的 env 是用户自定义的
+ * 环境变量字典，键名不可预测，redactSensitiveArgs 的字段名匹配无法兜底），
+ * 因此活动日志只记录少量安全字段，绝不序列化整个入参。
+ */
+const MCP_SAFE_PREVIEW_CHANNELS = new Set(['mcp:upsert-server', 'mcp:test-connect'])
+
+/**
  * 生成写入活动日志的参数预览，统一脱敏。
  * 默认对所有参数走 redactSensitiveArgs（命中 password/token/secret 等字段名），
  * 再叠加 POSITIONAL_SECRET_ARGS 的位置隐藏，最后截断到 200 字符。
@@ -420,6 +427,14 @@ const POSITIONAL_SECRET_ARGS: Record<string, readonly number[]> = {
 function formatIpcPreview(channel: string, args: unknown[]): string {
   if (SENSITIVE_CHANNELS.has(channel)) {
     return `avatarId=${typeof args[0] === 'string' ? args[0] : '?'}`
+  }
+  if (MCP_SAFE_PREVIEW_CHANNELS.has(channel)) {
+    const input = (args[0] ?? {}) as Record<string, unknown>
+    const name = typeof input.name === 'string' ? input.name : '?'
+    const transport = typeof input.transport === 'string' ? input.transport : '?'
+    const enabled = input.enabled === true
+    // 只记 name/transport/enabled；env / command / args / url 一律不入日志
+    return `name=${name} transport=${transport} enabled=${enabled}`
   }
   const positional = POSITIONAL_SECRET_ARGS[channel]
   const masked = positional

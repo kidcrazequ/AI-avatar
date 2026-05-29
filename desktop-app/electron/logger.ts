@@ -22,13 +22,44 @@ import { localDateString } from '@soul/core'
 export type LogLevel = 'info' | 'warn' | 'error'
 
 /**
- * 敏感字段名（小写匹配），命中后值替换为 [REDACTED]。
- * 用于 toolCall 审计日志和任何 args 序列化场景。
+ * 把字段名归一化用于敏感匹配：转小写并去掉 _ / -。
+ * 这样 access_token / accessToken / access-token / github_pat / githubPat
+ * 都会落到同一个归一化形式，无需为每种写法各列一条。
  */
-const SENSITIVE_KEYS = new Set([
-  'apikey', 'api_key', 'token', 'access_token', 'refresh_token',
-  'secret', 'client_secret', 'password', 'pwd', 'authorization', 'auth',
-])
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[_-]/g, '')
+}
+
+/**
+ * 敏感字段名（已归一化）——精确匹配。
+ * 这里放「短到不能做子串匹配」的词：pat/auth/pwd/key 若做子串会误伤
+ * path / author / keyword 等普通字段，故只精确命中。
+ */
+const SENSITIVE_KEYS_EXACT = new Set([
+  'pat', 'pwd', 'auth', 'key', 'token', 'secret', 'password',
+].map(normalizeKey))
+
+/**
+ * 敏感子串（已归一化）——包含即命中。
+ * 覆盖 MCP env / 第三方 SDK 常见环境变量名：OPENAI_API_KEY、ANTHROPIC_API_KEY、
+ * AUTH_TOKEN、SESSION_TOKEN、AWS_SECRET_ACCESS_KEY、GITHUB_PAT 等。
+ * 这些词足够长，作为子串匹配几乎不会误伤普通字段。
+ */
+const SENSITIVE_KEY_SUBSTRINGS = [
+  'apikey', 'accesstoken', 'refreshtoken', 'sessiontoken', 'authtoken',
+  'secret', 'clientsecret', 'password', 'passphrase', 'credential',
+  'accesskey', 'secretkey', 'privatekey', 'authorization',
+  'githubpat', 'personalaccesstoken',
+].map(normalizeKey)
+
+/**
+ * 判断字段名是否敏感：先归一化，再走精确集 + 子串集。
+ */
+function isSensitiveKey(key: string): boolean {
+  const norm = normalizeKey(key)
+  if (SENSITIVE_KEYS_EXACT.has(norm)) return true
+  return SENSITIVE_KEY_SUBSTRINGS.some((frag) => norm.includes(frag))
+}
 
 /**
  * 把对象中的敏感字段值替换为 [REDACTED]。
@@ -45,7 +76,7 @@ export function redactSensitiveArgs(args: unknown, depth = 0): unknown {
   }
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
-    if (SENSITIVE_KEYS.has(k.toLowerCase())) {
+    if (isSensitiveKey(k)) {
       out[k] = '[REDACTED]'
     } else if (typeof v === 'object' && v !== null) {
       out[k] = redactSensitiveArgs(v, depth + 1)

@@ -176,6 +176,67 @@ test('redactSensitiveArgs: 顶层敏感字段值被替换为 [REDACTED]', () => 
   assert.equal(out.authorization, '[REDACTED]')
 })
 
+test('redactSensitiveArgs: connect_github 的 pat 及别名/混写均被脱敏', () => {
+  const out = redactSensitiveArgs({
+    pat: 'ghp_aaa',
+    github_pat: 'ghp_bbb',
+    githubPat: 'ghp_ccc',
+    personal_access_token: 'ghp_ddd',
+    accessToken: 'tok',
+    'access-token': 'tok2',
+    clientSecret: 'cs',
+    privateKey: 'pk',
+    owner: 'octocat',
+  }) as Record<string, unknown>
+  assert.equal(out.pat, '[REDACTED]')
+  assert.equal(out.github_pat, '[REDACTED]')
+  assert.equal(out.githubPat, '[REDACTED]', '驼峰写法经归一化后也命中')
+  assert.equal(out.personal_access_token, '[REDACTED]')
+  assert.equal(out.accessToken, '[REDACTED]')
+  assert.equal(out['access-token'], '[REDACTED]', '连字符写法经归一化后也命中')
+  assert.equal(out.clientSecret, '[REDACTED]')
+  assert.equal(out.privateKey, '[REDACTED]')
+  assert.equal(out.owner, 'octocat', '非敏感字段保留')
+})
+
+test('redactSensitiveArgs: 常见 env/SDK 密钥变量名（子串匹配）被脱敏，PATH 等普通名保留', () => {
+  const out = redactSensitiveArgs({
+    env: {
+      OPENAI_API_KEY: 'sk-1',
+      ANTHROPIC_API_KEY: 'sk-2',
+      AUTH_TOKEN: 'tok',
+      SESSION_TOKEN: 'sess',
+      AWS_SECRET_ACCESS_KEY: 'aws',
+      GITHUB_PAT: 'ghp',
+      PATH: '/usr/bin',
+      HOME: '/home/u',
+      LANG: 'en_US',
+    },
+  }) as { env: Record<string, unknown> }
+  assert.equal(out.env.OPENAI_API_KEY, '[REDACTED]')
+  assert.equal(out.env.ANTHROPIC_API_KEY, '[REDACTED]')
+  assert.equal(out.env.AUTH_TOKEN, '[REDACTED]')
+  assert.equal(out.env.SESSION_TOKEN, '[REDACTED]')
+  assert.equal(out.env.AWS_SECRET_ACCESS_KEY, '[REDACTED]')
+  assert.equal(out.env.GITHUB_PAT, '[REDACTED]')
+  assert.equal(out.env.PATH, '/usr/bin', 'PATH 不是密钥，保留')
+  assert.equal(out.env.HOME, '/home/u')
+  assert.equal(out.env.LANG, 'en_US')
+})
+
+test('redactSensitiveArgs: 子串匹配不误伤 path / author / keyword 等普通字段', () => {
+  const out = redactSensitiveArgs({
+    path: '/some/file',  // 含 'pat'，但 'pat' 仅精确匹配 → 不命中 'path'
+    author: 'alice',     // 含 'auth'，但 'auth' 仅精确匹配 → 不命中 'author'
+    keyword: 'soul',     // 含 'key'，但 'key' 仅精确匹配 → 不命中 'keyword'
+    monkey: 'george',    // 含 'key'，不命中
+  }) as Record<string, unknown>
+  assert.equal(out.path, '/some/file')
+  assert.equal(out.author, 'alice')
+  assert.equal(out.keyword, 'soul')
+  assert.equal(out.monkey, 'george')
+})
+
 test('redactSensitiveArgs: 嵌套对象内的敏感字段也被脱敏', () => {
   const out = redactSensitiveArgs({
     config: { apiKey: 'sk-abc', baseUrl: 'https://api.x' },

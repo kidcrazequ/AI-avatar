@@ -176,12 +176,13 @@ function App() {
     document.documentElement.setAttribute('data-theme', themeId)
   }, [themeId])
 
-  const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, setLocalChatModel, setChatModelMode, chatModel, systemPrompt } = useChatStore(
+  const { clearMessages, resetTransientState, setSystemPrompt, setChatModel, setVisionModel: setVisionModelStore, setLocalChatModel, setChatModelMode, chatModel, systemPrompt } = useChatStore(
     useShallow(s => ({
       clearMessages: s.clearMessages,
       resetTransientState: s.resetTransientState,
       setSystemPrompt: s.setSystemPrompt,
       setChatModel: s.setChatModel,
+      setVisionModel: s.setVisionModel,
       setLocalChatModel: s.setLocalChatModel,
       setChatModelMode: s.setChatModelMode,
       chatModel: s.chatModel,
@@ -292,11 +293,13 @@ function App() {
       model: chatModelName || DEFAULT_CHAT_MODEL.model,
       apiKey: chatApiKey || '',
     })
-    setVisionModel({
+    const visionCfg: ModelConfig = {
       baseUrl: visionBaseUrl || DEFAULT_VISION_MODEL.baseUrl,
       model: visionModelName || DEFAULT_VISION_MODEL.model,
       apiKey: visionApiKey || '',
-    })
+    }
+    setVisionModel(visionCfg)          // 本地 state → ChatWindow prop → sendMessage
+    setVisionModelStore(visionCfg)     // store 镜像 → regenerateAssistantMessage 复用
     setOcrModel({
       baseUrl: ocrBaseUrl || DEFAULT_OCR_MODEL.baseUrl,
       model: ocrModelName || DEFAULT_OCR_MODEL.model,
@@ -315,7 +318,7 @@ function App() {
       apiKey: localApiKey || DEFAULT_LOCAL_CHAT_MODEL.apiKey,
     })
     setChatModelMode(chatModelMode === 'local' ? 'local' : 'cloud')
-  }, [setChatModel, setLocalChatModel, setChatModelMode])
+  }, [setChatModel, setVisionModelStore, setLocalChatModel, setChatModelMode])
 
   const refreshAvatarList = useCallback(async () => {
     const avatars = await window.electronAPI.listAvatars()

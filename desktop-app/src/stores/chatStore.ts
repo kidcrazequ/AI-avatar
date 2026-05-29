@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, detectReasoning, type SystemBlock } from '../services/llm-service'
+import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, detectReasoning, type SystemBlock } from '../services/llm-service'
 import {
   MEMORY_CHAR_LIMIT,
   localDateString,
@@ -275,6 +275,12 @@ interface ChatStore {
   systemPrompt: string
   chatModel: ModelConfig
   /**
+   * 视觉模型配置镜像（App.tsx 从设置加载后同步进来）。sendMessage 仍按 visionModel
+   * 参数走（ChatWindow 传 prop）；这里入 store 是为了 regenerateAssistantMessage 能复用
+   * 当前 vision 配置——否则历史图片消息“重新生成”会退回 chatModel，文本模型报错或忽略图片。
+   */
+  visionModel: ModelConfig
+  /**
    * 端侧（本地）模型配置（2026-05-22 Marvis 借鉴；端云/端侧切换闭环）。
    *
    * 与 chatModel 并列的第二个 master slot——用户在设置里配置一份指向本机的
@@ -325,6 +331,7 @@ interface ChatStore {
 
   setSystemPrompt: (prompt: string) => void
   setChatModel: (config: ModelConfig) => void
+  setVisionModel: (config: ModelConfig) => void
   /** 设置端侧（本地）模型配置（2026-05-22 Marvis 借鉴）。 */
   setLocalChatModel: (config: ModelConfig) => void
   /** 切换 active master slot（端云 / 端侧）。落 sqlite 由调用方负责。 */
@@ -2792,6 +2799,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isLoading: false,
   systemPrompt: '',
   chatModel: DEFAULT_CHAT_MODEL,
+  visionModel: DEFAULT_VISION_MODEL,
   localChatModel: DEFAULT_LOCAL_CHAT_MODEL,
   chatModelMode: 'cloud',
   toolCallStatus: '',
@@ -2817,6 +2825,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setSystemPrompt: (prompt) => set({ systemPrompt: prompt }),
 
   setChatModel: (config) => set({ chatModel: config }),
+
+  setVisionModel: (config) => set({ visionModel: config }),
 
   setLocalChatModel: (config) => set({ localChatModel: config }),
 
@@ -3199,25 +3209,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 视觉路径不走 mode 切换——vision 任务依赖云端模型，本地多数 7B 不支持图像输入。
     const chatModel = chatModelMode === 'local' ? localChatModel : cloudChatModel
 
-    // GAP9b: 有图片时使用视觉模型
-    const activeModel = (images && images.length > 0 && visionModel?.apiKey) ? visionModel : chatModel
+    // GAP9b: 有图片时强制走 vision slot（不再退回 chatModel）。
+    // 普通文本模型多半不支持 image_url——退回会被服务端 400 或静默忽略图片，
+    // 正常发送和图片消息“重新生成”都会出现“没配视觉模型却继续请求”。
+    // 退回到 chatModel 仅为类型兜底（hasImages 但 visionModel 未传时）；真正使用前
+    // missingVisionForImages 已把这种情况判为缺 key 而早退，不会拿 chatModel 发图片。
+    const hasImages = Boolean(images && images.length > 0)
+    const activeModel: ModelConfig = hasImages ? (visionModel ?? chatModel) : chatModel
+    // 图片消息但 vision slot 没配 key：即使 chatModel 有 key 也不能退回，给针对性错误。
+    const missingVisionForImages = hasImages && !visionModel?.apiKey
 
-    if (!activeModel.apiKey) {
-      const errorMsg = chatModelMode === 'local'
-        ? '端侧模型未配置 API Key（Ollama 默认为 "ollama"，本地 vllm 等可填任意非空字符串）。请在设置 → 端侧（本地）填写。'
-        : '请先在设置中配置 API Key'
-      const userMsgIdNoKey = nextMessageId()
-      const assistantMsgIdNoKey = nextMessageId()
-      set({
-        messages: [...messages, { id: userMsgIdNoKey, role: 'user', content }, { id: assistantMsgIdNoKey, role: 'assistant', content: errorMsg }],
-        isLoading: false,
-      })
-      await window.electronAPI.saveMessage(conversationId, 'user', content, undefined, undefined, undefined, undefined, undefined, undefined, userMsgIdNoKey)
-      await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgIdNoKey)
-      await invokeProxyComplete({ ok: false, error: errorMsg })
-      cleanupRequest()
-      return
-    }
+    // API Key 缺失的早退判定下移到“用户消息已正常落库”之后（见下方）：否则带图片 /
+    // 文档 / @ 引用发送但没配 key 时，输入区已清空、历史里的 user 消息却只剩裸 content，
+    // imageUrls / inline snapshot 丢失、已上传附件也不会 link 到 message。
+    const missingApiKey = missingVisionForImages || !activeModel.apiKey
 
     // 多分身 @提及：检测 @分身ID，并发拉取所有目标分身 soul.md 前缀，追加到 system prompt
     let effectiveSystemPrompt = systemPrompt
@@ -3387,6 +3392,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const linkMsg = linkErr instanceof Error ? linkErr.message : String(linkErr)
         window.electronAPI.logEvent('warn', 'link-attachment-to-message-error', linkMsg)
       }
+    }
+
+    // API Key 缺失早退（下移至此）：上面的正常路径已把 user 消息连同 taggedContent
+    // （含 inline snapshot）、imageUrls 落库并 link 附件，所以图片 / 文档 / @ 引用不再丢失。
+    // 这里只把空 assistant 占位 upsert 成错误提示并落库（externalId 复用 assistantMsgId，
+    // 与其它错误路径一致，重新生成能删到 DB 行），随后清理本请求并返回。
+    if (missingApiKey) {
+      const errorMsg = missingVisionForImages
+        ? '图片消息需要配置视觉模型 API Key，请在设置 → 视觉模型中填写'
+        : chatModelMode === 'local'
+          ? '端侧模型未配置 API Key（Ollama 默认为 "ollama"，本地 vllm 等可填任意非空字符串）。请在设置 → 端侧（本地）填写。'
+          : '请先在设置中配置 API Key'
+      if (!isHiddenRepair) {
+        set((state) => ({
+          messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
+          isLoading: false,
+        }))
+        // 落库失败不能跳过下面的 cleanupRequest（否则残留 activeChatRequest/streamingSnapshot）
+        try {
+          await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
+        } catch (saveErr) {
+          console.error('[chatStore] 保存 API Key 缺失错误消息失败:', saveErr instanceof Error ? saveErr.message : String(saveErr))
+        }
+      }
+      await invokeProxyComplete({ ok: false, error: errorMsg })
+      cleanupRequest()
+      return
     }
 
     // ─── 答案缓存命中检查（v14，同问不同答修复）────────────────────────────
@@ -3803,7 +3835,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
           isLoading: false,
         }))
-        await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
+        // 落库失败不能跳过下面的 cleanupRequest（否则残留 activeChatRequest/streamingSnapshot）
+        try {
+          await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
+        } catch (saveErr) {
+          console.error('[chatStore] 保存构造期错误消息失败:', saveErr instanceof Error ? saveErr.message : String(saveErr))
+        }
       }
       await invokeProxyComplete({ ok: false, error: errorMsg })
       cleanupRequest()
@@ -5295,13 +5332,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       window.electronAPI.logEvent('warn', 'regenerate-delete-message-error', m)
     }
 
-    // skipCache=true：跳过读 + 跳过写，原 cache 保留为"稳定档"
+    // skipCache=true：跳过读 + 跳过写，原 cache 保留为"稳定档"。
+    // visionModel 必须复用当前配置（与正常发送 ChatWindow 一致）：图片消息若传 undefined，
+    // sendMessage 会退回 chatModel，文本模型报错或忽略图片。缺配置时由 sendMessage 的
+    // missingApiKey 分支给出明确错误（activeModel 退回 chatModel 后若也无 key 即报错）。
     await get().sendMessage(
       rawContent,
       conversationId,
       avatarId,
       userMsg.imageUrls,
-      undefined,
+      get().visionModel,
       userMsg.attachments,
       undefined,
       undefined,

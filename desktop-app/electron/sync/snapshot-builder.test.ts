@@ -388,6 +388,53 @@ test('snapshot-builder: extractSnapshot zip slip 防御（含 ../ 路径的 zip 
   }
 })
 
+test('snapshot-builder: extractSnapshot 拒绝总体积超限的 zip（zip 炸弹兜底）', { skip: skipReason ?? false }, async () => {
+  if (!snapshotBuilderMod || !admZipCtor) return
+  const { extractSnapshot } = snapshotBuilderMod
+
+  const work = makeTempDir('zipbomb')
+  try {
+    // manifest 自报 totalBytes 超过 4GB 解压上限：应在逐条 getData() 解压「之前」就早退拒绝
+    const data = Buffer.from('tiny')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const crypto = require('node:crypto') as typeof import('node:crypto')
+    const sha = crypto.createHash('sha256').update(data).digest('hex')
+    const manifest = {
+      schemaVersion: 1,
+      appVersion: '0.1.0',
+      dbSchemaVersion: 12,
+      deviceId: 'bomb-dev',
+      createdAt: '2026-05-29T00:00:00.000Z',
+      totalBytes: 5_000_000_000, // > MAX_TOTAL_EXTRACT_BYTES (4GB)
+      entries: [{ path: 'avatars/a.txt', size: data.length, sha256: sha }],
+    }
+
+    const zipPath = path.join(work, 'bomb.zip')
+    const zip = new admZipCtor()
+    zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest), 'utf-8'))
+    zip.addFile('avatars/a.txt', data)
+    zip.writeZip(zipPath)
+
+    const outDir = path.join(work, 'extracted')
+    const { logger } = makeLogger()
+    let caught: unknown = null
+    try {
+      await extractSnapshot({ zipPath, outputDir: outDir, logger })
+    } catch (e) {
+      caught = e
+    }
+    assert.ok(caught instanceof Error, `应抛错，实际：${String(caught)}`)
+    assert.match((caught as Error).message, /totalBytes|extract limit/i)
+    // 早退应发生在解压之前：不应写出任何条目
+    assert.ok(
+      !fs.existsSync(path.join(outDir, 'avatars', 'a.txt')),
+      '超限 zip 不应解压出任何文件',
+    )
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true })
+  }
+})
+
 test('snapshot-builder: runDbBackup 失败时 buildSnapshot 抛同样错', { skip: skipReason ?? false }, async () => {
   if (!snapshotBuilderMod) return
   const { buildSnapshot } = snapshotBuilderMod

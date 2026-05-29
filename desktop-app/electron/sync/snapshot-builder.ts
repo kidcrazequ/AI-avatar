@@ -64,6 +64,13 @@ const EXCLUDED_FILE_PATTERNS: readonly RegExp[] = [/^\.DS_Store$/, /^Thumbs\.db$
 /** zip 单条目最大字节数（防 zip slip / zip 炸弹）。 */
 const MAX_SINGLE_ENTRY_BYTES = 500 * 1024 * 1024
 
+/**
+ * 解压后所有条目累计原始字节上限（防 zip 炸弹）。
+ * 下载的 zip 本身已被 WebDAV 层限制 500MB，但小压缩包可膨胀成超大解压体积；
+ * 这里在 getData() 解压前用中央目录声明的 uncompressed size 做累计预检兜底。
+ */
+const MAX_TOTAL_EXTRACT_BYTES = 4 * 1024 * 1024 * 1024
+
 /** 快照超出体积上限的专用错误类型。 */
 export class SnapshotTooLargeError extends Error {
   constructor(public readonly actualBytes: number, public readonly maxBytes: number) {
@@ -319,12 +326,21 @@ export async function extractSnapshot(
   }
   const manifest = parseSnapshotManifest(parsedJson)
 
+  // zip 炸弹预检（早退）：manifest 自报总体积超限直接拒绝，不进入逐条解压。
+  // manifest 来自包内不可全信，仅作便宜的早退；真正的兜底是下方逐条 header.size 预检。
+  if (manifest.totalBytes > MAX_TOTAL_EXTRACT_BYTES) {
+    throw new Error(
+      `snapshot manifest totalBytes exceeds extract limit: ${manifest.totalBytes} > ${MAX_TOTAL_EXTRACT_BYTES}`,
+    )
+  }
+
   await fs.promises.mkdir(opts.outputDir, { recursive: true })
   const outputRoot = path.resolve(opts.outputDir)
 
   const expected = new Map<string, SnapshotManifestEntry>()
   for (const e of manifest.entries) expected.set(e.path, e)
 
+  let cumulativeUncompressed = 0
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue
     const name = entry.entryName
@@ -344,6 +360,24 @@ export async function extractSnapshot(
       targetPath !== outputRoot
     ) {
       throw new Error(`zip entry escapes output dir: ${name}`)
+    }
+
+    // zip 炸弹预检：在 getData() 把整条目解压进内存「之前」，先用中央目录声明的
+    // 原始大小卡单条目上限与累计上限。这能在解压前拦掉「小压缩包→巨大解压」的常见炸弹。
+    // 残留风险：若 header 谎报小尺寸而实际 deflate 巨大，adm-zip 的 getData() 仍会一次性
+    // 全量膨胀进内存（它不支持流式带上限解压）；这类需换流式解压库才能根治，暂以下方
+    // 实际长度校验做事后兜底。
+    const declaredSize = entry.header?.size ?? exp.size
+    if (declaredSize > MAX_SINGLE_ENTRY_BYTES) {
+      throw new Error(
+        `zip entry declared size exceeds single-entry limit: ${name} (${declaredSize} > ${MAX_SINGLE_ENTRY_BYTES})`,
+      )
+    }
+    cumulativeUncompressed += declaredSize
+    if (cumulativeUncompressed > MAX_TOTAL_EXTRACT_BYTES) {
+      throw new Error(
+        `cumulative uncompressed size exceeds extract limit at ${name}: ${cumulativeUncompressed} > ${MAX_TOTAL_EXTRACT_BYTES}`,
+      )
     }
 
     const data = entry.getData()
@@ -397,6 +431,8 @@ interface PlannedEntry {
 interface AdmZipEntry {
   entryName: string
   isDirectory: boolean
+  /** 中央目录头：size=原始(解压后)字节数，compressedSize=压缩后字节数 */
+  header?: { size?: number; compressedSize?: number }
   getData(): Buffer
 }
 

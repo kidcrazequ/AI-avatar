@@ -100,6 +100,14 @@ export interface RestoreFromResult {
   preRestoreLocalPath?: string
 }
 
+/** applyExtractedSnapshot 内部：单个目录的暂存句柄（成功 commit / 失败 rollback） */
+interface StagedDir {
+  /** 失败回滚：删除已应用目录，改名还原本地原目录 */
+  rollback(): Promise<void>
+  /** 成功提交：删除 .restore-bak 暂存 */
+  commit(): Promise<void>
+}
+
 /** 远端备份条目（IPC 直接透传给 UI） */
 export interface RemoteBackupItem {
   filename: string
@@ -844,38 +852,51 @@ export class SyncManager {
     // DB 覆盖 + 后续文件替换包在同一 try 内：DB 已切到远端快照后，只要 avatars/shared/
     // conversations 任一步失败，就把 DB 回滚到恢复前状态，避免「DB 已恢复、文件未完整恢复」
     // 的脏状态（下次启动会读到与磁盘文件不一致的库）。
+    // 2-4. avatars / shared / conversations：每个目录先「改名暂存」再应用快照（stageDir）。
+    //   任一步失败时把已应用目录逆序回滚、再回滚 DB，保证文件树「全有或全无」，消除
+    //   「avatars 已替换、conversations 失败、DB 已回滚」这类半恢复脏状态。
+    const staged: StagedDir[] = []
     try {
       // 覆盖目标 DB：句柄被占用时此处会抛错，此时 avatars 尚未被触碰 → 干净失败。
       await fs.promises.copyFile(snapshotDb, targetDb)
       this.logger.info(`restore: SQLite replaced (old kept at ${bakPath})`)
 
-      // 2. avatars：先 rm 再 cp（保证旧分身不残留）。只有 DB 替换成功后才走到这里。
-      const snapshotAvatars = path.join(snapshotRoot, 'avatars')
-      if (await dirExists(snapshotAvatars)) {
-        await fs.promises.rm(this.avatarsRoot, { recursive: true, force: true })
-        await fs.promises.mkdir(this.avatarsRoot, { recursive: true })
-        await fs.promises.cp(snapshotAvatars, this.avatarsRoot, { recursive: true, force: true })
-        this.logger.info(`restore: avatars replaced from ${snapshotAvatars}`)
-      } else {
-        this.logger.warn('restore: snapshot/avatars/ missing, keeping local avatars/')
-      }
+      // avatars：整目录替换（保证旧分身不残留）。shared/conversations：合并覆盖
+      // （开发场景下通常包含未同步的本地资源，故保留本地后再叠加快照）。
+      staged.push(
+        await this.stageDir('avatars', path.join(snapshotRoot, 'avatars'), this.avatarsRoot, 'replace'),
+      )
+      staged.push(
+        await this.stageDir('shared', path.join(snapshotRoot, 'shared'), this.sharedRoot, 'merge'),
+      )
+      staged.push(
+        await this.stageDir(
+          'conversations',
+          path.join(snapshotRoot, 'conversations'),
+          this.conversationsRoot,
+          'merge',
+        ),
+      )
 
-      // 3. shared：合并覆盖（开发场景下 shared 通常包含未同步的本地资源）
-      const snapshotShared = path.join(snapshotRoot, 'shared')
-      if (await dirExists(snapshotShared)) {
-        await fs.promises.mkdir(this.sharedRoot, { recursive: true })
-        await fs.promises.cp(snapshotShared, this.sharedRoot, { recursive: true, force: true })
-        this.logger.info(`restore: shared merged from ${snapshotShared}`)
-      }
-
-      // 4. conversations：合并覆盖 jsonl
-      const snapshotConvs = path.join(snapshotRoot, 'conversations')
-      if (await dirExists(snapshotConvs)) {
-        await fs.promises.mkdir(this.conversationsRoot, { recursive: true })
-        await fs.promises.cp(snapshotConvs, this.conversationsRoot, { recursive: true, force: true })
-        this.logger.info(`restore: conversations merged from ${snapshotConvs}`)
+      // 文件树全部应用成功 → 提交（删除各 .restore-bak 暂存），best-effort。
+      for (const s of staged) {
+        await s.commit().catch((cmErr) => {
+          this.logger.warn(
+            'restore: staged backup cleanup failed',
+            cmErr instanceof Error ? cmErr : new Error(String(cmErr)),
+          )
+        })
       }
     } catch (applyErr) {
+      // 逆序回滚已应用的目录（best-effort，单个失败不阻断其余回滚）。
+      for (const s of staged.reverse()) {
+        await s.rollback().catch((rbErr) => {
+          this.logger.error(
+            'restore: file-tree rollback failed',
+            rbErr instanceof Error ? rbErr : new Error(String(rbErr)),
+          )
+        })
+      }
       // 回滚 DB：把旧库还原回 xiaodu.db（恢复前无库则删除新写入的库），best-effort。
       await this.rollbackRestoredDb(targetDb, oldDbBak).catch((rbErr) => {
         this.logger.error(
@@ -884,6 +905,63 @@ export class SyncManager {
         )
       })
       throw applyErr
+    }
+  }
+
+  /**
+   * 把一个快照目录「改名暂存 → 应用」，返回 commit/rollback 句柄，供 applyExtractedSnapshot
+   * 做文件树级 all-or-nothing 替换。
+   *
+   * - 快照里没有该目录：保持本地不动（兼容旧行为），返回空操作句柄。
+   * - mode='replace'（avatars）：本地整目录改名暂存后，仅写快照内容（旧内容不残留）。
+   * - mode='merge'（shared/conversations）：本地改名暂存后先拷回本地原内容，再叠加快照覆盖，
+   *   与旧「合并覆盖」语义一致，同时保证可回滚。
+   *
+   * 本方法自身具备原子性：应用过程中任一步失败会先把自己回滚干净再抛错，
+   * 不会把已改名的本地目录遗留成 .restore-bak。
+   */
+  private async stageDir(
+    label: string,
+    snapshotDir: string,
+    targetRoot: string,
+    mode: 'replace' | 'merge',
+  ): Promise<StagedDir> {
+    if (!(await dirExists(snapshotDir))) {
+      this.logger.warn(`restore: snapshot/${label}/ missing, keeping local ${label}/`)
+      return { rollback: async () => undefined, commit: async () => undefined }
+    }
+
+    const bak = `${targetRoot}.restore-bak.${Date.now()}`
+    const hadLocal = await dirExists(targetRoot)
+    if (hadLocal) {
+      await fs.promises.rename(targetRoot, bak)
+    }
+
+    try {
+      await fs.promises.mkdir(targetRoot, { recursive: true })
+      // merge：先把本地原内容拷回（保留未同步的本地资源），再用快照覆盖。
+      if (mode === 'merge' && hadLocal) {
+        await fs.promises.cp(bak, targetRoot, { recursive: true, force: true })
+      }
+      await fs.promises.cp(snapshotDir, targetRoot, { recursive: true, force: true })
+    } catch (err) {
+      // 本目录应用失败：先自我回滚再抛，避免遗留半拷贝目录与改名后的暂存。
+      await fs.promises.rm(targetRoot, { recursive: true, force: true }).catch(() => undefined)
+      if (hadLocal) await fs.promises.rename(bak, targetRoot).catch(() => undefined)
+      throw err
+    }
+
+    this.logger.info(`restore: ${label} ${mode === 'replace' ? 'replaced' : 'merged'} from snapshot`)
+    return {
+      // 回滚：删除已应用目录；恢复前有本地目录则改名还原，恢复前本就没有（hadLocal=false）
+      // 则停在「目录不存在」——这正是恢复前的原状，仍满足「全有或全无」。
+      rollback: async () => {
+        await fs.promises.rm(targetRoot, { recursive: true, force: true })
+        if (hadLocal) await fs.promises.rename(bak, targetRoot)
+      },
+      commit: async () => {
+        if (hadLocal) await fs.promises.rm(bak, { recursive: true, force: true })
+      },
     }
   }
 

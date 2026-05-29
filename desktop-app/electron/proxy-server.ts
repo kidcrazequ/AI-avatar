@@ -22,10 +22,29 @@ export interface SoulProxyServerDeps {
 }
 
 type PendingJob =
-  | { mode: 'sse'; res: ServerResponse }
-  | { mode: 'json'; res: ServerResponse }
+  | { mode: 'sse'; res: ServerResponse; timer: NodeJS.Timeout }
+  | { mode: 'json'; res: ServerResponse; timer: NodeJS.Timeout }
 
 const pendingJobs = new Map<string, PendingJob>()
+
+/**
+ * 单个 job 在 renderer 迟迟不回 finish 时的兜底超时（毫秒）。
+ * 客户端断开会先经 res.on('close') 清理；此超时覆盖「连接还在但 renderer
+ * 卡死/没回调」的场景，避免 pendingJobs 永久持有 ServerResponse。
+ */
+const JOB_TIMEOUT_MS = 5 * 60 * 1000
+
+/**
+ * 释放一个 pending job：从表中移除并清除其超时定时器。
+ * 返回被移除的 job（若已不存在则 undefined）。幂等——重复释放安全。
+ */
+function releaseJob(jobId: string): PendingJob | undefined {
+  const job = pendingJobs.get(jobId)
+  if (!job) return undefined
+  pendingJobs.delete(jobId)
+  clearTimeout(job.timer)
+  return job
+}
 
 let httpServer: ReturnType<typeof createServer> | null = null
 
@@ -99,9 +118,8 @@ export function registerSoulProxyIpcHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(
     'soul-proxy-api:finish',
     (_event, jobId: string, payload: { error?: string; json?: unknown }) => {
-      const job = pendingJobs.get(jobId)
+      const job = releaseJob(jobId)
       if (!job) return { ok: false }
-      pendingJobs.delete(jobId)
       // 录制器异步落盘，不阻塞 finish；recorder 内部已 try/catch
       void flowRecorder.onFinish(jobId, payload)
       try {
@@ -227,8 +245,27 @@ export function startSoulProxyServer(deps: SoulProxyServerDeps): void {
     }
 
     const jobId = crypto.randomUUID()
+    // 兜底超时：renderer 卡死/没回调时清理 job 并回 504，避免 res 永久挂在 pendingJobs。
+    const timer = setTimeout(() => {
+      const timedOut = releaseJob(jobId)
+      if (!timedOut) return
+      log?.channel('soul-proxy', 'timeout', `job=${jobId} 超过 ${JOB_TIMEOUT_MS}ms 未 finish，强制清理`)
+      void flowRecorder.onFinish(jobId, { error: 'timeout' })
+      try {
+        if (timedOut.mode === 'sse') {
+          timedOut.res.write(`event: error\ndata: ${JSON.stringify({ type: 'error', error: { type: 'timeout_error', message: 'Soul proxy job timed out' } })}\n\n`, 'utf8')
+          timedOut.res.end()
+        } else {
+          sendJson(timedOut.res, 504, { error: 'gateway_timeout', message: 'Soul proxy job timed out' })
+        }
+      } catch {
+        void 0 // socket 可能已关闭
+      }
+    }, JOB_TIMEOUT_MS)
+    timer.unref?.() // 不阻止进程退出
+
     if (stream) {
-      pendingJobs.set(jobId, { mode: 'sse', res })
+      pendingJobs.set(jobId, { mode: 'sse', res, timer })
       res.writeHead(200, {
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
@@ -236,8 +273,18 @@ export function startSoulProxyServer(deps: SoulProxyServerDeps): void {
         'Access-Control-Allow-Origin': '*',
       })
     } else {
-      pendingJobs.set(jobId, { mode: 'json', res })
+      pendingJobs.set(jobId, { mode: 'json', res, timer })
     }
+
+    // 客户端断开 / 响应关闭：若 renderer 还没 finish，释放占用并落一条 aborted 记录。
+    // 正常 finish 时 job 已被 releaseJob 移除，此处 if(stillPending) 为 no-op。
+    res.on('close', () => {
+      const stillPending = releaseJob(jobId)
+      if (stillPending) {
+        log?.channel('soul-proxy', 'client-closed', `job=${jobId} 连接关闭，释放未完成 job`)
+        void flowRecorder.onFinish(jobId, { error: 'client_closed' })
+      }
+    })
 
     const payload: SoulProxyRunPayload = {
       jobId,
@@ -257,7 +304,7 @@ export function startSoulProxyServer(deps: SoulProxyServerDeps): void {
       win.webContents.send('soul-proxy-api:run-request', payload)
       log?.channel('soul-proxy', 'dispatched', `job=${jobId} stream=${stream} conv=${conversationId.trim()}`)
     } catch (e) {
-      pendingJobs.delete(jobId)
+      releaseJob(jobId)
       const msg = e instanceof Error ? e.message : String(e)
       sendJson(res, 500, { error: 'dispatch_failed', message: msg })
     }

@@ -942,7 +942,13 @@ export class SyncManager {
     }
 
     const bak = `${targetRoot}.restore-bak.${Date.now()}`
-    const hadLocal = await dirExists(targetRoot)
+    const localStat = await fs.promises.stat(targetRoot).catch(() => null)
+    if (localStat && !localStat.isDirectory()) {
+      // 目标路径被占成非目录（异常状态）：在任何 rename/mkdir/rm 之前直接抛错，
+      // 绝不删除或覆盖它，避免把用户的原文件误删；本次 restore 失败并整体回滚。
+      throw new Error(`restore: ${label} 目标路径存在但不是目录，已中止以避免误删: ${targetRoot}`)
+    }
+    const hadLocal = localStat !== null // 非空即目录（上面已排除非目录情形）
     if (hadLocal) {
       await fs.promises.rename(targetRoot, bak)
     }

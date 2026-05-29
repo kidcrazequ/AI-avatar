@@ -788,12 +788,16 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       setPendingReferenceCount(c => c + 1)
       void window.electronAPI.webSearch(query.trim()).then(({ query: q, results, abstract, abstractSource }) => {
         if (!mountedRef.current) return
-        // 搜索返回后再检一次容量：异步期间可能其它路径加了附件把额度占满
+        // 搜索返回后再检一次容量并“原子占位”：异步期间可能其它路径加了附件把额度占满。
+        // 同 handleSelectEntry：setPendingDocs 的 updater 在渲染阶段才跑，单纯预检会留窗口让
+        // 两个并发异步引用都通过后各自 append 致超额；这里通过的瞬间同步 +1 占位（check 与自增
+        // 无 await，单线程下原子），后到回调立即看到新计数被挡住，updater 内再回填真实长度。
         if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
           restoreAtTokenAsync()
           showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
           return
         }
+        totalCountRef.current += 1
         const parts: string[] = [`# 联网搜索：${q}`]
         if (abstract) {
           parts.push(`\n## 摘要${abstractSource ? `（来源：${abstractSource}）` : ''}\n${abstract}`)
@@ -910,14 +914,19 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         showHint('warn', `引用解析失败：@${entry.namespace}/${entry.title}（已恢复输入，可重试或编辑）`)
         return
       }
-      // 解析回来后再检一次容量：异步期间可能其它路径加了附件把额度占满。
-      // 之前 setPendingDocs updater 内 return prev 后仍 showHint 'info' "已引用"，
-      // 用户以为成功实际没塞进 chip；改为同步预检 + 失败路径恢复 token
+      // 解析回来后再检一次容量并“原子占位”：异步期间可能其它路径加了附件把额度占满。
+      // 注意 setPendingDocs 的 functional updater 在 React 的渲染阶段才执行（这里是
+      // .then/await 回调，更新被异步批处理），所以单纯“同步预检 + updater 内 append”
+      // 仍存在窗口：两个并发异步引用都能在各自 updater 落库前通过预检，随后都 append → 超额。
+      // 修复：通过的瞬间同步自增 totalCountRef 占位。JS 单线程，check 与自增之间无 await，
+      // 二者原子；后到的回调立即看到新计数从而被预检挡住。updater 内再用数组真实长度回填，
+      // 防止占位与实际 chip 数漂移。toast/restore 因此能保持同步且只在确实加入后才提示“已引用”。
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
         restoreAtTokenAsync()
         showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@${entry.namespace}/${entry.title} 引用已恢复，请清理附件后重试`)
         return
       }
+      totalCountRef.current += 1
       const fakeId = `@${entry.namespace}:${entry.id}:${Date.now()}`
       setPendingDocs(prev => {
         const next: PendingDocAttachment[] = [

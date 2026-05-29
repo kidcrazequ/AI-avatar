@@ -209,7 +209,13 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   const asrChunksRef = useRef<Float32Array[]>([])
   const asrInputSampleRateRef = useRef(ASR_TARGET_SAMPLE_RATE)
   const lastAsrTextRef = useRef('')
-  /** 同步追踪图片 + 文档总数，用于异步流程的提前检查 */
+  /**
+   * 容量信号量：值 = 已落 chip 数（pendingImages + pendingDocs）+ 在途占位数。
+   * 只用 ±1 相对增减维护——进入异步（图片压缩 / saveAttachment / @、@web 解析）前 += 1 占位，
+   * 失败或卸载 -= 1 释放，成功落 chip 不再变动（占位即转为实际 chip），删除 chip -= 1，发送清零。
+   * 禁止用 pendingImages/pendingDocs 的 state 闭包做绝对重算：旧闭包会把并发在途占位算丢，
+   * 导致边界处超额（已有 8 个 + 并发拖入 A/B，A 先完成把 B 的占位重算冲掉 → 还能再加 → 11 个）。
+   */
   const totalCountRef = useRef(0)
   /**
    * 异步解析中的 @ 引用计数：handleSelectEntry / @web 都是先把 @... 从输入框移除，
@@ -449,18 +455,14 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         return
       }
       if (!mountedRef.current) { releaseSlot(); return }
-      setPendingImages(prev => {
-        const next = [...prev, compressed]
-        totalCountRef.current = next.length + pendingDocs.length
-        return next
-      })
-      // 占位已被实际 chip 取代：只松开发送锁，容量名额由上面的 recompute 接管
+      setPendingImages(prev => [...prev, compressed])
+      // 占位即代表该 chip（totalCountRef 不再重算，避免旧闭包冲掉并发占位）：只松开发送锁
       released = true
       setPendingAttachmentCount(c => Math.max(0, c - 1))
     }
     reader.onerror = () => { releaseSlot(); showHint('error', `读取图片失败: ${file.name}`) }
     reader.readAsDataURL(file)
-  }, [pendingDocs.length, showHint])
+  }, [showHint])
 
   const addDocumentFile = useCallback(async (file: File) => {
     const ext = getExt(file.name)
@@ -505,7 +507,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       totalCountRef.current = Math.max(0, totalCountRef.current - 1)
       if (mountedRef.current) setPendingAttachmentCount(c => Math.max(0, c - 1))
     }
-    // 成功落库：占位被实际 chip 取代，只松发送锁，容量名额由 updater 的 recompute 接管
+    // 成功落库：占位即转为实际 chip（totalCountRef 不再重算），只松发送锁
     const consumeSlot = () => {
       if (released) return
       released = true
@@ -538,7 +540,6 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
               outline: meta.outline,
             },
           ]
-          totalCountRef.current = pendingImages.length + next.length
           return next
         })
         consumeSlot()
@@ -565,7 +566,6 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
             outline: meta.outline,
           },
         ]
-        totalCountRef.current = pendingImages.length + next.length
         return next
       })
       consumeSlot()
@@ -576,7 +576,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       showHint('error', `上传失败: ${msg}`)
       window.electronAPI.logEvent('error', 'attachment-upload-failed', `${file.name}: ${msg}`)
     }
-  }, [conversationId, pendingImages.length, showHint])
+  }, [conversationId, showHint])
 
   /** 统一入口：根据 MIME 把 File 分发到 image / document 路径 */
   const addFile = useCallback((file: File) => {
@@ -844,10 +844,10 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       setPendingReferenceCount(c => c + 1)
       void window.electronAPI.webSearch(query.trim()).then(({ query: q, results, abstract, abstractSource }) => {
         if (!mountedRef.current) return
-        // 搜索返回后再检一次容量并“原子占位”：异步期间可能其它路径加了附件把额度占满。
-        // 同 handleSelectEntry：setPendingDocs 的 updater 在渲染阶段才跑，单纯预检会留窗口让
-        // 两个并发异步引用都通过后各自 append 致超额；这里通过的瞬间同步 +1 占位（check 与自增
-        // 无 await，单线程下原子），后到回调立即看到新计数被挡住，updater 内再回填真实长度。
+        // 搜索返回后再检一次容量并“原子占位”：异步期间可能其它路径占满额度。
+        // totalCountRef 是“已落 chip + 在途占位”的同步信号量，check 与 += 1 之间无 await、
+        // 单线程下原子，后到的并发引用立即看到新计数被预检挡住；占位即代表该 @web chip，
+        // append 成功不再重算（旧闭包重算会把并发占位冲掉致超额）。
         if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
           restoreAtTokenAsync()
           showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
@@ -883,7 +883,6 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
               outline: null,
             },
           ]
-          totalCountRef.current = pendingImages.length + next.length
           return next
         })
         showHint('info', `已引用 @web/${q.slice(0, 20)}（${results.length} 条结果）`)
@@ -919,7 +918,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         ta.setSelectionRange(pos, pos)
       })
     }
-  }, [input, closeCtxPalette, loadCtxEntries, pendingImages.length, showHint, webSearchEnabled])
+  }, [input, closeCtxPalette, loadCtxEntries, showHint, webSearchEnabled])
 
   /** 选中 entry：展开为 inlineFile 推入 pendingDocs，并把输入框中 @ 起始那段移除 */
   const handleSelectEntry = useCallback(async (entry: ContextEntry) => {
@@ -970,13 +969,14 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         showHint('warn', `引用解析失败：@${entry.namespace}/${entry.title}（已恢复输入，可重试或编辑）`)
         return
       }
-      // 解析回来后再检一次容量并“原子占位”：异步期间可能其它路径加了附件把额度占满。
+      // 解析回来后再检一次容量并“原子占位”：异步期间可能其它路径占满额度。
       // 注意 setPendingDocs 的 functional updater 在 React 的渲染阶段才执行（这里是
       // .then/await 回调，更新被异步批处理），所以单纯“同步预检 + updater 内 append”
       // 仍存在窗口：两个并发异步引用都能在各自 updater 落库前通过预检，随后都 append → 超额。
-      // 修复：通过的瞬间同步自增 totalCountRef 占位。JS 单线程，check 与自增之间无 await，
-      // 二者原子；后到的回调立即看到新计数从而被预检挡住。updater 内再用数组真实长度回填，
-      // 防止占位与实际 chip 数漂移。toast/restore 因此能保持同步且只在确实加入后才提示“已引用”。
+      // 修复：totalCountRef 是“已落 chip + 在途占位”的同步信号量，通过的瞬间 += 1 占位。
+      // JS 单线程，check 与自增之间无 await、二者原子，后到的回调立即看到新计数被预检挡住。
+      // 占位即代表该 chip，append 成功不再重算（旧闭包重算会把并发占位冲掉致超额）；reserve
+      // 紧邻 append、之间无 early return，失败/取消路径都在 reserve 之前已 return，无需释放。
       if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
         restoreAtTokenAsync()
         showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@${entry.namespace}/${entry.title} 引用已恢复，请清理附件后重试`)
@@ -999,14 +999,13 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
             outline: null,
           },
         ]
-        totalCountRef.current = pendingImages.length + next.length
         return next
       })
       showHint('info', `已引用 @${entry.namespace}/${entry.title}`)
     } finally {
       if (mountedRef.current) setPendingReferenceCount(c => Math.max(0, c - 1))
     }
-  }, [avatarId, closeCtxPalette, ctxConvMsgCount, input, pendingImages.length, showHint])
+  }, [avatarId, closeCtxPalette, ctxConvMsgCount, input, showHint])
 
   /** textarea onChange：检测 slash / @ 起始 + 同步 query */
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1187,20 +1186,18 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
   const handleDragLeave = () => setIsDragging(false)
 
+  // 删除 chip：信号量 -= 1（相对增减，勿用数组绝对重算以免冲掉在途占位）。
+  // 同步在 updater 外做，避免 StrictMode 下 updater 双调用导致双减。
   const removeImage = (index: number) => {
-    setPendingImages(prev => {
-      const next = prev.filter((_, i) => i !== index)
-      totalCountRef.current = next.length + pendingDocs.length
-      return next
-    })
+    if (index < 0 || index >= pendingImages.length) return
+    totalCountRef.current = Math.max(0, totalCountRef.current - 1)
+    setPendingImages(prev => prev.filter((_, i) => i !== index))
   }
 
   const removeDoc = (id: string) => {
-    setPendingDocs(prev => {
-      const next = prev.filter(d => d.id !== id)
-      totalCountRef.current = pendingImages.length + next.length
-      return next
-    })
+    if (!pendingDocs.some(d => d.id === id)) return
+    totalCountRef.current = Math.max(0, totalCountRef.current - 1)
+    setPendingDocs(prev => prev.filter(d => d.id !== id))
   }
 
   const hasAnyAttachment = pendingImages.length > 0 || pendingDocs.length > 0
@@ -1382,6 +1379,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
             disabled={
               disabled
               || pendingReferenceCount > 0
+              || pendingAttachmentCount > 0
               || (!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0)
             }
             aria-label="发送消息"

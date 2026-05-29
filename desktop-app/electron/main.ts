@@ -1735,6 +1735,9 @@ wrapHandler('save-message', (
   toolCallTimelineJson?: string,
   externalId?: string,
 ) => {
+  // conversationId 会被 saveMessage fire-and-forget 写入 <conversations>/<id>.jsonl；
+  // 在 SQLite 写入前先做路径段校验，避免不安全 ID 提交后于 JSONL append 处抛未处理 rejection。
+  assertSafeSegment(conversationId, '会话ID')
   return getDb().saveMessage(conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson, externalId)
 })
 
@@ -7188,6 +7191,10 @@ wrapHandler('regression-ensure-conversation', (_, avatarId: string, conversation
   if (typeof conversationId !== 'string' || !conversationId.startsWith('regression-')) {
     throw new Error(`非法 conversationId（必须以 regression- 开头）: ${conversationId}`)
   }
+  // 前缀检查不防路径穿越：conversationId 会被 saveMessage → JSONL append 当作路径段使用，
+  // 必须走 assertSafeSegment，否则 regression-../x 这类 ID 会在 SQLite 提交后于 JSONL
+  // append 处抛出未处理 rejection。
+  assertSafeSegment(conversationId, 'conversationId')
   if (typeof title !== 'string' || title.length === 0) title = '回归测试'
   getDb().ensureConversation(conversationId, title.slice(0, 200), avatarId)
   return { ok: true }

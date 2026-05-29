@@ -220,6 +220,14 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
    * 还原 @... 文本提示用户重试，避免静默掉引用。
    */
   const [pendingReferenceCount, setPendingReferenceCount] = useState(0)
+  /**
+   * 上传中的附件计数：图片压缩（compressImage）和文档落盘（saveAttachment）都是异步，
+   * 用户拖入大文件后立刻按 Enter，消息会先发出去且不带附件——上传完成后 chip 才出现，
+   * 被带到下一条消息。与 pendingReferenceCount 同理：计数 >0 时禁用发送，上传完成/失败再减 1。
+   * 进入异步前还同步占位 totalCountRef（见 addImageFile/addDocumentFile），避免并发上传
+   * 在各自 updater 落库前都通过容量预检后超额、以及满额时仍 saveAttachment 留下未关联的孤儿行。
+   */
+  const [pendingAttachmentCount, setPendingAttachmentCount] = useState(0)
   /** 组件是否仍挂载，防止异步压缩/IPC 完成后 setState 到已卸载组件 */
   const mountedRef = useRef(true)
   /**
@@ -416,20 +424,41 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件`)
       return
     }
+    // 同步占位：压缩异步，期间禁用发送（pendingAttachmentCount）并占住容量名额
+    // （totalCountRef），避免并发上传超额。失败/卸载时 releaseSlot 释放。
+    totalCountRef.current += 1
+    setPendingAttachmentCount(c => c + 1)
+    let released = false
+    const releaseSlot = () => {
+      if (released) return
+      released = true
+      totalCountRef.current = Math.max(0, totalCountRef.current - 1)
+      if (mountedRef.current) setPendingAttachmentCount(c => Math.max(0, c - 1))
+    }
     const reader = new FileReader()
     reader.onload = async (e) => {
       const dataUrl = e.target?.result as string
-      if (!dataUrl) return
-      const compressed = await compressImage(dataUrl)
-      if (!mountedRef.current) return
+      if (!dataUrl) { releaseSlot(); return }
+      let compressed: string
+      try {
+        compressed = await compressImage(dataUrl)
+      } catch (err) {
+        releaseSlot()
+        if (mountedRef.current) showHint('error', `图片处理失败: ${file.name}`)
+        window.electronAPI.logEvent('warn', 'image-compress-failed', err instanceof Error ? err.message : String(err))
+        return
+      }
+      if (!mountedRef.current) { releaseSlot(); return }
       setPendingImages(prev => {
-        if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
         const next = [...prev, compressed]
         totalCountRef.current = next.length + pendingDocs.length
         return next
       })
+      // 占位已被实际 chip 取代：只松开发送锁，容量名额由上面的 recompute 接管
+      released = true
+      setPendingAttachmentCount(c => Math.max(0, c - 1))
     }
-    reader.onerror = () => showHint('error', `读取图片失败: ${file.name}`)
+    reader.onerror = () => { releaseSlot(); showHint('error', `读取图片失败: ${file.name}`) }
     reader.readAsDataURL(file)
   }, [pendingDocs.length, showHint])
 
@@ -463,19 +492,38 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       return
     }
 
+    // 同步占位：落盘+取摘要异步，期间禁用发送（pendingAttachmentCount）并占住容量名额
+    // （totalCountRef）。占位在 saveAttachment 之前——满额时这里就 return，不会先把文件
+    // 落库再被 updater 拒绝，从而避免 DB 留下未关联 message 的孤儿行 + 误报“已添加”。
+    totalCountRef.current += 1
+    setPendingAttachmentCount(c => c + 1)
+    let released = false
+    // 失败/卸载：释放发送锁 + 退还容量名额
+    const releaseSlot = () => {
+      if (released) return
+      released = true
+      totalCountRef.current = Math.max(0, totalCountRef.current - 1)
+      if (mountedRef.current) setPendingAttachmentCount(c => Math.max(0, c - 1))
+    }
+    // 成功落库：占位被实际 chip 取代，只松发送锁，容量名额由 updater 的 recompute 接管
+    const consumeSlot = () => {
+      if (released) return
+      released = true
+      if (mountedRef.current) setPendingAttachmentCount(c => Math.max(0, c - 1))
+    }
+
     try {
       showHint('info', `正在上传附件: ${file.name}`)
       // inline 文本：直接 readAsText，避免 base64 → 解码两次浪费
       if (route === 'inline') {
         const text = await file.text()
-        if (!mountedRef.current) return
+        if (!mountedRef.current) { releaseSlot(); return }
         // 仍然落盘一份：让历史会话能恢复 chip + 让模型可选 read_attachment 复读
         const buffer = await file.arrayBuffer()
         const base64 = arrayBufferToBase64(buffer)
         const meta = await window.electronAPI.saveAttachment(conversationId, file.name, base64, file.type || '')
-        if (!mountedRef.current) return
+        if (!mountedRef.current) { releaseSlot(); return }
         setPendingDocs(prev => {
-          if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
           const next: PendingDocAttachment[] = [
             ...prev,
             {
@@ -493,6 +541,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
           totalCountRef.current = pendingImages.length + next.length
           return next
         })
+        consumeSlot()
         showHint('info', `已添加附件: ${file.name}`)
         return
       }
@@ -501,9 +550,8 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
       const buffer = await file.arrayBuffer()
       const base64 = arrayBufferToBase64(buffer)
       const meta = await window.electronAPI.saveAttachment(conversationId, file.name, base64, file.type || '')
-      if (!mountedRef.current) return
+      if (!mountedRef.current) { releaseSlot(); return }
       setPendingDocs(prev => {
-        if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) return prev
         const next: PendingDocAttachment[] = [
           ...prev,
           {
@@ -520,8 +568,10 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         totalCountRef.current = pendingImages.length + next.length
         return next
       })
+      consumeSlot()
       showHint('info', `已添加附件: ${file.name}`)
     } catch (err) {
+      releaseSlot()
       const msg = err instanceof Error ? err.message : String(err)
       showHint('error', `上传失败: ${msg}`)
       window.electronAPI.logEvent('error', 'attachment-upload-failed', `${file.name}: ${msg}`)
@@ -543,6 +593,12 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
     // 等 setPendingReferenceCount 回到 0（解析完成或失败回退）再让用户发送。
     if (pendingReferenceCount > 0) {
       showHint('info', '引用解析中，请稍候再发送…')
+      return
+    }
+    // 附件上传中：直接发送会让消息先飞出去而 chip 还没进 pendingDocs/pendingImages，
+    // 附件丢失或被带到下一条。等上传完成/失败（pendingAttachmentCount 归 0）再发。
+    if (pendingAttachmentCount > 0) {
+      showHint('info', '附件上传中，请稍候再发送…')
       return
     }
     // 区分 DB-backed attachment（id=att_xxx，主进程 read_attachment 能查到）

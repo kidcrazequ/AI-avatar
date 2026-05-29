@@ -797,11 +797,20 @@ export class SyncManager {
    * 把 extractedDir/snapshot/* 应用到当前 userData。
    *
    * 注意：本函数 **不会** 关闭 DB 与运行中的服务，调用方必须先在 IPC 层 close 资源。
+   *
+   * 顺序刻意把 SQLite 替换放在最前（步骤 1）：DB 是唯一可能因主进程仍持有句柄而
+   * 替换失败的资源（Windows 下尤甚）。先替换 DB，一旦失败就在「还没动任何不可逆
+   * 删除」前抛错退出，避免出现「avatars 已被远端替换、DB 仍是旧的」的半恢复脏状态
+   * ——即把原先的「半恢复数据丢失」收敛为「全有或全无」的干净失败。restoreFrom 的
+   * catch 会保留 pre-restore 兜底备份，本地数据原样不动。
+   *
+   * （彻底让 Windows「DB 占用时也能恢复」需要先关闭 DB 或走启动期 staged swap，
+   *  作为后续单独任务，不在本函数范围内。）
    * 步骤：
-   *  1. 替换 avatarsRoot ← snapshot/avatars/
-   *  2. 替换 sharedRoot   ← snapshot/shared/   （目标存在则保留，仅覆写新文件）
-   *  3. 复制 snapshot/conversations/*.jsonl ← conversationsRoot
-   *  4. 替换 SQLite 文件 dbPath ← snapshot/xiaodu-snapshot.db
+   *  1. 替换 SQLite 文件 dbPath ← snapshot/xiaodu-snapshot.db（最易失败，放最前）
+   *  2. 替换 avatarsRoot ← snapshot/avatars/（不可逆 rm，必须在 DB 替换成功后才执行）
+   *  3. 替换 sharedRoot   ← snapshot/shared/   （目标存在则保留，仅覆写新文件）
+   *  4. 复制 snapshot/conversations/*.jsonl ← conversationsRoot
    *
    * 使用 fs.cp（recursive: true, force: true）；为了减少误删风险，
    * shared 目录采取「合并覆盖」而非「先删再写」。
@@ -809,54 +818,86 @@ export class SyncManager {
   private async applyExtractedSnapshot(extractedDir: string): Promise<void> {
     const snapshotRoot = path.join(extractedDir, 'snapshot')
 
-    // 1. avatars：先 rm 再 cp（保证旧分身不残留）
-    const snapshotAvatars = path.join(snapshotRoot, 'avatars')
-    if (await dirExists(snapshotAvatars)) {
-      await fs.promises.rm(this.avatarsRoot, { recursive: true, force: true })
-      await fs.promises.mkdir(this.avatarsRoot, { recursive: true })
-      await fs.promises.cp(snapshotAvatars, this.avatarsRoot, { recursive: true, force: true })
-      this.logger.info(`restore: avatars replaced from ${snapshotAvatars}`)
-    } else {
-      this.logger.warn('restore: snapshot/avatars/ missing, keeping local avatars/')
-    }
-
-    // 2. shared：合并覆盖（开发场景下 shared 通常包含未同步的本地资源）
-    const snapshotShared = path.join(snapshotRoot, 'shared')
-    if (await dirExists(snapshotShared)) {
-      await fs.promises.mkdir(this.sharedRoot, { recursive: true })
-      await fs.promises.cp(snapshotShared, this.sharedRoot, { recursive: true, force: true })
-      this.logger.info(`restore: shared merged from ${snapshotShared}`)
-    }
-
-    // 3. conversations：合并覆盖 jsonl
-    const snapshotConvs = path.join(snapshotRoot, 'conversations')
-    if (await dirExists(snapshotConvs)) {
-      await fs.promises.mkdir(this.conversationsRoot, { recursive: true })
-      await fs.promises.cp(snapshotConvs, this.conversationsRoot, { recursive: true, force: true })
-      this.logger.info(`restore: conversations merged from ${snapshotConvs}`)
-    }
-
-    // 4. SQLite 文件替换
+    // 1. SQLite 文件替换（最前）：这是唯一可能因句柄占用而失败的步骤。
+    //    一旦失败就在不可逆的 avatars rm 之前抛错退出，保证「全有或全无」。
     const snapshotDb = path.join(snapshotRoot, 'xiaodu-snapshot.db')
-    if (await fileExists(snapshotDb)) {
-      const targetDb = path.join(this.userDataPath, 'xiaodu.db')
-      // 先把目标文件移到 .restore-bak.<ts>，再 rename 新文件，最大限度避免半成品
-      const bakPath = `${targetDb}.restore-bak.${Date.now()}`
-      if (await fileExists(targetDb)) {
-        try {
-          await fs.promises.rename(targetDb, bakPath)
-        } catch (err) {
-          // 主进程仍持有 db handle 时 rename 在 Windows 下会失败；改 copy
-          this.logger.warn(
-            `restore: rename old db failed, falling back to copy+unlink (${describeError(err)})`,
-          )
-          await fs.promises.copyFile(targetDb, bakPath)
-        }
+    if (!(await fileExists(snapshotDb))) {
+      throw new Error('restore: snapshot/xiaodu-snapshot.db missing in zip')
+    }
+    const targetDb = path.join(this.userDataPath, 'xiaodu.db')
+    // 先把目标文件移到 .restore-bak.<ts>，再 copy 新文件，最大限度避免半成品
+    const bakPath = `${targetDb}.restore-bak.${Date.now()}`
+    let oldDbBak: string | null = null
+    if (await fileExists(targetDb)) {
+      try {
+        await fs.promises.rename(targetDb, bakPath)
+      } catch (err) {
+        // 主进程仍持有 db handle 时 rename 在 Windows 下会失败；改 copy
+        this.logger.warn(
+          `restore: rename old db failed, falling back to copy+unlink (${describeError(err)})`,
+        )
+        await fs.promises.copyFile(targetDb, bakPath)
       }
+      oldDbBak = bakPath
+    }
+
+    // DB 覆盖 + 后续文件替换包在同一 try 内：DB 已切到远端快照后，只要 avatars/shared/
+    // conversations 任一步失败，就把 DB 回滚到恢复前状态，避免「DB 已恢复、文件未完整恢复」
+    // 的脏状态（下次启动会读到与磁盘文件不一致的库）。
+    try {
+      // 覆盖目标 DB：句柄被占用时此处会抛错，此时 avatars 尚未被触碰 → 干净失败。
       await fs.promises.copyFile(snapshotDb, targetDb)
       this.logger.info(`restore: SQLite replaced (old kept at ${bakPath})`)
+
+      // 2. avatars：先 rm 再 cp（保证旧分身不残留）。只有 DB 替换成功后才走到这里。
+      const snapshotAvatars = path.join(snapshotRoot, 'avatars')
+      if (await dirExists(snapshotAvatars)) {
+        await fs.promises.rm(this.avatarsRoot, { recursive: true, force: true })
+        await fs.promises.mkdir(this.avatarsRoot, { recursive: true })
+        await fs.promises.cp(snapshotAvatars, this.avatarsRoot, { recursive: true, force: true })
+        this.logger.info(`restore: avatars replaced from ${snapshotAvatars}`)
+      } else {
+        this.logger.warn('restore: snapshot/avatars/ missing, keeping local avatars/')
+      }
+
+      // 3. shared：合并覆盖（开发场景下 shared 通常包含未同步的本地资源）
+      const snapshotShared = path.join(snapshotRoot, 'shared')
+      if (await dirExists(snapshotShared)) {
+        await fs.promises.mkdir(this.sharedRoot, { recursive: true })
+        await fs.promises.cp(snapshotShared, this.sharedRoot, { recursive: true, force: true })
+        this.logger.info(`restore: shared merged from ${snapshotShared}`)
+      }
+
+      // 4. conversations：合并覆盖 jsonl
+      const snapshotConvs = path.join(snapshotRoot, 'conversations')
+      if (await dirExists(snapshotConvs)) {
+        await fs.promises.mkdir(this.conversationsRoot, { recursive: true })
+        await fs.promises.cp(snapshotConvs, this.conversationsRoot, { recursive: true, force: true })
+        this.logger.info(`restore: conversations merged from ${snapshotConvs}`)
+      }
+    } catch (applyErr) {
+      // 回滚 DB：把旧库还原回 xiaodu.db（恢复前无库则删除新写入的库），best-effort。
+      await this.rollbackRestoredDb(targetDb, oldDbBak).catch((rbErr) => {
+        this.logger.error(
+          'restore: DB rollback failed',
+          rbErr instanceof Error ? rbErr : new Error(String(rbErr)),
+        )
+      })
+      throw applyErr
+    }
+  }
+
+  /**
+   * 恢复期 DB 回滚：把 oldDbBak 还原回 targetDb；恢复前本就无库（oldDbBak=null）时
+   * 删除已写入的新库，回到「无本地库」原状。供 applyExtractedSnapshot 失败路径调用。
+   */
+  private async rollbackRestoredDb(targetDb: string, oldDbBak: string | null): Promise<void> {
+    if (oldDbBak && (await fileExists(oldDbBak))) {
+      await fs.promises.copyFile(oldDbBak, targetDb)
+      this.logger.warn('restore: 后续步骤失败，已将 DB 回滚到恢复前状态')
     } else {
-      throw new Error('restore: snapshot/xiaodu-snapshot.db missing in zip')
+      await fs.promises.rm(targetDb, { force: true })
+      this.logger.warn('restore: 后续步骤失败，已删除新写入的 DB（恢复前本地无库）')
     }
   }
 

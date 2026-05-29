@@ -684,6 +684,74 @@ test('sync-manager: restoreFrom 拒绝非法 filename', { skip: skipReason ?? fa
   }
 })
 
+test('sync-manager: applyExtractedSnapshot DB 步骤失败时不触碰本地 avatars（无半恢复）', { skip: skipReason ?? false }, async () => {
+  resetFakeWebDav()
+  const h = makeManager()
+  try {
+    // 本地 avatars 已有 a.txt（makeManager 预置）；构造一个「有 avatars 但缺 DB」的快照目录。
+    // 重排后 DB 替换在最前，缺 DB 应在删除 avatars 之前抛错 → 本地 a.txt 必须原样保留。
+    const extractedDir = path.join(h.workDir, 'extracted')
+    const snapshotRoot = path.join(extractedDir, 'snapshot')
+    fs.mkdirSync(path.join(snapshotRoot, 'avatars'), { recursive: true })
+    fs.writeFileSync(path.join(snapshotRoot, 'avatars', 'remote.txt'), Buffer.from('REMOTE'))
+    // 故意不写 snapshot/xiaodu-snapshot.db
+
+    const apply = (h.manager as unknown as {
+      applyExtractedSnapshot(dir: string): Promise<void>
+    }).applyExtractedSnapshot.bind(h.manager)
+
+    await assert.rejects(apply(extractedDir), /xiaodu-snapshot\.db missing/)
+
+    // 关键断言：本地 avatars 未被替换（旧分身仍在，远端文件没进来）
+    assert.ok(
+      fs.existsSync(path.join(h.workDir, 'avatars', 'a.txt')),
+      'DB 步骤失败时本地 avatars/a.txt 必须保留',
+    )
+    assert.ok(
+      !fs.existsSync(path.join(h.workDir, 'avatars', 'remote.txt')),
+      '失败时远端 avatars 不应被应用',
+    )
+  } finally {
+    h.cleanup()
+  }
+})
+
+test('sync-manager: applyExtractedSnapshot DB 替换后某步失败 → DB 回滚到恢复前', { skip: skipReason ?? false }, async () => {
+  resetFakeWebDav()
+  const h = makeManager()
+  try {
+    // 预置一个旧的本地 xiaodu.db（内容 OLDDB）
+    const targetDb = path.join(h.workDir, 'xiaodu.db')
+    fs.writeFileSync(targetDb, Buffer.from('OLDDB'))
+    // 让 conversations 步骤必然失败：把 conversationsRoot 预先写成「文件」，
+    // 后续 mkdir(conversationsRoot, {recursive}) 会抛错 → 触发 DB 回滚
+    fs.writeFileSync(path.join(h.workDir, 'conversations'), Buffer.from('blocker'))
+
+    const extractedDir = path.join(h.workDir, 'extracted')
+    const snapshotRoot = path.join(extractedDir, 'snapshot')
+    fs.mkdirSync(snapshotRoot, { recursive: true })
+    fs.writeFileSync(path.join(snapshotRoot, 'xiaodu-snapshot.db'), Buffer.from('NEWDB'))
+    // 仅放 conversations（让步骤 2/3 跳过，步骤 4 触发失败）
+    fs.mkdirSync(path.join(snapshotRoot, 'conversations'), { recursive: true })
+    fs.writeFileSync(path.join(snapshotRoot, 'conversations', 'c.jsonl'), Buffer.from('{}'))
+
+    const apply = (h.manager as unknown as {
+      applyExtractedSnapshot(dir: string): Promise<void>
+    }).applyExtractedSnapshot.bind(h.manager)
+
+    await assert.rejects(apply(extractedDir))
+
+    // 关键断言：DB 已回滚到 OLDDB，而不是停留在远端 NEWDB
+    assert.equal(
+      fs.readFileSync(targetDb, 'utf-8'),
+      'OLDDB',
+      '后续步骤失败时 xiaodu.db 必须回滚到恢复前内容',
+    )
+  } finally {
+    h.cleanup()
+  }
+})
+
 test('sync-manager: deviceId 持久化（多次 getStatus 返回同一 deviceId）', { skip: skipReason ?? false }, async () => {
   resetFakeWebDav()
   const h = makeManager()

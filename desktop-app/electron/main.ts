@@ -2642,25 +2642,31 @@ wrapHandler('knowledge:list-excel-files', (_, avatarId: string) => {
 
 interface SoulPackPathToken {
   filePath: string
+  /** preview 时文件内容的 sha256——import 前复核，文件被替换则拒绝（5 分钟 TTL 内的 TOCTOU 防护） */
+  sha256: string
   expiresAt: number
 }
 const soulPackPathTokens = new Map<string, SoulPackPathToken>()
 const SOUL_PACK_TOKEN_TTL_MS = 5 * 60 * 1000
 
-function issueSoulPackPathToken(filePath: string): string {
+function sha256OfSoulPack(content: string): string {
+  return crypto.createHash('sha256').update(content, 'utf-8').digest('hex')
+}
+
+function issueSoulPackPathToken(filePath: string, sha256: string): string {
   const token = crypto.randomBytes(16).toString('hex')
-  soulPackPathTokens.set(token, { filePath, expiresAt: Date.now() + SOUL_PACK_TOKEN_TTL_MS })
+  soulPackPathTokens.set(token, { filePath, sha256, expiresAt: Date.now() + SOUL_PACK_TOKEN_TTL_MS })
   return token
 }
 
-/** 消费 token：找到 → 删除并返回 filePath；缺失或过期 → null */
-function consumeSoulPackPathToken(token: string): string | null {
+/** 消费 token：找到 → 删除并返回 {filePath, sha256}；缺失或过期 → null */
+function consumeSoulPackPathToken(token: string): { filePath: string; sha256: string } | null {
   if (typeof token !== 'string' || token.length === 0) return null
   const entry = soulPackPathTokens.get(token)
   if (!entry) return null
   soulPackPathTokens.delete(token)
   if (entry.expiresAt < Date.now()) return null
-  return entry.filePath
+  return { filePath: entry.filePath, sha256: entry.sha256 }
 }
 
 wrapHandler('soul-pack:export-to-file', async (_, avatarId: string, options?: ExportSoulPackOptions) => {
@@ -2714,7 +2720,9 @@ wrapHandler('soul-pack:preview', async () => {
   const inputFilePath = openResult.filePaths[0]
   const json = fs.readFileSync(inputFilePath, 'utf-8')
   const pack = parseSoulPack(json)
-  const token = issueSoulPackPathToken(inputFilePath)
+  // token 绑定 preview 当时的内容指纹：TTL 内文件被替换时 import 复核会失败，
+  // 确保用户确认的摘要与实际导入内容一致（防 TOCTOU）。
+  const token = issueSoulPackPathToken(inputFilePath, sha256OfSoulPack(json))
   return {
     ok: true as const,
     token,
@@ -2736,11 +2744,15 @@ wrapHandler('soul-pack:preview', async () => {
 })
 
 wrapHandler('soul-pack:import-from-file', (_, token: string, options?: ImportSoulPackOptions) => {
-  const inputFilePath = consumeSoulPackPathToken(token)
-  if (!inputFilePath) {
+  const consumed = consumeSoulPackPathToken(token)
+  if (!consumed) {
     throw new Error('soul-pack 路径 token 无效或已过期，请重新选择文件')
   }
-  const json = fs.readFileSync(inputFilePath, 'utf-8')
+  const json = fs.readFileSync(consumed.filePath, 'utf-8')
+  // 复核内容指纹：preview 之后文件被替换（TTL 内 TOCTOU）则拒绝，避免确认内容与导入内容不一致。
+  if (sha256OfSoulPack(json) !== consumed.sha256) {
+    throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
+  }
   const pack = parseSoulPack(json)
   return importSoulPack(avatarsPath, pack, options ?? {})
 })

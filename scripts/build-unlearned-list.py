@@ -25,6 +25,12 @@ def learned_md_path(p):
 def is_learned(p):
     m=learned_md_path(p)
     return bool(m and os.path.exists(m))
+def arc_member_learned(archive, member):
+    """压缩包内成员是否已有对应 md（解压入库 / 归档图片 OCR 后生成）。"""
+    rel=os.path.relpath(archive,DL); parts=rel.split(os.sep)
+    if parts[0] not in SRC_MAP or len(parts)<2: return False
+    base=os.path.join(KN,SRC_MAP[parts[0]],os.path.splitext(os.path.join(*parts[1:]))[0]+"__解压")
+    return os.path.exists(os.path.join(base,os.path.splitext(member)[0]+".md"))
 
 # ext -> (类别, 问题说明, 能否补救/如何补救)
 CAT={}
@@ -98,6 +104,7 @@ def main():
             e=os.path.splitext(m)[1].lower()
             if e in CONV: continue                 # 文本类，已学习
             if e in (".zip",".rar",".7z"): continue # 嵌套包另算
+            if arc_member_learned(a,m): continue   # 图片 OCR 等已补学
             cat,prob,rem=cat_of(m)
             if shown<per_arc_cap:
                 buckets[(cat,prob,rem)].append(f"{arel} :: {m}")

@@ -704,6 +704,11 @@ function initManagers() {
     .filter((row) => row.enabled)
     .map(mcpRowToConfig)
   mcpManager = new McpClientManager(mcpInitialConfigs)
+  // 构造函数只把 enabled server 置为 connecting，真正连接要靠 ready()。
+  // fire-and-forget：异步发起首批连接，不阻塞启动；单个失败仅 warn（单个 server 失败不影响 app 启动）。
+  void mcpManager.ready().catch((err) => {
+    console.warn('[Main] mcpManager.ready() 首批连接失败:', err instanceof Error ? err.message : String(err))
+  })
 
   const resolveConversationProjectIdFromDb = (cid: string): string => {
     assertSafeSegment(cid, 'conversationId')

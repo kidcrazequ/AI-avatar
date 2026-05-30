@@ -3204,7 +3204,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 与是否在视图无关，保证答复永不丢失。
     const isViewedConv = (): boolean => get().currentConversationId === conversationId
 
-    const { messages, systemPrompt, chatModel: cloudChatModel, localChatModel, chatModelMode } = get()
+    const { systemPrompt, chatModel: cloudChatModel, localChatModel, chatModelMode } = get()
+    // 后台触发隔离（schedule / proxy）：sendMessage 可能被传入一个并非当前 UI 正在看的
+    // conversationId。此时 get().messages 是「当前 UI 会话」的历史，直接拿来构建 LLM 历史会
+    // 用错会话的上下文生成答案、再落库到目标会话（上下文串线）。修复：目标会话 ≠ 当前会话时，
+    // 按 conversationId 从 DB 拉取目标会话历史作为构建源；当前会话仍用 live 的 get().messages
+    // （包含尚未持久化的实时状态）。该 messages 是「本次新 user 消息之前」的历史快照，
+    // 下游 recentMessages / cacheKey / 附件标签启发式 / nudge 轮次计数全部据此构建。
+    let messages: ChatMessage[] = get().messages
+    if (conversationId !== get().currentConversationId) {
+      try {
+        const dbMsgs = await window.electronAPI.getMessages(conversationId)
+        messages = dbMsgs
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map(m => ({
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            reasoning: m.reasoning_content ?? undefined,
+          }))
+      } catch (loadErr) {
+        // 拉取目标会话历史失败：退化为「无历史」而非沿用当前会话历史——
+        // 用错会话上下文（串线 + 落库污染）比丢历史更危险。
+        messages = []
+        window.electronAPI.logEvent(
+          'warn',
+          'background-send-history-load-failed',
+          `conv=${conversationId}: ${loadErr instanceof Error ? loadErr.message : String(loadErr)}`,
+        )
+      }
+    }
     // 端云 / 端侧切换（2026-05-22 Marvis 借鉴）：active master slot 由 mode 决定。
     // 视觉路径不走 mode 切换——vision 任务依赖云端模型，本地多数 7B 不支持图像输入。
     const chatModel = chatModelMode === 'local' ? localChatModel : cloudChatModel

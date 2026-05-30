@@ -323,6 +323,11 @@ export class CommunitySkillManager {
     index: number,
     total: number,
   ): Promise<InstalledCommunityPack> {
+    // 信任边界：sources.yaml 可能被手工编辑 / 外部同步覆盖，读回的 source 必须在用于
+    // git 子进程前重新校验（addSource 的校验只覆盖写入路径，挡不住手写文件）。
+    // 放在此处而非 sync() 循环：sync() 已对每个 source try/catch + onProgress 上报，
+    // 校验失败即作为该 source 的同步失败，既拦住坏 source 又不影响其它 source。
+    this.validateSource(source)
     const tempDir = path.join(this.communityDir, `.tmp-${source.name}-${Date.now()}`)
     const destDir = path.join(this.communityDir, source.name)
 

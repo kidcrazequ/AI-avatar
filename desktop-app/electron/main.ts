@@ -17,6 +17,7 @@ app.disableHardwareAcceleration()
 
 import path from 'path'
 import fs from 'fs'
+import readline from 'readline'
 import os from 'os'
 import crypto from 'crypto'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
@@ -673,6 +674,23 @@ function initManagers() {
     }
   } catch (e) {
     logger.logEvent('warn', '[sub-agent] markOrphanRunningAsLost 失败', e instanceof Error ? e.message : String(e))
+  }
+
+  // restore 成功状态补记：上一轮 restore 成功后 DB 已被换成远端快照，成功状态当时
+  // 写不进新库（旧 db 句柄指向被 unlink 的旧 inode），落到了 sidecar。现在新库已就绪、
+  // 迁移已跑完，从 sidecar 补记 last_sync + 一条 restore success 历史，再删除 sidecar。
+  try {
+    SyncManager.consumePendingRestoreState({
+      db: db.getRawDb(),
+      syncHistoryStore: getSyncHistoryStore(),
+      userDataPath: app.getPath('userData'),
+      logger: {
+        info: (msg) => logger.activity('webdav-sync', msg),
+        warn: (msg, err) => logger.logEvent('warn', 'webdav-sync', err ? `${msg}: ${err.message}` : msg),
+      },
+    })
+  } catch (e) {
+    logger.logEvent('warn', '[sync] consumePendingRestoreState 失败', e instanceof Error ? e.message : String(e))
   }
 
   avatarManager = new AvatarManager(avatarsPath, templatesPath)
@@ -2046,14 +2064,22 @@ wrapHandler('tool-results:read', async (_, absPath: string, maxBytes = 200_000) 
   if (typeof absPath !== 'string' || !spoolRoot || !isUnderRoot(absPath, spoolRoot)) {
     throw new Error('非法路径：必须位于 tool-results 目录内')
   }
+  // maxBytes 由渲染层传入，必须在主进程 clamp：非有限正数回落到默认值，并硬限到 1MB，
+  // 否则传入超大值会绕过 200KB 防护、甚至落到整文件 readFileSync。
+  const MAX_READ_BYTES = 1_000_000
+  const requestedBytes =
+    typeof maxBytes === 'number' && Number.isFinite(maxBytes) && maxBytes > 0
+      ? Math.floor(maxBytes)
+      : 200_000
+  const cappedBytes = Math.min(requestedBytes, MAX_READ_BYTES)
   const stat = fs.statSync(absPath)
-  if (stat.size > maxBytes) {
+  if (stat.size > cappedBytes) {
     const fd = fs.openSync(absPath, 'r')
     try {
-      const buf = Buffer.alloc(maxBytes)
-      fs.readSync(fd, buf, 0, maxBytes, 0)
+      const buf = Buffer.alloc(cappedBytes)
+      fs.readSync(fd, buf, 0, cappedBytes, 0)
       return {
-        content: buf.toString('utf-8') + `\n\n[... 文件较大（${stat.size} 字节），已截断到前 ${maxBytes} 字节，可在系统资源管理器中查看完整文件]`,
+        content: buf.toString('utf-8') + `\n\n[... 文件较大（${stat.size} 字节），已截断到前 ${cappedBytes} 字节，可在系统资源管理器中查看完整文件]`,
         truncated: true,
         size: stat.size,
       }
@@ -3986,17 +4012,75 @@ wrapHandler(
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath || callId}` }
     }
-    const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
-    const totalLines = lines.length
-    if (startLine > totalLines) {
-      return { content: '', error: `start_line=${startLine} 超过总行数 ${totalLines}` }
-    }
+    // 流式按行读取目标区间，只读到本次最多返回的行号即停。spool 专门承接超大工具返回，
+    // 此前 readFileSync(abs).split() 会把整个文件（几 MB~几百 MB）读进内存再截断，阻塞主进程甚至 OOM。
+    const HARD_LINE_CAP = 3999          // 单次最多返回 4000 行（含起始行）
+    const MAX_BODY_BYTES = 1_000_000    // 返回体字节硬上限，防超长行 / 超宽返回撑爆内存
     const requestedEnd = endLineArg ?? startLine + 199
-    const cappedEnd = Math.min(totalLines, Math.min(requestedEnd, startLine + 3999))
-    const sliced = lines.slice(startLine - 1, cappedEnd)
-    const body = sliced.map((line, idx) => `${startLine + idx}|${line}`).join('\n')
-    if (requestedEnd > cappedEnd) {
-      return { content: `${body}\n[truncated: 返回 ${startLine}-${cappedEnd}/${totalLines}，受 4000 行硬上限或文件末尾限制]` }
+    const collectEnd = Math.min(requestedEnd, startLine + HARD_LINE_CAP)
+
+    const collected = await new Promise<{
+      body: string
+      lastLine: number
+      cappedEnd: number
+      truncated: boolean
+      byteCapped: boolean
+    }>((resolve, reject) => {
+      const stream = fs.createReadStream(abs, { encoding: 'utf-8' })
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+      let lineNo = 0
+      let bytes = 0
+      let truncated = false      // 目标区间之后仍有内容（行数或字节触顶）
+      let byteCapped = false
+      let done = false
+      const parts: string[] = []
+      rl.on('line', (line) => {
+        if (done) return
+        lineNo++
+        if (lineNo < startLine) return
+        if (lineNo > collectEnd) {
+          truncated = true       // 区间之后还有行
+          done = true
+          rl.close()
+          return
+        }
+        const rendered = `${lineNo}|${line}`
+        bytes += Buffer.byteLength(rendered) + 1
+        if (bytes > MAX_BODY_BYTES) {
+          truncated = true
+          byteCapped = true
+          done = true
+          rl.close()
+          return
+        }
+        parts.push(rendered)
+      })
+      rl.on('close', () => {
+        // 提前停止读取时 rl.close() 只 pause input，需主动 destroy 才能立即释放 FD。
+        stream.destroy()
+        resolve({
+          body: parts.join('\n'),
+          lastLine: lineNo,
+          cappedEnd: Math.min(collectEnd, lineNo),
+          truncated,
+          byteCapped,
+        })
+      })
+      rl.on('error', reject)
+    })
+
+    if (collected.lastLine < startLine) {
+      return { content: '', error: `start_line=${startLine} 超过总行数 ${collected.lastLine}` }
+    }
+    const { body, cappedEnd, byteCapped } = collected
+    const truncated = collected.truncated || requestedEnd > cappedEnd
+    if (truncated) {
+      const reason = byteCapped
+        ? `受返回体 ${MAX_BODY_BYTES} 字节上限`
+        : cappedEnd >= startLine + HARD_LINE_CAP
+          ? '受 4000 行硬上限'
+          : '受文件末尾或返回上限'
+      return { content: `${body}\n[truncated: 返回 ${startLine}-${cappedEnd}，${reason}限制]` }
     }
     return { content: body }
   }

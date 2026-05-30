@@ -100,6 +100,24 @@ export interface RestoreFromResult {
   preRestoreLocalPath?: string
 }
 
+/**
+ * restore 成功状态的 sidecar 内容（落到 userData/restore-pending.json）。
+ *
+ * applyExtractedSnapshot 替换 DB 后，本进程的 this.db 句柄在 POSIX 下仍绑定被 unlink 的
+ * 旧库，成功状态写不进新库。改写到本 sidecar，由下次启动 consumePendingRestoreState 补记。
+ */
+interface RestorePendingState {
+  version: 1
+  direction: 'restore'
+  status: 'success'
+  /** 完成时间 unix ms（= startedAt + durationMs） */
+  finishedAtMs: number
+  durationMs: number
+  remoteFilename: string | null
+  fileCount: number
+  totalBytes: number
+}
+
 /** applyExtractedSnapshot 内部：单个目录的暂存句柄（成功 commit / 失败 rollback） */
 interface StagedDir {
   /** 失败回滚：删除已应用目录，改名还原本地原目录 */
@@ -229,6 +247,12 @@ const BACKUP_FILENAME_PATTERN = /^soul-backup-.*\.zip$/
 
 /** 任意 settings value 长度上限，避免极端值塞满 SQLite 单行 */
 const MAX_SETTING_VALUE_LENGTH = 4096
+
+/**
+ * restore 成功状态落盘的 sidecar 文件名（userData 下）。
+ * 恢复后 DB 句柄已指向旧 inode，成功状态只能借 sidecar 跨 relaunch 写进新库。
+ */
+const RESTORE_PENDING_FILENAME = 'restore-pending.json'
 
 // ─── SyncManager ─────────────────────────────────────────────────────────────
 
@@ -565,14 +589,21 @@ export class SyncManager {
       await this.applyExtractedSnapshot(extractedDir)
 
       const durationMs = Date.now() - startedAt
-      this.syncHistoryStore.update(historyId, {
+      // DB 已被 applyExtractedSnapshot 换成远端快照（新 inode）。本进程的 this.db 句柄在
+      // POSIX 下仍指向被 rename+unlink 的旧库，往里写 success/last_sync 会随旧库一并丢弃，
+      // relaunch 后的新库读不到。改为把成功状态落到 sidecar，由下次启动（迁移跑完后）
+      // 经 consumePendingRestoreState 补记进新库。historyId 记的 in_progress 行也在旧库里，
+      // 同样随旧库丢弃，无需在此 update（补记时按新库自增 id 另插一条 success）。
+      this.writeRestorePendingState({
+        version: 1,
+        direction: 'restore',
         status: 'success',
-        file_count: manifest.entries.length,
-        total_bytes: manifest.totalBytes,
-        duration_ms: durationMs,
-        error_message: null,
+        finishedAtMs: startedAt + durationMs,
+        durationMs,
+        remoteFilename: filename,
+        fileCount: manifest.entries.length,
+        totalBytes: manifest.totalBytes,
       })
-      this.persistLastSync('restore', 'success', startedAt + durationMs, null)
 
       this.logger.info('restoreFrom: success', {
         filename,
@@ -1044,6 +1075,99 @@ export class SyncManager {
       this.deleteSetting(SETTING_KEYS.lastSyncError)
     } else {
       this.writeSetting(SETTING_KEYS.lastSyncError, error.slice(0, MAX_SETTING_VALUE_LENGTH))
+    }
+  }
+
+  /**
+   * 把 restore 成功状态写到 userData/restore-pending.json。
+   *
+   * 为什么不直接写 DB：applyExtractedSnapshot 已用远端快照替换了 xiaodu.db（新 inode），
+   * 而 this.db 句柄在 POSIX 下仍绑定被 unlink 的旧库，写进去的状态会随旧库丢弃。
+   * 由下次启动 consumePendingRestoreState 补记进新库，确保跨 relaunch 不丢。
+   * 写失败仅 warn——状态丢失不影响数据本体，恢复主链路已成功。
+   */
+  private writeRestorePendingState(state: RestorePendingState): void {
+    const file = path.join(this.userDataPath, RESTORE_PENDING_FILENAME)
+    try {
+      fs.writeFileSync(file, JSON.stringify(state), 'utf-8')
+    } catch (err) {
+      this.logger.warn(
+        'restore: 写 restore-pending sidecar 失败（成功状态可能在重启后丢失）',
+        err instanceof Error ? err : new Error(String(err)),
+      )
+    }
+  }
+
+  /**
+   * 启动时（DB 迁移跑完、新库就绪后）补记上一轮 restore 的成功状态到当前库。
+   *
+   * restore 成功后 DB 已换成远端快照，成功状态当时无法写进新库（见 writeRestorePendingState），
+   * 改由本方法在新库就绪后补写：last_sync_* settings + 一条 restore success 历史。
+   * - 无 sidecar 直接返回（正常路径）。
+   * - 旧库里的 in_progress 历史行已随旧库丢弃，故按新库自增 id 另插一条 success，
+   *   绝不拿旧库的 historyId 去 update 新库（同 id 在新库指向来源设备的无关行）。
+   * - 解析或写库失败仅 warn；处理后总是删除 sidecar，避免下次启动重复补记。
+   */
+  static consumePendingRestoreState(opts: {
+    db: Database.Database
+    syncHistoryStore: SyncHistoryStore
+    userDataPath: string
+    logger: Pick<SyncManagerLogger, 'info' | 'warn'>
+  }): void {
+    const file = path.join(opts.userDataPath, RESTORE_PENDING_FILENAME)
+    let raw: string
+    try {
+      raw = fs.readFileSync(file, 'utf-8')
+    } catch {
+      return // 没有待补记的 restore，正常路径
+    }
+    try {
+      const state = JSON.parse(raw) as Partial<RestorePendingState>
+      if (state.status !== 'success' || !Number.isFinite(state.finishedAtMs)) {
+        throw new Error('restore-pending sidecar 字段非法')
+      }
+      const finishedAtMs = Number(state.finishedAtMs)
+      // sidecar 位于 userData 用户可写，remoteFilename 可能被篡改成超长串；clamp 后再入库
+      // （SyncHistoryStore 只截断 error_message，不截断 remote_filename）。
+      const remoteFilename =
+        typeof state.remoteFilename === 'string' ? state.remoteFilename.slice(0, 512) : null
+      // settings 三写 + 清 error + 历史一行包进同一事务，避免中途崩溃留下不一致的状态字段。
+      opts.db.transaction(() => {
+        // 1. last_sync_* settings（key 与 persistLastSync 写的完全对齐）
+        const setSetting = opts.db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+        setSetting.run(SETTING_KEYS.lastSyncAt, String(finishedAtMs))
+        setSetting.run(SETTING_KEYS.lastSyncStatus, 'success')
+        setSetting.run(SETTING_KEYS.lastSyncDirection, 'restore')
+        opts.db.prepare('DELETE FROM settings WHERE key = ?').run(SETTING_KEYS.lastSyncError)
+        // 2. 一条 restore success 历史（用新库自增 id；clamp/截断由 store 兜底）
+        opts.syncHistoryStore.record({
+          direction: 'restore',
+          status: 'success',
+          file_count: Number.isFinite(state.fileCount) ? Number(state.fileCount) : 0,
+          total_bytes: Number.isFinite(state.totalBytes) ? Number(state.totalBytes) : 0,
+          duration_ms: Number.isFinite(state.durationMs) ? Number(state.durationMs) : 0,
+          remote_filename: remoteFilename,
+          error_message: null,
+          created_at: finishedAtMs,
+        })
+      })()
+      opts.logger.info('restore: 已从 sidecar 补记上一轮恢复的成功状态到新库')
+    } catch (err) {
+      opts.logger.warn(
+        'restore: 解析/补记 restore-pending sidecar 失败（已丢弃）',
+        err instanceof Error ? err : new Error(String(err)),
+      )
+    } finally {
+      // 无论成功与否都删除，避免下次启动重复补记。删不掉（只读 FS / 权限）会导致每次启动
+      // 重复插入同一条历史并把真实记录挤出 retention，故失败时 warn 而非完全静默。
+      try {
+        fs.unlinkSync(file)
+      } catch (err) {
+        opts.logger.warn(
+          'restore: 删除 restore-pending sidecar 失败（下次启动可能重复补记）',
+          err instanceof Error ? err : new Error(String(err)),
+        )
+      }
     }
   }
 

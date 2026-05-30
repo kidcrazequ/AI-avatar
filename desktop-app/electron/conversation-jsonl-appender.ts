@@ -60,6 +60,12 @@ export interface ConversationJsonlRecord {
   uncertainMarkers?: string[] | null
   /** v17：[RECONSIDER] 标记内容数组（仅 assistant；NULL 表示该消息无改主意标注） */
   reconsiderMarkers?: string[] | null
+  /**
+   * v19：assistant 工具调用时间线（解码后的 ToolCallTimelineEntry[]；NULL 表示该消息无工具调用）。
+   * 与 SQLite messages.tool_call_timeline_json 对齐，但 JSONL 沿用"解码形态"约定（同 uncertainMarkers），
+   * 离线恢复 / 事件重建时可直接读取 assistant 的工具调用过程，不必另解析嵌套 JSON 字符串。
+   */
+  toolCallTimeline?: unknown[] | null
   /** 写入时间戳（毫秒） */
   ts: number
 }

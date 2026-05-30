@@ -1442,6 +1442,16 @@ export class DatabaseManager {
     const uncertainValue = uncertainMarkers && uncertainMarkers.length > 0 ? JSON.stringify(uncertainMarkers) : null
     const reconsiderValue = reconsiderMarkers && reconsiderMarkers.length > 0 ? JSON.stringify(reconsiderMarkers) : null
     const timelineValue = toolCallTimelineJson && toolCallTimelineJson !== '[]' && toolCallTimelineJson.length > 0 ? toolCallTimelineJson : null
+    // JSONL 双写沿用解码形态：把工具时间线 JSON 解析回数组（同 uncertainMarkers），
+    // 让离线恢复 / 事件重建能直接读到 assistant 的工具调用过程。timelineValue 源自
+    // chatStore 的 JSON.stringify，正常可解析；异常仅降级为 null，绝不影响 SQLite 主存储。
+    let timelineDecoded: unknown[] | null = null
+    if (timelineValue) {
+      try {
+        const parsed = JSON.parse(timelineValue)
+        if (Array.isArray(parsed)) timelineDecoded = parsed
+      } catch { timelineDecoded = null }
+    }
 
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
@@ -1473,6 +1483,7 @@ export class DatabaseManager {
       reasoningContent: reasoningValue,
       uncertainMarkers: uncertainMarkers && uncertainMarkers.length > 0 ? uncertainMarkers : null,
       reconsiderMarkers: reconsiderMarkers && reconsiderMarkers.length > 0 ? reconsiderMarkers : null,
+      toolCallTimeline: timelineDecoded,
       ts: now,
     })
 

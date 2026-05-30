@@ -336,6 +336,10 @@ export class McpClientManager {
     try {
       const transport = this.buildTransport(record.config)
       const client = new Client({ name: 'soul-avatar', version: '1.0.0' })
+      // 先挂到 record：连接超时 / listTools 失败进 catch 时，disconnectInternal 才能
+      // close 掉本地 client/transport（含 stdio 子进程），否则它们会残留泄漏。
+      record.client = client
+      record.transport = transport
 
       // 用 Promise.race 保证连接不会卡死
       const connectPromise = client.connect(transport)
@@ -361,8 +365,6 @@ export class McpClientManager {
         cursor = page.nextCursor
       } while (cursor)
 
-      record.client = client
-      record.transport = transport
       record.tools = allTools
       record.status = 'connected'
       record.lastConnectedAt = Date.now()

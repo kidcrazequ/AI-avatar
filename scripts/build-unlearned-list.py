@@ -14,6 +14,17 @@ spec=importlib.util.spec_from_file_location("ing",os.path.join(ROOT,"scripts","i
 ing=importlib.util.module_from_spec(spec); spec.loader.exec_module(ing)
 CONV=ing.CONV
 ALREADY_LEARNED_EXT={'.md','.html'}   # 本轮已补收的可学习类型
+SRC_MAP={"00 国标及技术文献":"国标及技术文献","工作小结":"工作小结","工商业储能":"工商业储能","超充桩":"超充桩"}
+
+def learned_md_path(p):
+    """该源文件是否已有对应知识 md（图片 OCR / 媒体 ASR 等补学后会生成）。"""
+    rel=os.path.relpath(p,DL); parts=rel.split(os.sep)
+    if parts[0] in SRC_MAP and len(parts)>1:
+        return os.path.join(KN,SRC_MAP[parts[0]],os.path.splitext(os.path.join(*parts[1:]))[0]+".md")
+    return None
+def is_learned(p):
+    m=learned_md_path(p)
+    return bool(m and os.path.exists(m))
 
 # ext -> (类别, 问题说明, 能否补救/如何补救)
 CAT={}
@@ -72,6 +83,7 @@ def main():
     for p,_ in ing_rep["skipped"]:
         e=os.path.splitext(p)[1].lower()
         if e in ALREADY_LEARNED_EXT: continue
+        if is_learned(p): continue          # 图片 OCR / 媒体 ASR 后已学，剔除
         cat,prob,rem=cat_of(p)
         buckets[(cat,prob,rem)].append(p.replace(DL,""))
         skip_top+=1
@@ -94,10 +106,11 @@ def main():
             k=("（归档内大量同类文件）","单个压缩包内非文本文件过多，仅展示前 30 个","见原压缩包")
             buckets[k].append(f"{arel} :: …另有 {shown-per_arc_cap} 个非文本文件未逐一列出")
     # 输出
-    L=["# 未学习文件清单与问题分析\n",
-       f"> 生成于 2026-05-30。本文件汇总 4 个源目录里**未能转入知识库**的文件，并说明每类的问题与能否补救。\n",
-       f"> 统计：顶层非文本 **{skip_top}** 个 + 压缩包内非文本约 **{arc_skip}** 个 + 损坏/加密/老格式 **15** 个（详见 `_无法解析原件清单.md`）。\n",
-       "> 注：压缩包本身已解压学习；本轮已补收 1 个 .md + 2 个 .html（原误判为不支持），不计入未学习。\n",
+    L=["# 未学习文件清单与问题分析（补救后）\n",
+       f"> 更新于 2026-05-30（补救轮）。本文件汇总 4 个源目录里**仍未转入知识库**的文件，并说明每类问题与能否补救。\n",
+       f"> 统计：顶层仍未学 **{skip_top}** 个 + 压缩包内非文本约 **{arc_skip}** 个 + 损坏/加密/老格式 **15** 个（详见 `_无法解析原件清单.md`）。\n",
+       "> **已完成的补救**：图片 112 张已 OCR、视频/音频 75 个已 ASR 转写、1 个 .md + 2 个 .html 已补收、url 已登记参考——这些已从下表剔除。\n",
+       "> **仍未学的两大类**：① CAD dwg 117 个（本环境无转换器，已单列 `_待处理CAD图纸清单.md`）；② 纯二进制/构建产物/未下完残件（无学习价值或无法补）。\n",
        "\n## 一、问题分类总览\n",
        "| 问题类别 | 数量 | 问题说明 | 能否补救 |","|---|---|---|---|"]
     # 汇总每类数量

@@ -17,7 +17,6 @@ app.disableHardwareAcceleration()
 
 import path from 'path'
 import fs from 'fs'
-import readline from 'readline'
 import os from 'os'
 import crypto from 'crypto'
 import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
@@ -40,7 +39,7 @@ import {
 import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger, redactSensitiveArgs } from './logger'
-import { ToolResultSpool } from './tool-result-spool'
+import { ToolResultSpool, readSpoolLineRange, DEFAULT_SPOOL_MAX_BODY_BYTES, DEFAULT_SPOOL_HARD_LINE_CAP } from './tool-result-spool'
 import { AttachmentStore, MAX_ATTACHMENT_FILE_BYTES } from './attachment-store'
 import { createEmbeddingFn, createLLMFn } from './llm-factory'
 import { SKILL_GEN_SYSTEM_PROMPT, buildSkillGenUserPrompt } from './skill-generator-prompt'
@@ -3993,6 +3992,9 @@ wrapHandler(
     const endLineArg = typeof args.end_line === 'number' && Number.isFinite(args.end_line)
       ? Math.floor(args.end_line)
       : (typeof args.limit === 'number' && Number.isFinite(args.limit) ? startLine + Math.max(1, Math.floor(args.limit)) - 1 : undefined)
+    if (endLineArg !== undefined && endLineArg < startLine) {
+      return { content: '', error: `end_line(${endLineArg}) 不能小于 start_line(${startLine})` }
+    }
 
     const spoolRoot = toolResultSpool.getRootDir()
     let abs: string
@@ -4012,62 +4014,10 @@ wrapHandler(
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
       return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath || callId}` }
     }
-    // 流式按行读取目标区间，只读到本次最多返回的行号即停。spool 专门承接超大工具返回，
-    // 此前 readFileSync(abs).split() 会把整个文件（几 MB~几百 MB）读进内存再截断，阻塞主进程甚至 OOM。
-    const HARD_LINE_CAP = 3999          // 单次最多返回 4000 行（含起始行）
-    const MAX_BODY_BYTES = 1_000_000    // 返回体字节硬上限，防超长行 / 超宽返回撑爆内存
+    // 流式按字节扫描读取目标区间（readSpoolLineRange，O(1) 内存）。spool 专门承接超大工具返回，
+    // 此前 readFileSync(abs).split() 会把整个文件读进内存；即便单行超大也只读前 ~1MB。
     const requestedEnd = endLineArg ?? startLine + 199
-    const collectEnd = Math.min(requestedEnd, startLine + HARD_LINE_CAP)
-
-    const collected = await new Promise<{
-      body: string
-      lastLine: number
-      cappedEnd: number
-      truncated: boolean
-      byteCapped: boolean
-    }>((resolve, reject) => {
-      const stream = fs.createReadStream(abs, { encoding: 'utf-8' })
-      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
-      let lineNo = 0
-      let bytes = 0
-      let truncated = false      // 目标区间之后仍有内容（行数或字节触顶）
-      let byteCapped = false
-      let done = false
-      const parts: string[] = []
-      rl.on('line', (line) => {
-        if (done) return
-        lineNo++
-        if (lineNo < startLine) return
-        if (lineNo > collectEnd) {
-          truncated = true       // 区间之后还有行
-          done = true
-          rl.close()
-          return
-        }
-        const rendered = `${lineNo}|${line}`
-        bytes += Buffer.byteLength(rendered) + 1
-        if (bytes > MAX_BODY_BYTES) {
-          truncated = true
-          byteCapped = true
-          done = true
-          rl.close()
-          return
-        }
-        parts.push(rendered)
-      })
-      rl.on('close', () => {
-        // 提前停止读取时 rl.close() 只 pause input，需主动 destroy 才能立即释放 FD。
-        stream.destroy()
-        resolve({
-          body: parts.join('\n'),
-          lastLine: lineNo,
-          cappedEnd: Math.min(collectEnd, lineNo),
-          truncated,
-          byteCapped,
-        })
-      })
-      rl.on('error', reject)
-    })
+    const collected = await readSpoolLineRange(abs, startLine, requestedEnd)
 
     if (collected.lastLine < startLine) {
       return { content: '', error: `start_line=${startLine} 超过总行数 ${collected.lastLine}` }
@@ -4076,8 +4026,8 @@ wrapHandler(
     const truncated = collected.truncated || requestedEnd > cappedEnd
     if (truncated) {
       const reason = byteCapped
-        ? `受返回体 ${MAX_BODY_BYTES} 字节上限`
-        : cappedEnd >= startLine + HARD_LINE_CAP
+        ? `受返回体 ${DEFAULT_SPOOL_MAX_BODY_BYTES} 字节上限`
+        : cappedEnd >= startLine + DEFAULT_SPOOL_HARD_LINE_CAP
           ? '受 4000 行硬上限'
           : '受文件末尾或返回上限'
       return { content: `${body}\n[truncated: 返回 ${startLine}-${cappedEnd}，${reason}限制]` }

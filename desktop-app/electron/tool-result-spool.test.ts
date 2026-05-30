@@ -19,10 +19,18 @@ import os from 'os'
 import path from 'path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ToolResultSpool } from './tool-result-spool'
+import { ToolResultSpool, readSpoolLineRange } from './tool-result-spool'
 
 function makeTempUserData(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'soul-spool-test-'))
+}
+
+/** 写一个临时文件并返回路径（readSpoolLineRange 用例） */
+function writeTempFile(content: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-spool-read-'))
+  const file = path.join(dir, 'spool.txt')
+  fs.writeFileSync(file, content, 'utf-8')
+  return file
 }
 
 test('ToolResultSpool: 小内容原样返回，不落盘', () => {
@@ -167,4 +175,68 @@ test('ToolResultSpool.listForConversation: 不存在会话返回空数组', () =
   const userData = makeTempUserData()
   const spool = new ToolResultSpool(userData)
   assert.deepEqual(spool.listForConversation('not-exist'), [])
+})
+
+// ─── readSpoolLineRange：流式按字节读取，超长单行不会整体进内存 ────────────────
+
+test('readSpoolLineRange: 普通多行区间返回带行号、不算截断', async () => {
+  const file = writeTempFile('L1\nL2\nL3\nL4\nL5')
+  const r = await readSpoolLineRange(file, 2, 4)
+  assert.equal(r.body, '2|L2\n3|L3\n4|L4')
+  assert.equal(r.cappedEnd, 4)
+  assert.equal(r.truncated, false, '拿到完整请求区间即使后面还有行也不算截断')
+  assert.equal(r.byteCapped, false)
+})
+
+test('readSpoolLineRange: trailing newline 不多算一行', async () => {
+  const file = writeTempFile('L1\nL2\n')
+  const r = await readSpoolLineRange(file, 1, 100)
+  assert.equal(r.body, '1|L1\n2|L2')
+  assert.equal(r.lastLine, 2)
+})
+
+test('readSpoolLineRange: 请求超过文件行数 → cappedEnd 截到 EOF 且 truncated', async () => {
+  const file = writeTempFile('L1\nL2\nL3')
+  const r = await readSpoolLineRange(file, 1, 100)
+  assert.equal(r.lastLine, 3)
+  assert.equal(r.cappedEnd, 3)
+  assert.equal(r.truncated, true, 'requestedEnd>cappedEnd（EOF 先到）应算截断')
+})
+
+test('readSpoolLineRange: start_line 超过总行数 → lastLine<startLine、body 空', async () => {
+  const file = writeTempFile('L1\nL2\nL3')
+  const r = await readSpoolLineRange(file, 10, 12)
+  assert.equal(r.body, '')
+  assert.ok(r.lastLine < 10, '调用方据此回报「超过总行数」')
+})
+
+test('readSpoolLineRange: 单行超大 minified 内容只读到字节上限即停（不整体进内存）', async () => {
+  // 50 个 X、无换行：模拟一行超大 JSON。maxBodyBytes=20 → 只收 20 个内容字节后立即截断。
+  const file = writeTempFile('X'.repeat(50))
+  const r = await readSpoolLineRange(file, 1, 200, { maxBodyBytes: 20 })
+  assert.equal(r.body, '1|' + 'X'.repeat(20), '只应收集到字节预算内的内容')
+  assert.equal(r.lastLine, 1)
+  assert.equal(r.cappedEnd, 1)
+  assert.equal(r.byteCapped, true)
+  assert.equal(r.truncated, true)
+})
+
+test('readSpoolLineRange: 多行累计触及字节上限 → 在行边界截断', async () => {
+  const file = writeTempFile('AAAA\nBBBB\nCCCC\nDDDD')
+  // line1 "1|AAAA"=6+1 → bodyBytes=7；line2 "2|BBBB"=6+1 → bodyBytes=14 触顶
+  const r = await readSpoolLineRange(file, 1, 200, { maxBodyBytes: 14 })
+  assert.equal(r.body, '1|AAAA\n2|BBBB')
+  assert.equal(r.cappedEnd, 2)
+  assert.equal(r.byteCapped, true)
+  assert.equal(r.truncated, true)
+})
+
+test('readSpoolLineRange: 行数硬上限提前截断', async () => {
+  const lines = Array.from({ length: 20 }, (_, i) => `L${i + 1}`).join('\n')
+  const file = writeTempFile(lines)
+  const r = await readSpoolLineRange(file, 1, 100, { hardLineCap: 5 })
+  assert.equal(r.cappedEnd, 6, 'startLine(1) + hardLineCap(5) = 6')
+  assert.equal(r.body.split('\n').length, 6)
+  assert.equal(r.truncated, true, 'cappedEnd<requestedEnd（行数被砍）应算截断')
+  assert.equal(r.byteCapped, false)
 })

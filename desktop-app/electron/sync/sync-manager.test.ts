@@ -999,3 +999,28 @@ test('sync-manager: consumePendingRestoreState 非法 sidecar 不写库、删除
     fs.rmSync(userDataPath, { recursive: true, force: true })
   }
 })
+
+// 半写 / 损坏的 sidecar（JSON 解析失败）：不得污染新库，仍消费 sidecar 并 warn。
+// （写侧已用 temp+rename 原子替换避免产生这种文件，本用例守住读侧的兜底分支。）
+test('sync-manager: consumePendingRestoreState 损坏 JSON sidecar 安全降级', { skip: skipReason ?? false }, async () => {
+  if (!DatabaseCtor || !SyncManagerMod || !SyncHistoryStoreMod) throw new Error('依赖未加载（应已 skip）')
+  const db = new DatabaseCtor(':memory:')
+  setupSchema(db)
+  const history = new SyncHistoryStoreMod.SyncHistoryStore(db)
+  const userDataPath = makeTempDir('restore-backfill-broken')
+  const warns: string[] = []
+  const logger = { info: () => undefined, warn: (m: string) => warns.push(m) }
+  try {
+    const sidecar = path.join(userDataPath, 'restore-pending.json')
+    fs.writeFileSync(sidecar, '{ "status": "success", "finishedAtMs": 170000', 'utf-8') // 半写截断
+
+    SyncManagerMod.SyncManager.consumePendingRestoreState({ db, syncHistoryStore: history, userDataPath, logger })
+
+    assert.equal(history.count({ direction: 'restore' }), 0)
+    assert.ok(!fs.existsSync(sidecar), '损坏 sidecar 也必须被消费删除，避免每次启动反复失败')
+    assert.equal(warns.length, 1)
+  } finally {
+    db.close()
+    fs.rmSync(userDataPath, { recursive: true, force: true })
+  }
+})

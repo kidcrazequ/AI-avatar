@@ -210,3 +210,159 @@ export class ToolResultSpool {
     return cleaned || 'unknown_tool'
   }
 }
+
+/** read_tool_result 单次返回体字节硬上限（含超长单行防护） */
+export const DEFAULT_SPOOL_MAX_BODY_BYTES = 1_000_000
+/** read_tool_result 单次最多返回行数减一（4000 行上限，含起始行） */
+export const DEFAULT_SPOOL_HARD_LINE_CAP = 3999
+
+export interface SpoolLineRangeOptions {
+  /** 返回体字节硬上限，默认 1MB */
+  maxBodyBytes?: number
+  /** 起始行之后最多再返回多少行（4000 行上限），默认 3999 */
+  hardLineCap?: number
+}
+
+export interface SpoolLineRangeResult {
+  /** 渲染后的 "lineNo|content" 行，已 join('\n') */
+  body: string
+  /** 自然 EOF 时为真实总行数；提前停止时为已返回到的行号（>= startLine） */
+  lastLine: number
+  /** 实际返回到的行号 */
+  cappedEnd: number
+  /** 区间之后仍有内容 / 因行数或字节上限被截断 */
+  truncated: boolean
+  /** 因字节上限截断（含单行超长截断） */
+  byteCapped: boolean
+}
+
+/**
+ * 流式按行读取 spool 文件 [startLine, requestedEnd] 区间，O(1) 内存。
+ *
+ * - 逐 chunk 扫描换行字节：区间外的行只数行号、不缓存内容；
+ * - 区间内的行收集内容，但「已提交字节 + 当前行字节」一旦触及 maxBodyBytes 立即在行中截断并停止，
+ *   因此即便整个文件是一行超大 minified JSON，也只会把前 ~1MB 读进内存，不会整体加载；
+ * - 行号超过 startLine + hardLineCap 时停止（4000 行硬上限）。
+ *
+ * 为什么不用 readline：readline 以「整行」为最小单位触发 line 事件，单行超大时会先把整行
+ * 缓存进内存，字节上限来不及保护——正是本函数要解决的 OOM 场景。
+ */
+export async function readSpoolLineRange(
+  filePath: string,
+  startLine: number,
+  requestedEnd: number,
+  opts: SpoolLineRangeOptions = {},
+): Promise<SpoolLineRangeResult> {
+  const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_SPOOL_MAX_BODY_BYTES
+  const hardLineCap = opts.hardLineCap ?? DEFAULT_SPOOL_HARD_LINE_CAP
+  const collectEnd = Math.min(requestedEnd, startLine + hardLineCap)
+  const NL = 0x0a // '\n'
+
+  return await new Promise<SpoolLineRangeResult>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath)
+    const parts: string[] = []
+    let lineNo = 1 // 正在构建的行号
+    let lineStarted = false // 当前（未被换行终结的）行是否已消费过字节
+    let bodyBytes = 0 // 已提交行的字节合计（含行号前缀与换行符）
+    let byteCapped = false
+    let finished = false
+    let settled = false
+
+    let curChunks: Buffer[] = []
+    let curLen = 0
+    let curDropped = false // 当前行因预算耗尽丢弃了尾部
+
+    const inRange = (no: number): boolean => no >= startLine && no <= collectEnd
+
+    const commitLine = (): void => {
+      if (inRange(lineNo)) {
+        const content = Buffer.concat(curChunks, curLen).toString('utf-8')
+        const rendered = `${lineNo}|${content}`
+        parts.push(rendered)
+        bodyBytes += Buffer.byteLength(rendered) + 1
+        if (curDropped) byteCapped = true
+      }
+      curChunks = []
+      curLen = 0
+      curDropped = false
+    }
+
+    const settle = (lastLine: number): void => {
+      if (settled) return
+      settled = true
+      const cappedEnd = Math.min(collectEnd, lastLine)
+      resolve({
+        body: parts.join('\n'),
+        lastLine,
+        cappedEnd,
+        // 仅当内容被字节上限截断、或实际返回行号没到达请求的 requestedEnd（4000 行硬上限 / EOF）
+        // 才算 truncated；拿到完整请求区间即使文件后面还有行也不算截断（与旧行为一致）。
+        truncated: byteCapped || cappedEnd < requestedEnd,
+        byteCapped,
+      })
+    }
+
+    const stop = (lastLine: number): void => {
+      finished = true
+      stream.destroy()
+      settle(lastLine)
+    }
+
+    stream.on('data', (chunk: Buffer) => {
+      if (finished) return
+      let i = 0
+      while (i < chunk.length) {
+        const nl = chunk.indexOf(NL, i)
+        const segEnd = nl === -1 ? chunk.length : nl
+        const segLen = segEnd - i
+        if (segLen > 0) lineStarted = true
+        if (inRange(lineNo) && !curDropped && segLen > 0) {
+          const remaining = maxBodyBytes - (bodyBytes + curLen)
+          const take = Math.max(0, Math.min(segLen, remaining))
+          if (take > 0) {
+            curChunks.push(Buffer.from(chunk.subarray(i, i + take)))
+            curLen += take
+          }
+          if (take < segLen) {
+            // 预算耗尽于行中：提交已收集的部分并立即停止，避免继续把超大行剩余字节读进来
+            curDropped = true
+            commitLine()
+            stop(lineNo)
+            return
+          }
+        }
+        if (nl === -1) break // 本 chunk 用尽、行未结束 → 等下个 chunk
+        commitLine()
+        lineNo++
+        lineStarted = false
+        i = nl + 1
+        if (lineNo > collectEnd) {
+          // 越过请求区间末尾即停（不算截断；是否截断由 cappedEnd<requestedEnd 在 settle 判断）
+          stop(lineNo - 1)
+          return
+        }
+        if (bodyBytes >= maxBodyBytes) {
+          byteCapped = true
+          stop(lineNo - 1)
+          return
+        }
+      }
+    })
+
+    stream.on('end', () => {
+      if (finished) return
+      // 自然 EOF：补提交最后一行（无尾随换行的内容）；文件以 \n 结尾时 lineStarted=false，不多算一行
+      if (lineStarted) {
+        commitLine()
+        settle(lineNo)
+      } else {
+        settle(lineNo - 1)
+      }
+    })
+    stream.on('error', (err) => {
+      if (settled) return
+      settled = true
+      reject(err)
+    })
+  })
+}

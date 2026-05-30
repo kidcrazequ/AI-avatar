@@ -1088,9 +1088,19 @@ export class SyncManager {
    */
   private writeRestorePendingState(state: RestorePendingState): void {
     const file = path.join(this.userDataPath, RESTORE_PENDING_FILENAME)
+    // 先写临时文件再 rename 原子替换：sidecar 是恢复成功状态的唯一跨重启载体，直接 writeFileSync
+    // 在写入中途崩溃会留下半写的坏 JSON，下次启动解析失败被丢弃 → 成功状态仍丢。rename 保证
+    // 要么是旧内容/不存在、要么是本次完整内容，绝不出现半写态。
+    const tmp = `${file}.tmp.${Date.now()}`
     try {
-      fs.writeFileSync(file, JSON.stringify(state), 'utf-8')
+      fs.writeFileSync(tmp, JSON.stringify(state), 'utf-8')
+      fs.renameSync(tmp, file)
     } catch (err) {
+      try {
+        fs.rmSync(tmp, { force: true })
+      } catch {
+        /* best-effort：临时文件清理失败不影响主链路 */
+      }
       this.logger.warn(
         'restore: 写 restore-pending sidecar 失败（成功状态可能在重启后丢失）',
         err instanceof Error ? err : new Error(String(err)),

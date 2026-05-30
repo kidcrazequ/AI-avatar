@@ -18,6 +18,7 @@ import fs from 'fs'
 import { spawn } from 'child_process'
 import {
   assertSafeSegment,
+  resolveUnderRoot,
   extractFrontmatter,
   localDateString,
   type CommunitySkillSource,
@@ -26,6 +27,18 @@ import {
   type CommunitySkillSyncProgress,
 } from '@soul/core'
 import { Logger } from './logger'
+
+/**
+ * 是否含控制字符（含空字节）——repo/ref/path/file 一律不得包含。
+ * 用 charCode 判定而非正则字面量，避免 no-control-regex lint 报错。
+ */
+function hasControlChar(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -75,7 +88,7 @@ export class CommunitySkillManager {
 
   /** 添加新技能源到 sources.yaml */
   addSource(source: CommunitySkillSource): void {
-    assertSafeSegment(source.name)
+    this.validateSource(source)
     const sources = this.listSources()
     if (sources.some(s => s.name === source.name)) {
       throw new Error(`技能源 "${source.name}" 已存在`)
@@ -83,6 +96,46 @@ export class CommunitySkillManager {
     sources.push(source)
     this.writeSourcesYaml(sources)
     this.logger.activity('community:add-source', `name=${source.name} repo=${source.repo} ref=${source.ref}`)
+  }
+
+  /**
+   * 校验技能源——addSource（IPC 边界）必须先过这关。
+   * UI 的 https 限制不能替代主进程校验：repo/ref 会进 git clone 位置/选项参数，
+   * path/file 会拼进 clone 临时目录，必须挡住选项注入与路径穿越。
+   */
+  private validateSource(source: CommunitySkillSource): void {
+    assertSafeSegment(source.name, '技能源名称')
+
+    const repo = source.repo
+    if (typeof repo !== 'string' || repo.length === 0) {
+      throw new Error('技能源 repo 不能为空')
+    }
+    if (hasControlChar(repo) || repo.startsWith('-')) {
+      throw new Error(`技能源 repo 非法（控制字符或以 - 开头）: ${repo}`)
+    }
+    // 仅允许 https git 仓库，杜绝 file:// / ssh / git:// 等本地或不可信协议
+    if (!/^https:\/\/[^\s]+$/.test(repo)) {
+      throw new Error(`技能源 repo 必须是 https:// 仓库地址: ${repo}`)
+    }
+
+    const ref = source.ref
+    if (typeof ref !== 'string' || ref.length === 0) {
+      throw new Error('技能源 ref 不能为空')
+    }
+    // ref 作为 `--branch <ref>` 的值传入 git clone；以 - 开头会被当成选项（选项注入）
+    if (hasControlChar(ref) || ref.startsWith('-')) {
+      throw new Error(`技能源 ref 非法（控制字符或以 - 开头）: ${ref}`)
+    }
+
+    for (const [label, val] of [['path', source.path], ['file', source.file]] as const) {
+      if (val === undefined) continue
+      if (typeof val !== 'string' || hasControlChar(val) || val.startsWith('-')) {
+        throw new Error(`技能源 ${label} 非法（控制字符或以 - 开头）: ${String(val)}`)
+      }
+      if (path.isAbsolute(val) || val.split(/[\\/]/).includes('..')) {
+        throw new Error(`技能源 ${label} 不能为绝对路径或包含 ..: ${val}`)
+      }
+    }
   }
 
   /** 从 sources.yaml 移除技能源 */
@@ -295,9 +348,11 @@ export class CommunitySkillManager {
       })
 
       // 复制技能文件
+      // 防御性兜底：即便 sources.yaml 被手工改写绕过 addSource 校验，
+      // resolveUnderRoot 也会拒绝逃逸 clone 临时目录的 path/file。
       const skillsSourceDir = source.file
-        ? path.dirname(path.join(tempDir, source.file))
-        : path.join(tempDir, source.path || 'skills')
+        ? path.dirname(resolveUnderRoot(tempDir, source.file))
+        : resolveUnderRoot(tempDir, source.path || 'skills')
 
       if (fs.existsSync(destDir)) {
         fs.rmSync(destDir, { recursive: true, force: true })

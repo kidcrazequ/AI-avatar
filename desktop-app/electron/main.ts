@@ -453,7 +453,7 @@ function wrapHandler(
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
   ipcMain.handle(channel, async (event, ...args) => {
-    const isHighFreq = ['save-message', 'get-messages', 'get-conversations', 'get-knowledge-tree'].includes(channel)
+    const isHighFreq = ['save-message', 'get-messages', 'get-recent-messages', 'get-conversations', 'get-knowledge-tree'].includes(channel)
     if (!isHighFreq && logger) {
       logger.activity(channel, formatIpcPreview(channel, args))
     }
@@ -1765,6 +1765,12 @@ wrapHandler('save-message', (
 
 wrapHandler('get-messages', (_, conversationId: string) => {
   return getDb().getMessages(conversationId)
+})
+
+// 只取会话最近 N 条消息（按时间升序）。@会话引用等只需要尾部上下文的场景用它，
+// 避免把长会话整段历史拉到渲染进程再 slice。
+wrapHandler('get-recent-messages', (_, conversationId: string, limit: number) => {
+  return getDb().getRecentMessages(conversationId, limit)
 })
 
 // 删除单条消息（v14，「重新生成」按钮专用）

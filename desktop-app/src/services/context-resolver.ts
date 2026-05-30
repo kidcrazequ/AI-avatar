@@ -209,9 +209,9 @@ export async function resolveEntryContent(
     }
 
     if (entry.namespace === 'conversation') {
-      const msgs = await window.electronAPI.getMessages(entry.id)
       const limit = Math.max(10, Math.min(200, options.conversationMessageCount ?? MAX_CONVERSATION_MESSAGES))
-      const recent = msgs.slice(-limit)
+      // 只取最近 limit 条（主进程已按时间升序返回），避免长会话把整段历史拉过 IPC 再 slice
+      const recent = await window.electronAPI.getRecentMessages(entry.id, limit)
       const transcript = recent.map(m => {
         const role = m.role === 'user' ? '用户' : m.role === 'assistant' ? '分身' : '工具'
         return `[${role}] ${m.content}`

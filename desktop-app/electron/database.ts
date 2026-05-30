@@ -211,6 +211,7 @@ export class DatabaseManager {
     getConversationsAll: Database.Statement
     getConversation: Database.Statement
     getMessages: Database.Statement
+    getRecentMessages: Database.Statement
     insertMessage: Database.Statement
     updateConversationTime: Database.Statement
     getSetting: Database.Statement
@@ -264,6 +265,11 @@ export class DatabaseManager {
         // collectDocumentAttachmentsByAssistantId 依赖 tool 出现在 assistant 之前
         // 才能挂到正确的回答上，必须 rowid 兜底单调递增的插入顺序。
         `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC`
+      ),
+      // 只取最近 N 条：idx_messages_conversation 定位会话行，DESC + LIMIT 把跨 IPC 传输的
+      // 行数封顶为 N，避免长会话把整段历史读进渲染进程再 slice（见 context-resolver @会话引用）。
+      getRecentMessages: this.db.prepare(
+        `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`
       ),
       insertMessage: this.db.prepare(
         `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, tool_call_timeline_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -1492,6 +1498,16 @@ export class DatabaseManager {
 
   getMessages(conversationId: string): Message[] {
     return this.stmts.getMessages.all(conversationId) as Message[]
+  }
+
+  /**
+   * 只取会话最近 limit 条消息，按时间升序返回（与 getMessages 顺序一致）。
+   * SQL 用 DESC + LIMIT 取最新的，再在内存里反转回 ASC，避免长会话全量读取。
+   */
+  getRecentMessages(conversationId: string, limit: number): Message[] {
+    const safeLimit = Math.max(1, Math.min(500, Math.floor(limit) || 1))
+    const rows = this.stmts.getRecentMessages.all(conversationId, safeLimit) as Message[]
+    return rows.reverse()
   }
 
   /**

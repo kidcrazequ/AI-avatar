@@ -590,6 +590,8 @@ interface ElectronAPI {
     externalId?: string,
   ) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
+  /** 只取会话最近 limit 条消息（按时间升序），用于只需尾部上下文的场景（如 @会话引用） */
+  getRecentMessages: (conversationId: string, limit: number) => Promise<DbMessage[]>
 
   // 删除单条消息（v14，「重新生成」按钮专用）
   deleteMessage: (messageId: string) => Promise<number>

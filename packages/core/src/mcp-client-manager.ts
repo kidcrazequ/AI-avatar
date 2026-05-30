@@ -125,6 +125,29 @@ const DEFAULT_CALL_TIMEOUT_MS = 60_000
 /** 连接超时（10 秒）—— 防止 stdio 卡死 */
 const CONNECT_TIMEOUT_MS = 10_000
 
+/**
+ * 校验 MCP server 配置合法性。合法返回 null，否则返回错误信息字符串。
+ *
+ * 与 registerPlaceholder 共用同一份规则（单一事实源），供上层在「写 DB 前」先校验，
+ * 避免坏配置（stdio 缺 command、http/sse 缺 url、非法 transport）被持久化后，
+ * 在下次启动构造 transport 时抛错污染连接路径。
+ */
+export function validateMcpServerConfig(config: McpServerConfig): string | null {
+  if (!SERVER_NAME_REGEX.test(config.name)) {
+    return `MCP server 名称非法：'${config.name}'，仅允许 [a-zA-Z0-9_-]，长度 1~32`
+  }
+  if (config.transport !== 'stdio' && config.transport !== 'http' && config.transport !== 'sse') {
+    return `MCP server '${config.name}' transport 非法：'${String(config.transport)}'，仅支持 stdio / http / sse`
+  }
+  if (config.transport === 'stdio' && !config.command?.trim()) {
+    return `MCP server '${config.name}' 是 stdio 类型，必须指定 command`
+  }
+  if ((config.transport === 'http' || config.transport === 'sse') && !config.url?.trim()) {
+    return `MCP server '${config.name}' 是 ${config.transport} 类型，必须指定 url`
+  }
+  return null
+}
+
 export class McpClientManager {
   private servers = new Map<string, ConnectedServer>()
 
@@ -134,8 +157,24 @@ export class McpClientManager {
    */
   constructor(initialServers: McpServerConfig[] = []) {
     for (const cfg of initialServers) {
-      // 同步注册占位符，异步连接
-      this.registerPlaceholder(cfg)
+      // 同步注册占位符，异步连接。
+      // 单个坏配置（旧/损坏的 DB row）不得阻塞整个 manager 构造：能用 name 作 key 的
+      // 标 'error' 跳过连接（UI 经 snapshot 可见错误并修复/删除），name 都非法的只能整行丢弃。
+      try {
+        this.registerPlaceholder(cfg)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (cfg?.name && SERVER_NAME_REGEX.test(cfg.name)) {
+          this.servers.set(cfg.name, {
+            config: cfg,
+            status: 'error',
+            client: null,
+            transport: null,
+            tools: [],
+            error: message,
+          })
+        }
+      }
     }
   }
 
@@ -308,14 +347,9 @@ export class McpClientManager {
 
   /** 校验配置合法性，注册占位符 */
   private registerPlaceholder(config: McpServerConfig): void {
-    if (!SERVER_NAME_REGEX.test(config.name)) {
-      throw new Error(`MCP server 名称非法：'${config.name}'，仅允许 [a-zA-Z0-9_-]，长度 1~32`)
-    }
-    if (config.transport === 'stdio' && !config.command?.trim()) {
-      throw new Error(`MCP server '${config.name}' 是 stdio 类型，必须指定 command`)
-    }
-    if ((config.transport === 'http' || config.transport === 'sse') && !config.url?.trim()) {
-      throw new Error(`MCP server '${config.name}' 是 ${config.transport} 类型，必须指定 url`)
+    const validationError = validateMcpServerConfig(config)
+    if (validationError) {
+      throw new Error(validationError)
     }
     this.servers.set(config.name, {
       config,

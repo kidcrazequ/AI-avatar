@@ -124,7 +124,7 @@ export type {
 export { SubAgentManager } from './sub-agent-manager'
 export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'
 
-export { McpClientManager } from './mcp-client-manager'
+export { McpClientManager, validateMcpServerConfig } from './mcp-client-manager'
 export type {
   McpServerConfig,
   McpServerStatus,

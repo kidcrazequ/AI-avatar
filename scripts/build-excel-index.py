@@ -27,7 +27,7 @@ def read_sheets(path):
         wb.close(); return out
     if ext in (".xlsx",".xlsm"):
         return via_openpyxl(path)
-    # .xls：先 xlrd（老 BIFF），失败再当 xlsx 临时改名
+    # .xls：先 xlrd（老 BIFF），失败再当 xlsx 临时改名，再不行用 calamine（含 xlrd 读不了的老 BIFF）
     try:
         import xlrd
         wb=xlrd.open_workbook(path, ignore_workbook_corruption=True)
@@ -41,9 +41,14 @@ def read_sheets(path):
     tmp=tempfile.mktemp(suffix=".xlsx"); shutil.copy(path,tmp)
     try:
         return via_openpyxl(tmp)
+    except Exception:
+        pass
     finally:
         try: os.remove(tmp)
         except: pass
+    from python_calamine import CalamineWorkbook
+    wb=CalamineWorkbook.from_path(path)
+    return [(n, wb.get_sheet_by_name(n).to_python()) for n in wb.sheet_names]
 
 def jval(v):
     if v is None: return None

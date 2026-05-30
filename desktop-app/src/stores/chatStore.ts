@@ -3323,7 +3323,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       role: 'assistant',
       content: '',
     }
-    if (!isHiddenRepair) {
+    if (!isHiddenRepair && isViewedConv()) {
       set({ messages: [...messages, userMessage, assistantPlaceholder] })
     }
     let savedUserMessageId: string | null = null
@@ -3335,11 +3335,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error)
         window.electronAPI.logEvent('error', 'save-user-message-error', errMsg)
-        set((state) => ({
-          messages: upsertLastAssistant(state.messages, assistantMsgId, `抱歉，保存消息失败：${errMsg}`),
-          isLoading: false,
-          toolCallStatus: '',
-        }))
+        if (isViewedConv()) {
+          set((state) => ({
+            messages: upsertLastAssistant(state.messages, assistantMsgId, `抱歉，保存消息失败：${errMsg}`),
+            isLoading: false,
+            toolCallStatus: '',
+          }))
+        }
         await invokeProxyComplete({ ok: false, error: `保存用户消息失败：${errMsg}` })
         cleanupRequest()
         return
@@ -3407,10 +3409,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           ? '端侧模型未配置 API Key（Ollama 默认为 "ollama"，本地 vllm 等可填任意非空字符串）。请在设置 → 端侧（本地）填写。'
           : '请先在设置中配置 API Key'
       if (!isHiddenRepair) {
-        set((state) => ({
-          messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
-          isLoading: false,
-        }))
+        if (isViewedConv()) {
+          set((state) => ({
+            messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
+            isLoading: false,
+          }))
+        }
         // 落库失败不能跳过下面的 cleanupRequest（否则残留 activeChatRequest/streamingSnapshot）
         try {
           await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)
@@ -3439,16 +3443,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const cached = await window.electronAPI.getCachedAnswer(cacheKey)
         if (cached) {
           logPerf('answer-cache:hit', `key=${cacheKey.slice(0, 32)}... len=${cached.assistantContent.length}`)
-          set((state) => ({
-            messages: upsertLastAssistant(
-              state.messages,
-              assistantMsgId,
-              cached.assistantContent,
-              cached.reasoningContent ?? undefined,
-            ),
-            isLoading: false,
-            toolCallStatus: '',
-          }))
+          if (isViewedConv()) {
+            set((state) => ({
+              messages: upsertLastAssistant(
+                state.messages,
+                assistantMsgId,
+                cached.assistantContent,
+                cached.reasoningContent ?? undefined,
+              ),
+              isLoading: false,
+              toolCallStatus: '',
+            }))
+          }
           try {
             // externalId = assistantMsgId：让 DB row id 与 UI bubble id 一致，
             // 否则刷新后用户点"重新生成" deleteMessage(uiId) 在 DB 找不到行，
@@ -3497,11 +3503,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             await invokeProxyComplete({ ok: false, error: '请求已过期或已取消' })
             return
           }
-          set((state) => ({
-            messages: upsertLastAssistant(state.messages, assistantMsgId, cacheResult.assistantContent),
-            isLoading: false,
-            toolCallStatus: '',
-          }))
+          if (isViewedConv()) {
+            set((state) => ({
+              messages: upsertLastAssistant(state.messages, assistantMsgId, cacheResult.assistantContent),
+              isLoading: false,
+              toolCallStatus: '',
+            }))
+          }
           // externalId = assistantMsgId（同 answer-cache 早返路径，保持 UI/DB id 一致）
           await window.electronAPI.saveMessage(
             conversationId,
@@ -3833,10 +3841,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // hiddenRepair 模式跳过 UI / DB 写入——失败仅日志，对用户完全静默。
       const errorMsg = constructErr instanceof Error ? constructErr.message : String(constructErr)
       if (!isHiddenRepair) {
-        set((state) => ({
-          messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
-          isLoading: false,
-        }))
+        if (isViewedConv()) {
+          set((state) => ({
+            messages: upsertLastAssistant(state.messages, assistantMsgId, errorMsg),
+            isLoading: false,
+          }))
+        }
         // 落库失败不能跳过下面的 cleanupRequest（否则残留 activeChatRequest/streamingSnapshot）
         try {
           await window.electronAPI.saveMessage(conversationId, 'assistant', errorMsg, undefined, undefined, undefined, undefined, undefined, undefined, assistantMsgId)

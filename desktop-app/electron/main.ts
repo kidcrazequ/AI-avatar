@@ -1808,7 +1808,16 @@ wrapHandler('save-message', (
 })
 
 wrapHandler('get-messages', (_, conversationId: string) => {
-  return getDb().getMessages(conversationId)
+  // v21·phase2：渲染端只展示当前活动分支（无分叉时 == 全量线性，零行为变化）。
+  // 搜索/导出/上下文解析等内部消费仍走 getMessages（全量），不受影响。
+  return getDb().getActivePathMessages(conversationId)
+})
+
+// 会话树分叉（v21·phase2，借鉴 Pi "换个思路重答"）：把活动叶子指向某消息，之后回答另起分支。
+wrapHandler('fork-conversation', (_, conversationId: string, messageId: string) => {
+  assertSafeSegment(conversationId, '会话 ID')
+  assertSafeSegment(messageId, 'messageId')
+  return getDb().forkConversationFromMessage(conversationId, messageId)
 })
 
 // 只取会话最近 N 条消息（按时间升序）。@会话引用等只需要尾部上下文的场景用它，

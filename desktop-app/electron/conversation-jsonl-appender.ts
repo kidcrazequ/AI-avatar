@@ -66,6 +66,8 @@ export interface ConversationJsonlRecord {
    * 离线恢复 / 事件重建时可直接读取 assistant 的工具调用过程，不必另解析嵌套 JSON 字符串。
    */
   toolCallTimeline?: unknown[] | null
+  /** 会话树底座（v21）：父消息 id；跨端 sync 据此重建分叉树。线性会话指向上一条、根为 null。 */
+  parentId?: string | null
   /** 写入时间戳（毫秒） */
   ts: number
 }

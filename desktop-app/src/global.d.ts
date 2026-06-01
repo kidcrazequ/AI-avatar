@@ -590,6 +590,8 @@ interface ElectronAPI {
     externalId?: string,
   ) => Promise<string>
   getMessages: (conversationId: string) => Promise<DbMessage[]>
+  /** 会话树分叉（v21·phase2）：把活动叶子指向某消息，之后回答另起分支；messageId 不属于该会话返回 false */
+  forkConversation: (conversationId: string, messageId: string) => Promise<boolean>
   /** 只取会话最近 limit 条消息（按时间升序），用于只需尾部上下文的场景（如 @会话引用） */
   getRecentMessages: (conversationId: string, limit: number) => Promise<DbMessage[]>
 

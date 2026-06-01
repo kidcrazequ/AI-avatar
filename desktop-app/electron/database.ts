@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import { app } from 'electron'
+import { buildActivePath } from '@soul/core'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
@@ -1505,12 +1506,14 @@ export class DatabaseManager {
       } catch { timelineDecoded = null }
     }
 
+    // parentId 提到事务外声明：JSONL 双写（事务后、见下）也要带上它做跨端 sync。
+    let parentId: string | null = null
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
       // 会话树底座（v21）：parent_id = 会话当前 leaf（即上一条消息），随后把 leaf 推进到本条。
       // 无分叉时这条线性父链回溯出的活动路径 == getMessages 的扁平顺序（零行为变化）。
       const leafRow = this.stmts.getConversationLeaf.get(conversationId) as { leaf: string | null } | undefined
-      const parentId = leafRow?.leaf ?? null
+      parentId = leafRow?.leaf ?? null
       this.stmts.insertMessage.run(
         id, conversationId, role, content,
         toolCallId ?? null,
@@ -1542,6 +1545,7 @@ export class DatabaseManager {
       uncertainMarkers: uncertainMarkers && uncertainMarkers.length > 0 ? uncertainMarkers : null,
       reconsiderMarkers: reconsiderMarkers && reconsiderMarkers.length > 0 ? reconsiderMarkers : null,
       toolCallTimeline: timelineDecoded,
+      parentId,
       ts: now,
     })
 
@@ -1550,6 +1554,43 @@ export class DatabaseManager {
 
   getMessages(conversationId: string): Message[] {
     return this.stmts.getMessages.all(conversationId) as Message[]
+  }
+
+  /**
+   * 会话树（v21·phase2，借鉴 Pi）：只返回**当前活动分支**的消息（从 leaf 沿 parent_id 回溯到根）。
+   * 无分叉时活动路径 == getMessages 的扁平顺序，所以现有线性会话行为完全不变（零回归）。
+   * leaf 缺失 / 坏数据兜底：退回 getMessages 全量线性，绝不返回空对话。
+   */
+  getActivePathMessages(conversationId: string): Message[] {
+    const all = this.getMessages(conversationId)
+    if (all.length === 0) return all
+    const leaf = this.getConversation(conversationId)?.leaf_message_id ?? null
+    if (!leaf) return all
+    // 注：不能用"leaf==最后一条"做免遍历快路径——分叉后新回答既是 leaf 又是最后创建的，
+    // 但旧分支仍在；必须实跑 buildActivePath 才能正确排除旁支。O(n) + 一个 Map，正常会话开销可忽略。
+    const pathIds = buildActivePath(
+      all.map((m) => ({ id: m.id, parentId: m.parent_id ?? null })),
+      leaf,
+    ).map((n) => n.id)
+    if (pathIds.length === 0) return all // 坏数据（leaf 不在消息里）兜底
+    const byId = new Map(all.map((m) => [m.id, m]))
+    return pathIds
+      .map((id) => byId.get(id))
+      .filter((m): m is Message => m !== undefined)
+  }
+
+  /**
+   * 会话树（v21·phase2）：从某条消息分叉——把活动叶子指向该消息，之后新存的消息会以它为父、
+   * 形成新分支（旧分支的后续消息仍在库里，只是不在活动路径上）。"换个思路重答" 的底座。
+   * messageId 不属于该会话时返回 false（不动 leaf）。
+   */
+  forkConversationFromMessage(conversationId: string, messageId: string): boolean {
+    const row = this.db
+      .prepare('SELECT id FROM messages WHERE id = ? AND conversation_id = ?')
+      .get(messageId, conversationId)
+    if (!row) return false
+    this.stmts.updateConversationLeaf.run(messageId, conversationId)
+    return true
   }
 
   /**
@@ -1567,7 +1608,18 @@ export class DatabaseManager {
    * 返回删除条数；不存在时返回 0，调用方据此判断是否需要刷新 UI。
    */
   deleteMessage(messageId: string): number {
+    // 删前取该消息的会话 + 父：删后若该会话活动叶子正指向被删消息（如"重新生成"删掉末条），
+    // 把 leaf 修复到其父，避免 leaf 悬空导致 getActivePathMessages 每次静默退回全量（v21·phase2）。
+    const row = this.db
+      .prepare('SELECT conversation_id, parent_id FROM messages WHERE id = ?')
+      .get(messageId) as { conversation_id: string; parent_id: string | null } | undefined
     const result = this.db.prepare('DELETE FROM messages WHERE id = ?').run(messageId)
+    if (row && result.changes > 0) {
+      const conv = this.getConversation(row.conversation_id)
+      if (conv?.leaf_message_id === messageId) {
+        this.stmts.updateConversationLeaf.run(row.parent_id, row.conversation_id)
+      }
+    }
     return result.changes
   }
 

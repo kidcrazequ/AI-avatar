@@ -142,3 +142,57 @@ test('④ 迁移幂等：二次构造不抛错、回填数据不被破坏', { sk
   assert.equal(conv!.leaf_message_id, 'm3')
   assert.equal(m3.parent_id, 'm2')
 })
+
+test('⑤ getActivePathMessages 线性会话 == getMessages（零行为变化）', { skip: skipReason ?? undefined }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-db-tree-active-'))
+  const db = new DatabaseManagerCtor!(path.join(dir, 'a.db'))
+  const conv = db.createConversation('会话', 'avatar-x')
+  db.saveMessage(conv, 'user', '一')
+  db.saveMessage(conv, 'assistant', '二')
+  db.saveMessage(conv, 'user', '三')
+  const all = db.getMessages(conv).map((m) => m.id)
+  const active = db.getActivePathMessages(conv).map((m) => m.id)
+  db.close()
+  assert.deepEqual(active, all, '无分叉时活动路径必须等于全量线性顺序')
+})
+
+test('⑥ fork：换个思路重答另起分支，活动路径排除旧分支、全量仍含', { skip: skipReason ?? undefined }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-db-tree-fork-'))
+  const db = new DatabaseManagerCtor!(path.join(dir, 'f.db'))
+  const conv = db.createConversation('会话', 'avatar-x')
+  const a = db.saveMessage(conv, 'user', '问题')
+  const b = db.saveMessage(conv, 'assistant', '旧回答')
+  // 从 user 消息 a 分叉（leaf 指回 a），再存新回答 c → c 以 a 为父，b 落到旁支
+  assert.equal(db.forkConversationFromMessage(conv, a), true)
+  const c = db.saveMessage(conv, 'assistant', '新回答')
+  const active = db.getActivePathMessages(conv).map((m) => m.id)
+  const all = db.getMessages(conv).map((m) => m.id)
+  db.close()
+  assert.deepEqual(active, [a, c], '活动路径应为 [问题, 新回答]，不含旧回答 b')
+  assert.ok(all.includes(b), '旧回答仍在库里（全量含，可供切回）')
+  assert.equal(all.length, 3)
+})
+
+test('⑦ forkConversationFromMessage 非本会话消息 → false', { skip: skipReason ?? undefined }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-db-tree-fork2-'))
+  const db = new DatabaseManagerCtor!(path.join(dir, 'f2.db'))
+  const conv = db.createConversation('会话', 'avatar-x')
+  db.saveMessage(conv, 'user', 'x')
+  const ok = db.forkConversationFromMessage(conv, 'nonexistent-id')
+  db.close()
+  assert.equal(ok, false)
+})
+
+test('⑧ 删除 leaf 消息（重新生成场景）：leaf 修复到父，活动路径不断裂', { skip: skipReason ?? undefined }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-db-tree-del-'))
+  const db = new DatabaseManagerCtor!(path.join(dir, 'd.db'))
+  const conv = db.createConversation('会话', 'avatar-x')
+  const a = db.saveMessage(conv, 'user', '问题')
+  const b = db.saveMessage(conv, 'assistant', '回答') // leaf=b
+  db.deleteMessage(b) // 重新生成：删掉末条 assistant
+  const conv2 = db.getConversation(conv)
+  const active = db.getActivePathMessages(conv).map((m) => m.id)
+  db.close()
+  assert.equal(conv2!.leaf_message_id, a, 'leaf 应从被删的 b 修复到其父 a')
+  assert.deepEqual(active, [a], '活动路径不悬空、不退回错乱')
+})

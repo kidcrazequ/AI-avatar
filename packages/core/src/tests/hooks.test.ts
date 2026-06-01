@@ -349,6 +349,14 @@ describe('source-anchor enforcement hook', () => {
     assert.deepEqual(hook.warnings(), [])
   })
 
+  it('warnings 环形截断：长会话不无界增长（保留最近 200 条）', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    for (let i = 0; i < 250; i++) {
+      await firePost(hook, 'query_excel', { rows: [['x', i]] }) // 每条都缺锚点 → 告警
+    }
+    assert.equal(hook.warnings().length, 200, '应被截断到 200 条，而非 250')
+  })
+
   it('onWarning 回调被触发，reset() 清空', async () => {
     const seen: string[] = []
     const hook = makeSourceAnchorEnforcementHook({ onWarning: (w) => seen.push(w.toolName) })

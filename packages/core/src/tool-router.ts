@@ -11,6 +11,8 @@ import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
 import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
 import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
 import { CompositeKnowledgeRetriever } from './composite-knowledge-retriever'
+import { HookPoint } from './agent-runtime/hooks/points'
+import type { HookRegistry } from './agent-runtime/hooks/registry'
 import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
 import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
 import {
@@ -642,6 +644,11 @@ export class ToolRouter {
   /** 当前 execute 调用栈内的项目分区（线程非安全：假定单会话串行工具执行） */
   private knowledgeProjectContext: string = DEFAULT_AVATAR_PROJECT_ID
   /**
+   * 可选 Hook 总线（借鉴 Pi）：仅在 SOUL_USE_NEW_RUNTIME 开启时由 main 注入。
+   * execute 末尾 fire POST_TOOL_USE（观测型，不阻断结果回流）；deny 类 hook 需另行评审，不在此挂。
+   */
+  private hooks?: HookRegistry
+  /**
    * 按会话 ID 解析 `project_id`（与主进程 DB 一致），用于 `/projects/<conv>/` 跨会话路径与 ToolRouter 内工作区根解析。
    * 未注入时跨会话路径按 `default` 分区解析（兼容旧测试）；桌面端由 main 注入真实解析器。
    */
@@ -954,6 +961,11 @@ export class ToolRouter {
     this.systemPromptCache.set(avatarId, systemPrompt)
   }
 
+  /** 注入 / 清除 Hook 总线（仅 SOUL_USE_NEW_RUNTIME 开启时由 main 调用）。 */
+  setHooks(hooks: HookRegistry | undefined): void {
+    this.hooks = hooks
+  }
+
 
   private getKnowledgeFiles(avatarId: string): string[] {
     return this.getRetriever(avatarId).listFiles().filter((file) => file.toLowerCase().endsWith('.md'))
@@ -1129,6 +1141,7 @@ export class ToolRouter {
   ): Promise<ToolCallResult> {
     assertSafeSegment(avatarId, '分身ID')
     const { name, arguments: args } = request
+    const hookStart = this.hooks ? Date.now() : 0
 
     const prevCtx = this.knowledgeProjectContext
     const pid =
@@ -1298,6 +1311,21 @@ export class ToolRouter {
         } catch (err) {
           // 失败不影响原结果——lazy 是优化层，不是核心路径
           console.warn(`[tool-router] lazy-store ${name} 失败（降级为原文）:`, err instanceof Error ? err.message : String(err))
+        }
+      }
+      if (this.hooks) {
+        try {
+          await this.hooks.fire({
+            point: HookPoint.POST_TOOL_USE,
+            timestamp: Date.now(),
+            toolName: name,
+            args,
+            result,
+            durationMs: Date.now() - hookStart,
+            error: result.error,
+          })
+        } catch {
+          // Hook 绝不影响工具结果回流（registry.fire 内已吞 handler 异常，这里再兜一层）
         }
       }
       return result

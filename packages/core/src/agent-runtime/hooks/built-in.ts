@@ -109,6 +109,9 @@ export interface SourceAnchorWarning {
   readonly timestamp: number
 }
 
+/** warnings() 快照保留上限：hook 实例随 toolRouter 单例存活，环形截断防长会话无界增长。 */
+const MAX_RETAINED_WARNINGS = 200
+
 /** 复用 source-anchor 的唯一正本正则，构造无 lastIndex 副作用的探测器。 */
 function resultHasSourceAnchor(result: unknown): boolean {
   if (result === null || result === undefined) return false
@@ -157,6 +160,7 @@ export function makeSourceAnchorEnforcementHook(opts?: {
       timestamp: post.timestamp,
     }
     collected.push(warning)
+    if (collected.length > MAX_RETAINED_WARNINGS) collected.shift() // 环形截断：只留最近 N 条
     opts?.onWarning?.(warning)
     // 软警告：不返回 deny，不阻断结果回流
   }

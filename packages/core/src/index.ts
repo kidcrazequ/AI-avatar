@@ -218,6 +218,11 @@ export {
   DEFAULT_SMALL_LIBRARY_CHAR_THRESHOLD,
   type KnowledgeStrategy,
 } from './knowledge-strategy'
+export {
+  buildMcpServerSettingsSnippet,
+  type McpServerSnippet,
+  type McpServerSnippetInput,
+} from './mcp-settings-snippet'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

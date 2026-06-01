@@ -987,6 +987,8 @@ interface ElectronAPI {
   isExpertPackInstalled: (packId: string) => Promise<boolean>
   /** 借鉴 Pi check-update：比对已安装分身的包版本与当前分发版本，判断是否有更新 */
   checkExpertPackUpdate: (avatarId: string) => Promise<ExpertPackUpdateCheck>
+  /** 借鉴 Pi 可脚本化 seam：生成把分身暴露成 MCP server 的一键配置片段 */
+  generateMcpSettingsSnippet: () => Promise<McpSettingsSnippet>
   getAvatarSoulIntro: (targetAvatarId: string) => Promise<string | null>
   /**
    * agent-runtime: Phase 1+5 观测接入。
@@ -1451,6 +1453,15 @@ interface ExpertPackUpdateCheck {
   availableVersion: string | null
   packId?: string
   reason?: 'not-an-expert-pack-avatar' | 'invalid-pack-id' | 'source-pack-not-found'
+}
+
+interface McpSettingsSnippet {
+  serverName: string
+  config: { command: string; args: string[]; env: Record<string, string> }
+  /** 完整 mcpServers JSON 片段（可直接粘贴到 MCP 客户端 settings）。注意：含本机绝对路径，仅供本地配置用，禁止上报/上传 */
+  json: string
+  /** dev 环境是否解析到真实 bin 路径；false 时 json 内为占位路径，需用户在解包环境替换 */
+  binResolved: boolean
 }
 
 interface TestCase {

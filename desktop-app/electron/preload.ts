@@ -412,6 +412,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installExpertPack: (packId: string) => ipcRenderer.invoke('expert-packs:install', packId),
   isExpertPackInstalled: (packId: string) => ipcRenderer.invoke('expert-packs:is-installed', packId),
   checkExpertPackUpdate: (avatarId: string) => ipcRenderer.invoke('expert-packs:check-update', avatarId),
+  generateMcpSettingsSnippet: () => ipcRenderer.invoke('mcp:generate-settings-snippet'),
   getAvatarSoulIntro: (targetAvatarId: string) => ipcRenderer.invoke('get-avatar-soul-intro', targetAvatarId),
   /**
    * agent-runtime: Phase 1+5 观测接入。返回当前 system prompt 拆成 4 段后的

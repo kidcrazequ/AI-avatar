@@ -633,28 +633,31 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         >
           ◊ 事件
         </button>
-        <button
-          onClick={async () => {
-            try {
-              await window.electronAPI.exportConversation(conversationId, 'markdown')
-              setExportStatus({ type: 'success', msg: '导出成功 ✓' })
-              if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
-              exportTimerRef.current = setTimeout(() => setExportStatus(null), 3000)
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err)
-              window.electronAPI.logEvent('error', 'export-conversation', msg)
-              setExportStatus({ type: 'error', msg: `导出失败: ${msg}` })
-              if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
-              exportTimerRef.current = setTimeout(() => setExportStatus(null), 4000)
-            }
-          }}
-          title="导出对话为 Markdown"
-          className="font-game text-[11px] text-px-text-dim hover:text-px-primary px-2 py-0.5
-            border border-transparent hover:border-px-primary/50 transition-none"
-          aria-label="导出对话为 Markdown"
-        >
-          ↓ 导出
-        </button>
+        {(['markdown', 'html'] as const).map((fmt) => (
+          <button
+            key={fmt}
+            onClick={async () => {
+              try {
+                await window.electronAPI.exportConversation(conversationId, fmt)
+                setExportStatus({ type: 'success', msg: '导出成功 ✓' })
+                if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
+                exportTimerRef.current = setTimeout(() => setExportStatus(null), 3000)
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                window.electronAPI.logEvent('error', 'export-conversation', msg)
+                setExportStatus({ type: 'error', msg: `导出失败: ${msg}` })
+                if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
+                exportTimerRef.current = setTimeout(() => setExportStatus(null), 4000)
+              }
+            }}
+            title={fmt === 'markdown' ? '导出对话为 Markdown' : '导出对话为单文件 HTML（可分享）'}
+            className="font-game text-[11px] text-px-text-dim hover:text-px-primary px-2 py-0.5
+              border border-transparent hover:border-px-primary/50 transition-none"
+            aria-label={fmt === 'markdown' ? '导出对话为 Markdown' : '导出对话为 HTML'}
+          >
+            {fmt === 'markdown' ? '↓ MD' : '↓ HTML'}
+          </button>
+        ))}
       </div>
 
       {/* 消息列表 */}

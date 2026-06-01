@@ -697,7 +697,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 数据库备份
   dbBackup: () => ipcRenderer.invoke('db-backup'),
   // 对话导出
-  exportConversation: (conversationId: string, format: 'markdown' | 'pdf') =>
+  exportConversation: (conversationId: string, format: 'markdown' | 'html') =>
     ipcRenderer.invoke('export-conversation', conversationId, format),
   // 提示词模板
   createPromptTemplate: (avatarId: string, title: string, content: string) =>

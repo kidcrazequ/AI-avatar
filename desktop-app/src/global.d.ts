@@ -1213,7 +1213,7 @@ interface ElectronAPI {
   // 数据库备份
   dbBackup: () => Promise<void>
   // 对话导出
-  exportConversation: (conversationId: string, format: 'markdown' | 'pdf') => Promise<void>
+  exportConversation: (conversationId: string, format: 'markdown' | 'html') => Promise<void>
   // 提示词模板
   createPromptTemplate: (avatarId: string, title: string, content: string) => Promise<string>
   getPromptTemplates: (avatarId: string) => Promise<PromptTemplate[]>

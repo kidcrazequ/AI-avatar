@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -6650,10 +6650,13 @@ async function performDatabaseBackup(): Promise<string> {
  * @author zhi.qu
  * @date 2026-04-10
  */
-wrapHandler('export-conversation', async (_, conversationId: string, format: 'markdown' | 'pdf') => {
+wrapHandler('export-conversation', async (_, conversationId: string, format: 'markdown' | 'html') => {
   const messages = getDb().getMessages(conversationId)
   const conversation = getDb().getConversation(conversationId)
   const title = conversation?.title ?? '对话'
+  // 文件名净化：title 来自 DB（LLM 生成 / 用户编辑），可能含 / \ : * ? " < > | 等字符，
+  // 直接进 defaultPath 会让保存对话框跳错目录（mac 截断斜杠）或报错/崩溃（win 非法字符）。
+  const safeFileName = title.replace(/[/\\:*?"<>|]/g, '_').trim() || '对话'
 
   if (format === 'markdown') {
     const lines: string[] = [
@@ -6673,15 +6676,33 @@ wrapHandler('export-conversation', async (_, conversationId: string, format: 'ma
 
     const { canceled, filePath } = await dialog.showSaveDialog({
       title: '导出对话为 Markdown',
-      defaultPath: `${title}.md`,
+      defaultPath: `${safeFileName}.md`,
       filters: [{ name: 'Markdown', extensions: ['md'] }],
     })
     if (canceled || !filePath) return
     await fs.promises.writeFile(filePath, content, 'utf-8')
     if (logger) logger.activity('export-conversation', `format=markdown file=${filePath}`)
     await shell.openPath(path.dirname(filePath))
+  } else if (format === 'html') {
+    // 借鉴 Pi export-to-HTML：导出自包含、可分享的单文件 HTML（渲染 markdown，内联样式）。
+    const html = buildConversationHtml({
+      title,
+      exportedAt: new Date().toLocaleString('zh-CN'),
+      messages: messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+    })
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出对话为 HTML',
+      defaultPath: `${safeFileName}.html`,
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    })
+    if (canceled || !filePath) return
+    await fs.promises.writeFile(filePath, html, 'utf-8')
+    if (logger) logger.activity('export-conversation', `format=html file=${filePath}`)
+    await shell.openPath(path.dirname(filePath))
   } else {
-    throw new Error('PDF 导出暂不支持，请使用 Markdown 格式')
+    throw new Error(`不支持的导出格式：${format}`)
   }
 })
 

@@ -223,6 +223,12 @@ export {
   type McpServerSnippet,
   type McpServerSnippetInput,
 } from './mcp-settings-snippet'
+export {
+  buildConversationHtml,
+  markdownToSafeHtml,
+  type ConversationHtmlInput,
+  type ConversationHtmlMessage,
+} from './conversation-html-export'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

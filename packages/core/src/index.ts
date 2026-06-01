@@ -229,6 +229,12 @@ export {
   type ConversationHtmlInput,
   type ConversationHtmlMessage,
 } from './conversation-html-export'
+export {
+  buildActivePath,
+  backfillLinearParents,
+  findBranchPoints,
+  type TreeNode,
+} from './session-tree'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

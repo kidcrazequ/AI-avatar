@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 20
+const CURRENT_SCHEMA_VERSION = 21
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -113,6 +113,8 @@ export interface Conversation {
   workspace_initialized?: number
   created_at: number
   updated_at: number
+  /** 会话树底座（v21，借鉴 Pi）：当前活动叶子消息 id；从它沿 parent_id 回溯即得活动路径。 */
+  leaf_message_id?: string | null
 }
 
 export interface Message {
@@ -149,6 +151,8 @@ export interface Message {
    */
   tool_call_timeline_json?: string | null
   created_at: number
+  /** 会话树底座（v21，借鉴 Pi）：父消息 id；线性会话里指向上一条，根消息为 null。 */
+  parent_id?: string | null
 }
 
 /** 全文搜索结果 */
@@ -214,6 +218,8 @@ export class DatabaseManager {
     getRecentMessages: Database.Statement
     insertMessage: Database.Statement
     updateConversationTime: Database.Statement
+    getConversationLeaf: Database.Statement
+    updateConversationLeaf: Database.Statement
     getSetting: Database.Statement
     setSetting: Database.Statement
     searchWithAvatar: Database.Statement
@@ -272,10 +278,18 @@ export class DatabaseManager {
         `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`
       ),
       insertMessage: this.db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, tool_call_timeline_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        // parent_id（v21 会话树底座）追加在末尾：维护"上一条→这一条"的线性父链。
+        `INSERT INTO messages (id, conversation_id, role, content, tool_call_id, image_urls, reasoning_content, uncertain_markers, reconsider_markers, tool_call_timeline_json, created_at, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ),
       updateConversationTime: this.db.prepare(
         `UPDATE conversations SET updated_at = ? WHERE id = ?`
+      ),
+      // 会话树底座（v21）：读当前活动叶子 / 推进叶子；与其它高频语句一样预编译。
+      getConversationLeaf: this.db.prepare(
+        `SELECT leaf_message_id AS leaf FROM conversations WHERE id = ?`
+      ),
+      updateConversationLeaf: this.db.prepare(
+        `UPDATE conversations SET leaf_message_id = ? WHERE id = ?`
       ),
       getSetting: this.db.prepare(
         `SELECT value FROM settings WHERE key = ?`
@@ -360,7 +374,8 @@ export class DatabaseManager {
         project_id TEXT NOT NULL DEFAULT 'default',
         workspace_initialized INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        leaf_message_id TEXT
       )
     `)
 
@@ -377,6 +392,7 @@ export class DatabaseManager {
         reconsider_markers TEXT,
         tool_call_timeline_json TEXT,
         created_at INTEGER NOT NULL,
+        parent_id TEXT,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
       )
     `)
@@ -1162,6 +1178,36 @@ export class DatabaseManager {
       })()
     }
 
+    if (version < 21) {
+      // v20 → v21：会话树底座（借鉴 Pi 树状会话）。新增 messages.parent_id、
+      // conversations.leaf_message_id（均可空，向后兼容）。把历史扁平消息回填成退化的线性树：
+      // parent_id 指向同会话前一条（created_at 升序、rowid 兜底同毫秒），leaf 指向最后一条。
+      // 读取路径本期不变（无分叉时活动路径 == 线性顺序），故零行为变化。
+      // 性能：back-fill 子查询含 (created_at=.. AND rowid<..) 的 OR 分支，rowid 不在
+      // idx_messages_conversation 内，超大会话（数千条）可能退化为会话内全扫排序、一次性
+      // 同步阻塞主进程。实际历史每会话数十~数百条，代价可接受；超大库慢启动从这里查起。
+      this.db.transaction(() => {
+        this.safeAddColumn('messages', 'parent_id', 'TEXT')
+        this.safeAddColumn('conversations', 'leaf_message_id', 'TEXT')
+        this.db.exec(`
+          UPDATE messages SET parent_id = (
+            SELECT m2.id FROM messages m2
+            WHERE m2.conversation_id = messages.conversation_id
+              AND (m2.created_at < messages.created_at
+                   OR (m2.created_at = messages.created_at AND m2.rowid < messages.rowid))
+            ORDER BY m2.created_at DESC, m2.rowid DESC LIMIT 1
+          ) WHERE parent_id IS NULL
+        `)
+        this.db.exec(`
+          UPDATE conversations SET leaf_message_id = (
+            SELECT m.id FROM messages m WHERE m.conversation_id = conversations.id
+            ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1
+          ) WHERE leaf_message_id IS NULL
+        `)
+        version = 21
+      })()
+    }
+
     if (version !== fromVersion) {
       this.db.prepare('UPDATE schema_version SET version = ?').run(version)
     }
@@ -1461,6 +1507,10 @@ export class DatabaseManager {
 
     // 使用事务保证消息写入和会话更新时间原子一致，避免部分成功导致数据不一致。
     const saveTx = this.db.transaction(() => {
+      // 会话树底座（v21）：parent_id = 会话当前 leaf（即上一条消息），随后把 leaf 推进到本条。
+      // 无分叉时这条线性父链回溯出的活动路径 == getMessages 的扁平顺序（零行为变化）。
+      const leafRow = this.stmts.getConversationLeaf.get(conversationId) as { leaf: string | null } | undefined
+      const parentId = leafRow?.leaf ?? null
       this.stmts.insertMessage.run(
         id, conversationId, role, content,
         toolCallId ?? null,
@@ -1470,8 +1520,10 @@ export class DatabaseManager {
         reconsiderValue,
         timelineValue,
         now,
+        parentId,
       )
       this.stmts.updateConversationTime.run(now, conversationId)
+      this.stmts.updateConversationLeaf.run(id, conversationId)
     })
     saveTx()
 

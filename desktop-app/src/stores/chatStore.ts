@@ -6,13 +6,15 @@ import {
   hashQueryContent,
   PLAN_MODE_BLOCKED_TOOL_NAMES,
   evaluateConversationModeToolPolicy,
+  detectSelfDescriptionIntent,
+  buildSelfDescriptionAnswer,
 } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
 import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
 import { extractUncertain, extractReconsider } from './deliberation-extractors'
-import { buildStableSystemText } from './stable-system-prompt'
+import { buildStableSystemText, RED_LINE_SUMMARY } from './stable-system-prompt'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
@@ -3365,6 +3367,67 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const linkMsg = linkErr instanceof Error ? linkErr.message : String(linkErr)
         window.electronAPI.logEvent('warn', 'link-attachment-to-message-error', linkMsg)
       }
+    }
+
+    // ─── 分身自述快路径（借鉴 Pi self-documenting）────────────────────────
+    // "你能做什么 / 装了哪些技能 / 受哪些红线 / 你是谁" 这类**关于分身自身**的元问题，
+    // 答案确定（技能清单 + 红线本就是已知数据），直接拼好落库回显、跳过 LLM。
+    // 识别保守（整句匹配，见 detectSelfDescriptionIntent），未命中原样透传给 LLM。
+    // 带图片/附件/inlineFiles 或代理任务时不接管；放在 API Key 检查前，无 key 也能自述。
+    const selfDescBypassed =
+      isHiddenRepair ||
+      (images && images.length > 0) ||
+      (attachments && attachments.length > 0) ||
+      (inlineFiles && inlineFiles.length > 0) ||
+      proxyOpts?.proxyJobId !== undefined
+    if (!selfDescBypassed && detectSelfDescriptionIntent(content)) {
+      let skills: Array<{ name: string; description?: string }> = []
+      try {
+        const all = await window.electronAPI.getSkills(avatarId)
+        skills = all.filter((s) => s.enabled).map((s) => ({ name: s.name, description: s.description }))
+      } catch (skillErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'self-desc-get-skills-error',
+          skillErr instanceof Error ? skillErr.message : String(skillErr),
+        )
+      }
+      const roleLine = systemPrompt
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l.length > 0)
+      const answer = buildSelfDescriptionAnswer({ roleLine, skills, redLines: RED_LINE_SUMMARY })
+      if (isViewedConv()) {
+        set((state) => ({
+          messages: upsertLastAssistant(state.messages, assistantMsgId, answer),
+          isLoading: false,
+          toolCallStatus: '',
+        }))
+      }
+      try {
+        await window.electronAPI.saveMessage(
+          conversationId,
+          'assistant',
+          answer,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          assistantMsgId,
+        )
+      } catch (saveErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'self-desc-save-message-error',
+          saveErr instanceof Error ? saveErr.message : String(saveErr),
+        )
+      }
+      logPerf('sendMessage:success', `total=${Date.now() - requestStartedAt}ms via-self-desc displayLen=${answer.length}`)
+      await invokeProxyComplete({ ok: true, assistantText: answer })
+      cleanupRequest()
+      return
     }
 
     // API Key 缺失早退（下移至此）：上面的正常路径已把 user 消息连同 taggedContent

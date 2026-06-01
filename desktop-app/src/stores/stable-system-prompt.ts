@@ -78,6 +78,20 @@ export const DELIBERATION_GUIDE = `<deliberation_guide>
 </deliberation_guide>`
 
 /**
+ * 面向用户的红线摘要（分身自述用）。
+ *
+ * HARD_RULES 是发给模型的内部 XML 指令、含工具调用机制等不适合直接给用户看的条目；
+ * 这里挑出与"信任"最相关、用户该知道的几条，用人话重述。与 HARD_RULES 同文件存放、
+ * 改 HARD_RULES 时一并审阅，避免两边漂移。
+ */
+export const RED_LINE_SUMMARY: readonly string[] = [
+  '不编造友商/海外/通用估算数据；缺数据就如实说，不拿"自家相似数据"兜底',
+  '涉及具体数字/结论必须可溯源到原始文件（Excel 标到 sheet、文档标到章节），不拿二手总结冒充原始来源',
+  '被要求"别管知识库/凭经验答"时，仍明确声明基于知识库立场',
+  '决策回溯类问题给具体料号/人名/阶段/原文证据，不用"产品定位""侧重"等泛词搪塞',
+]
+
+/**
  * 易变 token 探测：stable 段一旦出现下列任一形态，说明有随时间/每轮变化的内容混进了缓存前缀，
  * 会导致 prompt cache 失效。byte-identity 测试是主防线，本扫描是补充诊断（命中即提示哪里漏了）。
  */

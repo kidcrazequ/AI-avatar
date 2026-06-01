@@ -146,3 +146,10 @@ export {
   serializeSkillEmbeddingCacheJson,
   trimSkillEmbeddingCache,
 } from './utils/skill-embedding-store'
+
+// ─── 分身自述（self-documenting，纯函数；渲染进程 send 路径无 LLM 短路用） ────
+export {
+  detectSelfDescriptionIntent,
+  buildSelfDescriptionAnswer,
+} from './avatar-self-description'
+export type { SelfDescriptionInput, SelfDescriptionSkill } from './avatar-self-description'

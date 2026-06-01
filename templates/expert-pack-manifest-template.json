@@ -1,0 +1,28 @@
+{
+  "//": "expert-pack.json 清单模板（借鉴 Pi Coding Agent 的整包版本钉 + 可发现 + 可更新）。",
+  "//required": "以下为必填字段：id / name / description / domain / version / author / sourceAvatarId / redline。",
+
+  "id": "your-expert-id",
+  "name": "你的专家（昵称）",
+  "description": "一句话说明这个专家包能做什么",
+  "domain": "领域名（如 财务分析 / 电气工程）",
+  "version": "1.0.0",
+  "author": "作者",
+  "sourceAvatarId": "your-expert-id",
+  "redline": "免责声明：本包提供参阅级草案，不替代专业执业意见。",
+  "installable": true,
+
+  "//optional": "以下为可选字段，缺失不影响既有包（向后兼容）。",
+  "defaultModel": "claude-sonnet-4-6",
+
+  "//keywords": "借鉴 Pi 的 discoverability keyword：发现/检索用关键词；建议带统一标记 soul-expert-pack。",
+  "keywords": ["关键词1", "关键词2", "soul-expert-pack"],
+
+  "//source": "借鉴 Pi 的版本钉：远端包来源（git/npm URL）。本地随应用分发的内置包可省略。",
+  "source": "https://github.com/<org>/<repo>.git",
+  "//sourceRef": "来源的 ref：tag（v1.2.3）/ branch / commit；用于钉住可复现的版本。",
+  "sourceRef": "v1.0.0",
+
+  "//update": "升级判定：安装时把 version + source + sourceRef 记入 avatar.config.json#expertPack；",
+  "//update2": "之后 electronAPI.checkExpertPackUpdate(avatarId) 比对已安装版本与当前分发版本（语义化比较），hasUpdate=true 即提示升级。"
+}

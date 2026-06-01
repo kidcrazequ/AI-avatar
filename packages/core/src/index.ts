@@ -208,6 +208,11 @@ export {
   type SelfDescriptionSkill,
 } from './avatar-self-description'
 export { isContextOverflowError } from './context-overflow'
+export {
+  compareVersions,
+  evaluatePackUpdate,
+  type PackUpdateEvaluation,
+} from './expert-pack-version'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

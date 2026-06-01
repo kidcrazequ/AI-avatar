@@ -985,6 +985,8 @@ interface ElectronAPI {
   listExpertPacks: () => Promise<ExpertPack[]>
   installExpertPack: (packId: string) => Promise<ExpertPackInstallResult>
   isExpertPackInstalled: (packId: string) => Promise<boolean>
+  /** 借鉴 Pi check-update：比对已安装分身的包版本与当前分发版本，判断是否有更新 */
+  checkExpertPackUpdate: (avatarId: string) => Promise<ExpertPackUpdateCheck>
   getAvatarSoulIntro: (targetAvatarId: string) => Promise<string | null>
   /**
    * agent-runtime: Phase 1+5 观测接入。
@@ -1430,11 +1432,25 @@ interface ExpertPack {
   installedAvatarId?: string
   /** 头像图片：data URL（自定义上传）或 "default:<key>"（预置头像） */
   avatarImage?: string
+  /** 借鉴 Pi 整包分发：发现用关键词（可选） */
+  keywords?: string[]
+  /** 借鉴 Pi 版本钉：包来源 git/npm（可选） */
+  source?: string
+  /** 借鉴 Pi 版本钉：来源 ref（tag/branch/commit，可选） */
+  sourceRef?: string
 }
 
 interface ExpertPackInstallResult {
   avatarId: string
   installed: boolean
+}
+
+interface ExpertPackUpdateCheck {
+  hasUpdate: boolean
+  installedVersion: string | null
+  availableVersion: string | null
+  packId?: string
+  reason?: 'not-an-expert-pack-avatar' | 'invalid-pack-id' | 'source-pack-not-found'
 }
 
 interface TestCase {

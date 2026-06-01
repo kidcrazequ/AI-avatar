@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -1044,6 +1044,12 @@ interface ExpertPackMeta {
    * 字段缺失时分身回落到全局 chat slot；字段以 claude-* 起始时需用户已在设置中配置 Anthropic key。
    */
   defaultModel?: string
+  /** 借鉴 Pi 整包分发：发现用关键词（可选，向后兼容）。 */
+  keywords?: string[]
+  /** 借鉴 Pi 版本钉：包来源（git/npm，可选）。 */
+  source?: string
+  /** 借鉴 Pi 版本钉：来源的 ref（tag/branch/commit，可选）。 */
+  sourceRef?: string
 }
 
 interface ExpertPackView extends ExpertPackMeta {
@@ -1057,6 +1063,9 @@ interface InstalledAvatarConfig {
     id: string
     version: string
     installedAt: string
+    /** 借鉴 Pi 版本钉：安装来源 + ref，供 check-update 比对（可选，向后兼容）。 */
+    source?: string
+    sourceRef?: string
   }
   [key: string]: unknown
 }
@@ -1088,6 +1097,13 @@ function readExpertPackMeta(packDir: string): ExpertPackMeta | null {
     ? raw.defaultModel.trim()
     : undefined
 
+  // 借鉴 Pi 整包分发：以下三项均为可选，缺失不影响既有包（向后兼容）。
+  const keywords = Array.isArray(raw.keywords)
+    ? raw.keywords.filter((k): k is string => typeof k === 'string' && k.trim().length > 0)
+    : undefined
+  const source = typeof raw.source === 'string' && raw.source.trim().length > 0 ? raw.source.trim() : undefined
+  const sourceRef = typeof raw.sourceRef === 'string' && raw.sourceRef.trim().length > 0 ? raw.sourceRef.trim() : undefined
+
   return {
     id: raw.id as string,
     name: raw.name as string,
@@ -1099,6 +1115,9 @@ function readExpertPackMeta(packDir: string): ExpertPackMeta | null {
     redline: raw.redline as string,
     installable: raw.installable !== false,
     defaultModel,
+    keywords,
+    source,
+    sourceRef,
   }
 }
 
@@ -1182,6 +1201,9 @@ async function writeInstalledAvatarConfig(avatarId: string, pack: ExpertPackMeta
       id: pack.id,
       version: pack.version,
       installedAt: localDateString(),
+      // 借鉴 Pi 版本钉：记录来源，供 check-update 比对（pack 未声明则省略）
+      ...(pack.source ? { source: pack.source } : {}),
+      ...(pack.sourceRef ? { sourceRef: pack.sourceRef } : {}),
     },
     // 仅在 pack 声明了 defaultModel 时写入；保留用户对已安装分身的人工覆盖
     ...(pack.defaultModel && !existing.defaultModel ? { defaultModel: pack.defaultModel } : {}),
@@ -3671,6 +3693,41 @@ wrapHandler('expert-packs:install', async (_, packId: string) => {
 wrapHandler('expert-packs:is-installed', (_, packId: string) => {
   assertSafeSegment(packId, '专家包 ID')
   return Boolean(findInstalledAvatarForPack(packId))
+})
+
+// 借鉴 Pi check-update：比对"已安装版本"与"当前随应用分发的包版本"，判断是否有更新。
+// 远端 git/npm 拉取属更重的 dev 路径，暂不在此实现；此处覆盖最常见的"应用升级带来更新版包"。
+wrapHandler('expert-packs:check-update', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身 ID')
+  const config = readJsonObject(path.join(avatarsPath, avatarId, 'avatar.config.json'))
+  const installed = config?.expertPack as { id?: string; version?: string } | undefined
+  if (!installed?.id || !installed.version) {
+    return { hasUpdate: false, installedVersion: null, availableVersion: null, reason: 'not-an-expert-pack-avatar' as const }
+  }
+  // installed.id 来自 avatar.config.json（用户可改），按路径段使用前必须显式校验，
+  // 不能依赖 resolveUnderRoot 的 throw 被 silent catch（否则成了路径盲扫通道）。
+  try {
+    assertSafeSegment(installed.id, '专家包 ID')
+  } catch {
+    return { hasUpdate: false, installedVersion: installed.version, availableVersion: null, reason: 'invalid-pack-id' as const }
+  }
+
+  // 按 id 在 expert-packs/ 找当前分发版本：先按目录名直查（安装约定 dir==id），失败再全量扫描。
+  let available: ExpertPackMeta | null = null
+  try {
+    const meta = readExpertPackMeta(resolveUnderRoot(expertPacksPath, installed.id))
+    if (meta && meta.id === installed.id) available = meta
+  } catch {
+    available = null
+  }
+  if (!available) {
+    available = listExpertPacks().find((p) => p.id === installed.id) ?? null
+  }
+  if (!available) {
+    return { hasUpdate: false, installedVersion: installed.version, availableVersion: null, reason: 'source-pack-not-found' as const }
+  }
+
+  return { ...evaluatePackUpdate(installed.version, available.version), packId: installed.id }
 })
 
 /**

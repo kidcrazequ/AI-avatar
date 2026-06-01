@@ -8,5 +8,6 @@
   "sourceAvatarId": "finance-expert",
   "redline": "提供财务分析草案与经营建议，不替代审计、税务申报或注册会计师意见。",
   "installable": true,
-  "defaultModel": "claude-sonnet-4-6"
+  "defaultModel": "claude-sonnet-4-6",
+  "keywords": ["finance", "财务", "报表", "经营分析", "预算", "soul-expert-pack"]
 }

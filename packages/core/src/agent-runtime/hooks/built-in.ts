@@ -1,6 +1,6 @@
 /**
- * 内置 Hook：把 CLAUDE.md 里的文本约定（"修改前先读"、"3 轮失败停下"）
- * 实现为可执行拦截器。
+ * 内置 Hook：把 CLAUDE.md 里的文本约定（"修改前先读"、"3 轮失败停下"、
+ * "数据必须可溯源到原始 sheet/条款"）实现为可执行拦截器。
  */
 
 import { HookPoint } from './points'
@@ -11,6 +11,7 @@ import type {
   PostToolUsePayload,
   PreToolUsePayload,
 } from './registry'
+import { SOURCE_ANCHOR_REGEX } from '../../source-anchor'
 
 // ── Hook 1: 修改前先读 ─────────────────────────────────────────────────
 
@@ -94,5 +95,77 @@ export function makeCircuitBreakerHook(threshold = 3): {
     handler,
     reset: () => failureCount.clear(),
     state: () => new Map(failureCount),
+  }
+}
+
+// ── Hook 3: 数据来源锚点强制（软警告） ─────────────────────────────────
+
+/** 默认纳入溯源校验的工具：会返回知识/表格数据、引用前必须可定位到原始来源。 */
+export const DEFAULT_TRACEABLE_TOOLS = ['query_excel', 'search_knowledge', 'knowledge_grep'] as const
+
+export interface SourceAnchorWarning {
+  readonly toolName: string
+  readonly reason: string
+  readonly timestamp: number
+}
+
+/** 复用 source-anchor 的唯一正本正则，构造无 lastIndex 副作用的探测器。 */
+function resultHasSourceAnchor(result: unknown): boolean {
+  if (result === null || result === undefined) return false
+  let text: string
+  if (typeof result === 'string') {
+    text = result
+  } else {
+    try {
+      text = JSON.stringify(result)
+    } catch {
+      return false
+    }
+  }
+  return new RegExp(SOURCE_ANCHOR_REGEX.source).test(text)
+}
+
+/**
+ * 数据溯源红线的可执行版本（对口 2026-05-22"来源错位"事故）。
+ *
+ * 当 query_excel / search_knowledge 等取数工具成功返回、但结果里**没有**任何
+ * `[来源: ...]` 锚点（query_excel 的 source_anchor 字段、search_knowledge 正文内联锚点
+ * 都走 formatSourceAnchor，统一含 `[来源:`）时，记录一条**软警告**。
+ *
+ * 刻意只软警告、绝不 deny —— 否则 markdown 二手总结会把正常问答卡死；POST_TOOL_USE
+ * 阶段 deny 也不会阻断结果回流，硬拦没有意义。警告通过 onWarning 回调 + warnings()
+ * 快照暴露给调用方（审计 / 回灌系统提示），与 makeCircuitBreakerHook 的 state() 同构。
+ */
+export function makeSourceAnchorEnforcementHook(opts?: {
+  tools?: Iterable<string>
+  onWarning?: (warning: SourceAnchorWarning) => void
+}): { handler: HookHandler; reset: () => void; warnings: () => SourceAnchorWarning[] } {
+  const tools = new Set<string>(opts?.tools ?? DEFAULT_TRACEABLE_TOOLS)
+  const collected: SourceAnchorWarning[] = []
+
+  const handler: HookHandler = async (payload: AnyHookPayload): Promise<HookResult | void> => {
+    if (payload.point !== HookPoint.POST_TOOL_USE) return
+    const post = payload as PostToolUsePayload
+    if (!tools.has(post.toolName)) return
+    // 工具自身失败交给 circuit-breaker，不在此叠加来源告警
+    if (post.error) return
+    if (resultHasSourceAnchor(post.result)) return
+
+    const warning: SourceAnchorWarning = {
+      toolName: post.toolName,
+      reason: `source-anchor: 工具 ${post.toolName} 的结果未携带可溯源锚点（[来源: ...] / source_anchor）；引用其中数字/结论前必须补全来源（数据溯源红线，对口 2026-05-22 来源错位事故）`,
+      timestamp: post.timestamp,
+    }
+    collected.push(warning)
+    opts?.onWarning?.(warning)
+    // 软警告：不返回 deny，不阻断结果回流
+  }
+
+  return {
+    handler,
+    reset: () => {
+      collected.length = 0
+    },
+    warnings: () => [...collected],
   }
 }

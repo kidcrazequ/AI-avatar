@@ -40,7 +40,13 @@ export {
   type OnErrorPayload,
   type OnCompactionPayload,
 } from './hooks/registry'
-export { makeReadBeforeEditHook, makeCircuitBreakerHook } from './hooks/built-in'
+export {
+  makeReadBeforeEditHook,
+  makeCircuitBreakerHook,
+  makeSourceAnchorEnforcementHook,
+  DEFAULT_TRACEABLE_TOOLS,
+  type SourceAnchorWarning,
+} from './hooks/built-in'
 export { AuditTrail, type AuditEvent, type AuditTrailOptions } from './audit-trail'
 export {
   runInstrumentedToolCall,

@@ -14,6 +14,7 @@ import {
   makeReadBeforeEditHook,
   makeCircuitBreakerHook,
   runInstrumentedToolCall,
+  makeSourceAnchorEnforcementHook,
 } from '../agent-runtime'
 
 describe('Phase 2 — Hook Registry', () => {
@@ -278,5 +279,99 @@ describe('Phase 2 — runInstrumentedToolCall', () => {
     assert.equal(r.ok, false)
     assert.match(r.error ?? '', /boom/)
     assert.equal(postFired, true)
+  })
+})
+
+describe('source-anchor enforcement hook', () => {
+  const EXCEL_WITH_ANCHOR = {
+    source_anchor: '[来源: knowledge/_excel/sales.json#sheet=Sheet1]',
+    rows: [['型号', '循环次数']],
+  }
+  const EXCEL_NO_ANCHOR = { sheet: 'Sheet1', rows: [['型号', '循环次数']] }
+  const KNOWLEDGE_WITH_ANCHOR = '净能量约 100kWh。[来源: knowledge/spec/cell.md#L10-L12]'
+  const KNOWLEDGE_NO_ANCHOR = '净能量约 100kWh。（凭记忆，未标来源）'
+
+  function firePost(
+    hook: { handler: Parameters<HookRegistry['register']>[1] },
+    toolName: string,
+    result: unknown,
+    error?: string,
+  ) {
+    const reg = new HookRegistry()
+    reg.register(HookPoint.POST_TOOL_USE, hook.handler)
+    return reg.fire({
+      point: HookPoint.POST_TOOL_USE,
+      timestamp: 1,
+      toolName,
+      args: {},
+      result,
+      durationMs: 1,
+      error,
+    })
+  }
+
+  it('query_excel 带 source_anchor：不告警', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    await firePost(hook, 'query_excel', EXCEL_WITH_ANCHOR)
+    assert.deepEqual(hook.warnings(), [])
+  })
+
+  it('query_excel 缺 source_anchor：软告警且不 deny', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    const r = await firePost(hook, 'query_excel', EXCEL_NO_ANCHOR)
+    assert.equal(r.deny, undefined)
+    assert.equal(hook.warnings().length, 1)
+    assert.match(hook.warnings()[0].reason, /来源/)
+    assert.equal(hook.warnings()[0].toolName, 'query_excel')
+  })
+
+  it('search_knowledge 正文内联 [来源: ...]：不告警', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    await firePost(hook, 'search_knowledge', { content: KNOWLEDGE_WITH_ANCHOR })
+    assert.deepEqual(hook.warnings(), [])
+  })
+
+  it('search_knowledge 无锚点：告警（字符串结果同样识别）', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    await firePost(hook, 'search_knowledge', KNOWLEDGE_NO_ANCHOR)
+    assert.equal(hook.warnings().length, 1)
+  })
+
+  it('非取数工具（read_file）即便无锚点也不告警', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    await firePost(hook, 'read_file', { content: '一些代码' })
+    assert.deepEqual(hook.warnings(), [])
+  })
+
+  it('取数工具自身报错时不叠加来源告警（交给 circuit-breaker）', async () => {
+    const hook = makeSourceAnchorEnforcementHook()
+    await firePost(hook, 'query_excel', undefined, 'sheet not found')
+    assert.deepEqual(hook.warnings(), [])
+  })
+
+  it('onWarning 回调被触发，reset() 清空', async () => {
+    const seen: string[] = []
+    const hook = makeSourceAnchorEnforcementHook({ onWarning: (w) => seen.push(w.toolName) })
+    await firePost(hook, 'query_excel', EXCEL_NO_ANCHOR)
+    assert.deepEqual(seen, ['query_excel'])
+    hook.reset()
+    assert.deepEqual(hook.warnings(), [])
+  })
+
+  it('端到端：经 runInstrumentedToolCall 软告警，结果照常回流（ok=true）', async () => {
+    const reg = new HookRegistry()
+    const hook = makeSourceAnchorEnforcementHook()
+    reg.register(HookPoint.POST_TOOL_USE, hook.handler)
+
+    const r = await runInstrumentedToolCall({
+      toolName: 'query_excel',
+      args: { file: 'sales.xlsx' },
+      execute: async () => EXCEL_NO_ANCHOR, // 工具忘了带锚点
+      hooks: reg,
+    })
+
+    assert.equal(r.ok, true) // 软警告不阻断
+    assert.deepEqual(r.result, EXCEL_NO_ANCHOR)
+    assert.equal(hook.warnings().length, 1)
   })
 })

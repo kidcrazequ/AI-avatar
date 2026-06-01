@@ -207,6 +207,7 @@ export {
   type SelfDescriptionInput,
   type SelfDescriptionSkill,
 } from './avatar-self-description'
+export { isContextOverflowError } from './context-overflow'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

@@ -8,6 +8,7 @@ import {
   evaluateConversationModeToolPolicy,
   detectSelfDescriptionIntent,
   buildSelfDescriptionAnswer,
+  isContextOverflowError,
 } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
@@ -3961,6 +3962,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 每轮：调用 LLM → 如有 tool_calls 则执行并追加结果 → 再次调用 → 直至无工具调用或达到上限
      */
     let round = 0
+    // 上下文溢出压缩重试：本次 send 内只允许压缩+重试一次，防死循环（借鉴 Pi prompt-too-long）
+    let contextOverflowRetried = false
     let assistantText = ''
     let reasoningText = ''
     /**
@@ -4273,8 +4276,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         )
       })
 
-    /** 带阶段超时的 runRound，区分首 token 慢、流中断和总耗时过长。 */
-    const runRoundWithTimeout = async (): Promise<void> => {
+    /** 单次尝试：带阶段超时跑一轮 runRound，区分首 token 慢、流中断和总耗时过长。 */
+    const attemptRound = async (): Promise<void> => {
       let timer: ReturnType<typeof setInterval> | null = null
       try {
         await Promise.race([
@@ -4304,6 +4307,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ])
       } finally {
         if (timer) clearInterval(timer)
+      }
+    }
+
+    /**
+     * 带阶段超时的 runRound + 上下文溢出自救（借鉴 Pi prompt-too-long → 压缩后重试一次）。
+     * 命中"上下文/提示过长"且本 send 尚未压缩过 → 压缩 apiMessages 里的旧工具结果
+     * （无需再调 LLM、保持 tool_call/tool 配对），重试一次；压缩无效或仍失败则原样抛出，
+     * 走正常错误兜底（Rule 12：不静默吞错）。runRound 开头自重置每轮状态，故二次调用干净。
+     */
+    const runRoundWithTimeout = async (): Promise<void> => {
+      try {
+        await attemptRound()
+      } catch (err) {
+        if (contextOverflowRetried || !isContextOverflowError(err)) throw err
+        contextOverflowRetried = true
+        const beforeChars = JSON.stringify(apiMessages).length
+        compressOldToolResults(apiMessages)
+        const afterChars = JSON.stringify(apiMessages).length
+        if (afterChars >= beforeChars) {
+          window.electronAPI.logEvent(
+            'warn',
+            'context-overflow-compact-noop',
+            `round=${round} chars=${beforeChars} 旧工具结果无可压缩，放弃重试`,
+          )
+          throw err
+        }
+        window.electronAPI.logEvent(
+          'warn',
+          'context-overflow-compact-retry',
+          `round=${round} chars ${beforeChars}->${afterChars}`,
+        )
+        logPerf('context-overflow:compact-retry', `round=${round} chars ${beforeChars}->${afterChars}`)
+        if (isViewedConv() && !isHiddenRepair) {
+          set({ toolCallStatus: '上下文超长，已压缩后重试…' })
+        }
+        await attemptRound()
       }
     }
 

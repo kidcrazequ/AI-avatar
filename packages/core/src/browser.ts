@@ -153,3 +153,6 @@ export {
   buildSelfDescriptionAnswer,
 } from './avatar-self-description'
 export type { SelfDescriptionInput, SelfDescriptionSkill } from './avatar-self-description'
+
+// ─── 上下文溢出识别（渲染进程 send 路径压缩重试用，纯函数） ──────────────────
+export { isContextOverflowError } from './context-overflow'

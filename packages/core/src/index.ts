@@ -213,6 +213,11 @@ export {
   evaluatePackUpdate,
   type PackUpdateEvaluation,
 } from './expert-pack-version'
+export {
+  decideKnowledgeStrategy,
+  DEFAULT_SMALL_LIBRARY_CHAR_THRESHOLD,
+  type KnowledgeStrategy,
+} from './knowledge-strategy'
 export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
 
 export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'

@@ -1,4 +1,4 @@
-export { isNewRuntimeEnabled, isNewIngestEnabled } from './feature-flags'
+export { isNewRuntimeEnabled, isNewIngestEnabled, isProgressiveDisclosureRagEnabled } from './feature-flags'
 export {
   AgentBlueprintSchema,
   IdentityCardSchema,

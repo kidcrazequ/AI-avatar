@@ -22,3 +22,13 @@ export function isNewRuntimeEnabled(): boolean {
 export function isNewIngestEnabled(): boolean {
   return readFlag('SOUL_USE_NEW_INGEST')
 }
+
+/**
+ * 渐进式披露 RAG（借鉴 Pi）：小知识库整库进 cacheable stable prompt（享 prompt cache）、
+ * 大库维持 agentic on-demand search_knowledge。注意"删除 pre-message BM25 注入"已于
+ * 2026-05-13 在 chat 路径落地（agentic-only），此 flag 仅 gate "小库进 stable cache"
+ * 这一 Phase-2 优化（召回敏感、需 eval 守门），默认 OFF。
+ */
+export function isProgressiveDisclosureRagEnabled(): boolean {
+  return readFlag('SOUL_USE_PROGRESSIVE_DISCLOSURE_RAG')
+}

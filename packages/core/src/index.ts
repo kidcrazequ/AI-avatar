@@ -226,8 +226,12 @@ export {
 export {
   buildConversationHtml,
   markdownToSafeHtml,
+  extractRenderableBlocks,
   type ConversationHtmlInput,
   type ConversationHtmlMessage,
+  type RenderableBlock,
+  type RenderableAssetKind,
+  type AssetResolver,
 } from './conversation-html-export'
 export {
   buildActivePath,

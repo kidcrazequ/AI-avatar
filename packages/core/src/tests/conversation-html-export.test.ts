@@ -17,6 +17,7 @@ import {
   escapeHtml,
   markdownToSafeHtml,
   buildConversationHtml,
+  extractRenderableBlocks,
 } from '../conversation-html-export'
 
 describe('escapeHtml / XSS', () => {
@@ -75,6 +76,38 @@ describe('markdownToSafeHtml — 块级', () => {
     assert.match(markdownToSafeHtml('> 引用'), /<blockquote>引用<\/blockquote>/)
     assert.match(markdownToSafeHtml('---'), /<hr>/)
     assert.match(markdownToSafeHtml('第一行\n第二行'), /<p>第一行<br>第二行<\/p>/)
+  })
+})
+
+describe('extractRenderableBlocks + 资源替换（F8 进阶）', () => {
+  const MD = '前言\n\n```chart\n{"series":[]}\n```\n\n中间\n\n```mermaid\ngraph TD; A-->B\n```\n\n```js\nconst x=1\n```'
+
+  test('抽取所有 chart/mermaid 块（跳过普通代码块）', () => {
+    const blocks = extractRenderableBlocks(MD)
+    assert.equal(blocks.length, 2)
+    assert.equal(blocks[0].kind, 'chart')
+    assert.equal(blocks[0].code, '{"series":[]}')
+    assert.equal(blocks[1].kind, 'mermaid')
+    assert.match(blocks[1].code, /graph TD/)
+  })
+
+  test('resolveAsset 命中：chart/mermaid 嵌成 <figure> SVG', () => {
+    const out = markdownToSafeHtml(MD, (kind) => `<svg data-${kind}></svg>`)
+    assert.match(out, /<figure class="rendered-asset" data-kind="chart"><svg data-chart>/)
+    assert.match(out, /<figure class="rendered-asset" data-kind="mermaid"><svg data-mermaid>/)
+    assert.match(out, /<pre><code>const x=1<\/code><\/pre>/) // 普通代码块不受影响
+  })
+
+  test('resolveAsset 未命中（返回 undefined）：回退带标签代码块', () => {
+    const out = markdownToSafeHtml(MD, () => undefined)
+    assert.match(out, /code-lang">chart</)
+    assert.doesNotMatch(out, /rendered-asset/)
+  })
+
+  test('不传 resolveAsset：chart/mermaid 仍按代码块渲染（向后兼容）', () => {
+    const out = markdownToSafeHtml(MD)
+    assert.match(out, /code-lang">mermaid</)
+    assert.doesNotMatch(out, /rendered-asset/)
   })
 })
 

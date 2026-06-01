@@ -55,8 +55,41 @@ function renderTableRow(line: string, cell: 'td' | 'th'): string {
   return `<tr>${tds}</tr>`
 }
 
-/** 把一段 markdown 渲染成 HTML（常见子集，XSS 安全）。 */
-export function markdownToSafeHtml(md: string): string {
+export type RenderableAssetKind = 'chart' | 'mermaid'
+/** 解析器：给定 chart/mermaid 源码返回已渲染的 SVG（来自离屏渲染）；返回 undefined 则回退代码块。 */
+export type AssetResolver = (kind: RenderableAssetKind, code: string) => string | undefined
+
+export interface RenderableBlock {
+  readonly kind: RenderableAssetKind
+  readonly code: string
+}
+
+/** 抽取 markdown 中所有 ```chart / ```mermaid 围栏块（供主进程离屏渲染）。纯函数、可单测。 */
+export function extractRenderableBlocks(md: string): RenderableBlock[] {
+  const lines = md.replace(/\r\n/g, '\n').split('\n')
+  const blocks: RenderableBlock[] = []
+  let i = 0
+  while (i < lines.length) {
+    const fence = lines[i].match(/^```(\w+)?\s*$/)
+    if (fence) {
+      const lang = fence[1]
+      const code: string[] = []
+      i++
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        code.push(lines[i])
+        i++
+      }
+      i++ // 跳过结尾 ```
+      if (lang === 'chart' || lang === 'mermaid') blocks.push({ kind: lang, code: code.join('\n') })
+      continue
+    }
+    i++
+  }
+  return blocks
+}
+
+/** 把一段 markdown 渲染成 HTML（常见子集，XSS 安全）。resolveAsset 命中时把 chart/mermaid 嵌成 SVG。 */
+export function markdownToSafeHtml(md: string, resolveAsset?: AssetResolver): string {
   const lines = md.replace(/\r\n/g, '\n').split('\n')
   const html: string[] = []
   let i = 0
@@ -82,8 +115,20 @@ export function markdownToSafeHtml(md: string): string {
         i++
       }
       i++ // 跳过结尾 ```
-      const label = fence[1] ? `<div class="code-lang">${escapeHtml(fence[1])}</div>` : ''
-      html.push(`${label}<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`)
+      const lang = fence[1]
+      const codeStr = code.join('\n')
+      // chart/mermaid：上游离屏渲染给了 SVG 就嵌图，否则回退带标签代码块（保真度边界）。
+      // svg 原样注入、不二次转义——信任来源是离屏主进程（echarts 文本已转义、mermaid securityLevel:strict）；
+      // 若将来换第三方 resolveAsset 实现，需在此加 SVG 净化。
+      if ((lang === 'chart' || lang === 'mermaid') && resolveAsset) {
+        const svg = resolveAsset(lang, codeStr)
+        if (svg) {
+          html.push(`<figure class="rendered-asset" data-kind="${lang}">${svg}</figure>`)
+          continue
+        }
+      }
+      const label = lang ? `<div class="code-lang">${escapeHtml(lang)}</div>` : ''
+      html.push(`${label}<pre><code>${escapeHtml(codeStr)}</code></pre>`)
       continue
     }
 
@@ -204,17 +249,19 @@ const PAGE_CSS = `
   blockquote { border-left: 3px solid #bbb; margin: 8px 0; padding-left: 12px; color: #555; }
   a { color: #2563eb; }
   hr { border: none; border-top: 1px solid #ddd; margin: 16px 0; }
+  figure.rendered-asset { margin: 12px 0; text-align: center; }
+  figure.rendered-asset svg { max-width: 100%; height: auto; }
 `.trim()
 
 /**
  * 拼装完整的自包含 HTML（内联 CSS，无外部资源依赖，开箱即可在浏览器打开/分享）。
  */
-export function buildConversationHtml(input: ConversationHtmlInput): string {
+export function buildConversationHtml(input: ConversationHtmlInput, resolveAsset?: AssetResolver): string {
   const body = input.messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
       const roleLabel = m.role === 'user' ? '你' : '专家'
-      return `<div class="msg ${m.role}"><div class="role">${roleLabel}</div>${markdownToSafeHtml(m.content)}</div>`
+      return `<div class="msg ${m.role}"><div class="role">${roleLabel}</div>${markdownToSafeHtml(m.content, resolveAsset)}</div>`
     })
     .join('\n')
 

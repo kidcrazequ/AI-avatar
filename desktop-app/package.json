@@ -41,6 +41,8 @@
     "smoke:static": "npx --yes tsx electron/__smoke__/static-smoke.ts",
     "smoke:verifier:build": "npx esbuild electron/__smoke__/verifier-main.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-electron/__smoke__/verifier-main.js --external:electron --external:better-sqlite3",
     "smoke:verifier": "npm run smoke:verifier:build && npx electron dist-electron/__smoke__/verifier-main.js",
+    "smoke:charts:build": "npx esbuild electron/__smoke__/chart-render-smoke.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-electron/__smoke__/chart-render-smoke.js --external:electron --external:better-sqlite3",
+    "smoke:charts": "npm run smoke:charts:build && npx electron dist-electron/__smoke__/chart-render-smoke.js",
     "smoke": "npm run smoke:static && npm run smoke:verifier"
   },
   "keywords": [

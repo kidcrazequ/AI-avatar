@@ -92,7 +92,7 @@ interface Props {
 }
 
 export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName, avatarRole, showToast }: Props) {
-  const { messages, isLoading, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
+  const { messages, isLoading, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, setConversationTree, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
       isLoading: s.isLoading,
@@ -102,6 +102,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       resetTransientState: s.resetTransientState,
       sendMessage: s.sendMessage,
       setMessages: s.setMessages,
+      setConversationTree: s.setConversationTree,
       bindConversation: s.bindConversation,
       restoreInflightStreamingMessage: s.restoreInflightStreamingMessage,
       mode: s.mode,
@@ -260,6 +261,18 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     return () => unsubscribe()
   }, [conversationId, setMode])
 
+  // 版本切换器（v21·phase2）：切分支后 MessageBubble 派发 soul-reload-active-path，
+  // 这里 bump nonce → 重跑下面的 loadMessages，重新拉活动路径 + 会话树。
+  const [reloadNonce, setReloadNonce] = useState(0)
+  useEffect(() => {
+    const onReload = (e: Event) => {
+      const detail = (e as CustomEvent<{ conversationId?: string }>).detail
+      if (detail?.conversationId === conversationId) setReloadNonce((n) => n + 1)
+    }
+    window.addEventListener('soul-reload-active-path', onReload)
+    return () => window.removeEventListener('soul-reload-active-path', onReload)
+  }, [conversationId])
+
   useEffect(() => {
     resetTransientState()
     // Stage 三 P2 范围外 1：绑定当前会话并从 DB 恢复任务列表（异步，失败兜底为空列表）
@@ -269,12 +282,14 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     let cancelled = false
     const loadMessages = async () => {
       try {
-        // 并发拉消息和附件，避免历史会话首屏多等一次 IPC
-        const [dbMessages, dbAttachments] = await Promise.all([
+        // 并发拉消息、附件、会话树（版本切换器用），避免历史会话首屏多等几次 IPC
+        const [dbMessages, dbAttachments, dbTree] = await Promise.all([
           window.electronAPI.getMessages(conversationId),
           window.electronAPI.listAttachments(conversationId).catch(() => [] as Attachment[]),
+          window.electronAPI.getConversationTree(conversationId).catch(() => []),
         ])
         if (cancelled) return
+        setConversationTree(dbTree)
 
         // 按 messageId 分组附件，O(N) 一次过滤
         const attachmentsByMsgId = new Map<string, AttachmentRef[]>()
@@ -381,7 +396,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     }
     loadMessages()
     return () => { cancelled = true }
-  }, [conversationId, setMessages, resetTransientState, bindConversation, restoreInflightStreamingMessage])
+  }, [conversationId, reloadNonce, setMessages, setConversationTree, resetTransientState, bindConversation, restoreInflightStreamingMessage])
 
   // 加载当前 conversation 的 project 上下文（README + notes），用于发送时自动注入
   useEffect(() => {

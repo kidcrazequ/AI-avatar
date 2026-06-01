@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('save-message', conversationId, role, content, toolCallId, imageUrls, reasoning, uncertainMarkers, reconsiderMarkers, toolCallTimelineJson, externalId),
   getMessages: (conversationId: string) => ipcRenderer.invoke('get-messages', conversationId),
   forkConversation: (conversationId: string, messageId: string) => ipcRenderer.invoke('fork-conversation', conversationId, messageId),
+  getConversationTree: (conversationId: string) => ipcRenderer.invoke('get-conversation-tree', conversationId),
   getRecentMessages: (conversationId: string, limit: number) => ipcRenderer.invoke('get-recent-messages', conversationId, limit),
 
   // 删除单条消息（v14，「重新生成」按钮专用）

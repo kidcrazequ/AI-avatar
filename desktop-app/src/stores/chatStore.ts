@@ -16,6 +16,7 @@ import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSo
 import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
 import { extractUncertain, extractReconsider } from './deliberation-extractors'
 import { buildStableSystemText, RED_LINE_SUMMARY } from './stable-system-prompt'
+import type { TreeNodeLite } from './branch-nav'
 
 /** GAP2: 从 AI 回复中提取 memory 更新标记的正则 */
 const MEMORY_UPDATE_REGEX = /\[MEMORY_UPDATE\]([\s\S]*?)\[\/MEMORY_UPDATE\]/g
@@ -411,6 +412,16 @@ interface ChatStore {
     conversationId: string,
     avatarId: string,
   ) => Promise<boolean>
+  /**
+   * 「换个思路重答」(v21·phase2，借鉴 Pi 树状会话)：非破坏性重答——保留旧回答整轮，
+   * 把活动叶子分叉到该 user 消息的父，再以新分支重发同一问题。旧回答留在 DB 旁支，
+   * 可经版本切换器找回。与 regenerate 一样只对最后一轮开放。
+   */
+  forkAndRegenerate: (
+    messageId: string,
+    conversationId: string,
+    avatarId: string,
+  ) => Promise<boolean>
   clearMessages: () => void
   resetTransientState: () => void
   /** Feature 6: 清除技能创建建议 */
@@ -451,6 +462,9 @@ interface ChatStore {
    * 不持久化：仅活在内存中，刷新/切会话后消失（与本轮对话生命周期一致）。
    */
   toolCallTimeline: ToolCallTimelineEntry[]
+  /** 会话树轻量结构（v21·phase2）：版本切换器据此算 ‹k/n› 与切换目标；ChatWindow 加载时刷新 */
+  conversationTree: TreeNodeLite[]
+  setConversationTree: (tree: TreeNodeLite[]) => void
   /** 追加一条工具调用时间线（每次工具循环执行完毕后调用，失败应静默） */
   /**
    * 追加一条工具调用时间线条目。
@@ -2747,6 +2761,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chatModelMode: 'cloud',
   toolCallStatus: '',
   skillProposals: [],
+  conversationTree: [],
+  setConversationTree: (tree) => set({ conversationTree: tree }),
   collapsedMessageIds: new Set<string>(),
   tasks: [],
   toolCallTimeline: [],
@@ -5446,6 +5462,62 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       undefined,
       { skipCache: true },
     )
+    return true
+  },
+  forkAndRegenerate: async (messageId, conversationId, avatarId) => {
+    if (get().isLoading) return false
+    const state = get()
+    const idx = state.messages.findIndex((m) => m.id === messageId && m.role === 'assistant')
+    if (idx < 0) return false
+    // 与「重新生成」一致：只对最后一轮开放（其后无 user 消息），避免新分支接到末尾破坏时间线
+    if (state.messages.slice(idx + 1).some((m) => m.role === 'user')) return false
+    let userIdx = -1
+    for (let i = idx - 1; i >= 0; i--) {
+      if (state.messages[i].role === 'user') { userIdx = i; break }
+    }
+    if (userIdx < 0) return false
+    const userMsg = state.messages[userIdx]
+    const rawContent = userMsg.content.replace(/^\[id:m\d+\]\s*/, '')
+
+    // 非破坏性分叉：活动叶子退到该 user 消息的父（树查 parentId；空串=分叉到根）。
+    // 旧回答整轮保留在 DB（离开活动路径、可经版本切换器找回），不删任何消息。
+    let forkTarget = ''
+    try {
+      const tree = await window.electronAPI.getConversationTree(conversationId)
+      forkTarget = tree.find((n) => n.id === userMsg.id)?.parentId ?? ''
+    } catch (treeErr) {
+      window.electronAPI.logEvent('warn', 'fork-regenerate-tree-error', treeErr instanceof Error ? treeErr.message : String(treeErr))
+    }
+    try {
+      const ok = await window.electronAPI.forkConversation(conversationId, forkTarget)
+      if (!ok && forkTarget) {
+        // forkTarget 已不在库（极端并发）→ 退回到根，仍能另起分支
+        await window.electronAPI.forkConversation(conversationId, '')
+      }
+    } catch (forkErr) {
+      window.electronAPI.logEvent('error', 'fork-regenerate-fork-error', forkErr instanceof Error ? forkErr.message : String(forkErr))
+      return false
+    }
+    // UI 退回到 user 之前；sendMessage 随后以新分支追加新一轮（旧轮已落到 DB 旁支）
+    set({ messages: state.messages.slice(0, userIdx) })
+    await get().sendMessage(
+      rawContent,
+      conversationId,
+      avatarId,
+      userMsg.imageUrls,
+      get().visionModel,
+      userMsg.attachments,
+      undefined,
+      undefined,
+      { skipCache: true },
+    )
+    // 刷新会话树（不动 messages，避免闪烁）：新分支落库后版本切换器 ‹k/n› 才能立刻反映多版本
+    try {
+      const tree = await window.electronAPI.getConversationTree(conversationId)
+      get().setConversationTree(tree)
+    } catch {
+      /* 版本数下次加载会话时再更新 */
+    }
     return true
   },
   clearMessages: () => set({ messages: [], skillProposals: [], toolCallStatus: '', isLoading: false, toolCallTimeline: [] }),

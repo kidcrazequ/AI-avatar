@@ -1585,12 +1585,33 @@ export class DatabaseManager {
    * messageId 不属于该会话时返回 false（不动 leaf）。
    */
   forkConversationFromMessage(conversationId: string, messageId: string): boolean {
+    // messageId 为空 = 分叉到"根"：清空 leaf，紧接着的新消息会成为新的根（首轮"换个思路重答"用）。
+    // 该状态是瞬时的——调用方随后立刻发新消息把 leaf 推进到新根，不会停在 leaf=null（全量退回）态。
+    if (!messageId) {
+      this.stmts.updateConversationLeaf.run(null, conversationId)
+      return true
+    }
     const row = this.db
       .prepare('SELECT id FROM messages WHERE id = ? AND conversation_id = ?')
       .get(messageId, conversationId)
     if (!row) return false
     this.stmts.updateConversationLeaf.run(messageId, conversationId)
     return true
+  }
+
+  /**
+   * 会话树（v21·phase2）：返回该会话所有消息的**轻量树结构**（仅 id/parentId/role/createdAt，
+   * 不含 content 等大字段），供渲染端计算分叉点、版本数与分支切换目标。按 createdAt 升序。
+   */
+  getConversationTree(
+    conversationId: string,
+  ): Array<{ id: string; parentId: string | null; role: string; createdAt: number }> {
+    const rows = this.db
+      .prepare(
+        'SELECT id, parent_id, role, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC',
+      )
+      .all(conversationId) as Array<{ id: string; parent_id: string | null; role: string; created_at: number }>
+    return rows.map((r) => ({ id: r.id, parentId: r.parent_id, role: r.role, createdAt: r.created_at }))
   }
 
   /**

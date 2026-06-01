@@ -3,6 +3,7 @@ import ToolCallTimeline from './ToolCallTimeline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ChatMessage, useChatStore } from '../stores/chatStore'
+import { computeBranchInfo, findBranchTip } from '../stores/branch-nav'
 import AvatarImage from './AvatarImage'
 import ChartRenderer from './ChartRenderer'
 import MermaidRenderer from './MermaidRenderer'
@@ -1030,8 +1031,25 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   const collapsed = useChatStore((s) => s.collapsedMessageIds.has(message.id))
   const toggleMessageCollapsed = useChatStore((s) => s.toggleMessageCollapsed)
   const regenerateAssistantMessage = useChatStore((s) => s.regenerateAssistantMessage)
+  const forkAndRegenerate = useChatStore((s) => s.forkAndRegenerate)
+  const conversationTree = useChatStore((s) => s.conversationTree)
   const currentConversationId = useChatStore((s) => s.currentConversationId)
   const isLoadingChat = useChatStore((s) => s.isLoading)
+  // 会话树版本切换器（v21·phase2）：本条消息若有同轮多版本（同父同角色兄弟），算 ‹k/n›
+  const branchInfo = useMemo(() => computeBranchInfo(conversationTree, message.id), [conversationTree, message.id])
+  const switchBranch = useCallback(
+    (targetIndex: number) => {
+      if (!currentConversationId || !branchInfo) return
+      const sibling = branchInfo.siblings[targetIndex]
+      if (!sibling || targetIndex === branchInfo.index) return
+      const tip = findBranchTip(conversationTree, sibling)
+      void window.electronAPI
+        .forkConversation(currentConversationId, tip)
+        .then(() => window.dispatchEvent(new CustomEvent('soul-reload-active-path', { detail: { conversationId: currentConversationId } })))
+        .catch((err) => window.electronAPI.logEvent('warn', 'branch-switch-error', err instanceof Error ? err.message : String(err)))
+    },
+    [branchInfo, conversationTree, currentConversationId],
+  )
   const extractedThinking = isUser
     ? { thinking: '', clean: stripIdAnchor(message.content) }
     : extractThinking(message.content)
@@ -1314,6 +1332,50 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                     >
                       ↻ 重新生成
                     </button>
+                  )}
+                  {/* 换个思路重答（v21·phase2）：非破坏性——保留旧回答为旁支，另起新分支重答 */}
+                  {currentConversationId && avatarId && canRegenerate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void forkAndRegenerate(message.id, currentConversationId, avatarId)
+                      }}
+                      disabled={isLoadingChat}
+                      className="font-game text-[11px] tracking-wider
+                        hover:text-px-primary
+                        disabled:opacity-40 disabled:cursor-not-allowed
+                        transition-colors"
+                      aria-label="换个思路重答"
+                      title="换个思路重答（保留当前回答，另起一个版本分支）"
+                    >
+                      ⑂ 换个思路
+                    </button>
+                  )}
+                  {/* 版本切换器：本轮有多个版本时显示 ‹ k/n ›，可切回旧分支（v21·phase2） */}
+                  {branchInfo && (
+                    <span className="font-game text-[11px] tracking-wider inline-flex items-center gap-1" aria-label="回答版本切换">
+                      <button
+                        type="button"
+                        onClick={() => switchBranch(branchInfo.index - 1)}
+                        disabled={isLoadingChat || branchInfo.index === 0}
+                        className="hover:text-px-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="上一个版本"
+                        title="上一个版本"
+                      >
+                        ‹
+                      </button>
+                      <span title="本轮回答版本">{branchInfo.index + 1}/{branchInfo.total}</span>
+                      <button
+                        type="button"
+                        onClick={() => switchBranch(branchInfo.index + 1)}
+                        disabled={isLoadingChat || branchInfo.index === branchInfo.total - 1}
+                        className="hover:text-px-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        aria-label="下一个版本"
+                        title="下一个版本"
+                      >
+                        ›
+                      </button>
+                    </span>
                   )}
                   <button
                     type="button"

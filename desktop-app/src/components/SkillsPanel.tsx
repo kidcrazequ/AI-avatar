@@ -5,6 +5,7 @@ import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
 import SharedSkillTab from './SharedSkillTab'
 import CommunitySkillTab from './CommunitySkillTab'
+import SkillMarketplaceTab from './SkillMarketplaceTab'
 
 interface Props {
   avatarId: string
@@ -63,7 +64,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const [isGenerating, setIsGenerating] = useState(false)
   // 删除确认 state
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'local' | 'shared' | 'community'>('local')
+  const [activeTab, setActiveTab] = useState<'local' | 'shared' | 'community' | 'marketplace'>('local')
 
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; clearTimeout(saveMsgTimerRef.current) } }, [])
@@ -304,7 +305,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
       {/* Tab 切换栏 */}
       <div className="flex border-b-2 border-px-border bg-px-elevated">
-        {(['local', 'shared', 'community'] as const).map((tab) => (
+        {(['local', 'shared', 'community', 'marketplace'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -315,7 +316,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
                 : 'border-transparent text-px-text-dim hover:text-px-text'
               }`}
           >
-            {tab === 'local' ? '本地技能' : tab === 'shared' ? '公共技能' : '社区技能'}
+            {tab === 'local' ? '本地技能' : tab === 'shared' ? '公共技能' : tab === 'community' ? '社区技能' : '技能市场'}
           </button>
         ))}
       </div>
@@ -580,6 +581,12 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
       )}
       {activeTab === 'shared' && <SharedSkillTab avatarId={avatarId} />}
       {activeTab === 'community' && <CommunitySkillTab avatarId={avatarId} />}
+      {activeTab === 'marketplace' && (
+        <SkillMarketplaceTab
+          avatarId={avatarId}
+          onInstalled={() => { loadSkills(); onSkillsChanged?.() }}
+        />
+      )}
     </Modal>
   )
 }

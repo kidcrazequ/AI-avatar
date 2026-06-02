@@ -70,3 +70,22 @@ export interface CommunitySkillSyncProgress {
   /** 当前第几个 */
   current: number
 }
+
+/**
+ * skills.sh 搜索结果项（对应 https://skills.sh/api/search 返回的 skills[] 元素）。
+ * 由 SkillsShManager.search 调免密公开端点检索后产出，供渲染端技能市场展示。
+ */
+export interface SkillsShSearchResult {
+  /** 完整 id：owner/repo/skillId */
+  id: string
+  /** 技能叶子名（== 目标技能 SKILL.md frontmatter 的 name，是安装时的定位键） */
+  skillId: string
+  /** 展示名 */
+  name: string
+  /** 来源仓库：owner/repo（== git clone 的目标） */
+  source: string
+  /** 安装次数（仅用于排序/展示） */
+  installs: number
+  /** 描述（/api/search 可能不返回） */
+  description?: string
+}

@@ -1068,6 +1068,12 @@ interface ElectronAPI {
   /** 为某分身禁用指定社区技能 */
   communityDisableForAvatar: (avatarId: string, skillName: string) => Promise<void>
 
+  // ─── skills.sh 技能市场 ───────────────────────────────────────
+  /** 调 skills.sh 公开搜索 API 检索开源技能 */
+  skillsShSearch: (query: string, limit?: number) => Promise<SkillsShSearchResult[]>
+  /** 安装一个 skills.sh 技能到当前分身（avatars/<id>/skills/，source: local） */
+  skillsShInstall: (avatarId: string, result: SkillsShSearchResult) => Promise<SkillsShInstallResult>
+
   // RAG 检索阶段进度
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
 
@@ -1564,6 +1570,23 @@ interface CommunitySkillSyncProgress {
   detail?: string
   total: number
   current: number
+}
+
+/** skills.sh 搜索结果项（对应 https://skills.sh/api/search 的 skills[]） */
+interface SkillsShSearchResult {
+  id: string
+  skillId: string
+  name: string
+  source: string
+  installs: number
+  description?: string
+}
+
+/** skills.sh 安装结果 */
+interface SkillsShInstallResult {
+  skillId: string
+  name: string
+  fileCount: number
 }
 
 /** Wiki 编译元数据 */

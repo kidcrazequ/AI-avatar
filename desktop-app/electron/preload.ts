@@ -475,6 +475,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   communityDisableForAvatar: (avatarId: string, skillName: string) =>
     ipcRenderer.invoke('community:disable-for-avatar', avatarId, skillName),
 
+  // ─── skills.sh 技能市场 ───────────────────────────────────────
+  skillsShSearch: (query: string, limit?: number) => ipcRenderer.invoke('skills-sh:search', query, limit),
+  skillsShInstall: (avatarId: string, result: { source: string; skillId: string }) =>
+    ipcRenderer.invoke('skills-sh:install', avatarId, result),
+
   // RAG 检索阶段进度（用于 UI 显示 "正在检索…/正在分析关联组件…/正在拼装上下文…"），
   // 避免长 LLM 调用时用户看到彩虹伞以为应用挂死。返回 unsubscribe 函数。
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => {

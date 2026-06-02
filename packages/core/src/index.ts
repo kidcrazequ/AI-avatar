@@ -37,6 +37,7 @@ export type {
   CommunitySkillInfo,
   SkillSource,
   CommunitySkillSyncProgress,
+  SkillsShSearchResult,
 } from './community-skill-types'
 export type { ToolCallRequest, ToolCallResult, DocumentRendererHook, DocumentRenderContext, SubAgentDispatchContext, SubAgentTaskSink } from './tool-router'
 

@@ -55,6 +55,7 @@ import { renderConversationAssets, assetKey } from './exporters/conversation-ass
 import { applyTweaks } from './preview/tweaks-writer'
 import { GitHubConnector } from './connectors/github-connector'
 import { CommunitySkillManager } from './community-skill-manager'
+import { SkillsShManager } from './skills-sh-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
 import { DoubaoAsrSession } from './asr-session'
@@ -127,6 +128,7 @@ let verifierAgent: VerifierAgent
 let publicFileServer: PublicFileServer
 let githubConnector: GitHubConnector
 let communitySkillManager: CommunitySkillManager
+let skillsShManager: SkillsShManager
 const documentParser = new DocumentParser()
 const scheduledTester = new ScheduledTester()
 const cronScheduler = new CronScheduler()
@@ -697,6 +699,7 @@ function initManagers() {
   testManager = new TestManager(avatarsPath)
   skillManager = new SkillManager(avatarsPath)
   communitySkillManager = new CommunitySkillManager(avatarsPath, logger)
+  skillsShManager = new SkillsShManager(avatarsPath, logger)
   skillRouter = new SkillRouter(avatarsPath)
   // 创建 MCP 客户端管理器，并从 DB 加载所有 enabled=true 的 server 配置。
   // 连接是异步且非阻塞的，单个 server 失败不影响 app 启动。
@@ -4023,6 +4026,17 @@ wrapHandler('community:enable-for-avatar', (_, avatarId: string, skillName: stri
 wrapHandler('community:disable-for-avatar', (_, avatarId: string, skillName: string) => {
   assertSafeSegment(avatarId, '分身ID')
   communitySkillManager.disableForAvatar(avatarId, skillName)
+})
+
+// ─── skills.sh 技能市场 ───────────────────────────────────────────────────────
+// 搜索：免密公开 API；安装：git clone → 落到 avatars/<id>/skills/<skillId>/（source: local）
+wrapHandler('skills-sh:search', (_, query: string, limit?: number) => {
+  return skillsShManager.search(query, limit)
+})
+
+wrapHandler('skills-sh:install', async (_, avatarId: string, result: { source: string; skillId: string }) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return skillsShManager.install(avatarId, result)
 })
 
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────

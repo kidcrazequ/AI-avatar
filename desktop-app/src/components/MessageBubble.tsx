@@ -1205,9 +1205,12 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
               prose-a:text-px-primary prose-a:no-underline hover:prose-a:underline
               prose-li:text-px-text-sec prose-li:marker:text-px-primary prose-li:font-body">
               {reasoning && (
-                <details className="not-prose mb-2 border border-px-border/40 bg-px-bg/50 px-3 py-2">
+                <details
+                  open={isLive || undefined}
+                  className="not-prose mb-2 border border-px-border/40 bg-px-bg/50 px-3 py-2"
+                >
                   <summary className="font-game text-[10px] tracking-wider text-px-text-dim cursor-pointer">
-                    [▷] THINKING ({reasoning.length} 字)
+                    [▷] THINKING ({reasoning.length} 字){isLive ? ' · 思考中…' : ''}
                   </summary>
                   <pre className="mt-2 text-[12px] text-px-text-dim font-mono whitespace-pre-wrap leading-relaxed">
                     {reasoning}

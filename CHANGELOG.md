@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### 新增
+
+- **案例视频离线内联工具** `scripts/embed-case-videos.py` — 把 CASE 03/04/05/06 的 mp4 用 base64 内联进 `AI分身提效案例.html`，生成可单文件分发的离线版本（CASE 01/02 体积大保持外链）；脚本路径不再硬编码，支持任意 checkout 路径与 `--html` / `--assets` 覆盖。
+- **案例截图资产** `assets/case-screenshots/`（6 张，380K）入库。
+
+### 工程
+
+- **`.gitignore` 加固** — 忽略本机模型与编译产物（`scripts/models/` whisper 模型二进制、`scripts/vision-ocr` arm64 可执行文件）、CodeGraph 本机数据（`.codegraph/`）与备份文件（`*.bak`），避免超 GitHub 100MB 限制或平台特定产物误入库。
+
 ## v0.17.0 (2026-05-19)
 
 > 第四波「2026 LLM 工具链借鉴」：Inspect AI / mitmproxy / LiteLLM 三件套落地。补 Soul 评测框架抽象不清晰、proxy 流量无法回放、跨 provider 成本不可见三个工程短板。`batch-regression-runner` 不动，新抽象并行落点。

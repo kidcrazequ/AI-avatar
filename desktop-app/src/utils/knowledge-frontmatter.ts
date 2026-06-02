@@ -38,6 +38,8 @@ const NO_FORMAT_RAW_EXTS = new Set([
  */
 export function shouldHideKnowledgeFormatButton(meta: Record<string, unknown>): boolean {
   const source = typeof meta.source === 'string' ? meta.source.toLowerCase() : ''
+  // 已 LLM 格式化（FORMAT 成功后标 source: enhanced）→ 再 FORMAT 冗余，隐藏。
+  if (source === 'enhanced') return true
   if (source === 'excel' || source === 'pptx') return true
   if (typeof meta.excel_json === 'string') return true
 

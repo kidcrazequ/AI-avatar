@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### 新增
+
+- **`@web` 改为内联提及** — message-input 里 `@web` 作为内联 token，发送时注入联网指令，不再是独立开关态。
+- **web_fetch fake-ip 代理放宽开关** — 修 SSRF 防护对正常 `web_fetch` 的误杀（合法外链被当成内网拦截）。
+- **已格式化文件隐藏 FORMAT 按钮** — 知识库中已 LLM 格式化（`source: enhanced`）的文件不再显示 FORMAT 按钮，避免重复格式化。
+- **THINKING 段流式自动展开** — 回答流式生成时 THINKING 段默认展开并显示「思考中…」，完成后自动折叠。
+
+### 性能
+
+- **soul-loader system prompt 砍半** — 大知识库的可检索索引改为顶层领域摘要，显著压缩 system prompt 体积。
+- **knowledge_grep 改用 ripgrep** — tool-router 知识检索优先走 `rg`，Node 扫描作回退。
+
+### 修复
+
+- **时效问答日期臆测** — 注入真实当前日期到动态系统段，修分身对「今天/最近」类问题臆测日期。
+- **soul-loader prompt 预算** — 识别 `source_type`，加 prompt 硬预算与深度上限，防大库撑爆上下文。
+- **分身简介裸 markdown** — 分身简介预览去除内联 markdown 标记（`**` / `` ` `` / 链接等）。
+
+### 工程
+
+- **frontmatter 重命名** — 知识 `rag_only` → `prompt_excluded`（向后兼容旧字段）。
+- **opus 重摄取工作清单脚本** `scripts/build-reingest-worklist.py` — 按 frontmatter 分流知识 .md 生成重摄取工作清单。
+- **release 构建改为仅手动触发** — 移除 tag 自动触发 CI 构建，发包走 `workflow_dispatch` 或本地出包。
+
 ## v0.18.0 (2026-06-02)
 
 > 自 v0.17.0 以来 139 个 commit（含 108 个 fix）。本版核心：会话树多分支重答、对话一键导出可分享 HTML、桌面端集成 skills.sh 社区技能市场、Soul MCP server 对外暴露分身资源，并完成大批安全加固（SSRF / 路径穿越 / zip 炸弹 / DNS rebinding）。

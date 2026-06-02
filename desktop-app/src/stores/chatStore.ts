@@ -3781,7 +3781,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 注入失败不阻塞 user message
       void lorebookErr
     }
-    const dynamicSystemText = dynamicAppended + lorebookText + snipNoticeBlock
+    // 注入真实当前日期到非 cacheable 动态段（每条消息重算，不污染 stable cache）。
+    // 修复：soul-loader 的工具指引声称"system 已注入 currentDate"，但此前从未真正注入，
+    // 模型对"今天天气"这类时效问题只能臆测日期（曾把 2026-06-02 答成 6-04）。
+    const currentWeekdayCn = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date().getDay()]
+    const currentDateLine = `【当前日期】今天是 ${localDateString()}（${currentWeekdayCn}）。涉及"今天/现在/最近/最新"的时效问题（天气、新闻、行情等）一律以此日期为准；联网检索结果标注的"访问日期"也用它，不要臆测、也不要照搬搜索结果页里出现的其它日期。`
+    const dynamicSystemText = currentDateLine + '\n\n' + dynamicAppended + lorebookText + snipNoticeBlock
 
     // agent-runtime 观测接入：保留原有 stats 上报，flag off 时无副作用
     try {

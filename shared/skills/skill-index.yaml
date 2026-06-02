@@ -310,3 +310,37 @@ skills:
       - 知识库对齐
     when: 同 grill-me；当前分身存在 knowledge/ 且 knowledge/README.md 不为空时优先用本技能（叠加术语对齐 + ADR 沉淀）
     priority: 1
+
+  # ═══════════════════════════════════════
+  # 外部平台知识
+  # ═══════════════════════════════════════
+  - name: palantir-aip-foundry
+    path: shared/skills/palantir-aip-foundry.md
+    domain: 外部平台知识
+    keywords:
+      - Palantir
+      - Foundry
+      - AIP
+      - AIP Logic
+      - AIP Assist
+      - AIP Analyst
+      - Chatbot Studio
+      - Agent Studio
+      - Document Intelligence
+      - AIP Evals
+      - Model Catalog
+      - AIP Threads
+      - AI FDE
+      - Ontology
+      - BYOM
+      - 自带模型
+      - 注册模型
+      - registered model
+      - ChatCompletion
+      - compute-second
+      - 责任 AI
+      - prompt engineering
+      - Supported LLMs
+      - LLM proxy
+    when: 用户问及 Palantir Foundry AIP 平台/模块选型/接入自有模型/计费限流容量/治理合规/提示工程；回答须标来源页并对未覆盖项标 GAP
+    priority: 1

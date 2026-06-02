@@ -461,19 +461,29 @@ export class SoulLoader {
         })
       }
 
-      // RAG-only 文件索引（只告诉 LLM 有哪些文件可通过 search_knowledge 检索）。
-      // 被预算降级的 stuff 文件也并入此清单，保证 LLM 仍知道它们的存在。
+      // RAG-only 文件索引：小库逐个列路径；大库（如小凯 1885 文件）只按顶层领域归并，
+      // 避免上千路径整块灌进 system prompt（曾占 ~5.5 万 token，拖慢每次请求的首 token）。
+      // agentic 方向：分身知道覆盖哪些领域 + 用工具下钻即可，不需要预先看到全部文件名。
       if (ragOnlyEntries.length > 0 || demotedStuff.length > 0) {
-        stableParts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
-        ragOnlyEntries.forEach(e => {
-          const source = typeof e.meta.source === 'string' ? e.meta.source
-            : typeof e.meta.source_type === 'string' ? e.meta.source_type
-            : 'document'
-          stableParts.push(`- \`knowledge/${e.relPath}\`（${source}）\n`)
-        })
-        demotedStuff.forEach(e => {
-          stableParts.push(`- \`knowledge/${e.relPath}\`（超 prompt 预算，已降级）\n`)
-        })
+        const indexEntries = [
+          ...ragOnlyEntries.map(e => ({
+            relPath: e.relPath,
+            source: typeof e.meta.source === 'string' ? e.meta.source
+              : typeof e.meta.source_type === 'string' ? e.meta.source_type
+              : 'document',
+          })),
+          ...demotedStuff.map(e => ({ relPath: e.relPath, source: '超预算降级' })),
+        ]
+        const { lines, summarized } = this.buildKnowledgeIndexLines(indexEntries, 'knowledge/')
+        if (summarized) {
+          stableParts.push('\n\n---\n\n# 知识库（用工具按需检索，不在 system prompt 正文中）\n\n')
+          stableParts.push(`覆盖领域（共 ${indexEntries.length} 个可检索文件）：\n`)
+          lines.forEach(l => stableParts.push(l))
+          stableParts.push('\n专业问题先检索再作答（不要凭空回答）：`search_knowledge`（语义召回）/ `knowledge_grep`（按关键词搜路径或内容，可加 scope 限定目录）/ `knowledge_glob`（按文件名模式）/ `list_knowledge_files` / `read_knowledge_file`（读全文）。\n')
+        } else {
+          stableParts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
+          lines.forEach(l => stableParts.push(l))
+        }
       }
 
       // Excel 结构化数据源清单（F1 按需 schema：只列 sheet 名，不注入完整列 schema，
@@ -674,13 +684,16 @@ export class SoulLoader {
       })
     }
     if (ragOnlyEntries.length > 0) {
-      stableParts.push(`\n\n---\n\n# 项目可检索文档（${projectId}）\n\n`)
-      ragOnlyEntries.forEach(e => {
-        const source = typeof e.meta.source === 'string' ? e.meta.source
+      const indexEntries = ragOnlyEntries.map(e => ({
+        relPath: e.relPath,
+        source: typeof e.meta.source === 'string' ? e.meta.source
           : typeof e.meta.source_type === 'string' ? e.meta.source_type
-          : 'document'
-        stableParts.push(`- \`projects/${projectId}/knowledge/${e.relPath}\`（${source}）\n`)
-      })
+          : 'document',
+      }))
+      const { lines, summarized } = this.buildKnowledgeIndexLines(indexEntries, `projects/${projectId}/knowledge/`)
+      stableParts.push(`\n\n---\n\n# 项目可检索文档（${projectId}）\n\n`)
+      if (summarized) stableParts.push(`覆盖领域（共 ${indexEntries.length} 个文件，用 search_knowledge / knowledge_grep 按需检索）：\n`)
+      lines.forEach(l => stableParts.push(l))
     }
   }
 
@@ -786,6 +799,40 @@ export class SoulLoader {
 
   /** 知识库全文进 system prompt 的总字符预算（见 loadAvatar 的硬预算说明） */
   private static readonly STUFF_PROMPT_BUDGET_CHARS = 120_000
+
+  /**
+   * 「可检索知识」索引的逐文件列出上限：文件数 ≤ 此值时逐个列路径（小库精确文件名更有用）；
+   * 超过则只按顶层目录归并成领域摘要，避免上千路径撑爆 system prompt。
+   */
+  private static readonly KNOWLEDGE_INDEX_PER_FILE_LIMIT = 40
+
+  /**
+   * 构建「可检索知识」段落的条目行。
+   * - entries ≤ 阈值：逐个 `- \`<prefix><relPath>\`（source）`。
+   * - entries > 阈值：只按 relPath 顶层目录归并 + 计数，返回 `- 领域（~N 个文件）`，
+   *   不列文件路径（agentic：分身知道覆盖哪些领域，用工具按需下钻即可）。
+   * summarized 标记供调用方决定段落抬头与工具指引文案。
+   */
+  private buildKnowledgeIndexLines(
+    entries: Array<{ relPath: string; source: string }>,
+    pathPrefix: string,
+  ): { lines: string[]; summarized: boolean } {
+    if (entries.length <= SoulLoader.KNOWLEDGE_INDEX_PER_FILE_LIMIT) {
+      return {
+        summarized: false,
+        lines: entries.map(e => `- \`${pathPrefix}${e.relPath}\`（${e.source}）\n`),
+      }
+    }
+    const counts = new Map<string, number>()
+    for (const e of entries) {
+      const top = e.relPath.split('/')[0] || '(根目录)'
+      counts.set(top, (counts.get(top) || 0) + 1)
+    }
+    const lines = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([domain, count]) => `- ${domain}（~${count} 个文件）\n`)
+    return { summarized: true, lines }
+  }
 
   /**
    * 递归读取目录下所有 .md 文件。

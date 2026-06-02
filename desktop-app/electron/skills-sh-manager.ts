@@ -29,6 +29,7 @@ import {
   resolveUnderRoot,
   extractFrontmatter,
   fetchWithTimeout,
+  safeSkillId,
   type SkillsShSearchResult,
 } from '@soul/core'
 import { Logger } from './logger'
@@ -51,6 +52,9 @@ const MAX_SKILL_FILES = 300
 /** SKILL.md 递归搜索的最大深度与命中上限（防御异常巨仓） */
 const WALK_MAX_DEPTH = 6
 const WALK_MAX_HITS = 2000
+
+/** 安装/更新进度阶段（主进程经 IPC 推给渲染端，让卡片显示「克隆中…/定位中…/复制中…」） */
+export type SkillsShInstallPhase = 'cloning' | 'locating' | 'copying' | 'done' | 'error'
 
 /** 安装结果（返回给渲染端做提示 + 触发本地技能列表刷新） */
 export interface SkillsShInstallResult {
@@ -154,6 +158,7 @@ export class SkillsShManager {
     avatarId: string,
     result: { source: string; skillId: string },
     opts: { overwrite?: boolean } = {},
+    onProgress?: (phase: SkillsShInstallPhase) => void,
   ): Promise<SkillsShInstallResult> {
     assertSafeSegment(avatarId, '分身ID')
     const { owner, repo } = this.parseSource(result.source)
@@ -177,8 +182,10 @@ export class SkillsShManager {
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-skillssh-'))
     const cloneDir = path.join(tmpRoot, 'repo')
     try {
+      onProgress?.('cloning')
       await this.gitClone(repoUrl, cloneDir)
 
+      onProgress?.('locating')
       const found = this.locateSkillDir(cloneDir, result.skillId)
       if (!found) {
         throw new Error(`未能在仓库 ${result.source} 中定位技能 "${result.skillId}"（未找到匹配的 SKILL.md）`)
@@ -189,6 +196,7 @@ export class SkillsShManager {
         throw new Error(`技能目录文件数 ${fileCount} 超过上限 ${MAX_SKILL_FILES}（疑似命中仓库根/monorepo），已中止安装`)
       }
 
+      onProgress?.('copying')
       if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true })
       this.copyDir(found.dir, destDir)
 
@@ -326,21 +334,24 @@ export class SkillsShManager {
     return { owner, repo }
   }
 
-  /** 收敛 skillId 为安全的文件系统片段（[A-Za-z0-9_-]），再过 assertSafeSegment 兜底 */
+  /** 收敛 skillId 为安全片段（与渲染端「已安装」判定共用 @soul/core 的 safeSkillId），再过 assertSafeSegment 兜底 */
   private sanitizeSkillId(raw: string): string {
     if (typeof raw !== 'string' || !raw.trim()) {
       throw new Error('skillId 不能为空')
     }
-    const id = raw
-      .trim()
-      .replace(/[^A-Za-z0-9_-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
+    const id = safeSkillId(raw)
     if (!id) {
       throw new Error(`无法从 "${raw}" 生成合法的技能 ID`)
     }
     assertSafeSegment(id, '技能ID')
     return id
+  }
+
+  /** 构造技能在 skills.sh 上的页面 URL（owner/repo + skillId 均校验后），供主进程 shell.openExternal */
+  pageUrl(source: string, skillId: string): string {
+    const { owner, repo } = this.parseSource(source)
+    const id = this.assertUrlSkillId(skillId)
+    return `https://skills.sh/skills/${owner}/${repo}/${id}`
   }
 
   /** 校验 skillId 可安全嵌入 raw URL 路径段（无斜杠/控制字符/穿越）；describe 用 */

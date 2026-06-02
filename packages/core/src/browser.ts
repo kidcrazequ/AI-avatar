@@ -74,6 +74,9 @@ export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './util
 export { fetchWithTimeout, HttpError } from './utils/http'
 export type { FetchWithTimeoutOptions } from './utils/http'
 
+// ─── 技能 ID 安全化（纯字符串） ────────────────────────────────────────────
+export { safeSkillId } from './utils/skill-id'
+
 // ─── 知识库 frontmatter 工具（纯字符串处理） ────────────────────────────────
 export {
   parseFrontmatterCore,

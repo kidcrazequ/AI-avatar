@@ -16,6 +16,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { SkillsShManager } from './skills-sh-manager'
+import { safeSkillId } from '@soul/core'
 
 const stubLogger = { activity() { /* noop */ }, error() { /* noop */ }, warn() { /* noop */ } } as never
 function makeMgr() {
@@ -69,6 +70,24 @@ test('assertUrlSkillId accepts safe ids and rejects path/traversal chars', () =>
   for (const bad of ['a/b', '..', 'a..b', 'a b', '']) {
     assert.throws(() => f(bad), /非法的 skillId/, `应拒绝: ${JSON.stringify(bad)}`)
   }
+})
+
+test('pageUrl builds a validated skills.sh URL and rejects bad input', () => {
+  const { mgr } = makeMgr()
+  const f = (s: string, k: string) => (mgr as unknown as { pageUrl(s: string, k: string): string }).pageUrl(s, k)
+  assert.equal(
+    f('vercel-labs/agent-skills', 'vercel-react-best-practices'),
+    'https://skills.sh/skills/vercel-labs/agent-skills/vercel-react-best-practices',
+  )
+  assert.throws(() => f('../evil', 'x'), /非法的技能来源|非法的来源片段/)
+  assert.throws(() => f('owner/repo', 'a/b'), /非法的 skillId/)
+})
+
+test('safeSkillId (shared core) collapses to a safe segment, no traversal/slash', () => {
+  assert.equal(safeSkillId('vercel-react-best-practices'), 'vercel-react-best-practices')
+  assert.equal(safeSkillId('a/b'), 'a-b')
+  assert.equal(safeSkillId('../x'), 'x')
+  assert.equal(safeSkillId('  '), '')
 })
 
 test('sanitizeSkillId collapses unsafe chars and never yields a traversal', () => {

@@ -4034,13 +4034,30 @@ wrapHandler('skills-sh:search', (_, query: string, limit?: number) => {
   return skillsShManager.search(query, limit)
 })
 
-wrapHandler('skills-sh:install', async (_, avatarId: string, result: { source: string; skillId: string }, options?: { overwrite?: boolean }) => {
+wrapHandler('skills-sh:install', async (_, avatarId: string, result: { source: string; skillId: string; id?: string }, options?: { overwrite?: boolean }) => {
   assertSafeSegment(avatarId, '分身ID')
-  return skillsShManager.install(avatarId, result, options)
+  // 进度按结果 id 路由到具体卡片（id = owner/repo/skillId）
+  const id = result.id || `${result.source}/${result.skillId}`
+  const send = (phase: string) => {
+    if (mainWindow) mainWindow.webContents.send('skills-sh:install-progress', { id, phase })
+  }
+  try {
+    const installed = await skillsShManager.install(avatarId, result, options, send)
+    send('done')
+    return installed
+  } catch (err) {
+    send('error')
+    throw err
+  }
 })
 
 wrapHandler('skills-sh:describe', (_, source: string, skillId: string) => {
   return skillsShManager.describe(source, skillId)
+})
+
+wrapHandler('skills-sh:open-page', async (_, source: string, skillId: string) => {
+  // pageUrl 内部校验 owner/repo + skillId，URL 由主进程构造，渲染端无法传任意 URL
+  await shell.openExternal(skillsShManager.pageUrl(source, skillId))
 })
 
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────

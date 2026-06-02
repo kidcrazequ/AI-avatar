@@ -2,12 +2,15 @@
  * SkillMarketplaceTab — 技能市场（skills.sh）
  *
  * 从 skills.sh 搜索开源技能，对当前分身安装 / 更新 / 卸载（avatars/<id>/skills/，source: local）。
- * - 已装技能（按 skillId 与本地技能 id 比对）显示「更新 / 卸载」，否则显示「安装」。
- * - 「详情」按需拉取 SKILL.md 描述（/api/search 不返回描述）。
+ * - 已装技能（按 safeSkillId(skillId) 与本地技能 id 比对）显示「更新 / 卸载」，否则「安装」。
+ * - 安装/更新显示实时进度（克隆/定位/复制）。
+ * - 「详情」按需拉取 SKILL.md 描述；「在 skills.sh 查看」用系统浏览器打开原页。
+ * - /api/search 不支持分页，仅认 limit；「加载更多」即提高 limit 重搜。
  * 状态全部 component-local（与 CommunitySkillTab 一致，不引入 store）。
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { safeSkillId } from '@soul/core/browser'
 
 interface Props {
   avatarId: string
@@ -15,19 +18,28 @@ interface Props {
   onChanged?: () => void
 }
 
-/** 在途操作枚举；action map 里非这些值的字符串视为错误信息 */
 const BUSY = new Set<string>(['installing', 'updating', 'uninstalling'])
+const PAGE = 30
+const MAX_LIMIT = 90
+/** 进度阶段 -> 中文标签 */
+const PHASE_TEXT: Record<string, string> = { cloning: '克隆中…', locating: '定位中…', copying: '复制中…' }
 
 export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SkillsShSearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [searched, setSearched] = useState(false)
   const [error, setError] = useState('')
-  /** 当前分身已装技能 id 集合（用于判定结果是否「已安装」） */
+  /** 已执行搜索的 query / limit（「加载更多」据此重搜） */
+  const [lastQuery, setLastQuery] = useState('')
+  const [limit, setLimit] = useState(PAGE)
+  /** 当前分身已装技能 id 集合 */
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set())
   /** item.id -> 在途状态或错误信息 */
   const [action, setAction] = useState<Record<string, string | undefined>>({})
+  /** item.id -> 安装进度阶段（cloning/locating/copying） */
+  const [progress, setProgress] = useState<Record<string, string>>({})
   /** item.id -> 是否展开详情 */
   const [descOpen, setDescOpen] = useState<Record<string, boolean>>({})
   /** item.id -> 描述（'loading' 表示拉取中） */
@@ -37,6 +49,21 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
   useEffect(() => {
     mountedRef.current = true
     return () => { mountedRef.current = false }
+  }, [])
+
+  // 安装/更新进度推送：按 id 路由到对应卡片；done/error 时清除
+  useEffect(() => {
+    const unsub = window.electronAPI.onSkillsShInstallProgress((p) => {
+      if (!mountedRef.current) return
+      setProgress((s) => {
+        if (p.phase === 'done' || p.phase === 'error') {
+          const { [p.id]: _drop, ...rest } = s
+          return rest
+        }
+        return { ...s, [p.id]: p.phase }
+      })
+    })
+    return unsub
   }, [])
 
   const loadInstalled = useCallback(async () => {
@@ -51,24 +78,30 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
 
   useEffect(() => { loadInstalled() }, [loadInstalled])
 
-  const isInstalled = (item: SkillsShSearchResult) => installedIds.has(item.skillId)
+  // 已安装判定：两侧都用 safeSkillId 收敛，避免含特殊字符 skillId 误判
+  const isInstalled = (item: SkillsShSearchResult) => installedIds.has(safeSkillId(item.skillId))
 
-  const handleSearch = useCallback(async () => {
-    const q = query.trim()
+  const runSearch = useCallback(async (q: string, lim: number, more: boolean) => {
     if (!q) return
-    setSearching(true)
+    if (more) setLoadingMore(true); else setSearching(true)
     setError('')
     try {
-      const list = await window.electronAPI.skillsShSearch(q, 30)
+      const list = await window.electronAPI.skillsShSearch(q, lim)
       if (!mountedRef.current) return
       setResults(list)
+      setLimit(lim)
+      setLastQuery(q)
       setSearched(true)
     } catch (err) {
       if (mountedRef.current) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      if (mountedRef.current) setSearching(false)
+      if (mountedRef.current) { if (more) setLoadingMore(false); else setSearching(false) }
     }
-  }, [query])
+  }, [])
+
+  const handleSearch = () => runSearch(query.trim(), PAGE, false)
+  const handleLoadMore = () => runSearch(lastQuery, Math.min(limit + PAGE, MAX_LIMIT), true)
+  const canLoadMore = searched && results.length >= limit && limit < MAX_LIMIT
 
   const doInstall = async (item: SkillsShSearchResult, overwrite: boolean) => {
     const key = item.id
@@ -85,11 +118,12 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
   }
 
   const handleUninstall = async (item: SkillsShSearchResult) => {
-    if (!confirm(`确认卸载「${item.name}」？将删除 avatars/${avatarId}/skills/${item.skillId}/ 整个目录。`)) return
+    const localId = safeSkillId(item.skillId)
+    if (!confirm(`确认卸载「${item.name}」？将删除 avatars/${avatarId}/skills/${localId}/ 整个目录。`)) return
     const key = item.id
     setAction((s) => ({ ...s, [key]: 'uninstalling' }))
     try {
-      await window.electronAPI.deleteSkill(avatarId, item.skillId)
+      await window.electronAPI.deleteSkill(avatarId, localId)
       if (!mountedRef.current) return
       setAction((s) => ({ ...s, [key]: undefined }))
       await loadInstalled()
@@ -114,7 +148,13 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
     }
   }
 
+  const openPage = (item: SkillsShSearchResult) => {
+    window.electronAPI.skillsShOpenPage(item.source, item.skillId).catch(() => { /* 忽略：打开失败无关紧要 */ })
+  }
+
   const errMsg = (st: string | undefined) => (st && !BUSY.has(st) ? st : '')
+  /** 在途按钮文案：优先显示实时进度，否则用默认忙碌文案 */
+  const busyLabel = (id: string, fallback: string) => PHASE_TEXT[progress[id]] || fallback
 
   return (
     <div className="flex-1 overflow-y-auto bg-px-surface p-6">
@@ -179,13 +219,22 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
                       {installed && <span className="pixel-badge text-[9px]">已安装</span>}
                     </div>
                     <p className="font-body text-[11px] text-px-text-dim mt-0.5 truncate">{item.source}</p>
-                    <button
-                      type="button"
-                      onClick={() => toggleDesc(item)}
-                      className="font-game text-[10px] text-px-primary hover:underline mt-1"
-                    >
-                      {descOpen[item.id] ? '收起' : '详情'}
-                    </button>
+                    <div className="flex items-center gap-3 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleDesc(item)}
+                        className="font-game text-[10px] text-px-primary hover:underline"
+                      >
+                        {descOpen[item.id] ? '收起' : '详情'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openPage(item)}
+                        className="font-game text-[10px] text-px-text-dim hover:text-px-text hover:underline"
+                      >
+                        在 skills.sh 查看 ↗
+                      </button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     {installed ? (
@@ -196,7 +245,7 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
                           disabled={busy}
                           className="pixel-btn-outline-light text-[11px]"
                         >
-                          {st === 'updating' ? '更新中...' : '更新'}
+                          {st === 'updating' ? busyLabel(item.id, '更新中...') : '更新'}
                         </button>
                         <button
                           type="button"
@@ -214,7 +263,7 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
                         disabled={busy}
                         className="pixel-btn-primary text-[11px]"
                       >
-                        {st === 'installing' ? '安装中...' : '安装'}
+                        {st === 'installing' ? busyLabel(item.id, '安装中...') : '安装'}
                       </button>
                     )}
                   </div>
@@ -231,6 +280,19 @@ export default function SkillMarketplaceTab({ avatarId, onChanged }: Props) {
               </div>
             )
           })}
+
+          {canLoadMore && (
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="pixel-btn-outline-light text-[11px]"
+              >
+                {loadingMore ? '加载中...' : '加载更多'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

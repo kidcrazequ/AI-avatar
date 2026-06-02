@@ -135,6 +135,7 @@ export type {
 } from './mcp-client-manager'
 
 export { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
+export { safeSkillId } from './utils/skill-id'
 
 export { parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock } from './utils/knowledge-frontmatter'
 export type { FrontmatterParseResult } from './utils/knowledge-frontmatter'

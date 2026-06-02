@@ -1075,6 +1075,10 @@ interface ElectronAPI {
   skillsShInstall: (avatarId: string, result: SkillsShSearchResult, options?: { overwrite?: boolean }) => Promise<SkillsShInstallResult>
   /** 取某技能的描述（按需拉 SKILL.md frontmatter，/api/search 不返回描述） */
   skillsShDescribe: (source: string, skillId: string) => Promise<string>
+  /** 在系统浏览器打开技能的 skills.sh 页面（URL 由主进程校验构造） */
+  skillsShOpenPage: (source: string, skillId: string) => Promise<void>
+  /** 订阅安装/更新进度（克隆/定位/复制/完成/错误），返回取消订阅函数 */
+  onSkillsShInstallProgress: (callback: (p: SkillsShInstallProgress) => void) => (() => void)
 
   // RAG 检索阶段进度
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
@@ -1589,6 +1593,12 @@ interface SkillsShInstallResult {
   skillId: string
   name: string
   fileCount: number
+}
+
+/** skills.sh 安装/更新进度（按结果 id 路由到卡片） */
+interface SkillsShInstallProgress {
+  id: string
+  phase: 'cloning' | 'locating' | 'copying' | 'done' | 'error'
 }
 
 /** Wiki 编译元数据 */

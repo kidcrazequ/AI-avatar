@@ -357,10 +357,28 @@ ${skillsList || '（暂无技能）'}
     const lines = claudeMd.split('\n').filter(l => l.trim())
     for (const line of lines) {
       if (!line.startsWith('#') && !line.startsWith('>') && line.trim().length > 5) {
-        return line.trim().substring(0, 100)
+        return AvatarManager.stripInlineMarkdown(line.trim()).substring(0, 100)
       }
     }
     return ''
+  }
+
+  /**
+   * 去除一行 markdown 文本中的内联标记符号，得到用于纯文本预览的简介。
+   * 处理：加粗 / 斜体（** * __ _）、行内代码（`）、链接（[文本](url) → 文本）。
+   * 仅做轻量清洗，不解析完整 markdown，避免简介里出现裸露的 `**` 等符号。
+   *
+   * @author zhi.qu
+   * @date 2026-06-02
+   */
+  private static stripInlineMarkdown(line: string): string {
+    return line
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/(\*\*|__)(.+?)\1/g, '$2')
+      .replace(/(\*|_)(.+?)\1/g, '$2')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[*_`]/g, '')
+      .trim()
   }
 
   private extractNameFromSoul(soulContent: string): string {

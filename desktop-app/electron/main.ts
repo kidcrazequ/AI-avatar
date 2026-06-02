@@ -5398,7 +5398,7 @@ async function batchImportFiles(
       const RAG_ONLY_THRESHOLD = 50_000  // 50KB 以上标 rag_only
       const isLargeFile = finalBody.length > RAG_ONLY_THRESHOLD
       const systemMeta: Record<string, unknown> = {}
-      if (isLargeFile) systemMeta.rag_only = true
+      if (isLargeFile) systemMeta.prompt_excluded = true
       systemMeta.source = sourceTag
       if (rawRelPath) systemMeta.raw_file = rawRelPath
       const enhanced = extractFrontmatterFields(fileName, finalBody)
@@ -5733,7 +5733,7 @@ wrapHandler('format-knowledge-file', async (_, avatarId: string, relativePath: s
   const oldMeta = fmMatch ? parseFrontmatterCore(currentContent).meta : {}
   const isLarge = formatted.length > 50_000
   const newSystemMeta: Record<string, unknown> = { source: 'enhanced' }
-  if (isLarge) newSystemMeta.rag_only = true
+  if (isLarge) newSystemMeta.prompt_excluded = true
   const enhanced = extractFrontmatterFields(
     path.basename(filePath, path.extname(filePath)),
     formatted,
@@ -5863,7 +5863,7 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
           try {
             const head = fs.readFileSync(full, 'utf-8').slice(0, 2000)
             const meta = parseFrontmatterCore(head).meta
-            if (meta.rag_only !== true) continue
+            if (meta.prompt_excluded !== true && meta.rag_only !== true) continue
             const source = typeof meta.source === 'string' ? meta.source : ''
             if (!source || NON_ENHANCEABLE_SOURCES.has(source)) continue
             allFiles.push(full)
@@ -6059,7 +6059,7 @@ wrapHandler('enhance-knowledge-files', async (_, avatarId: string, options: Enha
       const oldContent = fs.readFileSync(filePath, 'utf-8')
       const oldMeta = parseFrontmatterCore(oldContent).meta
       const enhancedFields = extractFrontmatterFields(fileName, formatted)
-      const mergedMeta = mergeFrontmatter(oldMeta, mergeFrontmatter({ rag_only: true, source: 'enhanced' }, enhancedFields))
+      const mergedMeta = mergeFrontmatter(oldMeta, mergeFrontmatter({ prompt_excluded: true, source: 'enhanced' }, enhancedFields))
       const newContent = buildFrontmatterBlock(mergedMeta) + '\n\n' + formatted
       fs.writeFileSync(filePath, newContent, 'utf-8')
       enhanced++

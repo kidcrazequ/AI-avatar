@@ -409,7 +409,7 @@ export class SoulLoader {
     //   - 批量导入产物（有 source: pdf/word/pptx/... frontmatter）→ 运行时 rag_only，
     //     通过 search_knowledge / query_excel / read_knowledge_file 按需检索（Channel B+C）
     //   - 用户手写文件（无 source 字段）→ 塞进 system prompt（Channel A 全量注入）
-    //   - 显式标记 rag_only: true 的文件 → 同上，不塞 prompt
+    //   - 显式标记 prompt_excluded: true（旧名 rag_only，仍兼容）的文件 → 同上，不塞 prompt
     //
     // 为什么不全塞？237 文件 × 大多 < 50KB = 184K tokens，超 DeepSeek 131K 窗口。
     // 即使不超窗口，128K+ 长上下文的 LLM 注意力退化严重（"lost in the middle"），
@@ -424,9 +424,9 @@ export class SoulLoader {
         const relPath = path.relative(knowledgeBase, f.path)
         const { data: fm, body } = parseFrontmatter(f.content)
         // 批量导入产物带 source / source_type 字段（摄取脚本写的是 source_type +
-        // source_path + ingested），运行时当 rag_only 处理，不塞 system prompt，
-        // 保留通过工具按需检索的能力。
-        if (fm.rag_only === true || fm.source || fm.source_type) {
+        // source_path + ingested），运行时当 prompt_excluded 处理，不塞 system prompt，
+        // 保留通过工具按需检索的能力。prompt_excluded 是新规范字段，rag_only 是旧别名（向后兼容）。
+        if (fm.prompt_excluded === true || fm.rag_only === true || fm.source || fm.source_type) {
           ragOnlyEntries.push({ relPath, meta: fm })
         } else {
           stuffEntries.push({ relPath, body })
@@ -451,7 +451,7 @@ export class SoulLoader {
         }
       }
       if (demotedStuff.length > 0) {
-        console.warn(`[SoulLoader] 知识库 stuff 总字符数 ${totalStuffChars} 超过预算 ${SoulLoader.STUFF_PROMPT_BUDGET_CHARS}，已将 ${demotedStuff.length} 个文件降级为「可检索」（不进 system prompt，仍可被 search_knowledge / read_knowledge_file 按需访问）。建议为批量导入文档补 rag_only: true 或 source frontmatter。`)
+        console.warn(`[SoulLoader] 知识库 stuff 总字符数 ${totalStuffChars} 超过预算 ${SoulLoader.STUFF_PROMPT_BUDGET_CHARS}，已将 ${demotedStuff.length} 个文件降级为「可检索」（不进 system prompt，仍可被 search_knowledge / read_knowledge_file 按需访问）。建议为批量导入文档补 prompt_excluded: true 或 source frontmatter。`)
       }
 
       if (promptStuff.length > 0) {
@@ -670,7 +670,7 @@ export class SoulLoader {
     for (const f of knowledgeRootFiles) {
       const relPath = path.relative(knowledgeBase, f.path)
       const { data: fm, body } = parseFrontmatter(f.content)
-      if (fm.rag_only === true || fm.source || fm.source_type) {
+      if (fm.prompt_excluded === true || fm.rag_only === true || fm.source || fm.source_type) {
         ragOnlyEntries.push({ relPath, meta: fm })
       } else {
         stuffEntries.push({ relPath, body })
@@ -874,7 +874,7 @@ export class SoulLoader {
             // 不读全文（避免数 MB body 阻塞主进程），合成 rag_only 标记让 loadAvatar
             // 把它路由到「可检索」索引而非塞进 system prompt。
             console.warn(`[SoulLoader] 知识文件超过 ${SoulLoader.MAX_STUFF_FILE_BYTES} 字节且无 rag_only frontmatter，按可检索处理: ${fullPath}`)
-            files.push({ path: fullPath, content: '---\nrag_only: true\nsource: oversized\n---\n' })
+            files.push({ path: fullPath, content: '---\nprompt_excluded: true\nsource: oversized\n---\n' })
           } else {
             // 非 rag_only 或无 frontmatter：读取完整内容拼入 system prompt
             files.push({ path: fullPath, content: this.readFileSafe(fullPath) })
@@ -931,7 +931,7 @@ export class SoulLoader {
     const end = endIdx >= 0 ? endIdx : endIdx2
     if (end < 0) return false
     const fm = header.slice(0, end)
-    if (/\brag_only\s*:\s*true\b/.test(fm)) return true
+    if (/\b(?:prompt_excluded|rag_only)\s*:\s*true\b/.test(fm)) return true
     // source 或 source_type 字段存在（非空值）即按 rag_only 处理。
     // 批量摄取脚本写的是 source_type（+ source_path / ingested），早期只认 source
     // 导致这些导入产物被当全文塞进 prompt——两个字段都要识别。

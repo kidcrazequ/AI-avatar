@@ -15,9 +15,9 @@ const LARGE_FILE_THRESHOLD = 50_000
 export default function KnowledgeViewer({ content }: Props) {
   const { meta, body } = useMemo(() => parseFrontmatter(content), [content])
 
-  // 自动生成的 rag_only 数据源 → 显示摘要而非全量内容
+  // 自动生成的 prompt_excluded（旧名 rag_only）数据源 → 显示摘要而非全量内容
   const source = typeof meta.source === 'string' ? meta.source : null
-  if (source === 'excel' || source === 'pptx' || meta.rag_only === true) {
+  if (source === 'excel' || source === 'pptx' || meta.prompt_excluded === true || meta.rag_only === true) {
     const sheets = Array.isArray(meta.sheets) ? (meta.sheets as string[]) : []
     const excelJson = typeof meta.excel_json === 'string' ? meta.excel_json : null
     const lineCount = body.split('\n').length

@@ -12,7 +12,7 @@ import { resolveUnderRoot } from './utils/path-security'
 function isExcelStructuredRagOnlyMd(content: string): boolean {
   const head = content.slice(0, Math.min(content.length, 6144))
   if (!/^---\r?\n/m.test(head)) return false
-  const hasRagOnly = /\brag_only\s*:\s*true\b/.test(head)
+  const hasRagOnly = /\b(?:prompt_excluded|rag_only)\s*:\s*true\b/.test(head)
   const hasExcelMarker = /\bsource\s*:\s*excel\b/.test(head) || /^\s*excel_json\s*:/m.test(head)
   return hasRagOnly && hasExcelMarker
 }

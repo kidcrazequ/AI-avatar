@@ -354,7 +354,7 @@ export function mergeFrontmatter(
 
 /** 字段输出顺序（系统字段在前，增强字段在后） */
 const FIELD_ORDER = [
-  'rag_only', 'source', 'raw_file', 'excel_json', 'sheets',
+  'prompt_excluded', 'rag_only', 'source', 'raw_file', 'excel_json', 'sheets',
   'title', 'model', 'version', 'category', 'keywords', 'summary',
 ]
 

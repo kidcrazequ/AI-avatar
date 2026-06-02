@@ -288,7 +288,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
         const systemMeta: Record<string, unknown> = {
-          rag_only: true,
+          prompt_excluded: true,
           source: 'excel',
           excel_json: `_excel/${baseName}.json`,
         }
@@ -355,7 +355,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       if (parsed.fileType === 'pptx') {
         const baseName = parsed.fileName.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
         const targetPath = `${baseName}.md`
-        const pptxSystemMeta: Record<string, unknown> = { rag_only: true, source: 'pptx' }
+        const pptxSystemMeta: Record<string, unknown> = { prompt_excluded: true, source: 'pptx' }
         if (rawRelPath) pptxSystemMeta.raw_file = rawRelPath
         const pptxEnhanced = extractFrontmatterFields(parsed.fileName, parsed.text)
         const frontmatter = buildFrontmatterBlock(mergeFrontmatter(pptxSystemMeta, pptxEnhanced)) + '\n\n'
@@ -491,7 +491,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         source: llmFormatted ? 'enhanced' : parsed.fileType,
       }
       if (rawRelPath) generalSystemMeta.raw_file = rawRelPath
-      if (finalContent.length > RAG_ONLY_THRESHOLD) generalSystemMeta.rag_only = true
+      if (finalContent.length > RAG_ONLY_THRESHOLD) generalSystemMeta.prompt_excluded = true
       const generalEnhanced = extractFrontmatterFields(parsed.fileName, finalContent)
       const generalFmBlock = buildFrontmatterBlock(mergeFrontmatter(generalSystemMeta, generalEnhanced))
       finalContent = `${generalFmBlock}\n\n${finalContent}`

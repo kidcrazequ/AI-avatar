@@ -18,7 +18,7 @@ function detectAutoSource(content: string): string | null {
   const fmText = content.slice(4, endMatch.index)
   const srcMatch = fmText.match(/^\s*source\s*:\s*(\S+)\s*$/m)
   if (srcMatch) return srcMatch[1]
-  if (/^\s*rag_only\s*:\s*true\s*$/m.test(fmText)) return 'other'
+  if (/^\s*(?:prompt_excluded|rag_only)\s*:\s*true\s*$/m.test(fmText)) return 'other'
   return null
 }
 

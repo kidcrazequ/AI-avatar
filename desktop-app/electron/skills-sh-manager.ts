@@ -44,6 +44,7 @@ function resolveSearchApiBase(): string {
 }
 const SEARCH_API_BASE = resolveSearchApiBase()
 const SEARCH_TIMEOUT_MS = 15_000
+const DESCRIBE_TIMEOUT_MS = 10_000
 const CLONE_TIMEOUT_MS = 60_000
 /** 单技能目录文件数上限——超过视为误命中仓库根（monorepo），拒绝复制以防把整库拖进分身 */
 const MAX_SKILL_FILES = 300
@@ -106,6 +107,43 @@ export class SkillsShManager {
     return out
   }
 
+  /**
+   * 取某技能的描述（/api/search 不返回 description）。HTTP-only：按 skills.sh 常见布局探测
+   * raw.githubusercontent 上的 SKILL.md，优先取 frontmatter `name` 等于 skillId 的那份，
+   * 解析其 frontmatter `description`。探测失败返回空串（UI 优雅降级）。不克隆、不打 GitHub API。
+   */
+  async describe(source: string, skillId: string): Promise<string> {
+    const { owner, repo } = this.parseSource(source)
+    const id = this.assertUrlSkillId(skillId)
+    const rest = id.includes('-') ? id.slice(id.indexOf('-') + 1) : id
+    // 候选路径覆盖 skills/<id>、skills/<去前缀>、根级等常见布局；Set 去重避免无前缀时重复探测
+    const candidates = [...new Set([
+      `skills/${id}/SKILL.md`,
+      `skills/${rest}/SKILL.md`,
+      `${id}/SKILL.md`,
+      `${rest}/SKILL.md`,
+      'SKILL.md',
+    ])]
+
+    let fallback = ''
+    for (const cand of candidates) {
+      const url = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${cand}`
+      let body: string
+      try {
+        const res = await fetchWithTimeout(url, { timeoutMs: DESCRIBE_TIMEOUT_MS, headers: { accept: 'text/plain' } })
+        body = await res.text()
+      } catch {
+        continue // 404 / 网络错误 → 试下一个候选
+      }
+      const fm = extractFrontmatter(body)
+      const name = (fm.name || '').trim()
+      const desc = (fm.description || '').trim()
+      if (name === id) return desc // frontmatter name 精确命中，最可信
+      if (!fallback && desc) fallback = desc // 路径命中但 name 不符，留作兜底
+    }
+    return fallback
+  }
+
   // ─── 安装 ──────────────────────────────────────────────────────
 
   /**
@@ -115,6 +153,7 @@ export class SkillsShManager {
   async install(
     avatarId: string,
     result: { source: string; skillId: string },
+    opts: { overwrite?: boolean } = {},
   ): Promise<SkillsShInstallResult> {
     assertSafeSegment(avatarId, '分身ID')
     const { owner, repo } = this.parseSource(result.source)
@@ -126,7 +165,11 @@ export class SkillsShManager {
     // resolveUnderRoot 兜底：即便 sanitize 失效也挡住越界
     const destDir = resolveUnderRoot(skillsDir, skillId)
     if (fs.existsSync(destDir)) {
-      throw new Error(`技能 "${skillId}" 已安装在该分身；如需更新请先在「本地技能」删除后重装`)
+      if (!opts.overwrite) {
+        throw new Error(`技能 "${skillId}" 已安装在该分身；如需更新请用「更新」`)
+      }
+      // overwrite=更新：先删旧目录，再用最新克隆覆盖
+      fs.rmSync(destDir, { recursive: true, force: true })
     }
 
     const repoUrl = `https://github.com/${owner}/${repo}.git`
@@ -297,6 +340,15 @@ export class SkillsShManager {
       throw new Error(`无法从 "${raw}" 生成合法的技能 ID`)
     }
     assertSafeSegment(id, '技能ID')
+    return id
+  }
+
+  /** 校验 skillId 可安全嵌入 raw URL 路径段（无斜杠/控制字符/穿越）；describe 用 */
+  private assertUrlSkillId(skillId: string): string {
+    const id = (skillId || '').trim()
+    if (!/^[A-Za-z0-9_.-]+$/.test(id) || id.includes('..')) {
+      throw new Error(`非法的 skillId: ${skillId}`)
+    }
     return id
   }
 

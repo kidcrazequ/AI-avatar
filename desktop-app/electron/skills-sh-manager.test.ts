@@ -61,6 +61,16 @@ test('parseSource rejects malicious sources and accepts owner/repo', () => {
   assert.deepEqual(parse('owner/repo.git'), { owner: 'owner', repo: 'repo' })
 })
 
+test('assertUrlSkillId accepts safe ids and rejects path/traversal chars', () => {
+  const { mgr } = makeMgr()
+  const f = (s: string) => (mgr as unknown as { assertUrlSkillId(s: string): string }).assertUrlSkillId(s)
+  assert.equal(f('vercel-react-best-practices'), 'vercel-react-best-practices')
+  assert.equal(f('git-commit'), 'git-commit')
+  for (const bad of ['a/b', '..', 'a..b', 'a b', '']) {
+    assert.throws(() => f(bad), /非法的 skillId/, `应拒绝: ${JSON.stringify(bad)}`)
+  }
+})
+
 test('sanitizeSkillId collapses unsafe chars and never yields a traversal', () => {
   const { mgr } = makeMgr()
   const san = (s: string) => (mgr as unknown as { sanitizeSkillId(s: string): string }).sanitizeSkillId(s)

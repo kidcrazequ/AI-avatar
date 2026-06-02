@@ -584,7 +584,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
       {activeTab === 'marketplace' && (
         <SkillMarketplaceTab
           avatarId={avatarId}
-          onInstalled={() => { loadSkills(); onSkillsChanged?.() }}
+          onChanged={() => { loadSkills(); onSkillsChanged?.() }}
         />
       )}
     </Modal>

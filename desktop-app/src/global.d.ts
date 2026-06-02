@@ -1071,8 +1071,10 @@ interface ElectronAPI {
   // ─── skills.sh 技能市场 ───────────────────────────────────────
   /** 调 skills.sh 公开搜索 API 检索开源技能 */
   skillsShSearch: (query: string, limit?: number) => Promise<SkillsShSearchResult[]>
-  /** 安装一个 skills.sh 技能到当前分身（avatars/<id>/skills/，source: local） */
-  skillsShInstall: (avatarId: string, result: SkillsShSearchResult) => Promise<SkillsShInstallResult>
+  /** 安装一个 skills.sh 技能到当前分身（avatars/<id>/skills/，source: local）；overwrite=更新覆盖 */
+  skillsShInstall: (avatarId: string, result: SkillsShSearchResult, options?: { overwrite?: boolean }) => Promise<SkillsShInstallResult>
+  /** 取某技能的描述（按需拉 SKILL.md frontmatter，/api/search 不返回描述） */
+  skillsShDescribe: (source: string, skillId: string) => Promise<string>
 
   // RAG 检索阶段进度
   onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void

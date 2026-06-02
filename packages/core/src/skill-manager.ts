@@ -259,7 +259,14 @@ export class SkillManager {
       throw new Error(`系统内置技能不可删除: ${skillId}（如需停用请用"禁用"开关）`)
     }
 
-    fs.unlinkSync(skill.filePath)
+    // 目录形式技能（<id>/SKILL.md）要删整个技能目录，否则只删了 SKILL.md，
+    // 残留的 rules/ references/ 等子目录会留下孤儿（skills.sh 装的多文件技能即此形态）。
+    // 单文件技能（<id>.md）照常删文件。
+    if (path.basename(skill.filePath) === 'SKILL.md') {
+      fs.rmSync(path.dirname(skill.filePath), { recursive: true, force: true })
+    } else {
+      fs.unlinkSync(skill.filePath)
+    }
 
     // 清理 disabledSkills 里的残留条目（不影响主流程，失败不抛）
     try {

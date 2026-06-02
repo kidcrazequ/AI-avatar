@@ -4034,9 +4034,13 @@ wrapHandler('skills-sh:search', (_, query: string, limit?: number) => {
   return skillsShManager.search(query, limit)
 })
 
-wrapHandler('skills-sh:install', async (_, avatarId: string, result: { source: string; skillId: string }) => {
+wrapHandler('skills-sh:install', async (_, avatarId: string, result: { source: string; skillId: string }, options?: { overwrite?: boolean }) => {
   assertSafeSegment(avatarId, '分身ID')
-  return skillsShManager.install(avatarId, result)
+  return skillsShManager.install(avatarId, result, options)
+})
+
+wrapHandler('skills-sh:describe', (_, source: string, skillId: string) => {
+  return skillsShManager.describe(source, skillId)
 })
 
 // ─── 工具调用（GAP4）────────────────────────────────────────────────────────

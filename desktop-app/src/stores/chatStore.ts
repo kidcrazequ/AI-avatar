@@ -3681,6 +3681,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 4) 使用已有数据直接收敛输出，不要重复调用同参数工具。`
     }
 
+    // @web 内联提及：用户消息里出现 @web → 给模型注入"本轮主动联网检索"指令，
+    // 分身在 AGENT 模式下自己调 web_search（可多次 / 配合 web_fetch）。显示给用户的消息
+    // 保持原文（含 @web）；只增强发往模型的内容。@web 是触发标记，不是搜索关键词本身。
+    if (typeof content === 'string' && typeof nudgedUserContent === 'string' && /(^|\s)@web(\s|$)/i.test(content)) {
+      nudgedUserContent = `${nudgedUserContent}
+
+[系统提示] 用户在消息中使用了 @web，表示希望你本轮主动联网：请优先调用 web_search（必要时配合 web_fetch）获取实时信息后再作答，并在回答中标注来源链接。@web 只是触发联网的标记，不是搜索关键词本身——请根据消息内容自行提炼检索词。`
+    }
+
     // 图表请求时跳过 nudge，保证"同问"时 user prompt 内容稳定（独立开关，可单独回滚）
     const skipNudgeForChart = ENABLE_NUDGE_SKIP_ON_CHART && chartConsistencyMode
     if (skipNudgeForChart) {

@@ -252,22 +252,27 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
     return () => { mountedRef.current = false }
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    const sync = () => {
-      void window.electronAPI.getSetting('web_search_enabled').then((v) => {
-        if (!cancelled) setWebSearchEnabled(v === 'true')
-      }).catch(() => { /* 读 setting 失败按关闭处理 */ })
-    }
-    sync()
-    // SettingsPanel 保存联网开关后会广播 settings-updated；订阅刷新，
-    // 否则用户开/关后旧 input 仍按 mount 时的值显示 @web 入口
-    window.addEventListener('settings-updated', sync)
-    return () => {
-      cancelled = true
-      window.removeEventListener('settings-updated', sync)
-    }
+  // 读一次联网总开关写进镜像；mountedRef 守卫避免卸载后 setState。
+  const refreshWebSearchEnabled = useCallback(() => {
+    void window.electronAPI.getSetting('web_search_enabled').then((v) => {
+      if (mountedRef.current) setWebSearchEnabled(v === 'true')
+    }).catch(() => { /* 读 setting 失败按关闭处理 */ })
   }, [])
+
+  useEffect(() => {
+    refreshWebSearchEnabled()
+    // SettingsPanel 保存联网开关后会广播 settings-updated；订阅刷新，
+    // 否则用户开/关后旧 input 仍按 mount 时的值显示/隐藏 @web 入口
+    window.addEventListener('settings-updated', refreshWebSearchEnabled)
+    return () => window.removeEventListener('settings-updated', refreshWebSearchEnabled)
+  }, [refreshWebSearchEnabled])
+
+  // 兜底：每次 @ 引用面板打开时重新读一次联网开关。mount 时的异步读可能尚未 resolve，
+  // 或开关在别处被改而没收到 settings-updated（长跑 dev 会话 / HMR / 未走 SettingsPanel 保存路径）
+  // 都会让镜像滞留旧值——在面板真正要用到这个值的那一刻刷新，@web 入口的显隐永远基于最新设置，自愈。
+  useEffect(() => {
+    if (ctxOpen) refreshWebSearchEnabled()
+  }, [ctxOpen, refreshWebSearchEnabled])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 父组件传 fillText 同步进本地 input state，是受控/非受控混合的合法模式
@@ -785,117 +790,25 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         closeCtxPalette()
         return
       }
-      // @web 完整版：弹 prompt 收集 query → 调 webSearch → 把结果作为 inline file 塞 pendingDocs
-      if (ctxStartRef.current < 0) return
-      const ta = textareaRef.current
-      const cursor = ta?.selectionStart ?? input.length
-      const before = input.slice(0, ctxStartRef.current)
-      const after = input.slice(cursor)
-      // 记录原始 @web 段，所有失败路径（取消/空 query/容量满/搜索失败）统一恢复
-      const originalAtToken = input.slice(ctxStartRef.current, cursor)
-      // 移除 input 中 @web 文本
-      const cleaned = (before + after).replace(/[ \t]+$/, '')
-      setInput(cleaned)
-      closeCtxPalette()
-      requestAnimationFrame(() => {
-        if (!ta) return
-        ta.focus()
-        ta.setSelectionRange(before.length, before.length)
-      })
-      // 同步路径还原：直接原位写回（before + token + after）。
-      // 不能用 ta.value === cleaned 判定——setInput(cleaned) 在 prompt() 同步
-      // 阻塞之前 schedule，但 React 不会在同步代码块里 flush DOM；prompt 返回
-      // 后立即检 DOM 仍是 user 原输入而非 cleaned，导致每次同步取消都误判
-      // "用户继续输入了" → 退回末尾追加（例如「请 @web 继续」会变成「请 继续 @web」）
-      const restoreAtTokenSync = () => {
-        setInput(before + originalAtToken + after)
+      // @web 作为内联提及：直接在输入框留下 "@web "，不弹框、不立即搜索。
+      // 发送时由 chatStore.sendMessage 检测 @web，给模型注入“本轮请用 web_search 联网检索”
+      // 指令（见 nudgedUserContent），分身在 AGENT 模式下自己调 web_search，可多次 / 用更好的源。
+      if (ctxStartRef.current >= 0) {
+        const ta = textareaRef.current
+        const cursor = ta?.selectionStart ?? input.length
+        const before = input.slice(0, ctxStartRef.current)
+        const after = input.slice(cursor)
+        const inserted = '@web '
+        const next = before + inserted + after
+        setInput(next)
         requestAnimationFrame(() => {
           if (!ta) return
-          const pos = before.length + originalAtToken.length
+          const pos = before.length + inserted.length
           ta.focus()
           ta.setSelectionRange(pos, pos)
         })
       }
-      // 异步路径还原：webSearch 在事件循环让出后才 resolve，期间用户可能继续
-      // 输入。这时 DOM 已被 React flush 到 cleaned；ta.value !== cleaned 才能
-      // 真实反映"用户改过"，启发式有意义
-      const restoreAtTokenAsync = () => {
-        if (ta !== null && ta.value === cleaned) {
-          restoreAtTokenSync()
-        } else {
-          setInput(prev => prev.length === 0 ? originalAtToken : `${prev} ${originalAtToken}`)
-        }
-      }
-      const query = window.prompt('联网搜索关键词：', '')
-      if (!query || !query.trim()) {
-        // 用户取消或空 query：同步路径，强制原位还原
-        restoreAtTokenSync()
-        return
-      }
-      if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
-        // 容量满（同步路径）：之前只 toast 错误就 return，@web token 被吞掉了
-        restoreAtTokenSync()
-        showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
-        return
-      }
-      showHint('info', `正在联网搜索：${query.slice(0, 40)}...`)
-      // 同 handleSelectEntry：异步流程期间禁用发送，避免用户 Enter 把"无 @web 引用"
-      // 的版本发出去——webSearch 一返回才能塞 chip。
-      setPendingReferenceCount(c => c + 1)
-      void window.electronAPI.webSearch(query.trim()).then(({ query: q, results, abstract, abstractSource }) => {
-        if (!mountedRef.current) return
-        // 搜索返回后再检一次容量并“原子占位”：异步期间可能其它路径占满额度。
-        // totalCountRef 是“已落 chip + 在途占位”的同步信号量，check 与 += 1 之间无 await、
-        // 单线程下原子，后到的并发引用立即看到新计数被预检挡住；占位即代表该 @web chip，
-        // append 成功不再重算（旧闭包重算会把并发占位冲掉致超额）。
-        if (totalCountRef.current >= MAX_ATTACHMENT_COUNT_PER_MESSAGE) {
-          restoreAtTokenAsync()
-          showHint('warn', `单条消息最多 ${MAX_ATTACHMENT_COUNT_PER_MESSAGE} 个附件；@web 引用已恢复，请清理附件后重试`)
-          return
-        }
-        totalCountRef.current += 1
-        const parts: string[] = [`# 联网搜索：${q}`]
-        if (abstract) {
-          parts.push(`\n## 摘要${abstractSource ? `（来源：${abstractSource}）` : ''}\n${abstract}`)
-        }
-        if (results.length === 0) {
-          parts.push('\n（DuckDuckGo Instant Answer 未返回结果。Long-tail 查询建议改用 @web 之外的搜索 MCP，如 Tavily。）')
-        } else {
-          parts.push(`\n## 结果（${results.length} 条）`)
-          for (const r of results) {
-            parts.push(`\n- **${r.title}**\n  ${r.snippet}\n  ${r.url}`)
-          }
-        }
-        const text = parts.join('\n')
-        const fakeId = `@web:${Date.now()}`
-        setPendingDocs(prev => {
-          const next: PendingDocAttachment[] = [
-            ...prev,
-            {
-              id: fakeId,
-              name: `@web/${q.slice(0, 30)}.md`,
-              mime: 'text/markdown',
-              size: text.length,
-              ext: '.md',
-              route: 'inline',
-              inlineText: text,
-              summary: null,
-              outline: null,
-            },
-          ]
-          return next
-        })
-        showHint('info', `已引用 @web/${q.slice(0, 20)}（${results.length} 条结果）`)
-      }).catch((err: unknown) => {
-        if (!mountedRef.current) return
-        // 搜索失败：之前只 toast 错误，@web token 被吞掉了。还原让用户能直接重试
-        restoreAtTokenAsync()
-        const msg = err instanceof Error ? err.message : String(err)
-        showHint('error', `联网搜索失败：${msg}；@web 引用已恢复`)
-        window.electronAPI.logEvent('warn', 'web-search-failed', msg)
-      }).finally(() => {
-        if (mountedRef.current) setPendingReferenceCount(c => Math.max(0, c - 1))
-      })
+      closeCtxPalette()
       return
     }
     setCtxActiveNs(ns)

@@ -1,13 +1,11 @@
 name: Release builds
 
-# 触发条件：
-#   - push 形如 v* 的 tag → 自动 checkout 该 tag 构建并上传到对应 GitHub Release
+# 触发条件（仅手动，不再随 push tag 自动构建）：
 #   - 手动触发（workflow_dispatch）→ checkout main 构建并上传到指定 tag 的 Release
 #     （tag 历史不动；适合"基于当前 main 修补 + 重发产物"的场景）
+#   - 不推荐在 GitHub Actions 上跑 CI 构建：tag 推送不再自动触发，需发包时手动跑本 workflow，
+#     或在本地 npm run dist:<target> 出包后上传 Release。
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:

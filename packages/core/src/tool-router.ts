@@ -2580,6 +2580,9 @@ ${content}` }
    * 与 `search_knowledge`（BM25 + vector + RRF）互补：grep 适合精确关键词（型号编号、政策条款号、专有名词）。
    * search_knowledge 漏召回时用 grep 兜底。
    *
+   * 后端：优先 ripgrep（大库快几个数量级），rg 不可用或拒绝该正则时回退到 Node 逐行扫描，
+   * 两条路径输出契约一致（见 ripgrepScan / nodeGrepScan）。
+   *
    * 红线：
    *   - 仅搜分身自己的 knowledge/（含当前 project knowledge），不下钻 shared/
    *   - scope 必须在 knowledge root 内（防路径穿越）
@@ -2637,6 +2640,103 @@ ${content}` }
       }
     }
 
+    // 优先用 ripgrep（大库上比逐文件 Node 行扫快几个数量级）；rg 不可用或拒绝该
+    // 正则（Rust 引擎不支持 JS-only 特性如 lookahead/backref）时回退到 Node 扫描，
+    // 保证零回归。两条路径输出契约严格一致。
+    const rg = this.ripgrepScan(roots, pattern, { maxPerFile, maxTotal })
+    const { matches, truncated } = rg ?? this.nodeGrepScan(roots, regex, { maxPerFile, maxTotal })
+
+    return { content: JSON.stringify({
+      pattern,
+      scope: scopeRaw || undefined,
+      engine: rg ? 'ripgrep' : 'node',
+      count: matches.length,
+      truncated,
+      matches,
+      hint: truncated ? '已达硬上限，请缩窄 pattern 或加 scope' : undefined,
+    }, null, 2) }
+  }
+
+  /** knowledge_grep 的命中条目 */
+  private static readonly GREP_LINE_MAX = 300
+
+  /**
+   * ripgrep 后端：对每个 root 跑 `rg --json`，解析出与 Node 扫描完全一致的命中列表。
+   * 返回 null 表示 rg 不可用 / 出错（调用方据此回退到 nodeGrepScan）。
+   *
+   * - `-i` 大小写不敏感（对齐 Node 侧的 `new RegExp(pattern, 'i')`）
+   * - `-m maxPerFile` 单文件命中上限；maxTotal 在解析阶段跨文件统一截断
+   * - `--no-ignore` 不理会 .gitignore（对齐 Node 侧"扫全部匹配扩展名文件"的行为）
+   * - `--max-depth` 与 Node 侧 collectFilesRecursive 同用 DEFAULT_MAX_DIR_DEPTH
+   * - rg 退出码：0=有命中，1=无命中（非错误），2=错误（回退）
+   */
+  private ripgrepScan(
+    roots: Array<{ relPrefix: string; absRoot: string }>,
+    pattern: string,
+    limits: { maxPerFile: number; maxTotal: number },
+  ): { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean } | null {
+    // 依赖 PATH 上的系统 `rg`；缺失时 execFileSync 抛 ENOENT → 回退 Node 扫描。
+    // 生产环境若要保证一定可用，后续可改为 bundle @vscode/ripgrep 并在此返回其 rgPath。
+    const rgPath = 'rg'
+    const { execFileSync } = require('child_process') as typeof import('child_process')
+
+    const matches: Array<{ file: string; line: number; text: string }> = []
+    let truncated = false
+
+    for (const root of roots) {
+      if (truncated) break
+      const args = [
+        // -a/--text：不在 NUL 字节处当二进制停搜，与 Node 侧"整文件按 utf-8 逐行扫"对齐
+        // （否则含 NUL 的 .md 会被 rg 中途截断，漏掉后半部分命中）
+        '--json', '-i', '-a', '-m', String(limits.maxPerFile),
+        '--max-depth', String(DEFAULT_MAX_DIR_DEPTH), '--no-ignore',
+        '-g', '*.md', '-g', '*.markdown', '-g', '*.txt',
+        '-g', '*.json', '-g', '*.yaml', '-g', '*.yml',
+        '--', pattern, root.absRoot,
+      ]
+      let stdout: string
+      try {
+        stdout = execFileSync(rgPath, args, {
+          encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000,
+          // stderr 设为 pipe（而非默认 inherit），避免 rg 拒绝 JS-only 正则时
+          // 把 "look-around not supported" 报错泄漏到父进程 stderr / 日志。
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+      } catch (e) {
+        const err = e as { status?: number; code?: string; stdout?: string }
+        if (err.status === 1) continue          // 无命中：正常，继续下一个 root
+        if (err.code === 'ENOENT' || err.status === 2) return null  // rg 缺失 / 正则被拒 → 回退
+        return null                              // 其他异常 → 保守回退
+      }
+      for (const line of stdout.split('\n')) {
+        if (!line) continue
+        let evt: { type?: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } }
+        try { evt = JSON.parse(line) } catch { continue }
+        if (evt.type !== 'match' || !evt.data) continue
+        const absPath = evt.data.path?.text
+        const rawLine = evt.data.lines?.text
+        if (typeof absPath !== 'string' || typeof rawLine !== 'string') continue
+        if (matches.length >= limits.maxTotal) { truncated = true; break }
+        const rel = path.relative(root.absRoot, absPath).replace(/\\/g, '/')
+        const stripped = rawLine.replace(/\r?\n$/, '')
+        matches.push({
+          file: root.relPrefix + rel,
+          line: evt.data.line_number ?? 0,
+          text: stripped.length > ToolRouter.GREP_LINE_MAX
+            ? stripped.slice(0, ToolRouter.GREP_LINE_MAX) + '…'
+            : stripped,
+        })
+      }
+    }
+    return { matches, truncated }
+  }
+
+  /** Node 后端：逐文件 readFileSync + 逐行正则。ripgrep 不可用时的回退。 */
+  private nodeGrepScan(
+    roots: Array<{ relPrefix: string; absRoot: string }>,
+    regex: RegExp,
+    limits: { maxPerFile: number; maxTotal: number },
+  ): { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean } {
     const matches: Array<{ file: string; line: number; text: string }> = []
     let totalCount = 0
     let truncated = false
@@ -2652,30 +2752,24 @@ ${content}` }
           for (let i = 0; i < lines.length; i++) {
             if (regex.test(lines[i])) {
               // 先判 total 上限，避免跨文件时多 push 一条（per-file 重置导致的 off-by-one）
-              if (totalCount >= maxTotal) { truncated = true; break outer }
+              if (totalCount >= limits.maxTotal) { truncated = true; break outer }
               const rel = path.relative(root.absRoot, file).replace(/\\/g, '/')
               matches.push({
                 file: root.relPrefix + rel,
                 line: i + 1,
-                text: lines[i].length > 300 ? lines[i].slice(0, 300) + '…' : lines[i],
+                text: lines[i].length > ToolRouter.GREP_LINE_MAX
+                  ? lines[i].slice(0, ToolRouter.GREP_LINE_MAX) + '…'
+                  : lines[i],
               })
               perFile++
               totalCount++
-              if (perFile >= maxPerFile) break
+              if (perFile >= limits.maxPerFile) break
             }
           }
         } catch {/* 读文件失败跳过 */}
       }
     }
-
-    return { content: JSON.stringify({
-      pattern,
-      scope: scopeRaw || undefined,
-      count: matches.length,
-      truncated,
-      matches,
-      hint: truncated ? '已达硬上限，请缩窄 pattern 或加 scope' : undefined,
-    }, null, 2) }
+    return { matches, truncated }
   }
 
   /**

@@ -173,6 +173,57 @@ test('knowledge_grep 知识库目录不存在 → 优雅返回 count=0', async (
   }
 })
 
+test('knowledge_grep ripgrep 与 node 回退命中集合一致（parity）', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  const pathBak = process.env.PATH
+  try {
+    fs.mkdirSync(path.join(knowledgePath, 'sub'), { recursive: true })
+    fs.writeFileSync(path.join(knowledgePath, 'a.md'), '峰时 1.156\n谷时 0.286\n峰时 0.99', 'utf-8')
+    fs.writeFileSync(path.join(knowledgePath, 'sub', 'b.md'), 'IEC62619 峰时\n无关行', 'utf-8')
+
+    const key = (m: { file: string; line: number }) => `${m.file}:${m.line}`
+    type Out = { engine: string; matches: Array<{ file: string; line: number }> }
+
+    // 默认引擎（CI 有 rg 则 ripgrep，无则 node）
+    const normal = parseJsonContent<Out>(
+      (await router.execute(AVATAR_ID, { name: 'knowledge_grep', arguments: { pattern: '峰时' } })).content)
+
+    // 抹掉 PATH → execFileSync('rg') ENOENT → 强制 node 回退
+    process.env.PATH = path.join(avatarsPath, 'no-such-bin')
+    const fallback = parseJsonContent<Out>(
+      (await router.execute(AVATAR_ID, { name: 'knowledge_grep', arguments: { pattern: '峰时' } })).content)
+
+    assert.equal(fallback.engine, 'node', 'PATH 抹掉后必须回退 node 引擎')
+    // 两条后端路径的命中集合必须逐条一致——这是 ripgrep 升级不得改变行为的硬不变量
+    assert.deepEqual(
+      normal.matches.map(key).sort(),
+      fallback.matches.map(key).sort(),
+      'ripgrep 与 node 回退的命中集合必须完全一致',
+    )
+    assert.equal(fallback.matches.length, 3, '峰时 应命中 a.md 两行 + b.md 一行')
+  } finally {
+    process.env.PATH = pathBak
+    cleanup()
+  }
+})
+
+test('knowledge_grep JS-only 正则（lookahead）回退 node 仍正确', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  try {
+    fs.writeFileSync(path.join(knowledgePath, 'a.md'), '峰时电价 1.156\n峰时段说明\n谷时电价', 'utf-8')
+    // 前瞻断言：rg 的 Rust 引擎不支持 lookahead（exit 2）→ 必须回退到支持它的 node 正则
+    const r = await router.execute(AVATAR_ID, { name: 'knowledge_grep', arguments: { pattern: '峰时(?=电价)' } })
+    const out = parseJsonContent<{ engine: string; count: number; matches: Array<{ line: number }> }>(r.content)
+    assert.equal(out.engine, 'node', 'lookahead 必须回退 node 引擎')
+    assert.equal(out.count, 1, '只命中"峰时电价"，不命中"峰时段"')
+    assert.equal(out.matches[0].line, 1)
+  } finally {
+    cleanup()
+  }
+})
+
 // ─── knowledge_glob ────────────────────────────────────────────────────────
 
 test('knowledge_glob 命中 ** 跨目录模式', async () => {

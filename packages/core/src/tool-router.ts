@@ -500,6 +500,34 @@ export function isPrivateIp(ip: string): boolean {
 }
 
 /**
+ * relaxed 模式（web_fetch_allow_private 开启，用于 fake-ip 代理）下**仍然硬拦**的最危险段：
+ * loopback（0/8、127/8、::1）+ link-local（169.254/16、fe80::/10）。
+ * 这些永远不会是"经代理抓公网页面"的合法目标，保留零成本，却挡住最有价值的 SSRF
+ * 目标（localhost 管理面板、云 metadata 169.254.169.254）。其余段（198.18 fake-ip、
+ * 100.64 CGNAT、10/172.16/192.168 等）在 relaxed 下放行，交给用户的代理路由。
+ */
+function isLoopbackOrLinkLocal(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const n = ipv4ToInt(ip)
+    if (n === null) return true
+    const inCidr = (base: string, prefix: number): boolean => {
+      const b = ipv4ToInt(base)!
+      const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+      return ((n & mask) >>> 0) === ((b & mask) >>> 0)
+    }
+    return inCidr('0.0.0.0', 8) || inCidr('127.0.0.0', 8) || inCidr('169.254.0.0', 16)
+  }
+  if (net.isIPv6(ip)) {
+    const g = expandIpv6(ip)
+    if (!g) return true
+    if (g.slice(0, 7).every(x => x === 0) && g[7] === 1) return true   // ::1 loopback
+    if ((g[0] & 0xffc0) === 0xfe80) return true                        // fe80::/10 link-local
+    return false
+  }
+  return true   // 解析不出 = fail-closed
+}
+
+/**
  * DNS 解析 hostname、校验所有返回 IP 都不在内网段，并返回首个 public IP 用于 pinning。
  * 之前只对 hostname 字符串做正则匹配，localtest.me / 自定义域名解析到 127.0.0.1
  * 或公网 URL 302 到内网 IP 都会绕过。
@@ -507,19 +535,26 @@ export function isPrivateIp(ip: string): boolean {
  * 返回值用于 DNS rebinding 防护：调用方把这个 IP 灌进 undici 的 connect.lookup，
  * 确保 fetch 实际连接的就是我们校验过的 IP，不会被攻击域名第二次解析返回内网替换。
  */
-export async function resolveAndAssertNotPrivate(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
+export async function resolveAndAssertNotPrivate(
+  hostname: string,
+  allowPrivate = false,
+): Promise<{ address: string; family: 4 | 6 }> {
+  // allowPrivate=true（fake-ip 代理放宽）下只硬拦 loopback/link-local，其余放行。
+  const blocked = (ip: string): boolean => (allowPrivate ? isLoopbackOrLinkLocal(ip) : isPrivateIp(ip))
+  const blockedLabel = allowPrivate ? '回环/链路本地' : '内网'
   // IPv6 literal URL（http://[2606:...]/）的 URL.hostname 在 Node 里带 []，
   // net.isIP('[...]')=0 会误走 DNS lookup 失败。先剥外层方括号按 IP 直判。
   if (hostname.startsWith('[') && hostname.endsWith(']')) {
     hostname = hostname.slice(1, -1)
   }
-  // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单
+  // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单。
+  // 即使 allowPrivate 也拦——localhost 永远不是经代理抓公网的合法目标。
   if (/^localhost$/i.test(hostname) || /\.localhost$/i.test(hostname)) {
     throw new Error(`拒绝内网/回环主机名：${hostname}`)
   }
   // 输入本身就是 IP：直接判
   if (net.isIP(hostname)) {
-    if (isPrivateIp(hostname)) throw new Error(`拒绝抓取内网地址：${hostname}`)
+    if (blocked(hostname)) throw new Error(`拒绝抓取${blockedLabel}地址：${hostname}`)
     return { address: hostname, family: net.isIPv4(hostname) ? 4 : 6 }
   }
   let addrs: Array<{ address: string; family: number }>
@@ -529,8 +564,8 @@ export async function resolveAndAssertNotPrivate(hostname: string): Promise<{ ad
     throw new Error(`DNS 解析失败 ${hostname}：${err instanceof Error ? err.message : String(err)}`, { cause: err })
   }
   for (const addr of addrs) {
-    if (isPrivateIp(addr.address)) {
-      throw new Error(`拒绝抓取内网地址 ${addr.address}（DNS 解析自 ${hostname}）`)
+    if (blocked(addr.address)) {
+      throw new Error(`拒绝抓取${blockedLabel}地址 ${addr.address}（DNS 解析自 ${hostname}）`)
     }
   }
   const picked = addrs[0]
@@ -4322,6 +4357,9 @@ ${content}` }
         error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
       }
     }
+    // fake-ip 代理放宽：用户在用 Clash/Surge 等 TUN+fake-ip 时，公网域名会被解析到
+    // 198.18.x.x 这类段，默认 SSRF 拦截会误杀。开启此设置后只硬拦 loopback/link-local。
+    const allowPrivate = !!this.getSetting && this.getSetting('web_fetch_allow_private') === 'true'
     const rawUrl = typeof args.url === 'string' ? args.url.trim() : ''
     if (!rawUrl) return { content: '', error: '缺少 url 参数' }
 
@@ -4370,7 +4408,7 @@ ${content}` }
         if (u.protocol !== 'http:' && u.protocol !== 'https:') {
           return { content: '', error: `重定向跳到不支持的协议 ${u.protocol}` }
         }
-        const pinned = await resolveAndAssertNotPrivate(u.hostname)
+        const pinned = await resolveAndAssertNotPrivate(u.hostname, allowPrivate)
         // undici Agent: 自定义 connect.lookup 把校验过的 IP pin 死。
         // 注意：fetch 全局是 undici，Node 22+ RequestInit 不声明 dispatcher 字段，
         // 用 init 对象 + 类型扩展规避

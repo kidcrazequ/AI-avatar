@@ -376,6 +376,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   // 联网功能总开关：默认关闭。关闭时分身回答仅基于知识库，不会调用 web_search / web_fetch。
   // 配合 chatStore（剔除联网工具）+ tool-router（入口闸门）+ soul-loader（system prompt 分支）三层保护。
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+  const [webFetchAllowPrivate, setWebFetchAllowPrivate] = useState(false)
   const [tavilyApiKey, setTavilyApiKey] = useState('')
   /** 九层重构 #16 generate_image：DashScope 通义万相 API Key */
   const [imageApiKey, setImageApiKey] = useState('')
@@ -589,6 +590,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         proxTok,
         anthroKey,
         anthroBase,
+        webFetchAllowPrivateRaw,
       ] = await Promise.all([
         window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
@@ -609,6 +611,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         window.electronAPI.getSetting('proxy_api_token'),
         window.electronAPI.getSetting('anthropic_api_key'),
         window.electronAPI.getSetting('anthropic_base_url'),
+        window.electronAPI.getSetting('web_fetch_allow_private'),
       ])
       if (loadSeqRef.current !== seq) return
       setWikiInjectRag(wikiInject === 'true')
@@ -620,6 +623,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         if (cfg.type === 'knowledge-check') setCronKnowledgeInterval(String(cfg.intervalHours))
       }
       setWebSearchEnabled(webEnabledRaw === 'true')
+      setWebFetchAllowPrivate(webFetchAllowPrivateRaw === 'true')
       setTavilyApiKey(tavilyKey ?? '')
       setImageApiKey(imageKey ?? '')
       setDoubaoAsrApiKey(doubaoKey ?? '')
@@ -1001,6 +1005,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       const anthroBase = anthropicBaseUrl.trim() || 'https://api.anthropic.com'
       await Promise.all([
         window.electronAPI.setSetting('web_search_enabled', webSearchEnabled ? 'true' : 'false'),
+        window.electronAPI.setSetting('web_fetch_allow_private', webFetchAllowPrivate ? 'true' : 'false'),
         window.electronAPI.setSetting('tavily_api_key', tavilyApiKey.trim()),
         // 九层重构 #16 generate_image：DashScope API Key
         window.electronAPI.setSetting('image_api_key', imageApiKey.trim()),
@@ -2069,6 +2074,28 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                         <p className="font-game text-[11px] text-px-warning">
                           ⚠ 已开启联网，但下方 Tavily API Key 为空。请填写 Key 后联网搜索才能真正生效。
                         </p>
+                      </div>
+                    )}
+                    {/* web_fetch 放宽内网拦截：fake-ip 代理（Clash/Surge TUN）会把公网域名解析到
+                        198.18.x.x 等段，默认 SSRF 拦截误杀 web_fetch。开启后仅硬拦 loopback/link-local。 */}
+                    {webSearchEnabled && (
+                      <div className="border-t border-px-border/40 pt-3 mt-1">
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={webFetchAllowPrivate}
+                            onChange={(e) => setWebFetchAllowPrivate(e.target.checked)}
+                            className="pixel-checkbox mt-0.5"
+                          />
+                          <span className="font-game text-[12px] text-px-text-sec">
+                            web_fetch 放宽内网地址拦截（用于 fake-ip 代理）
+                            <span className="block text-[11px] text-px-text-dim mt-0.5">
+                              若你用 Clash/Surge 等 TUN+fake-ip 代理，公网域名会被解析到 198.18.x.x，默认会被
+                              web_fetch 的 SSRF 防护误杀。开启后仅硬拦 loopback / link-local（127、169.254 等），
+                              其余交给代理路由。仅在你信任本机代理时开启。
+                            </span>
+                          </span>
+                        </label>
                       </div>
                     )}
                   </div>

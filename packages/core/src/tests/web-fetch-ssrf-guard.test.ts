@@ -86,3 +86,20 @@ test('resolveAndAssertNotPrivate 裸 IPv6（无方括号）仍直判', async () 
   assert.equal(r.family, 6)
   await assert.rejects(() => resolveAndAssertNotPrivate('fe80::1'))
 })
+
+// allowPrivate=true（fake-ip 代理放宽）：fake-ip / 私网放行，但 loopback/link-local 仍硬拦。
+// 用 IP literal 直判，不走 DNS，确定性。
+test('resolveAndAssertNotPrivate(allowPrivate) 放行 fake-ip / 私网段', async () => {
+  for (const ip of ['198.18.0.207', '198.19.255.255', '100.64.0.1', '10.0.0.1', '172.16.0.1', '192.168.1.1', 'fc00::1']) {
+    const r = await resolveAndAssertNotPrivate(ip, true)
+    assert.equal(r.address, ip, `allowPrivate 应放行：${ip}`)
+  }
+})
+
+test('resolveAndAssertNotPrivate(allowPrivate) 仍硬拦 loopback / link-local / localhost', async () => {
+  for (const ip of ['127.0.0.1', '0.0.0.0', '169.254.169.254', '::1', 'fe80::1']) {
+    await assert.rejects(() => resolveAndAssertNotPrivate(ip, true), `allowPrivate 下仍应拦：${ip}`)
+  }
+  // localhost 字符串永远拦，与 allowPrivate 无关
+  await assert.rejects(() => resolveAndAssertNotPrivate('localhost', true))
+})

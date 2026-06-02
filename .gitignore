@@ -61,6 +61,17 @@ AI分身提效案例.html
 AI分身提效案例.md
 AI分身提效案例-*.md
 
+# 备份文件（编辑器/脚本生成，勿入库）
+*.bak
+
+# 本地工具产物与模型（平台特定 / 体积超 GitHub 限制，本机保留即可）
+# - scripts/models/: whisper 等离线模型二进制（单文件 >100MB）
+# - scripts/vision-ocr: 编译的 Mach-O 可执行文件（arm64 平台特定产物）
+# - .codegraph/: CodeGraph 本机数据（DB/cache/log），跨机器无意义
+scripts/models/
+scripts/vision-ocr
+.codegraph/
+
 # 知识库原始文件（PDF/DOCX/XLSX 等二进制源），单文件常 >100MB 超 GitHub 限制；
 # 真实产物是 chunk 后的 .md，原始文件由用户在本地保留即可。
 expert-packs/*/knowledge/_raw/

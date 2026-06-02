@@ -2,14 +2,36 @@
 
 ## Unreleased
 
+## v0.18.0 (2026-06-02)
+
+> 自 v0.17.0 以来 139 个 commit（含 108 个 fix）。本版核心：会话树多分支重答、对话一键导出可分享 HTML、桌面端集成 skills.sh 社区技能市场、Soul MCP server 对外暴露分身资源，并完成大批安全加固（SSRF / 路径穿越 / zip 炸弹 / DNS rebinding）。
+
 ### 新增
 
-- **案例视频离线内联工具** `scripts/embed-case-videos.py` — 把 CASE 03/04/05/06 的 mp4 用 base64 内联进 `AI分身提效案例.html`，生成可单文件分发的离线版本（CASE 01/02 体积大保持外链）；脚本路径不再硬编码，支持任意 checkout 路径与 `--html` / `--assets` 覆盖。
-- **案例截图资产** `assets/case-screenshots/`（6 张，380K）入库。
+- **会话树（session-tree）多分支对话** — DB 层 `parent_id` / leaf / active-path 模型；「换个思路重答」对同一问题生成多个回答版本 + version switcher 切换；fork primitive 与 active-path 读取。
+- **对话导出为可分享 HTML** — 单文件自包含导出，chart / mermaid 离屏渲染为 SVG 内联。
+- **桌面端集成 skills.sh 社区技能市场** — 技能面板内搜索 / 安装 / 更新 / 卸载社区技能，带进度、加载更多、打开技能主页、已安装状态稳健匹配。
+- **Soul MCP server** — 把分身资源（soul / knowledge / skills）read-only 暴露给外部 Claude Code 等 MCP 客户端；并一键生成 MCP server 配置片段。
+- **RAG 知识策略增强** — 渐进式披露（progressive-disclosure）知识策略决策 + flag；知识检索召回完整度信号 + `search_knowledge` 工具决策树。
+- **专家包版本管理** — version pin + 可发现性 + 更新检查。
+- **上下文溢出自愈** — 超长上下文自动 compact 并重试一次。
+- **分身自我介绍快路径** — 无需 LLM 的 avatar self-description fast path。
+- **source-anchor 强制 hook** — 工具调用链路接入来源锚点校验（flag-gated，软告警）。
+- **案例视频离线内联工具** `scripts/embed-case-videos.py` + 案例截图资产 `assets/case-screenshots/`（base64 内联 CASE mp4 生成离线单文件 HTML）。
+
+### 修复与加固（108 个 fix，节选核心）
+
+- **安全**：web_fetch SSRF 按 IANA special-purpose 表收紧 + IPv6 literal 处理；多处 IPC 路径穿越 / 越界加固；zip / 7z 炸弹解压前预检体积；DNS rebinding 防护；日志密钥脱敏扩面。
+- **会话 / 聊天**：切换会话不再串线污染、后台触发按目标会话拉历史、hidden repair 不再占锁 / 重复计费 / 污染外层状态。
+- **MCP**：启动自动连接已保存 server、写 DB 前校验配置跳过坏行、连接超时泄漏修复。
+- **分身包 / 技能**：soul-pack import 前完整 preflight + 内容指纹防 TOCTOU；community 技能源校验。
 
 ### 工程
 
-- **`.gitignore` 加固** — 忽略本机模型与编译产物（`scripts/models/` whisper 模型二进制、`scripts/vision-ocr` arm64 可执行文件）、CodeGraph 本机数据（`.codegraph/`）与备份文件（`*.bak`），避免超 GitHub 100MB 限制或平台特定产物误入库。
+- **`.gitignore` 加固** — 忽略本机模型与编译产物（`scripts/models/`、`scripts/vision-ocr`）、CodeGraph 本机数据（`.codegraph/`）、备份文件（`*.bak`）。
+- **release 前回归 gate** — `test:qa-gate` 与 expert-packs 结构 lint 接入 quality 链路。
+- **prompt-cache** — 集中稳定前缀 + byte-identity 测试。
+- **package-lock 版本同步** — 修正长期停留在 0.14.0 的滞后，对齐 0.18.0。
 
 ## v0.17.0 (2026-05-19)
 

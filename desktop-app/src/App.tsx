@@ -15,6 +15,7 @@ import PromptTemplatePanel from './components/PromptTemplatePanel'
 import SchedulesPanel from './components/SchedulesPanel'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
 import ExpertPackPanel from './components/ExpertPackPanel'
+import ImportAvatarPackPanel from './components/ImportAvatarPackPanel'
 import GlobalSearchPalette from './components/GlobalSearchPalette'
 import ArtifactPanel from './components/ArtifactPanel'
 import ProjectManagerPanel from './components/ProjectManagerPanel'
@@ -129,7 +130,7 @@ function App() {
   /** Project 管理面板 */
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
@@ -541,6 +542,11 @@ function App() {
     await handleSelectAvatar(avatarId)
   }
 
+  const handlePackImported = async () => {
+    // 仅刷新列表；是否进入新分身由导入面板的"进入分身"按钮决定
+    await refreshAvatarList()
+  }
+
   // 并发锁：防止双击或同时点击两个"新建对话"按钮导致重复创建
   const [isCreatingConversation, setIsCreatingConversation] = useState(false)
 
@@ -685,6 +691,12 @@ function App() {
               className="pixel-btn-outline-muted px-5 py-3"
             >
               专家包
+            </button>
+            <button
+              onClick={() => setActivePanel('importPack')}
+              className="pixel-btn-outline-muted px-5 py-3"
+            >
+              导入分身包
             </button>
             <button
               onClick={() => setActivePanel('settings')}
@@ -886,6 +898,15 @@ function App() {
         <ExpertPackPanel
           onClose={() => setActivePanel(null)}
           onInstalled={handleExpertPackInstalled}
+          onOpenAvatar={handleSelectAvatar}
+          showToast={showToast}
+        />
+      )}
+
+      {activePanel === 'importPack' && (
+        <ImportAvatarPackPanel
+          onClose={() => setActivePanel(null)}
+          onImported={handlePackImported}
           onOpenAvatar={handleSelectAvatar}
           showToast={showToast}
         />

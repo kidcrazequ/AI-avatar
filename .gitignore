@@ -52,6 +52,11 @@ avatars/
 
 # Cursor hooks 运行时 state（时间戳 / generation id 等本地状态，跨机器无意义）
 .cursor/hooks/state/
+# Cursor 本地计划草稿，不入库
+.cursor/plans/
+
+# 本地回收站（手动清理时暂存的旧文件，体积大且本机保留即可）
+_trash-*/
 
 # 大文件资产与归档（超过 GitHub 100MB 硬限制，禁止入库）
 assets/*.mp4

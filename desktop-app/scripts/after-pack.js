@@ -99,6 +99,66 @@ exports.default = async function afterPack(context) {
     }
   }
 
+  // --- 交叉编译：替换 @vscode/ripgrep 二进制（macOS → Windows）---
+  // @vscode/ripgrep 1.15.x 在 postinstall 时只下载“构建平台”的 bin/rg（这里是 darwin），
+  // 没有 win 的 rg.exe。运行期 rgPath 在 win32 上指向 bin/rg.exe，缺失会导致知识库 grep
+  // 找不到 bundle 的 ripgrep（虽有 Node 兜底，但拿不到 ripgrep 的速度）。
+  // 这里从 microsoft/ripgrep-prebuilt 下载与已装 @vscode/ripgrep 匹配版本的 win64 zip，
+  // 解出 rg.exe 放到解包目录，并清理无用的 darwin 二进制。
+  //
+  // 版本来源：读取已装 @vscode/ripgrep/lib/postinstall.js 里的 VERSION 常量，避免硬编码漂移。
+  // 升级 @vscode/ripgrep 时无需改这里；若上游改了 zip 命名规则再调整 assetName。
+  if (process.platform === 'darwin' && targetPlatform === 'win32') {
+    const ripgrepDir = path.join(
+      context.appOutDir,
+      'resources/app.asar.unpacked/node_modules/@vscode/ripgrep'
+    )
+    if (fs.existsSync(ripgrepDir)) {
+      const postinstallJs = path.join(
+        context.packager.projectDir,
+        'node_modules/@vscode/ripgrep/lib/postinstall.js'
+      )
+      const versionMatch = fs.readFileSync(postinstallJs, 'utf-8').match(/const VERSION = '([^']+)'/)
+      if (!versionMatch) {
+        throw new Error(`afterPack: 无法从 ${postinstallJs} 解析 ripgrep VERSION 常量`)
+      }
+      const rgVersion = versionMatch[1]
+      const assetName = `ripgrep-${rgVersion}-x86_64-pc-windows-msvc.zip`
+      const zipUrl = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/${rgVersion}/${assetName}`
+      console.log(`  • afterPack: 为 win32 下载 ripgrep prebuild (${rgVersion})`)
+      const tmpDir = path.join(path.dirname(context.appOutDir), '.tmp-ripgrep-win32')
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+        fs.mkdirSync(tmpDir, { recursive: true })
+        const zipPath = path.join(tmpDir, assetName)
+        execSync(
+          `curl -fL --connect-timeout 10 --retry 2 -o "${zipPath}" "${zipUrl}"`,
+          { stdio: 'inherit' }
+        )
+        // -j 扁平解压，-o 覆盖；只取 rg.exe
+        execSync(`unzip -j -o "${zipPath}" "rg.exe" -d "${tmpDir}"`, { stdio: 'inherit' })
+        const srcExe = path.join(tmpDir, 'rg.exe')
+        const dstExe = path.join(ripgrepDir, 'bin/rg.exe')
+        if (!fs.existsSync(srcExe)) {
+          throw new Error(`zip 内未找到 rg.exe：${zipUrl}`)
+        }
+        fs.copyFileSync(srcExe, dstExe)
+        // 清理随包带来的 darwin 二进制（win 运行期只认 rg.exe），节省体积
+        const darwinRg = path.join(ripgrepDir, 'bin/rg')
+        if (fs.existsSync(darwinRg)) fs.rmSync(darwinRg, { force: true })
+        const fileInfo = execSync(`file "${dstExe}"`).toString()
+        console.log(`  • afterPack: ${fileInfo.trim()}`)
+      } catch (e) {
+        console.error(`  • afterPack: ripgrep prebuild 替换失败:`, e.message)
+        throw e
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    } else {
+      console.warn(`  • afterPack: @vscode/ripgrep 目录不存在，跳过 (${ripgrepDir})`)
+    }
+  }
+
   // --- macOS quarantine 清理 ---
   if (process.platform === 'darwin') {
     try {

@@ -2695,6 +2695,41 @@ ${content}` }
   /** knowledge_grep 的命中条目 */
   private static readonly GREP_LINE_MAX = 300
 
+  /** 解析后的 ripgrep 可执行路径；undefined=尚未解析，null=无 bundle（退回系统 rg）。 */
+  private static resolvedRgPath: string | null | undefined = undefined
+
+  /**
+   * 解析 ripgrep 可执行文件路径，按优先级：
+   *   1. 随应用 bundle 的 @vscode/ripgrep（打包后 JS 在 app.asar 内、二进制经 asarUnpack
+   *      解到 app.asar.unpacked，需把路径里的 app.asar 重写为 app.asar.unpacked）
+   *   2. 系统 PATH 上的 `rg`（开发机 / 未 bundle 场景）
+   * 结果 memoize；解析不到 bundle 时返回 'rg'，再由调用方在 ENOENT 时回退 Node 扫描，保证零回归。
+   */
+  private static resolveRgPath(): string {
+    if (ToolRouter.resolvedRgPath !== undefined) {
+      return ToolRouter.resolvedRgPath ?? 'rg'
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { rgPath } = require('@vscode/ripgrep') as { rgPath?: string }
+      if (rgPath) {
+        // 打包后二进制在 app.asar.unpacked（见 electron-builder.yml asarUnpack）；
+        // 负向先行避免对已是 app.asar.unpacked 的路径重复改写。
+        const diskPath = rgPath.replace(/\bapp\.asar\b(?!\.unpacked)/, 'app.asar.unpacked')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs') as typeof import('fs')
+        if (fs.existsSync(diskPath)) {
+          ToolRouter.resolvedRgPath = diskPath
+          return diskPath
+        }
+      }
+    } catch {
+      // @vscode/ripgrep 未安装（纯 CLI / 测试环境）→ 回退系统 rg
+    }
+    ToolRouter.resolvedRgPath = null
+    return 'rg'
+  }
+
   /**
    * ripgrep 后端：对每个 root 跑 `rg --json`，解析出与 Node 扫描完全一致的命中列表。
    * 返回 null 表示 rg 不可用 / 出错（调用方据此回退到 nodeGrepScan）。
@@ -2710,9 +2745,9 @@ ${content}` }
     pattern: string,
     limits: { maxPerFile: number; maxTotal: number },
   ): { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean } | null {
-    // 依赖 PATH 上的系统 `rg`；缺失时 execFileSync 抛 ENOENT → 回退 Node 扫描。
-    // 生产环境若要保证一定可用，后续可改为 bundle @vscode/ripgrep 并在此返回其 rgPath。
-    const rgPath = 'rg'
+    // 优先用随应用 bundle 的 @vscode/ripgrep 二进制（Windows 用户无需自装 rg）；
+    // 解析不到时退回 PATH 上的系统 `rg`，再缺失则 execFileSync 抛 ENOENT → 回退 Node 扫描。
+    const rgPath = ToolRouter.resolveRgPath()
     const { execFileSync } = require('child_process') as typeof import('child_process')
 
     const matches: Array<{ file: string; line: number; text: string }> = []

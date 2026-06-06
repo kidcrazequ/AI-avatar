@@ -60,6 +60,7 @@
     "@octokit/rest": "^22.0.1",
     "@soul/core": "file:../packages/core",
     "@tailwindcss/postcss": "^4.2.2",
+    "@vscode/ripgrep": "~1.15.14",
     "7zip-bin": "^5.2.0",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",

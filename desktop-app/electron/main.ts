@@ -20,7 +20,7 @@ import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
 import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
-import { DatabaseManager, type McpServerRow, type SubAgentTaskRow } from './database'
+import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
 import { ScheduleStore, type ScheduleRow, type NewScheduleInput, type UpdateScheduleInput, type ScheduleRunRow, type RunStatus } from './db-schedules'
@@ -200,7 +200,7 @@ function getSyncManager(): SyncManager {
       avatarsRoot: avatarsPath,
       sharedRoot,
       conversationsRoot,
-      dbSchemaVersion: 12,
+      dbSchemaVersion: CURRENT_SCHEMA_VERSION,
       runDbBackup: (dest: string) => getDb().backup(dest),
       relaunchApp: () => {
         app.relaunch()
@@ -634,9 +634,16 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    previewManager?.dispose()
     previewManager = null
     scheduledTester.stop()
     cronScheduler.cancelAll()
+    // 关窗时若仍有豆包 ASR 会话在跑，必须断开：否则 WebSocket + 麦克风管线会对着已销毁的
+    // webContents 继续跑、泄漏到 app 退出，且卡住的全局 session 会让重开后 asr:start 报"已有会话"
+    if (activeAsrSession?.active) {
+      try { activeAsrSession.cancel() } catch { /* noop */ }
+    }
+    activeAsrSession = null
     if (logger) logger.activity('app-window-closed')
   })
 }
@@ -1745,6 +1752,9 @@ wrapHandler('delete-conversation', (_, id: string) => {
     if (logger) logger.error('delete-conversation:cleanup-cache', err)
   }
   getDb().deleteConversation(id)
+  // 清理按 conversationId keyed 的进程级 Map，避免删除会话后僵尸条目无限累积撑 V8 堆
+  bridgeConversationTokens.delete(id)
+  messageSeqCounters.delete(id)
 })
 
 // ─── Workspace（L3 Phase A）──────────────────────────────────────────────────
@@ -3359,7 +3369,12 @@ function spawnLifeGeneration(avatarId: string, params: LifeStartGenerationParams
         logger.error('life:start-generation', err instanceof Error ? err : new Error(String(err)))
       }
     } finally {
-      lifeAbortControllers.delete(avatarId)
+      // 仅当仍是本次生成的 controller 时才删：retry/reset 会 abort 旧的并立刻注册新 controller，
+      // 而旧 generateLife 的 AbortError 往往晚于一个 setImmediate tick 才 settle——无此 owner 守卫，
+      // 旧 finally 会删掉新 controller，导致 cancel 失效 + 启动守卫失灵 → 两个生成并发写坏同一分身
+      if (lifeAbortControllers.get(avatarId) === ac) {
+        lifeAbortControllers.delete(avatarId)
+      }
     }
   })()
 
@@ -4229,7 +4244,9 @@ wrapHandler(
   }
   if (name === 'save_screenshot') {
     const savePath = typeof args.save_path === 'string' ? args.save_path : `screenshots/${Date.now()}.png`
-    const shot = await previewManager?.screenshot('hidden', path.join(workspaceRoot, savePath))
+    // 经 workspace 沙箱解析，禁止 LLM 用 ../ 越出工作区任意写文件（与 multi_screenshot 一致）
+    const abs = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, savePath)
+    const shot = await previewManager?.screenshot('hidden', abs)
     return { content: JSON.stringify({ ...shot, savePath }, null, 2) }
   }
   if (name === 'multi_screenshot') {
@@ -4459,7 +4476,18 @@ wrapHandler(
       printWin.show()
       printWin.focus()
     })
-    await printWin.loadFile(abs)
+    // loadFile 在文件缺失/HTML 损坏（LLM 传错相对路径很常见）时会 reject；show:false 下
+    // ready-to-show 永不触发，没有 try/catch 关窗就会泄漏一个隐藏窗口（含完整 renderer 进程）。
+    if (!fs.existsSync(abs)) {
+      try { printWin.close() } catch { /* noop */ }
+      return { content: '', error: `文件不存在: ${rel}` }
+    }
+    try {
+      await printWin.loadFile(abs)
+    } catch {
+      try { printWin.close() } catch { /* noop */ }
+      return { content: '', error: `打印文件加载失败: ${rel}` }
+    }
     // 在已加载页面里调用 window.print()，让用户走系统打印对话框
     try { await printWin.webContents.executeJavaScript('setTimeout(()=>window.print(),200)', true) } catch {}
     return { content: `已打开打印窗口: ${rel}` }
@@ -6644,6 +6672,17 @@ wrapHandler('sync:restore-from', async (_, filename: string) => {
     // 推迟到 setImmediate 让 IPC 响应先到达渲染端
     setImmediate(() => {
       try {
+        // restore 已用远端快照覆盖 xiaodu.db，但旧库的 -wal/-shm 仍在磁盘上。app.exit(0) 不触发
+        // before-quit，旧 db.close() 不会跑；重启后 SQLite 会把旧 WAL 回放到新快照库 → 'malformed'/
+        // 静默回退/串库损坏。这里先显式 close（checkpoint 旧 inode 并按路径删掉 xiaodu.db-wal/-shm），
+        // 再兜底删一遍，确保新进程打开的是干净无 WAL 的快照库。
+        if (db) {
+          try { db.close() } catch (e) { if (logger) logger.error('sync:restore-from-db-close', e instanceof Error ? e : new Error(String(e))) }
+        }
+        const dbPath = path.join(app.getPath('userData'), 'xiaodu.db')
+        for (const sfx of ['-wal', '-shm']) {
+          try { fs.rmSync(`${dbPath}${sfx}`, { force: true }) } catch { /* noop */ }
+        }
         app.relaunch()
         app.exit(0)
       } catch (err) {

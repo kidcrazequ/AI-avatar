@@ -293,8 +293,13 @@ function MermaidRendererCore({ code }: MermaidRendererProps): ReactElement {
 }
 
 export default function MermaidRenderer({ code }: MermaidRendererProps): ReactElement {
+  // key={code} 让 code 变化时整体卸载重建：
+  //   1) ErrorBoundary 内部 hasError 重置为 false（class state 在 unmount 时丢弃）
+  //   2) Core 的 renderError state 也回到初始 null，无需在 effect 内手动清理
+  // 必要性：流式输出阶段中间快照可能语法不完整触发 hasError，若不重置，
+  //   最终合法 code 到达后红框会永久残留。
   return (
-    <MermaidErrorBoundary code={code}>
+    <MermaidErrorBoundary code={code} key={code}>
       <MermaidRendererCore code={code} />
     </MermaidErrorBoundary>
   )

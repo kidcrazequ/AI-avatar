@@ -142,6 +142,11 @@ export class PublicFileServer {
       throw new Error(`public-file-server.register 文件不存在: ${absPath}`)
     }
     await this.ensureStarted()
+    // 注册时顺手清理已过期的 entry，避免 Map 无限增长
+    const now = Date.now()
+    for (const [k, v] of this.entries) {
+      if (v.expiresAt < now) this.entries.delete(k)
+    }
     const token = crypto.randomBytes(20).toString('hex')
     this.entries.set(token, {
       absPath,

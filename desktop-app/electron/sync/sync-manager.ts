@@ -28,7 +28,7 @@ import path from 'node:path'
 
 import type Database from 'better-sqlite3'
 
-import { generateBackupFilename } from '@soul/core'
+import { generateBackupFilename, parseBackupFilename } from '@soul/core'
 
 import {
   WEBDAV_PASSWORD_SETTING_KEY,
@@ -585,6 +585,14 @@ export class SyncManager {
         logger: this.toSnapshotLogger(),
       })
 
+      // 兼容性闸门：快照的 DB 结构版本高于当前应用支持版本时，旧迁移代码无法理解未来 schema，
+      // 直接覆盖会损坏数据。在任何不可逆替换（applyExtractedSnapshot）之前拒绝并保留本地数据。
+      if (manifest.dbSchemaVersion > this.dbSchemaVersion) {
+        throw new Error(
+          `备份的数据库结构版本(${manifest.dbSchemaVersion})高于当前应用支持的版本(${this.dbSchemaVersion})，请先升级应用再恢复（已中止，本地数据未改动）`,
+        )
+      }
+
       // 应用解压结果到本地
       await this.applyExtractedSnapshot(extractedDir)
 
@@ -774,9 +782,14 @@ export class SyncManager {
       )
       return
     }
-    if (items.length <= retainCount) return
-    items.sort((a, b) => compareLastModifiedDesc(a.lastModified, b.lastModified))
-    const toDelete = items.slice(retainCount)
+    // 只裁剪「本设备自己」的备份：basePath 是多设备共享目录，文件名内嵌 deviceId。
+    // 若按全局列表裁剪，A 设备每轮 prune 会删到第 retainCount+1 新的文件——常常是 B 设备的
+    // 备份，导致别的设备的整段历史被静默删光、该设备 restore 时无备份可恢复。
+    const myDeviceId = this.getOrCreateDeviceId()
+    const mine = items.filter((it) => parseBackupFilename(it.filename)?.deviceId === myDeviceId)
+    if (mine.length <= retainCount) return
+    mine.sort((a, b) => compareLastModifiedDesc(a.lastModified, b.lastModified))
+    const toDelete = mine.slice(retainCount)
     for (const it of toDelete) {
       try {
         await client.deleteBackup(it.filename)
@@ -787,7 +800,7 @@ export class SyncManager {
         )
       }
     }
-    this.logger.info(`prune: removed ${toDelete.length} old backups, kept ${retainCount}`)
+    this.logger.info(`prune: removed ${toDelete.length} old backups (device ${myDeviceId}), kept ${retainCount}`)
   }
 
   /**

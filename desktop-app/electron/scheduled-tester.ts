@@ -18,10 +18,15 @@ export class ScheduledTester {
   start(avatarId: string, intervalHours: number) {
     this.stop()
     if (intervalHours <= 0) return
+    if (!Number.isFinite(intervalHours)) return
+
+    // 防止误传极小值导致高频触发（与 CronScheduler.MIN_INTERVAL_HOURS 保持一致）
+    const MIN_INTERVAL_HOURS = 0.1
+    const effHours = Math.max(intervalHours, MIN_INTERVAL_HOURS)
 
     // 立即触发第一次测试，之后按间隔重复
     this.triggerTest(avatarId)
-    const intervalMs = intervalHours * 60 * 60 * 1000
+    const intervalMs = effHours * 60 * 60 * 1000
     this.timer = setInterval(() => {
       this.triggerTest(avatarId)
     }, intervalMs)

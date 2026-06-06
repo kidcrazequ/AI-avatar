@@ -152,7 +152,7 @@ function loadSavedTheme(): ThemeId {
 export const useThemeStore = create<ThemeState>((set) => ({
   themeId: loadSavedTheme(),
   setTheme: (id) => {
-    localStorage.setItem(STORAGE_KEY, id)
     set({ themeId: id })
+    try { localStorage.setItem(STORAGE_KEY, id) } catch { /* ignore */ }
   },
 }))

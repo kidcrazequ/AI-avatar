@@ -134,6 +134,9 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
   const abortControllerRef = useRef<AbortController | null>(null)
   const caseListRef = useRef<HTMLDivElement>(null)
   const isMountedRef = useRef(true)
+  // Snapshot the user's active conversation before the regression run hijacks the store.
+  // On every exit path (done / cancelled / error) and on unmount we restore it.
+  const priorConvIdRef = useRef<string | null>(null)
 
   // ── chatStore 镜像订阅 ──
   // 只订阅当前题需要的字段，避免无关重渲染
@@ -150,6 +153,13 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
     return () => {
       isMountedRef.current = false
       abortControllerRef.current?.abort()
+      // Restore the user's conversation if the run mutated the shared store.
+      const priorId = priorConvIdRef.current
+      if (priorId && useChatStore.getState().currentConversationId !== priorId) {
+        void useChatStore.getState().bindConversation(priorId).then(() => {
+          window.dispatchEvent(new CustomEvent('soul-reload-active-path', { detail: { conversationId: priorId } }))
+        })
+      }
     }
   }, [])
 
@@ -279,6 +289,9 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
       selectedQuestionCount: questions.length,
     }
 
+    // Snapshot the live conversation so we can restore it on every exit path.
+    priorConvIdRef.current = useChatStore.getState().currentConversationId
+
     setCurrentRunId(runId)
     setCaseResults([])
     setSavedReport(null)
@@ -289,6 +302,18 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
 
     const controller = new AbortController()
     abortControllerRef.current = controller
+
+    // Restore the user's conversation after the run (any exit path).
+    // bindConversation resets currentConversationId + tasks; the event triggers
+    // ChatWindow's reload effect so it re-fetches messages from DB.
+    const restorePriorConversation = (): void => {
+      const priorId = priorConvIdRef.current
+      if (!priorId) return
+      if (useChatStore.getState().currentConversationId === priorId) return
+      void useChatStore.getState().bindConversation(priorId).then(() => {
+        window.dispatchEvent(new CustomEvent('soul-reload-active-path', { detail: { conversationId: priorId } }))
+      })
+    }
 
     // sendMessage 适配器：注册临时会话 → 镜像跟随 → 调真实 sendMessage
     const sendMessageAdapter = async (content: string, conversationId: string, ava: string): Promise<void> => {
@@ -336,6 +361,7 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      restorePriorConversation()
       if (msg.includes('aborted')) {
         setRunState('cancelled')
       } else {
@@ -396,8 +422,10 @@ export default function BatchRegressionPanel({ avatarId, avatarName, onClose }: 
         console.warn('[BatchRegressionPanel] 刷新历史列表失败:', listErr instanceof Error ? listErr.message : String(listErr))
       }
 
+      restorePriorConversation()
       if (isMountedRef.current) setRunState('done')
     } catch (err) {
+      restorePriorConversation()
       if (!isMountedRef.current) return
       setRunErr(`报告生成失败：${err instanceof Error ? err.message : String(err)}`)
       setRunState('error')

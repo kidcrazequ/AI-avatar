@@ -37,6 +37,7 @@ export class PreviewManager {
   private logs: string[] = []
   private userBounds: PreviewBounds = DEFAULT_USER_BOUNDS
   private currentConversationId: string = 'unknown'
+  private rendererBridges: Array<{ channel: string; handler: (...args: unknown[]) => void }> = []
 
   constructor(private readonly mainWindow: BrowserWindow, preloadPath: string) {
     const previewSession = session.fromPartition('persist:soul-preview')
@@ -192,17 +193,27 @@ export class PreviewManager {
    */
   private installRendererBridges(): void {
     const forward = (channel: string): void => {
-      ipcMain.on(channel, (_event, payload) => {
+      const handler = (_event: unknown, payload: unknown): void => {
         try {
           if (!this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send(channel, payload)
           }
         } catch {}
-      })
+      }
+      ipcMain.on(channel, handler)
+      this.rendererBridges.push({ channel, handler })
     }
     forward('preview:block-selected')
     forward('preview:tweaks-available')
     forward('preview:tweaks-save')
     forward('preview:size-changed')
+  }
+
+  /** 主窗口关闭时调用，移除注册的全局 ipcMain 监听器，避免重建窗口时泄漏 */
+  dispose(): void {
+    for (const { channel, handler } of this.rendererBridges) {
+      ipcMain.removeListener(channel, handler)
+    }
+    this.rendererBridges = []
   }
 }

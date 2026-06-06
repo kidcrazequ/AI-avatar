@@ -5,7 +5,7 @@ import { buildActivePath } from '@soul/core'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-const CURRENT_SCHEMA_VERSION = 21
+export const CURRENT_SCHEMA_VERSION = 21
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -1387,6 +1387,8 @@ export class DatabaseManager {
         this.db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(row.id)
         this.db.prepare('DELETE FROM agent_tasks WHERE conversation_id = ?').run(row.id)
         this.db.prepare('DELETE FROM sub_agent_tasks WHERE conversation_id = ?').run(row.id)
+        // answer_cache 无 FK CASCADE，须显式清理，否则前缀批量删除后缓存答案永久残留
+        this.db.prepare('DELETE FROM answer_cache WHERE conversation_id = ?').run(row.id)
         this.db.prepare('DELETE FROM conversations WHERE id = ?').run(row.id)
         deleted++
       }
@@ -1428,6 +1430,8 @@ export class DatabaseManager {
       this.db.prepare('DELETE FROM agent_tasks WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM sub_agent_tasks WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM attachments WHERE conversation_id = ?').run(id)
+      // answer_cache 无 FK CASCADE，须显式清理，否则缓存答案随会话删除后永久残留
+      this.db.prepare('DELETE FROM answer_cache WHERE conversation_id = ?').run(id)
       this.db.prepare('DELETE FROM conversations WHERE id = ?').run(id)
     })()
   }
@@ -1452,6 +1456,12 @@ export class DatabaseManager {
       `).run(avatarId)
       this.db.prepare(`
         DELETE FROM attachments WHERE conversation_id IN (
+          SELECT id FROM conversations WHERE avatar_id = ?
+        )
+      `).run(avatarId)
+      // answer_cache 无 FK CASCADE，须显式清理，否则删除分身后其缓存答案永久残留
+      this.db.prepare(`
+        DELETE FROM answer_cache WHERE conversation_id IN (
           SELECT id FROM conversations WHERE avatar_id = ?
         )
       `).run(avatarId)
@@ -1638,7 +1648,13 @@ export class DatabaseManager {
     if (row && result.changes > 0) {
       const conv = this.getConversation(row.conversation_id)
       if (conv?.leaf_message_id === messageId) {
-        this.stmts.updateConversationLeaf.run(row.parent_id, row.conversation_id)
+        // row.parent_id 可能在前序删除中已被删掉（重新生成时自前向后删整条尾巴），
+        // 直接指过去会让 leaf 悬空。仅当父仍存在才指过去，否则置 NULL，
+        // 让 getActivePathMessages 走干净的线性兜底而非悬空 leaf。
+        const parentAlive = row.parent_id
+          ? this.db.prepare('SELECT 1 FROM messages WHERE id = ?').get(row.parent_id)
+          : undefined
+        this.stmts.updateConversationLeaf.run(parentAlive ? row.parent_id : null, row.conversation_id)
       }
     }
     return result.changes

@@ -79,7 +79,12 @@ export class ClaudeProvider implements LLMProvider {
       let reasoningText = ''
       /** 按 content_block 的 index 累积 tool_use 的 partial_json */
       const toolUseAcc = new Map<number, { id: string; name: string; partialJson: string }>()
-      let normalizedUsage: import('./types').NormalizedUsage | undefined
+      // input/cache token 来自 message_start.usage（input_tokens 非空），message_delta 只可靠带 output_tokens
+      let inputTokens = 0
+      let cacheReadTokens = 0
+      let cacheCreationTokens = 0
+      let outputTokens = 0
+      let sawUsage = false
 
       for await (const event of stream as AsyncIterable<MessageStreamEvent>) {
         if (event.type === 'content_block_start') {
@@ -103,25 +108,39 @@ export class ClaudeProvider implements LLMProvider {
             const acc = toolUseAcc.get(event.index)
             if (acc) acc.partialJson += delta.partial_json
           }
+        } else if (event.type === 'message_start') {
+          // input/cache token 只在 message_start.usage 上可靠（input_tokens 非空，cache 字段已填充）
+          const u = event.message.usage
+          inputTokens = u.input_tokens
+          cacheReadTokens = u.cache_read_input_tokens ?? 0
+          cacheCreationTokens = u.cache_creation_input_tokens ?? 0
+          outputTokens = u.output_tokens
+          sawUsage = true
         } else if (event.type === 'message_delta' && event.usage) {
-          // 在 final 事件累积 usage（cache_read/creation 字段是 Anthropic prompt cache 命中指标）
+          // message_delta 累积 output_tokens；input/cache 字段在 delta 上多为 null，仅在非空时覆盖
           const u = event.usage
-          const cacheRead = (u as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0
-          const cacheCreation = (u as { cache_creation_input_tokens?: number }).cache_creation_input_tokens ?? 0
-          const input = u.input_tokens ?? 0
-          // Anthropic 把 cache_read / cache_creation 与 input_tokens 分开计；总 input = 三者之和
-          const totalInput = input + cacheRead + cacheCreation
-          const hitRatio = totalInput > 0 ? cacheRead / totalInput : 0
-          // eslint-disable-next-line no-console
-          console.info(
-            `[llm-cache] provider=anthropic input_tokens=${input} cache_read=${cacheRead} cache_creation=${cacheCreation} hit_ratio=${(hitRatio * 100).toFixed(1)}% output_tokens=${u.output_tokens ?? '?'}`,
-          )
-          normalizedUsage = {
-            inputTokens: input,
-            outputTokens: u.output_tokens ?? 0,
-            cacheReadTokens: cacheRead,
-            cacheCreationTokens: cacheCreation,
-          }
+          outputTokens = u.output_tokens ?? outputTokens
+          if (u.input_tokens !== null) inputTokens = u.input_tokens
+          if (u.cache_read_input_tokens !== null) cacheReadTokens = u.cache_read_input_tokens
+          if (u.cache_creation_input_tokens !== null) cacheCreationTokens = u.cache_creation_input_tokens
+          sawUsage = true
+        }
+      }
+
+      let normalizedUsage: import('./types').NormalizedUsage | undefined
+      if (sawUsage) {
+        // Anthropic 把 cache_read / cache_creation 与 input_tokens 分开计；总 input = 三者之和
+        const totalInput = inputTokens + cacheReadTokens + cacheCreationTokens
+        const hitRatio = totalInput > 0 ? cacheReadTokens / totalInput : 0
+        // eslint-disable-next-line no-console
+        console.info(
+          `[llm-cache] provider=anthropic input_tokens=${inputTokens} cache_read=${cacheReadTokens} cache_creation=${cacheCreationTokens} hit_ratio=${(hitRatio * 100).toFixed(1)}% output_tokens=${outputTokens}`,
+        )
+        normalizedUsage = {
+          inputTokens,
+          outputTokens,
+          cacheReadTokens,
+          cacheCreationTokens,
         }
       }
 
@@ -323,6 +342,15 @@ function buildSystemBlocks(blocks: SystemBlock[]): TextBlockParam[] {
 
 /** Anthropic SDK error → 与 OpenAICompat 一致的人类可读 Error */
 function mapAnthropicError(error: unknown): Error {
+  // 连接失败/超时是 status === undefined 的 APIError 子类，需在通用分支前拦截，
+  // 否则会落到 `请求失败 (0)` 而非友好的网络提示；TimeoutError 是 ConnectionError 子类，先判
+  if (error instanceof Anthropic.APIUserAbortError) return error
+  if (error instanceof Anthropic.APIConnectionTimeoutError) {
+    return new Error('网络连接超时，请稍后重试')
+  }
+  if (error instanceof Anthropic.APIConnectionError) {
+    return new Error('网络连接失败，请检查网络和 API 地址')
+  }
   if (error instanceof Anthropic.APIError) {
     const status = error.status ?? 0
     const msg = error.message || ''

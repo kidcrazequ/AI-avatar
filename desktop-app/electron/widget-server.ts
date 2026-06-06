@@ -658,6 +658,12 @@ export class WidgetServer {
             try { res.end() } catch { void 0 /* 客户端已断开 */ }
             resolve()
           })
+          // widget client 中途断开：销毁上游请求与响应流，避免悬挂连接。
+          res.on('close', () => {
+            try { upstream.destroy() } catch { void 0 }
+            try { upRes.destroy() } catch { void 0 }
+            resolve()
+          })
           return
         }
         // SSE 透传：写头并直接 pipe 字节流
@@ -673,6 +679,13 @@ export class WidgetServer {
         upRes.on('error', (err) => {
           this.deps.logger.error('widget-server.upstream', err)
           try { res.end() } catch { void 0 /* 客户端已断开 */ }
+          resolve()
+        })
+        // widget client 中途断开（关页签）：销毁上游请求与响应流，
+        // 让 proxy-server 的 res.on('close') 触发 releaseJob，停止 renderer 继续生成 token。
+        res.on('close', () => {
+          try { upstream.destroy() } catch { void 0 }
+          try { upRes.destroy() } catch { void 0 }
           resolve()
         })
       })

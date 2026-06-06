@@ -168,7 +168,10 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     conversationId: string
   } | null>(null)
   const handleInjectPrompt = useCallback((text: string) => {
+    // 立刻重置回 undefined，避免 l3InjectedFill 永久遮蔽模板 fillText（?? 短路），
+    // 并让同文案二次注入也能重新触发 MessageInput 的 fill effect（同 App.tsx 模板填充模式）
     setL3InjectedFill(text)
+    setTimeout(() => setL3InjectedFill(undefined), 0)
   }, [])
   /** 已耗时（秒，精度 0.1s），isLoading 期间递增，用于在"思考中..."旁显示进度感知 */
   const [elapsedSec, setElapsedSec] = useState(0)
@@ -238,6 +241,10 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
    * 仅响应当前会话的事件；切换会话时自动清掉旧问题。
    */
   useEffect(() => {
+    // 切换会话时清掉上个会话的旧问题卡片，否则在 B 会话回答 A 的卡片会把答案
+    // 注入到 B（handleSendMessage 闭包到当前 conversationId）——跨会话"幽灵上下文"泄漏
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- conversationId 变化时清旧卡片，合法的 effect 联动
+    setPendingAsk(null)
     const unsubscribe = window.electronAPI.onChatAskQuestion((payload) => {
       if (payload.conversationId !== conversationId) return
       setPendingAsk({

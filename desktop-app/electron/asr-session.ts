@@ -147,12 +147,17 @@ export class DoubaoAsrSession {
 
   stop(): void {
     if (this.ended) return
-    this.sendFrame(buildDoubaoAsrAudioOnlyRequest({
-      audio: new Uint8Array(),
-      sequence: this.sequence,
-      last: true,
-      compression: 'gzip',
-    }))
+    try {
+      this.sendFrame(buildDoubaoAsrAudioOnlyRequest({
+        audio: new Uint8Array(),
+        sequence: this.sequence,
+        last: true,
+        compression: 'gzip',
+      }))
+    } catch (error) {
+      this.handleSocketError(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
     this.closeTimer = setTimeout(() => {
       this.socket?.close(1000, 'asr-stop')
       this.finish('stopped')

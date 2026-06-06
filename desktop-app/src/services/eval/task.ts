@@ -79,11 +79,9 @@ async function runOneScorer<TTarget>(
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('aborted')); return }
-    const t = setTimeout(resolve, ms)
-    signal?.addEventListener('abort', () => {
-      clearTimeout(t)
-      reject(new Error('aborted'))
-    }, { once: true })
+    const onAbort = () => { clearTimeout(t); reject(new Error('aborted')) }
+    const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve() }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
   })
 }
 

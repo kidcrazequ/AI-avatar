@@ -59,6 +59,8 @@ type ProgressCallback = (progress: CommunitySkillSyncProgress) => void
 export class CommunitySkillManager {
   private soulRoot: string
   private logger: Logger
+  /** 在途同步守卫：串行化 sources.lock 的读改写与各源 destDir 的 rm/重建，防止并发 sync 互相覆盖 */
+  private syncing = false
 
   constructor(avatarsPath: string, logger: Logger) {
     this.soulRoot = path.resolve(avatarsPath, '..')
@@ -163,6 +165,19 @@ export class CommunitySkillManager {
 
   /** 执行全量同步，类似 soul-sync.sh */
   async sync(onProgress?: ProgressCallback): Promise<InstalledCommunityPack[]> {
+    // IPC 层（community:sync）无去重，双击/重触发会让两次 sync 交错：interleaved 的
+    // readLock/updateLockEntry/writeLock 丢更新，同名源的 destDir rm 又会撞另一次的 copy。
+    // 在管理器层串行化，关掉这两个窗口。
+    if (this.syncing) throw new Error('社区技能同步已在进行中，请等待当前同步完成')
+    this.syncing = true
+    try {
+      return await this.syncImpl(onProgress)
+    } finally {
+      this.syncing = false
+    }
+  }
+
+  private async syncImpl(onProgress?: ProgressCallback): Promise<InstalledCommunityPack[]> {
     const sources = this.listSources()
     if (sources.length === 0) return []
 

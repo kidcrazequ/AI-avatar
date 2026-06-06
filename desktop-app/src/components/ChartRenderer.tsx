@@ -116,7 +116,12 @@ async function ensureEchartsLoaded(): Promise<void> {
     registerPixelTheme()
     _echartsCore = core
     _echartsLoaded = true
-  })()
+  })().catch((err: unknown) => {
+    // Reset so a future mount can retry the dynamic import instead of
+    // latching every ChartRenderer instance on a permanent load failure.
+    _echartsLoadingPromise = null
+    throw err
+  })
 
   return _echartsLoadingPromise
 }
@@ -618,7 +623,7 @@ function ChartRendererCore({ option, rawJson }: ChartRendererProps): ReactElemen
 
 export default function ChartRenderer({ option, rawJson }: ChartRendererProps): ReactElement {
   return (
-    <ChartErrorBoundary rawJson={rawJson}>
+    <ChartErrorBoundary key={rawJson ?? JSON.stringify(option)} rawJson={rawJson}>
       <ChartRendererCore option={option} rawJson={rawJson} />
     </ChartErrorBoundary>
   )

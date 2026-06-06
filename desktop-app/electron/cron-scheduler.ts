@@ -39,17 +39,16 @@ const TASK_EVENT_MAP: Record<CronTaskType, string> = {
 
 /**
  * 「每日固定时间」回调任务的内部状态。
- * 启动时先 setTimeout 等到第一次触发，之后用 setInterval(24h) 持续触发。
+ * 每次触发后都按当前墙钟重新 setTimeout 到下一个 HH:MM（不用固定 24h interval），
+ * 这样睡眠唤醒 / DST 切换后仍能自校正回 HH:MM。
  */
 interface DailyCallbackState {
   name: string
   hour: number
   minute: number
   callback: () => void | Promise<void>
-  /** 第一次触发的 setTimeout（首次到 HH:MM 的等待） */
-  firstTimer: NodeJS.Timeout | null
-  /** 之后每 24 小时触发一次的 setInterval */
-  intervalTimer: NodeJS.Timeout | null
+  /** 指向下一次触发的 setTimeout（每次 fire 后重新按墙钟计算并重置） */
+  timer: NodeJS.Timeout | null
 }
 
 /**
@@ -154,24 +153,25 @@ export class CronScheduler {
       hour,
       minute,
       callback,
-      firstTimer: null,
-      intervalTimer: null,
+      timer: null,
     }
 
-    const fire = () => {
-      Promise.resolve()
-        .then(() => callback())
-        .catch((err) => {
-          console.error(`[CronScheduler] daily '${name}' callback 抛错:`, err)
-        })
+    // 每次到点：跑 callback，再按当前墙钟重新排下一个 HH:MM。
+    // 用链式 setTimeout（而非固定 24h setInterval），因为 setInterval 在系统睡眠
+    // 期间不推进、唤醒后从暂停处续算会永久偏离 HH:MM；跨 DST 加固定 24h 也会差 1 小时。
+    // 每次重新调用 computeMsUntilNext（DST-aware setHours）即可自校正。
+    const arm = () => {
+      const msUntilNext = computeMsUntilNext(hour, minute, new Date())
+      state.timer = setTimeout(() => {
+        Promise.resolve()
+          .then(() => callback())
+          .catch((err) => {
+            console.error(`[CronScheduler] daily '${name}' callback 抛错:`, err)
+          })
+        arm()
+      }, msUntilNext)
     }
-
-    const msUntilFirstFire = computeMsUntilNext(hour, minute, new Date())
-    state.firstTimer = setTimeout(() => {
-      fire()
-      // 之后每 24 小时跑一次
-      state.intervalTimer = setInterval(fire, 24 * 60 * 60 * 1000)
-    }, msUntilFirstFire)
+    arm()
 
     this.dailyCallbacks.set(name, state)
   }
@@ -195,8 +195,7 @@ export class CronScheduler {
   cancelDaily(name: string): void {
     const state = this.dailyCallbacks.get(name)
     if (!state) return
-    if (state.firstTimer) clearTimeout(state.firstTimer)
-    if (state.intervalTimer) clearInterval(state.intervalTimer)
+    if (state.timer) clearTimeout(state.timer)
     this.dailyCallbacks.delete(name)
   }
 

@@ -158,13 +158,18 @@ export class GitHubConnector {
 
   /** 读单文件内容（utf-8），> 1MB 抛出（避免吃光内存） */
   async readFile(owner: string, repo: string, filePath: string, ref?: string): Promise<string> {
+    const buf = await this.readFileBuffer(owner, repo, filePath, ref)
+    return buf.toString('utf-8')
+  }
+
+  /** 读单文件原始字节，> 1MB 抛出（避免吃光内存） */
+  private async readFileBuffer(owner: string, repo: string, filePath: string, ref?: string): Promise<Buffer> {
     const oct = this.getClient()
     const { data } = await oct.rest.repos.getContent({ owner, repo, path: filePath, ref })
     if (Array.isArray(data)) throw new Error(`期望文件，但 ${filePath} 是目录`)
     if (!('content' in data) || data.type !== 'file') throw new Error(`${filePath} 不是普通文件`)
     if ((data.size ?? 0) > 1_048_576) throw new Error(`文件过大（>1MB），不便预览：${filePath}`)
-    const buf = Buffer.from(data.content, 'base64')
-    return buf.toString('utf-8')
+    return Buffer.from(data.content, 'base64')
   }
 
   /**
@@ -183,12 +188,12 @@ export class GitHubConnector {
     if (!Array.isArray(files) || files.length === 0) return []
     const result: Array<{ path: string; bytes: number }> = []
     for (const f of files) {
-      const content = await this.readFile(owner, repo, f.path, ref)
+      const buf = await this.readFileBuffer(owner, repo, f.path, ref)
       const dest = f.saveAs || f.path
       const abs = this.workspaceManager.resolveSafe(avatarId, projectId, conversationId, dest)
       fs.mkdirSync(path.dirname(abs), { recursive: true })
-      fs.writeFileSync(abs, content, 'utf-8')
-      result.push({ path: dest, bytes: Buffer.byteLength(content, 'utf-8') })
+      fs.writeFileSync(abs, buf)
+      result.push({ path: dest, bytes: buf.length })
     }
     return result
   }

@@ -3082,8 +3082,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     //     repair 自己拿到的 abortController 也只是 local 给 fetch signal 用）
     const abortController = new AbortController()
     if (!_hiddenRepairEarly) {
+      // 仅当上一条进行中的请求属于同一会话时才 abort（"同会话内发新消息取消上一条"）。
+      // 切走→在另一会话 B 发新消息时，A 的流仍在跑（resetTransientState 已把 isLoading 清成
+      // false 但没清 activeChatRequest/activeAbortController）；若无条件 abort 会误杀 A 的流，
+      // A 的答复永远落不了 DB（见 line ~3000 与模块顶部 snapshot 说明）。
+      const prevChatRequest = activeChatRequest
       activeChatRequest = { id: requestId, conversationId }
-      if (activeAbortController) activeAbortController.abort()
+      if (activeAbortController && prevChatRequest?.conversationId === conversationId) {
+        activeAbortController.abort()
+      }
       activeAbortController = abortController
     }
     // 2026-05-24：hiddenRepair 模式（infographic validator 触发的格式修正轮）

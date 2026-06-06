@@ -195,14 +195,18 @@ export function assertExpectedValue(content: string, expected: ExpectedValue | u
   const upper = expected.value === 0 ? 0.5 : expected.value * (1 + tol)
   const min = Math.min(lower, upper)
   const max = Math.max(lower, upper)
+  // Strip citation anchors (e.g. [来源: knowledge/policy.md#L10-L16]) so that
+  // structural numbers inside them (line ranges, row indices, page numbers) are
+  // not mistaken for data values asserted by the assistant.
+  const narrative = content.replace(/\[来源:\s*[^\]]+\]/g, ' ')
   const numberRegex = /-?\d+(?:\.\d+)?/g
   let match: RegExpExecArray | null
-  while ((match = numberRegex.exec(content)) !== null) {
+  while ((match = numberRegex.exec(narrative)) !== null) {
     const n = parseFloat(match[0])
     if (!Number.isFinite(n)) continue
     if (n < min || n > max) continue
     if (expected.unit) {
-      const around = content.slice(Math.max(0, match.index - 10), Math.min(content.length, match.index + match[0].length + 10))
+      const around = narrative.slice(Math.max(0, match.index - 10), Math.min(narrative.length, match.index + match[0].length + 10))
       if (!around.includes(expected.unit)) continue
     }
     return { name: 'expectedValue', pass: true }

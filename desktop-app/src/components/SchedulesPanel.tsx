@@ -100,10 +100,18 @@ export default function SchedulesPanel({ avatarId, onClose }: Props) {
   const [timezone, setTimezone] = useState<string>(DEFAULT_TIMEZONE)
   const [enabled, setEnabled] = useState(true)
   const [nextRuns, setNextRuns] = useState<number[]>([])
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const triggerTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => () => {
+    clearTimeout(toastTimerRef.current)
+    clearTimeout(triggerTimerRef.current)
+  }, [])
 
   const showToast = (msg: string) => {
     setToast(msg)
-    window.setTimeout(() => setToast(null), 2500)
+    clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
   }
 
   const reportError = useCallback(async (action: string, err: unknown) => {
@@ -269,7 +277,7 @@ export default function SchedulesPanel({ avatarId, onClose }: Props) {
         showToast('已触发，等待对话生成')
       }
       // 给主进程一点时间写 running 行，然后刷新
-      window.setTimeout(() => { void loadRuns(row.id) }, 800)
+      triggerTimerRef.current = setTimeout(() => { void loadRuns(row.id) }, 800)
     } catch (err) {
       void reportError('立即触发', err)
     }
@@ -515,6 +523,9 @@ export default function SchedulesPanel({ avatarId, onClose }: Props) {
         <span className="font-game text-[12px] text-px-primary">触发历史（最近 100 条）</span>
         <div className="flex gap-2">
           <button
+            // React 19 的 react-hooks/refs 一刀切：handleTriggerNow 在事件回调里写 triggerTimerRef
+            // 是 render 之外的合法访问，不会导致 inconsistent render（同 MessageInput 的处理）。
+            // eslint-disable-next-line react-hooks/refs
             onClick={() => { void handleTriggerNow(row) }}
             className="px-2 py-1 bg-px-bg-sec text-px-text font-game text-[11px] border-2 border-px-border hover:border-px-primary"
           >

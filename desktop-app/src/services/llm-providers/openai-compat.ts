@@ -108,8 +108,9 @@ export class OpenAICompatProvider implements LLMProvider {
 
       // 已显式通过 AbortSignal.timeout 做超时控制；throwOnHttpError 需要读取响应体
       // 映射到友好错误信息，fetchWithTimeout 会在 !ok 时直接抛出无法保留正文，故此处保留原生 fetch。
+      const base = this.config.baseUrl.replace(/\/+$/, '')
       // eslint-disable-next-line no-restricted-globals
-      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+      const response = await fetch(`${base}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -237,8 +238,9 @@ export class OpenAICompatProvider implements LLMProvider {
       ? AbortSignal.any([options.signal, timeoutSignal])
       : timeoutSignal
 
+    const base = this.config.baseUrl.replace(/\/+$/, '')
     // eslint-disable-next-line no-restricted-globals
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+    const response = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

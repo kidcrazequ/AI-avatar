@@ -21,8 +21,47 @@
 
 import fs from 'fs'
 import path from 'path'
+import dns from 'dns'
 import { JSDOM } from 'jsdom'
 import { fetchWithTimeout } from '@soul/core'
+
+/**
+ * Returns true when the resolved IP address belongs to a private / loopback /
+ * link-local range that should never be reachable via an inlined resource URL.
+ * Covers: 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16,
+ *         169.254.0.0/16 (link-local / cloud-metadata), ::1, fc00::/7.
+ */
+function isPrivateIp(ip: string): boolean {
+  // IPv6 loopback / ULA
+  if (ip === '::1') return true
+  if (/^fc[0-9a-f]{2}:/i.test(ip) || /^fd[0-9a-f]{2}:/i.test(ip)) return true
+  // IPv4
+  const parts = ip.split('.').map(Number)
+  if (parts.length !== 4 || parts.some(isNaN)) return false
+  const [a, b] = parts
+  return (
+    a === 127 ||                         // 127.0.0.0/8  loopback
+    a === 10 ||                          // 10.0.0.0/8   private
+    (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 private
+    (a === 192 && b === 168) ||          // 192.168.0.0/16 private
+    (a === 169 && b === 254)             // 169.254.0.0/16 link-local / cloud-metadata
+  )
+}
+
+/**
+ * Resolves `hostname` to its first IPv4/IPv6 address and checks whether it
+ * falls in a private range.  Returns true (= block) when the hostname resolves
+ * to a private/loopback/link-local address OR when resolution fails.
+ */
+async function resolvesToPrivateIp(hostname: string): Promise<boolean> {
+  try {
+    const { address } = await dns.promises.lookup(hostname, { verbatim: true })
+    return isPrivateIp(address)
+  } catch {
+    // If we can't resolve it, treat as unsafe (fail-closed)
+    return true
+  }
+}
 
 export interface InlineHtmlOptions {
   /** 源 HTML 绝对路径 */
@@ -84,12 +123,18 @@ async function loadResource(
   if (!url || url.startsWith('data:')) return null
   if (url.startsWith('http://') || url.startsWith('https://')) {
     try {
+      const parsed = new URL(url)
+      const hostname = parsed.hostname
+      // Block literal private/loopback/link-local IPs immediately
+      if (isPrivateIp(hostname)) return null
+      // Resolve DNS to guard against DNS rebinding to private ranges
+      if (await resolvesToPrivateIp(hostname)) return null
       const res = await fetchWithTimeout(url, { timeoutMs })
       if (!res.ok) return null
       const ab = await res.arrayBuffer()
       const buf = Buffer.from(ab)
       const ct = res.headers.get('content-type')?.split(';')[0]?.trim()
-      const mime = ct || guessMime(path.extname(new URL(url).pathname))
+      const mime = ct || guessMime(path.extname(parsed.pathname))
       return { data: buf, mime }
     } catch {
       return null

@@ -288,7 +288,7 @@ export default function GlobalSearchPalette({
                   </span>
                 </div>
                 <div className="font-game text-[10px] text-px-text-dim mt-0.5 line-clamp-2"
-                  dangerouslySetInnerHTML={{ __html: escapeAndHighlight(hit.subtitle) }}
+                  dangerouslySetInnerHTML={{ __html: escapeAndHighlight(hit.subtitle, hit.kind === 'message') }}
                 />
                 {hit.meta && (
                   <div className="font-mono text-[9px] text-px-text-dim/80 mt-0.5 truncate">
@@ -304,13 +304,16 @@ export default function GlobalSearchPalette({
   )
 }
 
-/** FTS5 snippet 返回的 [keyword] 标记转 <mark>；其它 HTML 字符全部转义 */
-function escapeAndHighlight(text: string): string {
+/** FTS5 snippet 返回的 [keyword] 标记转 <mark>；其它 HTML 字符全部转义。
+ *  highlightBrackets 仅对消息 snippet（FTS5 snippet() 输出）为 true；
+ *  知识库 / 记忆的 subtitle 是原始内容，不做括号替换。 */
+function escapeAndHighlight(text: string, highlightBrackets = false): string {
   const escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+  if (!highlightBrackets) return escaped
   // FTS5 在 snippet 用了 '[' ']' 包围匹配片段；现在已经被转义为 &lt; / &gt; 不存在了，
   // 所以匹配原始字符 '[' ']'（在 escaped 中仍然是原字符）
   return escaped.replace(/\[([^\]]+)\]/g, '<mark class="bg-px-primary/30 text-px-primary px-0.5">$1</mark>')

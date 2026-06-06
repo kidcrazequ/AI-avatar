@@ -173,7 +173,7 @@ export class VerifierAgent {
     //     模式会触发 GPU 子进程 Mach rendezvous failure，页面加载不出来。
     //   - 每个 viewport 用独立 partition：避免并行窗口共享 session 时
     //     webRequest listener 互相覆盖；用完即弃。
-    const partition = `persist:soul-verifier-${vp.name}-${Date.now()}`
+    const partition = `soul-verifier-${vp.name}-${Date.now()}`
     const sess = electronSession.fromPartition(partition)
 
     // 给本 viewport 的 session 装资源错误监听。

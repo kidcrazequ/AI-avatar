@@ -186,6 +186,11 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
   '.bmp',
 ] as const
 
+/** 单次 parseFile 调用专属的中止令牌（超时后置 aborted=true，避免并发调用互相污染） */
+interface AbortToken {
+  aborted: boolean
+}
+
 /**
  * DocumentParser: 负责解析 PDF / Word / 图片 / 文本文件，提取文字和图片。
  * - PDF → pdf-parse v2 提取文字；文字少的页面同时渲染为截图供 OCR 识别图表内容
@@ -194,19 +199,18 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
  * - 纯文本 → 直接读取
  */
 export class DocumentParser {
-  /** 超时标志：parseFile 超时后置 true，_parseFileImpl 中的耗时操作检查此标志提前退出 */
-  private _aborted = false
-
   /** 解析文件，返回文本内容和图片列表。带超时保护。 */
   async parseFile(filePath: string): Promise<ParsedDocument> {
-    this._aborted = false
+    // 超时标志：本次调用专属，避免共享单例的并发 parseFile 互相污染中止状态。
+    // parseFile 超时后置 aborted=true，parsePdf 中的耗时操作检查此 token 提前退出。
+    const token: AbortToken = { aborted: false }
     let timer: NodeJS.Timeout | null = null
     try {
       return await Promise.race([
-        this._parseFileImpl(filePath),
+        this._parseFileImpl(filePath, token),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
-            this._aborted = true
+            token.aborted = true
             reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${path.basename(filePath)}`))
           }, PARSE_TIMEOUT_MS)
         }),
@@ -218,7 +222,7 @@ export class DocumentParser {
     }
   }
 
-  private async _parseFileImpl(filePath: string): Promise<ParsedDocument> {
+  private async _parseFileImpl(filePath: string, token: AbortToken): Promise<ParsedDocument> {
     const stat = await fs.promises.stat(filePath)
     if (!stat.isFile()) {
       throw new Error(`路径不是普通文件: ${filePath}`)
@@ -231,7 +235,7 @@ export class DocumentParser {
 
     switch (ext) {
       case '.pdf':
-        return this.parsePdf(filePath, fileName)
+        return this.parsePdf(filePath, fileName, token)
       case '.docx':
         return this.parseWord(filePath, fileName)
       case '.doc':
@@ -279,7 +283,7 @@ export class DocumentParser {
    *   不依赖也不修改 knowledge-retriever。
    *   单页 PDF 不注入，保持现有行为不变。
    */
-  private async parsePdf(filePath: string, fileName: string): Promise<ParsedDocument> {
+  private async parsePdf(filePath: string, fileName: string, token: AbortToken): Promise<ParsedDocument> {
     // pdfjs-dist 的 fake worker 模式通过 import("./pdf.worker.mjs") 加载 worker。
     // 在 Windows 打包后 asar 内 import() 加载 .mjs 有兼容性问题。
     // 预加载 CJS 版本的 worker 并挂到 globalThis，pdfjs-dist 检测到后直接使用。
@@ -299,6 +303,7 @@ export class DocumentParser {
     const data = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
     const parser = new PDFParse({ data })
 
+    try {
     // 1. 提取全文
     const textResult = await parser.getText({ parsePageInfo: true })
     const rawFullText: string = textResult.text || ''
@@ -364,7 +369,7 @@ export class DocumentParser {
       imageDensePages.length = 0
       imageDensePages.push(...sampled)
     }
-    if ((imageDensePages.length > 0 || needsFullDocFallback) && !this._aborted) {
+    if ((imageDensePages.length > 0 || needsFullDocFallback) && !token.aborted) {
       try {
         const imageDenseSet = new Set(imageDensePages)
         const screenshotResult = await parser.getScreenshot({ scale: 2 })
@@ -387,10 +392,6 @@ export class DocumentParser {
       }
     }
 
-    // 释放 pdfjs 底层 document，避免批量导入 300+ 文件时 worker 累积状态导致
-    // 后续文件随机出现"0 截图"的 flake。单文件场景 destroy 无副作用。
-    try { await parser.destroy() } catch { /* ignore */ }
-
     return {
       text: fullText,
       images,
@@ -398,6 +399,13 @@ export class DocumentParser {
       fileType: 'pdf',
       perPageChars,
       imagePageNumbers,
+    }
+    } finally {
+      // 释放 pdfjs 底层 document，避免批量导入 300+ 文件时 worker 累积状态导致
+      // 后续文件随机出现"0 截图"的 flake。单文件场景 destroy 无副作用。
+      // 用 finally 确保任意提前 return / throw（含超时后 race 失败、getText 抛错、
+      // 截图 catch）路径都会释放 parser，不再泄漏 pdfjs document + worker。
+      try { await parser.destroy() } catch { /* ignore */ }
     }
   }
 

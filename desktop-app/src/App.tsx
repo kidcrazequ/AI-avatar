@@ -16,6 +16,7 @@ import SchedulesPanel from './components/SchedulesPanel'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
 import ExpertPackPanel from './components/ExpertPackPanel'
 import ImportAvatarPackPanel from './components/ImportAvatarPackPanel'
+import ExportAvatarPackModal from './components/ExportAvatarPackModal'
 import GlobalSearchPalette from './components/GlobalSearchPalette'
 import ArtifactPanel from './components/ArtifactPanel'
 import ProjectManagerPanel from './components/ProjectManagerPanel'
@@ -145,6 +146,8 @@ function App() {
   const showPromptTemplatePanel = activePanel === 'promptTemplate'
   const showSchedulesPanel = activePanel === 'schedules'
   const showBatchRegression = activePanel === 'batchRegression'
+  /** 非空时打开"导出分身包"弹窗，值为要导出的分身 ID */
+  const [exportAvatarId, setExportAvatarId] = useState<string | null>(null)
   const [templateFillText, setTemplateFillText] = useState<string | undefined>(undefined)
   const [activeAvatarId, setActiveAvatarId] = useState<string>('')
   /** Avatar 内二级项目（工作区 / 项目知识分区） */
@@ -813,6 +816,7 @@ function App() {
                       await refreshAvatarList()
                     }}
                     showToast={showToast}
+                    onExportAvatar={setExportAvatarId}
                     qualityRefreshNonce={qualityReportNonce}
                   />
                 </div>
@@ -908,6 +912,15 @@ function App() {
           onClose={() => setActivePanel(null)}
           onImported={handlePackImported}
           onOpenAvatar={handleSelectAvatar}
+          showToast={showToast}
+        />
+      )}
+
+      {exportAvatarId && (
+        <ExportAvatarPackModal
+          avatarId={exportAvatarId}
+          avatarName={avatarList.find((a) => a.id === exportAvatarId)?.name ?? exportAvatarId}
+          onClose={() => setExportAvatarId(null)}
           showToast={showToast}
         />
       )}

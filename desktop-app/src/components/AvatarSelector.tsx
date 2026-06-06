@@ -16,6 +16,8 @@ interface Props {
   onAvatarsChanged?: () => void | Promise<void>
   /** 保存成功/失败提示（与项目 Toast 规范一致） */
   showToast?: (message: string, type?: 'success' | 'error') => void
+  /** 导出指定分身为 .soulpack.json 分身包（由 App 打开导出弹窗） */
+  onExportAvatar?: (avatarId: string) => void
   /**
    * 与最近一次 TEST CENTER 落盘绑定；递增时当前分身重新拉取 `getLatestReport` 以刷新顶栏 R/K/C 勋章。
    */
@@ -37,6 +39,7 @@ export default function AvatarSelector({
   onCreateAvatar,
   onAvatarsChanged,
   showToast,
+  onExportAvatar,
   qualityRefreshNonce = 0,
 }: Props) {
   const [avatars, setAvatars] = useState<Avatar[]>([])
@@ -203,6 +206,16 @@ export default function AvatarSelector({
                   >
                     <span className="font-game text-[13px]">[✎]</span>
                     <span className="font-game text-[13px]">换头像</span>
+                  </button>
+                )}
+                {activeAvatarId && onExportAvatar && (
+                  <button
+                    onClick={() => { onExportAvatar(activeAvatarId); setIsOpen(false) }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5
+                      text-px-text-sec hover:bg-px-hover tracking-wider"
+                  >
+                    <span className="font-game text-[13px]">[↗]</span>
+                    <span className="font-game text-[13px]">导出分身包</span>
                   </button>
                 )}
                 <button

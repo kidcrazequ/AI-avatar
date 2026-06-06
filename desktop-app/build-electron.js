@@ -49,6 +49,21 @@ esbuild.build({
 }).then(() => {
   console.log('✅ pdf-worker.cjs 已构建（CJS 格式，绕过 asar import() 兼容问题）')
 
+  // #16: Excel 解析 worker —— 大 xlsx 的 XLSX.readFile + sheet_to_json 是同步 CPU 密集操作，
+  // 放在主进程会冻结事件循环且超时无法中断。搬到 worker_threads 后主进程可 worker.terminate()
+  // 强杀卡死解析。单独打成 CJS（xlsx 纯 JS 一并 bundle），主进程 new Worker(...cjs)。
+  return esbuild.build({
+    entryPoints: [path.join(__dirname, 'electron/workers/excel-parse.worker.ts')],
+    bundle: true,
+    platform: 'node',
+    target: 'node20',
+    outfile: path.join(__dirname, 'dist-electron/excel-parse-worker.cjs'),
+    format: 'cjs',
+    plugins: [soulCoreSrcPlugin],
+  })
+}).then(() => {
+  console.log('✅ excel-parse-worker.cjs 已构建（worker_threads，避免大 xlsx 冻结主进程）')
+
   // node-unrar-js 的 WASM 文件需要拷贝到输出目录（esbuild 无法打包 .wasm 二进制）
   const unrarWasm = path.join(__dirname, 'node_modules/node-unrar-js/dist/js/unrar.wasm')
   const unrarDest = path.join(__dirname, 'dist-electron/unrar.wasm')

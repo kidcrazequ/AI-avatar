@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { Worker } from 'node:worker_threads'
 import { JSDOM } from 'jsdom'
 
 import { parseExcelCore } from './excel/excel-parse-core'
@@ -110,6 +111,32 @@ export const SUPPORTED_PARSE_EXTENSIONS: readonly string[] = [
 /** 单次 parseFile 调用专属的中止令牌（超时后置 aborted=true，避免并发调用互相污染） */
 interface AbortToken {
   aborted: boolean
+}
+
+let excelWorkerWarned = false
+
+/**
+ * 解析 excel-parse-worker.cjs 的物理路径。
+ *
+ * 兼容三种运行态：
+ *   - 打包后：与 main 同在 dist-electron（__dirname）。若 asarUnpack 生效，物理文件在
+ *     app.asar.unpacked，显式重定向兜底（worker 加载 asar 虚拟路径在部分场景会失败）。
+ *   - 本地 build 后跑源码 / 单测：electron/ → ../dist-electron。
+ *   - 都没有（dev 未 build）：返回 null，由调用方退回主线程同步解析。
+ */
+function resolveExcelWorkerPath(): string | null {
+  const candidates = [
+    path.join(__dirname, 'excel-parse-worker.cjs'),
+    path.join(__dirname, '..', 'dist-electron', 'excel-parse-worker.cjs'),
+  ]
+  for (const c of candidates) {
+    if (c.includes(`app.asar${path.sep}`) && !c.includes('app.asar.unpacked')) {
+      const unpacked = c.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`)
+      if (fs.existsSync(unpacked)) return unpacked
+    }
+    if (fs.existsSync(c)) return c
+  }
+  return null
 }
 
 /**
@@ -605,12 +632,50 @@ export class DocumentParser {
   /**
    * 解析 Excel/CSV → Markdown + 结构化数据。
    *
-   * 同步重活已抽到 ./excel/excel-parse-core（XLSX.readFile + sheet_to_json 等）。
-   * 子任务 1：此处直接同步调用，行为与原内联实现逐字等价（零行为变化）。
-   * 子任务 3 将改为 worker_threads 调度 + terminate 超时，避免大 xlsx 冻结主进程。
+   * 同步重活（XLSX.readFile + sheet_to_json）跑在 worker_threads 里（excel-parse-worker.cjs），
+   * 避免大 xlsx 冻结主进程事件循环；超时用 worker.terminate() 强杀卡死的同步解析——这是
+   * 主进程内联跑做不到的（被锁死的事件循环里 Promise.race 超时回调永远排不上）。
+   * 若 worker 产物缺失（dev 未 build / 单测源码态）则退回主线程同步解析，保证功能不缺失。
    */
-  private async parseExcel(filePath: string, fileName: string): Promise<ParsedDocument> {
-    return parseExcelCore(filePath, fileName)
+  private parseExcel(filePath: string, fileName: string): Promise<ParsedDocument> {
+    const workerPath = resolveExcelWorkerPath()
+    if (!workerPath) {
+      if (!excelWorkerWarned) {
+        excelWorkerWarned = true
+        console.warn('[DocumentParser] excel-parse-worker.cjs 未找到，Excel 解析退回主线程同步执行（仅 dev/test 预期）')
+      }
+      return Promise.resolve(parseExcelCore(filePath, fileName))
+    }
+    return new Promise<ParsedDocument>((resolve, reject) => {
+      const worker = new Worker(workerPath, { workerData: { filePath, fileName } })
+      let settled = false
+      // 超时：worker.terminate() 强杀卡死的同步解析（主进程内联做不到）。回调内联以避免前向引用。
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        void worker.terminate()
+        reject(new Error(`解析超时（>${PARSE_TIMEOUT_MS / 1000}秒），文件可能过大: ${fileName}`))
+      }, PARSE_TIMEOUT_MS)
+      const finish = (action: () => void): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        void worker.terminate()
+        action()
+      }
+      worker.once('message', (msg: { ok: boolean; result?: ParsedDocument; error?: string }) => {
+        finish(() => {
+          if (msg && msg.ok && msg.result) resolve(msg.result)
+          else reject(new Error((msg && msg.error) || 'excel worker 返回无效结果'))
+        })
+      })
+      worker.once('error', (err) => {
+        finish(() => reject(err instanceof Error ? err : new Error(String(err))))
+      })
+      worker.once('exit', (code) => {
+        if (code !== 0) finish(() => reject(new Error(`excel worker 异常退出（code ${code}）`)))
+      })
+    })
   }
 
 }

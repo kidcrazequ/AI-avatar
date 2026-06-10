@@ -152,10 +152,21 @@ export default function SourceCitation({ anchor, avatarId }: Props) {
 
   /**
    * 兜底打开 markdown 源（raw_file 缺失或对应 _raw/ 物理文件不存在时）。
-   * mdRelPath 从 anchor 解析出，已经是 `knowledge/<file>.md` 形式（含 `knowledge/` 前缀）；
-   * IPC 内部的 path.resolve 会按 avatar/knowledge 根重定位，所以传入原值即可。
+   * mdRelPath 从 anchor 解析出，是相对 knowledge/ 根的路径（不含 `knowledge/` 前缀，
+   * 项目知识为 `projects/<pid>/knowledge/<file>.md`）。
+   *
+   * 全局知识 .md → 派发 `soul-open-knowledge-file` 事件，App 打开应用内知识库面板
+   * 定位该文件（KnowledgeViewer 渲染 markdown），不依赖系统 .md 关联应用——
+   * 系统没装 markdown 查看器时 shell.openPath 会失败或落到 Xcode 等糟糕体验。
+   * 项目知识 .md 不在 KnowledgePanel 全局知识树里，仍走系统默认应用打开。
    */
   const handleOpenMd = async (mdRelPath: string) => {
+    if (!mdRelPath.startsWith('projects/')) {
+      window.dispatchEvent(new CustomEvent('soul-open-knowledge-file', {
+        detail: { avatarId, relativePath: mdRelPath },
+      }))
+      return
+    }
     try {
       const ret = await window.electronAPI.openMdFile(avatarId, mdRelPath)
       if (!ret.ok) {

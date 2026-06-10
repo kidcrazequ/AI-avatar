@@ -527,6 +527,17 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAvatarId])
 
+  // 聊天里 source citation 的 .md chip 点击 → 应用内知识库面板打开查看（SourceCitation 派发）
+  useEffect(() => {
+    const onOpenKnowledgeFile = (e: Event) => {
+      const detail = (e as CustomEvent<{ avatarId?: string; relativePath?: string }>).detail
+      if (!detail?.avatarId || !detail.relativePath) return
+      void handleNavigateToKnowledgeFile(detail.avatarId, detail.relativePath)
+    }
+    window.addEventListener('soul-open-knowledge-file', onOpenKnowledgeFile)
+    return () => window.removeEventListener('soul-open-knowledge-file', onOpenKnowledgeFile)
+  }, [handleNavigateToKnowledgeFile])
+
   const handleAvatarCreated = async (avatarId: string, lifeStarted: boolean) => {
     setActivePanel(null)
     await handleSelectAvatar(avatarId)

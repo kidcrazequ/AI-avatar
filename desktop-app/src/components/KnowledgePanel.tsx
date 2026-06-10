@@ -4,7 +4,8 @@ import KnowledgeViewer from './KnowledgeViewer'
 import KnowledgeEditor from './KnowledgeEditor'
 import { parseFrontmatter, shouldHideKnowledgeFormatButton } from '../utils/knowledge-frontmatter'
 import { LLMService, ModelConfig } from '../services/llm-service'
-import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, extractFrontmatterFields, buildFrontmatterBlock, mergeFrontmatter, type LLMCallFn } from '@soul/core/browser'
+import { cleanPdfFullText, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText, formatDocument, callVisionOcr, extractFrontmatterFields, buildFrontmatterBlock, mergeFrontmatter, localDateString, type LLMCallFn } from '@soul/core/browser'
+import { WECOM_CHAT_VISION_PROMPT, parseChatSegment, mergeChatSegments, sanitizeChatTitle, buildChatMarkdownBody } from '../services/wecom-chat-importer'
 import { generateTestCasesFromContent } from '../services/test-generator'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
@@ -674,6 +675,119 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
+  /**
+   * 导入企业微信聊天截图：多选图片 → Vision 按聊天专用 prompt 逐张转写 →
+   * 相邻截图重叠去重合并 → 写入 `聊天记录/<会话名>-<日期>.md`。
+   *
+   * 为什么走截图：企业微信普通成员没有明文导出（客户端「聊天记录迁移」
+   * 产物是加密 .bak，会话存档是管理员付费功能），截图是唯一可行载体。
+   */
+  const handleImportChatScreenshots = async () => {
+    if (!ocrModel?.apiKey) {
+      showStatus('✗ 未配置视觉模型 API Key，无法识别聊天截图（请到设置中配置）', 8000)
+      return
+    }
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: '导入企业微信聊天截图（可多选）',
+        filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+        properties: ['openFile', 'multiSelections'],
+      })
+      if (result.canceled || result.filePaths.length === 0) return
+
+      setIsImporting(true)
+      // 文件名数字感知排序 = 聊天先后顺序（企业微信截图_<时间戳>.png 天然有序）
+      const filePaths = [...result.filePaths].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }))
+      const total = filePaths.length
+      setImportProgress({ current: 0, total: total + 1, phase: '解析截图' })
+      showStatus('解析截图中...', false)
+
+      // 原图保留到 _raw/（source of truth 不丢失；单张失败不阻断导入）
+      for (const fp of filePaths) {
+        try {
+          await window.electronAPI.preserveRawFile(avatarId, fp)
+        } catch (rawErr) {
+          console.warn('截图原图保留失败（不影响导入）:', rawErr)
+        }
+      }
+
+      const images: string[] = []
+      for (const fp of filePaths) {
+        const parsed = await window.electronAPI.parseDocument(fp)
+        if (parsed.fileType !== 'image' || parsed.images.length === 0) {
+          throw new Error(`不是有效图片：${parsed.fileName}`)
+        }
+        images.push(parsed.images[0])
+      }
+      if (!mountedRef.current) return
+
+      showStatus('视觉模型转写聊天内容中...', false)
+      const ocrOutcome = await callVisionOcr(images, {
+        apiKey: ocrModel.apiKey,
+        baseUrl: ocrModel.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        prompt: WECOM_CHAT_VISION_PROMPT,
+        onProgress: (done, totalImgs) => {
+          if (!mountedRef.current) return
+          showStatus(`转写截图 ${done} / ${totalImgs}...`, false)
+          setImportProgress({ current: done, total: total + 1, phase: `转写截图 ${done}/${totalImgs}` })
+        },
+      })
+      if (!mountedRef.current) return
+
+      // 全部失败 → 明确拒绝，不写"空骨架"文件
+      const okCount = ocrOutcome.results.filter((r) => r !== null).length
+      if (okCount === 0) {
+        console.error('[KnowledgePanel] 聊天截图全部识别失败:', ocrOutcome.failures)
+        showStatus(`✗ ${total} 张截图全部识别失败，未写入知识库（请检查网络 / API Key 后重试）`, 10000)
+        return
+      }
+      if (ocrOutcome.failures.length > 0) {
+        console.warn(`[KnowledgePanel] 聊天截图识别失败 ${ocrOutcome.failures.length}/${total} 张:`, ocrOutcome.failures)
+      }
+
+      const segments = ocrOutcome.results
+        .filter((r): r is string => r !== null)
+        .map(parseChatSegment)
+      const mergedChat = mergeChatSegments(segments)
+      const failedOrdinals = ocrOutcome.failures.map((f) => f.index + 1).sort((a, b) => a - b)
+
+      const importedDate = localDateString()
+      const chatTitle = mergedChat.title ?? '企业微信聊天记录'
+      const baseName = `${sanitizeChatTitle(mergedChat.title) || '企业微信聊天记录'}-${importedDate}`
+      const targetPath = `聊天记录/${baseName}.md`
+      const body = buildChatMarkdownBody({
+        title: chatTitle,
+        lines: mergedChat.lines,
+        screenshotCount: total,
+        failedOrdinals,
+      })
+      const systemMeta: Record<string, unknown> = {
+        source: 'wecom-chat',
+        imported: importedDate,
+        screenshots: total,
+      }
+      const enhanced = extractFrontmatterFields(`${baseName}.md`, body)
+      const frontmatter = buildFrontmatterBlock(mergeFrontmatter(systemMeta, enhanced))
+      setImportProgress({ current: total + 1, total: total + 1, phase: '写入知识库' })
+      await window.electronAPI.writeKnowledgeFile(avatarId, targetPath, `${frontmatter}\n\n${body}`)
+
+      await loadTree()
+      handleSelectFile(targetPath)
+      await onSaved?.()
+      showStatus(
+        failedOrdinals.length > 0
+          ? `✓ 已导入: ${targetPath}（${failedOrdinals.length} 张识别失败，内容有断档）`
+          : `✓ 已导入: ${targetPath}`,
+        10000,
+      )
+    } catch (err) {
+      console.error('导入聊天截图失败:', err)
+      showStatus('✗ 导入聊天截图失败: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsImporting(false)
+      setImportProgress(null)
+    }
+  }
 
   const handleGenerateTests = async () => {
     const testModel = creationModel?.apiKey ? creationModel : chatModel
@@ -797,6 +911,15 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
               title="支持 zip / tar.gz / 7z / rar"
             >
               {isBatchImporting ? '...' : '[📦] ARCHIVE'}
+            </button>
+            <button
+              onClick={handleImportChatScreenshots}
+              disabled={isImporting || isBatchImporting}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="导入企业微信聊天截图"
+              title="多选聊天截图，视觉模型逐条转写为可检索的聊天记录"
+            >
+              {isImporting ? '...' : '[💬] CHAT'}
             </button>
             <button
               onClick={() => setShowNewFileDialog(true)}

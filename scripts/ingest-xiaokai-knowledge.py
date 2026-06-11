@@ -169,12 +169,15 @@ def process_dir(src_root):
             if ext not in CONV:
                 stats["skipped"] += 1; skipped_list.append((src, f"未支持类型 {ext}")); continue
             out_path = os.path.join(out_root, os.path.splitext(rel)[0] + ".md")
+            # 溯源标签用相对原始目录路径（如 工作小结/xxx.pdf），不写本机绝对前缀，
+            # 便于分身包分发后仍可定位原件归属。
+            disp = os.path.join(sub, rel)
             try:
                 stype, body, extra = CONV[ext](src)
                 if not body or not body.strip():
                     body = "> （该文件解析后无可抽取文本内容。）"
                 title = os.path.splitext(os.path.basename(rel))[0]
-                content = fm(src, stype, **extra) + f"# {title}\n\n> 来源原件：`{src}`\n" + body + "\n"
+                content = fm(disp, stype, **extra) + f"# {title}\n\n> 来源原件：`{disp}`\n" + body + "\n"
                 p = write_md(out_path, content)
                 stats["converted"] += 1
                 converted_list.append((os.path.relpath(p, KN), stype))

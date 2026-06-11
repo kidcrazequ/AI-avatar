@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### 新增
+
+- **分身包覆盖更新模式** — 导入同名分身包时可选「覆盖更新」（默认）：更新人设/技能/知识库，保留本机记忆、模型配置、`_raw` 原始资料与本地新增文件，并按上次导入清单清理新版包已移除的旧文件；「完全重置」语义不变。导出不再把 `knowledge/_index` 陈旧索引打进包。
+
+### 修复
+
+- **分身包导入后缓存失效** — `soul-pack:import-from-file` 导入成功后失效该分身的 KnowledgeRetriever/KnowledgeManager/WikiCompiler/blueprint 进程内缓存，修复导入后检索仍用旧 BM25 索引直到重启的问题。
+
 ## v0.18.2 (2026-06-08)
 
 ### 新增

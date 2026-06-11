@@ -461,6 +461,7 @@ export {
   parseSoulPack,
   exportSoulPack,
   importSoulPack,
+  readInstalledPackState,
 } from './soul-pack'
 export type {
   SoulPack,
@@ -471,6 +472,7 @@ export type {
   ExportSoulPackOptions,
   ImportSoulPackOptions,
   ImportSoulPackResult,
+  SoulPackInstallState,
 } from './soul-pack'
 
 // agent-runtime（feature-flagged 新治理层；默认旧路径不变）

@@ -191,6 +191,19 @@ describe('soul-pack / export 行为', () => {
     }
   })
 
+  it('嵌套层级的 _index（如 knowledge/_index）也不入包', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar()
+    try {
+      const idxDir = path.join(avatarsRoot, avatarId, 'knowledge', '_index')
+      fs.mkdirSync(idxDir, { recursive: true })
+      fs.writeFileSync(path.join(idxDir, 'contexts.json'), '{}', 'utf-8')
+      const pack = exportSoulPack(avatarsRoot, avatarId)
+      assert.equal(pack.files.find(f => f.path.includes('_index')), undefined)
+    } finally {
+      cleanup()
+    }
+  })
+
   it('includeMemory=true 时打包 MEMORY/USER/standing-orders/episodes/daily-summaries', () => {
     const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withMemory: true })
     try {
@@ -460,6 +473,138 @@ describe('soul-pack / import 行为', () => {
       assert.throws(() => importSoulPack(avatarsRoot, parsed, { targetAvatarId: '../escape' }))
     } finally {
       cleanup()
+    }
+  })
+})
+
+describe('soul-pack / update 模式（覆盖更新）', () => {
+  /**
+   * 模拟真实更新场景：packA 装到独立 root 后，本机产生运行期数据
+   * （记忆改动、本地新增知识、本机 LLM 配置、_raw 原始文件），
+   * 之后作者改源分身再导出 packB 做 update。
+   */
+  function setupInstalled() {
+    const src = setupAvatar({ withMemory: true })
+    const srcDir = path.join(src.avatarsRoot, src.avatarId)
+    fs.writeFileSync(path.join(srcDir, 'knowledge', 'old.md'), '# Old\n\n初版包含、后续被作者移除的知识。\n', 'utf-8')
+
+    const importRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-pack-update-'))
+    const packA = parseSoulPack(serializeSoulPack(exportSoulPack(src.avatarsRoot, src.avatarId, { includeMemory: true })))
+    importSoulPack(importRoot, packA, { targetAvatarId: 'imported' })
+
+    const installed = path.join(importRoot, 'imported')
+    fs.writeFileSync(path.join(installed, 'memory', 'MEMORY.md'), '# 本机记忆\n- 导入后新增\n', 'utf-8')
+    fs.writeFileSync(path.join(installed, 'knowledge', 'local-extra.md'), '# 本地新增知识\n', 'utf-8')
+    fs.writeFileSync(path.join(installed, 'avatar.config.json'), JSON.stringify({ displayName: '本机改名' }), 'utf-8')
+    const rawDir = path.join(installed, 'knowledge', '_raw')
+    fs.mkdirSync(rawDir, { recursive: true })
+    fs.writeFileSync(path.join(rawDir, 'origin.xlsx'), Buffer.from([1, 2, 3]))
+
+    return {
+      src,
+      srcDir,
+      importRoot,
+      installed,
+      exportPackB: (opts?: Parameters<typeof exportSoulPack>[2]) =>
+        parseSoulPack(serializeSoulPack(exportSoulPack(src.avatarsRoot, src.avatarId, opts))),
+      cleanup: () => {
+        src.cleanup()
+        fs.rmSync(importRoot, { recursive: true, force: true })
+      },
+    }
+  }
+
+  it('update：写入包内新知识，保留本机 memory / avatar.config.json / 本地新增 / _raw', () => {
+    const env = setupInstalled()
+    try {
+      fs.writeFileSync(path.join(env.srcDir, 'knowledge', 'topic.md'), '# Topic v2\n\n更新后的知识。\n', 'utf-8')
+      const result = importSoulPack(env.importRoot, env.exportPackB(), { targetAvatarId: 'imported', mode: 'update' })
+      assert.equal(result.mode, 'update')
+      assert.match(fs.readFileSync(path.join(env.installed, 'knowledge', 'topic.md'), 'utf-8'), /Topic v2/)
+      // 本机运行期数据全部健在
+      assert.match(fs.readFileSync(path.join(env.installed, 'memory', 'MEMORY.md'), 'utf-8'), /本机记忆/)
+      assert.match(fs.readFileSync(path.join(env.installed, 'avatar.config.json'), 'utf-8'), /本机改名/)
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', 'local-extra.md')))
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', '_raw', 'origin.xlsx')))
+    } finally {
+      env.cleanup()
+    }
+  })
+
+  it('update：按上次包清单清理新版包已移除的文件，本地新增不受影响', () => {
+    const env = setupInstalled()
+    try {
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', 'old.md')))
+      fs.rmSync(path.join(env.srcDir, 'knowledge', 'old.md'))
+      const result = importSoulPack(env.importRoot, env.exportPackB(), { targetAvatarId: 'imported', mode: 'update' })
+      assert.ok(result.filesRemoved.includes('knowledge/old.md'))
+      assert.equal(fs.existsSync(path.join(env.installed, 'knowledge', 'old.md')), false)
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', 'local-extra.md')))
+    } finally {
+      env.cleanup()
+    }
+  })
+
+  it('update：无上次包清单时不删除任何文件，给出残留警告', () => {
+    const env = setupInstalled()
+    try {
+      fs.rmSync(path.join(env.installed, '.soul-pack-state.json'))
+      fs.rmSync(path.join(env.srcDir, 'knowledge', 'old.md'))
+      const result = importSoulPack(env.importRoot, env.exportPackB(), { targetAvatarId: 'imported', mode: 'update' })
+      assert.equal(result.filesRemoved.length, 0)
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', 'old.md')))
+      assert.ok(result.warnings.some(w => w.includes('包清单')))
+    } finally {
+      env.cleanup()
+    }
+  })
+
+  it('update：restoreMemory 默认不恢复包内记忆；显式 true 才覆盖', () => {
+    const env = setupInstalled()
+    try {
+      const r1 = importSoulPack(env.importRoot, env.exportPackB({ includeMemory: true }), { targetAvatarId: 'imported', mode: 'update' })
+      assert.equal(r1.memoryRestored, false)
+      assert.match(fs.readFileSync(path.join(env.installed, 'memory', 'MEMORY.md'), 'utf-8'), /本机记忆/)
+
+      const r2 = importSoulPack(env.importRoot, env.exportPackB({ includeMemory: true }), { targetAvatarId: 'imported', mode: 'update', restoreMemory: true })
+      assert.equal(r2.memoryRestored, true)
+      assert.match(fs.readFileSync(path.join(env.installed, 'memory', 'MEMORY.md'), 'utf-8'), /pref 1/)
+    } finally {
+      env.cleanup()
+    }
+  })
+
+  it('update：包内 memory/ / _index / _raw 路径被保护跳过（filesSkipped）', () => {
+    const env = setupInstalled()
+    try {
+      const packB = env.exportPackB()
+      // importSoulPack 不重验 per-file sha256（parse 阶段才验），可直接注入异常 entry
+      packB.files.push({ path: 'memory/MEMORY.md', content: '# 包内插入', sha256: 'x', size: 8 })
+      packB.files.push({ path: 'knowledge/_index/contexts.json', content: '{}', sha256: 'x', size: 2 })
+      packB.files.push({ path: 'knowledge/_raw/origin.md', content: '# 包内 raw 文本', sha256: 'x', size: 8 })
+      const result = importSoulPack(env.importRoot, packB, { targetAvatarId: 'imported', mode: 'update' })
+      assert.ok(result.filesSkipped.includes('memory/MEMORY.md'))
+      assert.ok(result.filesSkipped.includes('knowledge/_index/contexts.json'))
+      assert.ok(result.filesSkipped.includes('knowledge/_raw/origin.md'))
+      assert.match(fs.readFileSync(path.join(env.installed, 'memory', 'MEMORY.md'), 'utf-8'), /本机记忆/)
+      assert.equal(fs.existsSync(path.join(env.installed, 'knowledge', '_index', 'contexts.json')), false)
+      assert.equal(fs.existsSync(path.join(env.installed, 'knowledge', '_raw', 'origin.md')), false)
+      // 本机已有的 _raw 正本不受影响
+      assert.ok(fs.existsSync(path.join(env.installed, 'knowledge', '_raw', 'origin.xlsx')))
+    } finally {
+      env.cleanup()
+    }
+  })
+
+  it('update：目标不存在时退化为全新导入，不报错也无清单警告', () => {
+    const env = setupInstalled()
+    try {
+      const result = importSoulPack(env.importRoot, env.exportPackB(), { targetAvatarId: 'fresh-target', mode: 'update' })
+      assert.equal(result.avatarId, 'fresh-target')
+      assert.ok(fs.existsSync(path.join(env.importRoot, 'fresh-target', 'soul.md')))
+      assert.equal(result.warnings.some(w => w.includes('包清单')), false)
+    } finally {
+      env.cleanup()
     }
   })
 })

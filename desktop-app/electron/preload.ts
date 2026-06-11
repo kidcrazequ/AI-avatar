@@ -280,7 +280,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 完全不持有文件系统句柄。import 需要先 preview 拿一次性 token 才能用。
   soulPackExportToFile: (avatarId: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }) =>
     ipcRenderer.invoke('soul-pack:export-to-file', avatarId, options),
-  soulPackImportFromFile: (token: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean }) =>
+  soulPackImportFromFile: (token: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean; mode?: 'replace' | 'update' }) =>
     ipcRenderer.invoke('soul-pack:import-from-file', token, options),
   soulPackPreview: () =>
     ipcRenderer.invoke('soul-pack:preview'),

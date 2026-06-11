@@ -778,10 +778,17 @@ interface ElectronAPI {
       targetAvatarId?: string
       force?: boolean
       restoreMemory?: boolean
+      /** replace（默认）= 清空目录重写；update = 覆盖更新，保留记忆/本地配置/_raw/本地新增文件 */
+      mode?: 'replace' | 'update'
     },
   ) => Promise<{
     avatarId: string
+    mode: 'replace' | 'update'
     filesWritten: string[]
+    /** update 模式：按上次包清单清理掉的旧包文件 */
+    filesRemoved: string[]
+    /** update 模式：受保护跳过、未从包写入的路径 */
+    filesSkipped: string[]
     binaryRefsMissing: Array<{ path: string; sha256: string; size: number; mime?: string }>
     externalSkillsRequired: {
       shared: string[]
@@ -795,6 +802,10 @@ interface ElectronAPI {
       ok: true
       /** 一次性 path token，调 soulPackImportFromFile 时传回——同一 token 只能用一次 */
       token: string
+      /** 包默认 id（name）在本机是否已存在——存在时渲染层应提供「覆盖更新/完全重置」选择 */
+      targetExists: boolean
+      /** 本机已装同名包的版本（来自上次导入写入的包清单；无清单时 undefined） */
+      installedPackVersion?: string
       name: string
       display_name: string
       description: string

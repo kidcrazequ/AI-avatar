@@ -26,5 +26,5 @@ export type {
 export { exportSoulPack } from './export'
 export type { ExportSoulPackOptions } from './export'
 
-export { importSoulPack } from './import'
-export type { ImportSoulPackOptions, ImportSoulPackResult } from './import'
+export { importSoulPack, readInstalledPackState } from './import'
+export type { ImportSoulPackOptions, ImportSoulPackResult, SoulPackInstallState } from './import'

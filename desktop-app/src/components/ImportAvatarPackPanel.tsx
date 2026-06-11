@@ -1,11 +1,15 @@
 /**
  * @file ImportAvatarPackPanel.tsx — 导入/安装外部分身包（.soulpack.json）
  *
- * 复用已就绪的后端：soulPackPreview（弹原生文件框 → 摘要 + 一次性 token）→
- * soulPackImportFromFile（核验 token/指纹 → 落地到 avatars/）。后端零改动。
+ * 后端链路：soulPackPreview（弹原生文件框 → 摘要 + targetExists + 一次性 token）→
+ * soulPackImportFromFile（核验 token/指纹 → 落地到 avatars/）。
+ *
+ * 同名分身已存在时提供两种模式：
+ *   - 覆盖更新（mode='update'，默认）：更新人设/技能/知识库，保留本机记忆、配置与本地数据
+ *   - 完全重置（force=true）：清空整个分身目录后按包重写
  *
  * token 一次性消费且 5 分钟过期，导入失败也会消费 token，因此任何一次导入尝试后
- * 都需重新选择文件——失败时回到选择页并保留用户已设的选项（覆盖/恢复记忆/改名）。
+ * 都需重新选择文件——失败时回到选择页并保留用户已设的选项（模式/恢复记忆/改名）。
  */
 import { useState } from 'react'
 import Modal from './shared/Modal'
@@ -31,7 +35,11 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
   // 选项跨"重新选择"保留
   const [restoreMemory, setRestoreMemory] = useState(true)
   const [force, setForce] = useState(false)
+  const [mode, setMode] = useState<'replace' | 'update'>('update')
   const [targetAvatarId, setTargetAvatarId] = useState('')
+
+  // 同名分身已存在且未改名 → 走「覆盖更新 / 完全重置」二选一
+  const updating = !!preview?.targetExists && !targetAvatarId.trim()
 
   const handlePickFile = async () => {
     setError(null)
@@ -42,7 +50,13 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
         return // 取消：留在当前页
       }
       setPreview(res)
-      setRestoreMemory(res.memoryIncluded) // 含记忆时默认恢复
+      if (res.targetExists) {
+        setMode('update') // 已装同名分身：默认覆盖更新，保留本机记忆
+        setRestoreMemory(false)
+      } else {
+        setMode('replace')
+        setRestoreMemory(res.memoryIncluded) // 全新导入：含记忆时默认恢复
+      }
       setPhase('preview')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -56,18 +70,22 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
     setPhase('importing')
     setError(null)
     try {
+      const customId = targetAvatarId.trim()
       const res = await window.electronAPI.soulPackImportFromFile(preview.token, {
         restoreMemory,
-        force,
-        targetAvatarId: targetAvatarId.trim() || undefined,
+        targetAvatarId: customId || undefined,
+        // 更新场景：update 模式不传 force；选完全重置时 radio 即确认，直接 force
+        ...(updating
+          ? (mode === 'update' ? { mode: 'update' as const } : { force: true })
+          : { force }),
       })
       setResult(res)
       setPhase('done')
       await onImported(res.avatarId)
-      showToast?.(`已导入分身「${res.avatarId}」`, 'success')
+      showToast?.(res.mode === 'update' ? `已更新分身「${res.avatarId}」` : `已导入分身「${res.avatarId}」`, 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      // token 已被消费，必须重新选择文件；保留选项让用户勾上"覆盖"再来一次
+      // token 已被消费，必须重新选择文件；保留选项让用户调整后再来一次
       setError(msg)
       setPreview(null)
       setPhase('idle')
@@ -140,16 +158,45 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
 
             {/* 选项 */}
             <div className="mt-5 border-2 border-px-border bg-px-surface/70 p-5 space-y-4">
+              {updating ? (
+                <div className="space-y-3">
+                  <div className="font-game text-[12px] text-px-warning">
+                    本机已存在分身「{preview.name}」
+                    {preview.installedPackVersion ? `（已装包 v${preview.installedPackVersion} → 新包 v${preview.pack_version}）` : ''}
+                  </div>
+                  <label className="flex items-start gap-3 font-game text-[12px] text-px-text cursor-pointer">
+                    <input type="radio" name="import-mode" className="mt-0.5" checked={mode === 'update'}
+                      onChange={() => { setMode('update'); setRestoreMemory(false) }} />
+                    <span>
+                      覆盖更新（推荐）
+                      <span className="block text-[11px] text-px-text-dim mt-1 leading-relaxed">
+                        更新人设 / 技能 / 知识库；保留本机记忆、模型配置、原始资料（_raw）与你本地新增的文件
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 font-game text-[12px] text-px-text cursor-pointer">
+                    <input type="radio" name="import-mode" className="mt-0.5" checked={mode === 'replace'}
+                      onChange={() => { setMode('replace'); setRestoreMemory(preview.memoryIncluded) }} />
+                    <span>
+                      完全重置
+                      <span className="block text-[11px] text-px-danger/90 mt-1 leading-relaxed">
+                        清空整个分身目录后按包重写：本机记忆与导入后新增的数据会被删除，原始二进制资料无法从包恢复
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 font-game text-[12px] text-px-text cursor-pointer">
+                  <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+                  若同名分身已存在则覆盖
+                </label>
+              )}
               {preview.memoryIncluded && (
                 <label className="flex items-center gap-3 font-game text-[12px] text-px-text cursor-pointer">
                   <input type="checkbox" checked={restoreMemory} onChange={(e) => setRestoreMemory(e.target.checked)} />
-                  恢复对方分身的记忆
+                  {updating && mode === 'update' ? '用包内记忆覆盖本机记忆' : '恢复对方分身的记忆'}
                 </label>
               )}
-              <label className="flex items-center gap-3 font-game text-[12px] text-px-text cursor-pointer">
-                <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
-                若同名分身已存在则覆盖
-              </label>
               <div className="font-game text-[12px] text-px-text">
                 <div className="text-px-text-dim mb-2">自定义分身 ID（可选，留空用包内默认）</div>
                 <input
@@ -167,7 +214,7 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
                 重新选择
               </button>
               <button type="button" onClick={handleImport} className="pixel-btn-primary px-5 py-2 text-[11px]">
-                确认导入
+                {updating ? (mode === 'update' ? '覆盖更新' : '完全重置导入') : '确认导入'}
               </button>
             </div>
           </div>
@@ -181,10 +228,13 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
         {phase === 'done' && result && (
           <div className="max-w-2xl mx-auto">
             <div className="border-2 border-px-primary/60 bg-px-surface/95 p-5">
-              <div className="font-game text-[15px] text-px-text font-bold">导入成功</div>
+              <div className="font-game text-[15px] text-px-text font-bold">{result.mode === 'update' ? '更新成功' : '导入成功'}</div>
               <div className="font-game text-[12px] text-px-text-sec mt-2">
-                新分身：<span className="text-px-primary">{result.avatarId}</span> · 写入 {result.filesWritten.length} 个文件
-                {result.memoryRestored ? ' · 已恢复记忆' : ''}
+                {result.mode === 'update' ? '已更新分身' : '新分身'}：<span className="text-px-primary">{result.avatarId}</span> · 写入 {result.filesWritten.length} 个文件
+                {result.filesRemoved.length > 0 ? ` · 清理 ${result.filesRemoved.length} 个旧包文件` : ''}
+                {result.memoryRestored
+                  ? ' · 已恢复包内记忆'
+                  : result.mode === 'update' ? ' · 本机记忆与本地数据已保留' : ''}
               </div>
 
               {result.warnings.length > 0 && (

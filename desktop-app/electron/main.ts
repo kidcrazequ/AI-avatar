@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -59,7 +59,7 @@ import { SkillsShManager } from './skills-sh-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
 import { DoubaoAsrSession } from './asr-session'
-import { getPromptCacheStats } from './agent-runtime-bridge'
+import { getPromptCacheStats, clearBlueprintCache } from './agent-runtime-bridge'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -2738,8 +2738,13 @@ function sha256OfSoulPack(content: string): string {
 }
 
 function issueSoulPackPathToken(filePath: string, sha256: string): string {
+  // 顺手清扫已过期 entry：preview 后放弃导入的 token 不会被 consume，防 Map 无界增长
+  const now = Date.now()
+  for (const [k, v] of soulPackPathTokens) {
+    if (v.expiresAt < now) soulPackPathTokens.delete(k)
+  }
   const token = crypto.randomBytes(16).toString('hex')
-  soulPackPathTokens.set(token, { filePath, sha256, expiresAt: Date.now() + SOUL_PACK_TOKEN_TTL_MS })
+  soulPackPathTokens.set(token, { filePath, sha256, expiresAt: now + SOUL_PACK_TOKEN_TTL_MS })
   return token
 }
 
@@ -2802,14 +2807,28 @@ wrapHandler('soul-pack:preview', async () => {
     return { ok: false as const, canceled: true }
   }
   const inputFilePath = openResult.filePaths[0]
-  const json = fs.readFileSync(inputFilePath, 'utf-8')
+  const json = await fs.promises.readFile(inputFilePath, 'utf-8')
   const pack = parseSoulPack(json)
   // token 绑定 preview 当时的内容指纹：TTL 内文件被替换时 import 复核会失败，
   // 确保用户确认的摘要与实际导入内容一致（防 TOCTOU）。
   const token = issueSoulPackPathToken(inputFilePath, sha256OfSoulPack(json))
+  // 包默认 id（pack.name）在本机是否已存在 + 已装包版本，供渲染层提供「覆盖更新 / 完全重置」选择
+  let targetExists = false
+  let installedPackVersion: string | undefined
+  try {
+    const targetRoot = resolveUnderRoot(avatarsPath, pack.name)
+    targetExists = fs.existsSync(targetRoot)
+    if (targetExists) {
+      installedPackVersion = readInstalledPackState(avatarsPath, pack.name)?.pack_version
+    }
+  } catch {
+    // pack.name 非法（路径穿越等）时按不存在处理；import 阶段会正式校验并报错
+  }
   return {
     ok: true as const,
     token,
+    targetExists,
+    installedPackVersion,
     name: pack.name,
     display_name: pack.display_name,
     description: pack.description,
@@ -2827,18 +2846,33 @@ wrapHandler('soul-pack:preview', async () => {
   }
 })
 
-wrapHandler('soul-pack:import-from-file', (_, token: string, options?: ImportSoulPackOptions) => {
+wrapHandler('soul-pack:import-from-file', async (_, token: string, options?: ImportSoulPackOptions) => {
   const consumed = consumeSoulPackPathToken(token)
   if (!consumed) {
     throw new Error('soul-pack 路径 token 无效或已过期，请重新选择文件')
   }
-  const json = fs.readFileSync(consumed.filePath, 'utf-8')
+  // 包文件最大可达数百 MB：读文件走异步 I/O，避免在 IPC 关键路径上长时间锁事件循环
+  // （parse + 写入循环仍是同步的；超大包的彻底方案是下沉 worker，见 oom-diagnose 约束）
+  const json = await fs.promises.readFile(consumed.filePath, 'utf-8')
   // 复核内容指纹：preview 之后文件被替换（TTL 内 TOCTOU）则拒绝，避免确认内容与导入内容不一致。
   if (sha256OfSoulPack(json) !== consumed.sha256) {
     throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
   }
   const pack = parseSoulPack(json)
-  return importSoulPack(avatarsPath, pack, options ?? {})
+  const result = importSoulPack(avatarsPath, pack, options ?? {})
+  // 知识/人设已变化：失效该分身全部进程内缓存（与 delete-avatar 同一套），
+  // 否则已缓存的 KnowledgeRetriever 会继续用旧 BM25 索引直到重启
+  knowledgeManagers.delete(result.avatarId)
+  wikiCompilers.delete(result.avatarId)
+  toolRouter.invalidateRetriever(result.avatarId)
+  clearBlueprintCache(result.avatarId)
+  if (logger) {
+    logger.recordGenerated('avatar', result.avatarId, path.join(avatarsPath, result.avatarId), {
+      action: 'import-soul-pack',
+      mode: result.mode,
+    })
+  }
+  return result
 })
 
 // v18 OpenClaw 借鉴：Standing Orders 永久规则 CRUD（只读 + append，不提供 remove）

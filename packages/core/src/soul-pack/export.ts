@@ -174,7 +174,9 @@ function collectFiles(
       // 隐藏文件 / 系统文件跳过
       if (entry.name.startsWith('.')) continue
       if (entry.isDirectory()) {
-        if (shouldSkipDir(topSegment)) continue
+        // _index 是派生搜索索引，可能出现在任意层级（如 knowledge/_index），一律不入包；
+        // import 端按 hashes.json 增量重建
+        if (entry.name === '_index' || shouldSkipDir(topSegment)) continue
         walk(full)
         continue
       }

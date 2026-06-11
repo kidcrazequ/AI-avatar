@@ -2,7 +2,8 @@
  * soul-pack import：把 SoulPack 写到 avatars/<target-id>/。
  *
  * 安全设计：
- *   - **默认不覆盖**已存在 avatar；force=true 才覆盖
+ *   - **默认不覆盖**已存在 avatar；replace 模式 force=true 整目录重置，
+ *     update 模式覆盖更新（保留 memory/、life/、avatar.config.json、_index/_raw 与本地新增文件）
  *   - 目标 avatar id 走 assertSafeSegment 校验，防路径穿越
  *   - 每个 file 的 path 也走相对路径校验（不能含 `..` / 绝对路径）
  *   - binary_refs 不能恢复（无内容），报告给用户手动补
@@ -22,17 +23,34 @@ import type { SoulPack, SoulPackBinaryRef, SoulPackSkillsRef } from './manifest'
 export interface ImportSoulPackOptions {
   /** 目标 avatar id；默认用 pack.name */
   targetAvatarId?: string
-  /** 已存在时是否覆盖；默认 false */
+  /** replace 模式下已存在时是否覆盖；默认 false */
   force?: boolean
-  /** 是否还原 memory（从 pack.memory 写到 memory/）；默认 true（如果 pack 包含） */
+  /**
+   * 是否还原 memory（从 pack.memory 写到 memory/）。
+   * replace 模式默认 true（如果 pack 包含）；update 模式默认 false（保留本机记忆，显式 true 才覆盖）。
+   */
   restoreMemory?: boolean
+  /**
+   * 导入模式：
+   *   - replace（默认）：目标已存在时需 force=true，先清空整个目录再写——重置为包快照
+   *   - update：覆盖更新。不删目录，写入包内文件并按上次导入的包清单清理「新版包已移除」
+   *     的旧包文件；保留本机运行期数据（memory/、life/、avatar.config.json、_index/_raw、
+   *     用户本地新增的文件）
+   */
+  mode?: 'replace' | 'update'
 }
 
 export interface ImportSoulPackResult {
   /** 目标 avatar id（resolveTargetId 后） */
   avatarId: string
+  /** 实际执行的导入模式 */
+  mode: 'replace' | 'update'
   /** 写入的文件路径列表（相对 avatar 根，POSIX 风格） */
   filesWritten: string[]
+  /** update 模式：按上次包清单清理掉的文件（新版包已不包含） */
+  filesRemoved: string[]
+  /** update 模式：受保护跳过、未从包写入的路径 */
+  filesSkipped: string[]
   /** 二进制 ref：pack 里没有内容，导入端需手动补 */
   binaryRefsMissing: SoulPackBinaryRef[]
   /** 需要 import 端环境提供的外部 skills */
@@ -64,37 +82,94 @@ export function importSoulPack(
   // 原分身、再在写入循环报错 → 原分身数据丢失。必须先校验、再删除、再写入。
   preflightImport(pack)
 
+  const mode = options.mode ?? 'replace'
   const targetRoot = path.join(avatarsPath, targetId)
   const exists = fs.existsSync(targetRoot)
-  if (exists && !options.force) {
-    throw new Error(`目标分身已存在: ${targetId}。传 force=true 覆盖（会清空原目录后再写）。`)
-  }
-  if (exists && options.force) {
-    // 覆盖前清理（递归删除）。这是破坏性操作；调用方应已确认 force，且 preflight 已通过。
-    fs.rmSync(targetRoot, { recursive: true, force: true })
+  if (mode === 'replace') {
+    if (exists && !options.force) {
+      throw new Error(
+        `目标分身已存在: ${targetId}。传 force=true 覆盖（会清空原目录后再写），` +
+        `或用 mode='update' 覆盖更新（保留记忆与本地数据）。`,
+      )
+    }
+    if (exists && options.force) {
+      // 覆盖前清理（递归删除）。这是破坏性操作；调用方应已确认 force，且 preflight 已通过。
+      fs.rmSync(targetRoot, { recursive: true, force: true })
+    }
   }
   fs.mkdirSync(targetRoot, { recursive: true })
 
   const warnings: string[] = []
   const filesWritten: string[] = []
+  const filesSkipped: string[] = []
+
+  // update 模式：写入前先读上次导入的包清单，用于稍后清理新版包已移除的旧包文件
+  const previousState = mode === 'update' ? readPackState(targetRoot) : null
+  if (mode === 'update' && exists && !previousState) {
+    warnings.push(
+      '未找到上次导入的包清单（.soul-pack-state.json），无法识别旧版包文件，' +
+      '新版包已移除的文件可能残留。',
+    )
+  }
 
   // 写 inline 文本文件
   for (const f of pack.files) {
     if (!isSafeRelativePath(f.path)) {
       throw new Error(`非法 file path（可能路径穿越）: ${f.path}`)
     }
+    if (mode === 'update' && isProtectedOnUpdate(f.path, targetRoot)) {
+      filesSkipped.push(f.path)
+      continue
+    }
     const fullPath = path.join(targetRoot, f.path)
     fs.mkdirSync(path.dirname(fullPath), { recursive: true })
     fs.writeFileSync(fullPath, f.content, 'utf-8')
     filesWritten.push(f.path)
   }
+  if (filesSkipped.length > 0) {
+    warnings.push(
+      `update 模式跳过 ${filesSkipped.length} 个受保护路径（memory/、life/、avatar.config.json、_index、_raw），本机数据保持不变。`,
+    )
+  }
 
-  // memory 还原（如果 pack 包含 + 选项允许）
+  // update 模式：按上次包清单清理「新版包已不包含」的旧包文件。
+  // 只删上次确认由包写入的路径——用户本地新增的文件不在清单里，永远不会被碰。
+  const filesRemoved: string[] = []
+  if (mode === 'update' && previousState) {
+    const newPaths = new Set(pack.files.map((f) => f.path))
+    for (const oldPath of previousState.files) {
+      if (newPaths.has(oldPath)) continue
+      // 清单可能被手工篡改：删除前重新做路径校验 + 保护路径校验
+      if (!isSafeRelativePath(oldPath)) continue
+      if (isProtectedOnUpdate(oldPath, targetRoot)) continue
+      const full = path.join(targetRoot, oldPath)
+      try {
+        if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+          fs.rmSync(full)
+          filesRemoved.push(oldPath)
+        }
+      } catch {
+        warnings.push(`清理旧包文件失败: ${oldPath}`)
+      }
+    }
+    if (filesRemoved.length > 0) {
+      warnings.push(`已清理 ${filesRemoved.length} 个新版包中不再包含的旧包文件。`)
+    }
+  }
+
+  // memory 还原：update 模式默认保留本机记忆（显式 restoreMemory=true 才用包内快照覆盖）；
+  // replace 模式维持原行为（pack 包含时默认恢复）
   let memoryRestored = false
-  if (pack.memory_included && pack.memory && options.restoreMemory !== false) {
+  const wantRestoreMemory =
+    mode === 'update' ? options.restoreMemory === true : options.restoreMemory !== false
+  if (pack.memory_included && pack.memory && wantRestoreMemory) {
     memoryRestored = restoreMemory(targetRoot, pack.memory, filesWritten, warnings)
-  } else if (pack.memory_included && options.restoreMemory === false) {
-    warnings.push('pack 包含 memory 但 restoreMemory=false，已跳过')
+  } else if (pack.memory_included && !wantRestoreMemory) {
+    warnings.push(
+      mode === 'update'
+        ? 'pack 包含 memory，update 模式默认保留本机记忆，未恢复包内记忆'
+        : 'pack 包含 memory 但 restoreMemory=false，已跳过',
+    )
   }
 
   // 二进制 ref 提示
@@ -117,14 +192,82 @@ export function importSoulPack(
     )
   }
 
+  // 记录本次包清单（两种模式都写），供下次 update 识别包文件 / 比较版本
+  writePackState(targetRoot, pack)
+
   return {
     avatarId: targetId,
+    mode,
     filesWritten,
+    filesRemoved,
+    filesSkipped,
     binaryRefsMissing: pack.binary_refs,
     externalSkillsRequired: pack.external_skills,
     memoryRestored,
     warnings,
   }
+}
+
+/** 上次导入的包清单文件（点前缀：export 扫描跳过隐藏文件，不会回流进新包） */
+const PACK_STATE_FILE = '.soul-pack-state.json'
+
+/** 已安装分身的包清单（每次 import 成功后写入 avatar 根目录） */
+export interface SoulPackInstallState {
+  pack_name: string
+  pack_version: string
+  manifest_sha256?: string
+  /** 上次导入时包内 inline 文件的相对路径列表 */
+  files: string[]
+}
+
+/** 读取已安装分身的包清单；不存在 / 损坏返回 null。 */
+export function readInstalledPackState(avatarsPath: string, avatarId: string): SoulPackInstallState | null {
+  assertSafeSegment(avatarId, 'avatarId')
+  return readPackState(path.join(avatarsPath, avatarId))
+}
+
+function readPackState(targetRoot: string): SoulPackInstallState | null {
+  const p = path.join(targetRoot, PACK_STATE_FILE)
+  if (!fs.existsSync(p)) return null
+  try {
+    const raw = JSON.parse(fs.readFileSync(p, 'utf-8')) as Partial<SoulPackInstallState>
+    if (!Array.isArray(raw.files)) return null
+    return {
+      pack_name: typeof raw.pack_name === 'string' ? raw.pack_name : '',
+      pack_version: typeof raw.pack_version === 'string' ? raw.pack_version : '',
+      manifest_sha256: typeof raw.manifest_sha256 === 'string' ? raw.manifest_sha256 : undefined,
+      files: raw.files.filter((x): x is string => typeof x === 'string'),
+    }
+  } catch {
+    return null
+  }
+}
+
+function writePackState(targetRoot: string, pack: SoulPack): void {
+  const state: SoulPackInstallState = {
+    pack_name: pack.name,
+    pack_version: pack.pack_version,
+    manifest_sha256: pack.manifest_sha256,
+    files: pack.files.map((f) => f.path),
+  }
+  fs.writeFileSync(path.join(targetRoot, PACK_STATE_FILE), JSON.stringify(state, null, 2), 'utf-8')
+}
+
+/**
+ * update 模式下不被包覆盖、也不参与旧文件清理的路径：
+ *   - memory/、life/：本机运行期数据（记忆、想象人生），包内容不得静默覆盖
+ *   - avatar.config.json：本机 LLM 配置 / 显示名（仅本机已存在时保护，否则照常写入）
+ *   - 任意层级 _index：派生搜索索引，由本机按 hashes 增量重建
+ *   - 任意层级 _raw：原始资料正本（二进制不入包，包内偶发的 _raw 文本也不得覆盖本机正本）
+ */
+function isProtectedOnUpdate(relPosix: string, targetRoot: string): boolean {
+  const segs = relPosix.split('/')
+  if (segs[0] === 'memory' || segs[0] === 'life') return true
+  if (segs.includes('_index') || segs.includes('_raw')) return true
+  if (relPosix === 'avatar.config.json') {
+    return fs.existsSync(path.join(targetRoot, 'avatar.config.json'))
+  }
+  return false
 }
 
 /** import 上限：防资源炸弹（force 删除前就拦下，不污染原分身）。 */

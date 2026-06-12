@@ -40,6 +40,8 @@ export function shouldHideKnowledgeFormatButton(meta: Record<string, unknown>): 
   const source = typeof meta.source === 'string' ? meta.source.toLowerCase() : ''
   // 已 LLM 格式化（FORMAT 成功后标 source: enhanced）→ 再 FORMAT 冗余，隐藏。
   if (source === 'enhanced') return true
+  // 精读产物是蒸馏笔记：FORMAT 会从 _raw/ 整本原书重新排版并覆盖笔记，必须隐藏。
+  if (meta.source_type === 'deep-read') return true
   if (source === 'excel' || source === 'pptx') return true
   if (typeof meta.excel_json === 'string') return true
 

@@ -10,7 +10,7 @@ interface Props {
 /** 大文件阈值：超过此字符数 Monaco 性能堪忧，禁止编辑 */
 const EDITOR_MAX_CHARS = 100_000
 
-/** 检测是否是自动生成的 rag_only .md（Excel/PPTX/其他大文件）。返回 source 名或 null。 */
+/** 检测是否是自动生成的 .md（Excel/PPTX/精读笔记等）。返回 source 名或 null。 */
 function detectAutoSource(content: string): string | null {
   if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) return null
   const endMatch = content.match(/\n---\r?\n/)
@@ -18,6 +18,9 @@ function detectAutoSource(content: string): string | null {
   const fmText = content.slice(4, endMatch.index)
   const srcMatch = fmText.match(/^\s*source\s*:\s*(\S+)\s*$/m)
   if (srcMatch) return srcMatch[1]
+  // 精读产物（source_type: deep-read）：手工编辑会被续跑静默覆盖，按自动生成文件只读处理
+  const srcTypeMatch = fmText.match(/^\s*source_type\s*:\s*(\S+)\s*$/m)
+  if (srcTypeMatch) return srcTypeMatch[1]
   if (/^\s*(?:prompt_excluded|rag_only)\s*:\s*true\s*$/m.test(fmText)) return 'other'
   return null
 }

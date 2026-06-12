@@ -47,8 +47,22 @@ export * from './utils/markdown-parser'
 
 export { cleanOcrHtml, cleanPdfFullText, cleanLlmOutput, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText } from './utils/ocr-html-cleaner'
 
-export { splitIntoChapters, formatChapter, formatDocument, FORMAT_SYSTEM_PROMPT } from './document-formatter'
+export { splitIntoChapters, detectChapterHeadings, formatChapter, formatDocument, FORMAT_SYSTEM_PROMPT } from './document-formatter'
 export type { Chapter, FormatProgress, LLMCallFn } from './document-formatter'
+
+export { splitBookIntoChapters, estimateDeepRead, runDeepRead, sanitizeFileSegment, chapterFileName, DEEP_READ_SYSTEM_PROMPT, DEEP_READ_SYNTHESIS_FILES } from './deep-reader'
+export type {
+  BookChapter,
+  DeepReadDepth,
+  DeepReadContentType,
+  DeepReadStage,
+  DeepReadProgress,
+  DeepReadProduct,
+  DeepReadProductKind,
+  DeepReadOptions,
+  DeepReadRunResult,
+  DeepReadEstimate,
+} from './deep-reader'
 
 export { buildKnowledgeIndex, saveIndex, loadIndex, CONTEXT_PROMPT } from './knowledge-indexer'
 export type { EmbeddingCallFn, IndexerConfig, IndexBuildProgress } from './knowledge-indexer'

@@ -402,6 +402,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('life:advance-now', avatarId),
   },
 
+  // ─── 知识库精读（deep-read）──────────────────────────────────────────────
+  // namespace 风格同 life；长任务 fire-and-forget + 进度订阅 + 拉式状态
+  deepRead: {
+    prepare: (avatarId: string, filePath: string) =>
+      ipcRenderer.invoke('deep-read:prepare', avatarId, filePath),
+    start: (avatarId: string, params: DeepReadStartParams) =>
+      ipcRenderer.invoke('deep-read:start', avatarId, params),
+    cancel: (avatarId: string) => ipcRenderer.invoke('deep-read:cancel', avatarId),
+    getStatus: (avatarId: string) => ipcRenderer.invoke('deep-read:get-status', avatarId),
+    /**
+     * 订阅精读进度推送。
+     * @returns unsubscribe 函数；调用即移除监听器
+     */
+    onProgress: (callback: (payload: DeepReadProgressPayload) => void) => {
+      const listener = (_: unknown, payload: DeepReadProgressPayload) => callback(payload)
+      ipcRenderer.on('deep-read:progress', listener)
+      return () => ipcRenderer.removeListener('deep-read:progress', listener)
+    },
+  },
+
   // 人格管理
   readSoul: (avatarId: string) => ipcRenderer.invoke('read-soul', avatarId),
   writeSoul: (avatarId: string, content: string) => ipcRenderer.invoke('write-soul', avatarId, content),

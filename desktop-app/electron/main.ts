@@ -42,6 +42,7 @@ import { Logger, redactSensitiveArgs } from './logger'
 import { ToolResultSpool, readSpoolLineRange, DEFAULT_SPOOL_MAX_BODY_BYTES, DEFAULT_SPOOL_HARD_LINE_CAP } from './tool-result-spool'
 import { AttachmentStore, MAX_ATTACHMENT_FILE_BYTES } from './attachment-store'
 import { createEmbeddingFn, createLLMFn } from './llm-factory'
+import { DeepReadManager, type DeepReadStartParams } from './deep-read-manager'
 import { SKILL_GEN_SYSTEM_PROMPT, buildSkillGenUserPrompt } from './skill-generator-prompt'
 import { WorkspaceManager } from './workspace/WorkspaceManager'
 import { PreviewManager } from './preview/PreviewManager'
@@ -456,7 +457,7 @@ function wrapHandler(
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
   ipcMain.handle(channel, async (event, ...args) => {
-    const isHighFreq = ['save-message', 'get-messages', 'get-recent-messages', 'get-conversations', 'get-knowledge-tree'].includes(channel)
+    const isHighFreq = ['save-message', 'get-messages', 'get-recent-messages', 'get-conversations', 'get-knowledge-tree', 'deep-read:get-status'].includes(channel)
     if (!isHighFreq && logger) {
       logger.activity(channel, formatIpcPreview(channel, args))
     }
@@ -5671,6 +5672,60 @@ wrapHandler('import-archive', async (_, avatarId: string, archivePath: string): 
     // walkFolder 解压嵌套归档时在 os.tmpdir() 下创建独立临时目录，需单独清理
     for (const td of nestedTempDirs) await cleanupTempDir(td)
   }
+})
+
+// ─── 知识库精读（deep-read）──────────────────────────────────────────────────
+//
+// 长任务编排同 life:start-generation（fire-and-forget + AbortController +
+// 进度推送 'deep-read:progress' + 拉式 'deep-read:get-status'）。
+// 实现在 electron/deep-read-manager.ts；这里只做依赖注入和 IPC 注册。
+
+let deepReadManager: DeepReadManager | null = null
+const getDeepReadManager = (): DeepReadManager => {
+  if (!deepReadManager) {
+    deepReadManager = new DeepReadManager({
+      documentParser,
+      avatarsPath,
+      resolveUserFile: assertUserOwnedFile,
+      getSetting: (key) => getDb().getSetting(key),
+      createLLMFn,
+      writeKnowledgeFile: (avatarId, relativePath, content) =>
+        getKnowledgeManager(avatarId).writeFile(relativePath, content),
+      preserveRawFile: (knowledgePath, originalFilePath) =>
+        WikiCompiler.preserveRawFile(knowledgePath, originalFilePath),
+      buildIndexAfterImport: (avatarId) => buildIndexAfterBatchImport(avatarId),
+      sendToRenderer: (channel, payload) => {
+        mainWindow?.webContents.send(channel, payload)
+      },
+      logActivity: (action, detail) => {
+        if (logger) logger.activity(action, detail)
+      },
+      logError: (action, err) => {
+        if (logger) logger.error(action, err)
+      },
+    })
+  }
+  return deepReadManager
+}
+
+wrapHandler('deep-read:prepare', async (_, avatarId: string, filePath: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDeepReadManager().prepare(avatarId, filePath)
+})
+
+wrapHandler('deep-read:start', async (_, avatarId: string, params: DeepReadStartParams) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDeepReadManager().start(avatarId, params)
+})
+
+wrapHandler('deep-read:cancel', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDeepReadManager().cancel(avatarId)
+})
+
+wrapHandler('deep-read:get-status', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return getDeepReadManager().getStatus(avatarId)
 })
 
 /**

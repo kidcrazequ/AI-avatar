@@ -982,6 +982,27 @@ interface ElectronAPI {
     advanceNow: (avatarId: string) => Promise<LifeAdvanceNowResult>
   }
 
+  /**
+   * 知识库精读（deep-read）：整本书/长文档逐章 LLM 蒸馏成结构化知识四件套
+   * （索引 + 逐章笔记 + 术语表 + 模式与决策 + 速查表），产物写入 knowledge/精读/<书名>/。
+   * 长任务编排同 life：fire-and-forget + 进度订阅 + 拉式状态。
+   */
+  deepRead: {
+    /** 解析文档 + 切章 + 成本预估（大 PDF 可能分钟级）；结果暂存主进程等 start 消费 */
+    prepare: (avatarId: string, filePath: string) => Promise<DeepReadPrepareResult>
+    /**
+     * 启动后台精读；IPC 立即返回，进度走 onProgress。
+     * @throws 当分身已有精读在进行、未 prepare、或 LLM API Key 未配置
+     */
+    start: (avatarId: string, params: DeepReadStartParams) => Promise<{ started: true }>
+    /** 取消在飞任务；已落盘章节保留，重新 prepare + start 即按文件存在性续跑 */
+    cancel: (avatarId: string) => Promise<{ cancelled: boolean }>
+    /** 拉式状态（窗口重载后恢复进度 UI；含终态 error / result 摘要） */
+    getStatus: (avatarId: string) => Promise<DeepReadStatus>
+    /** 订阅 'deep-read:progress' 事件；返回 unsubscribe */
+    onProgress: (callback: (payload: DeepReadProgressPayload) => void) => () => void
+  }
+
   // 人格管理
   readSoul: (avatarId: string) => Promise<string>
   writeSoul: (avatarId: string, content: string) => Promise<void>
@@ -1887,6 +1908,70 @@ interface LifeAdvanceNowResult {
   newEpisodes: number
   failedEpisodes: number
   reconsolidated: boolean
+}
+
+// ─── 知识库精读（deep-read）────────────────────────────────────────────────
+// 与 @soul/core deep-reader.ts / electron/deep-read-manager.ts 保持一致的镜像声明
+// （渲染端不能 import electron/，见文件头注释）。
+
+/** 学习深度：study=精读（含实例演算），reference=速查（只留决策要点） */
+type DeepReadDepth = 'study' | 'reference'
+/** 内容类型：technical=含代码/表格/公式，text=纯文字 */
+type DeepReadContentType = 'technical' | 'text'
+
+/** 一次精读的 LLM 开销粗估（不换算货币，模型单价取决于用户配置） */
+interface DeepReadEstimate {
+  llmCalls: number
+  inputTokens: number
+  outputTokens: number
+  estMinutes: number
+}
+
+/** 'deep-read:progress' 推送的进度（chapters=逐章蒸馏，synthesis=综合四件套） */
+interface DeepReadProgress {
+  stage: 'chapters' | 'synthesis' | 'done'
+  current: number
+  total: number
+  label: string
+}
+
+/** deep-read:prepare 返回：解析 + 切章 + 预估结果 */
+interface DeepReadPrepareResult {
+  bookTitle: string
+  fileName: string
+  fileType: string
+  totalChars: number
+  chapterCount: number
+  chapters: Array<{ title: string; chars: number; pageStart?: number; pageEnd?: number }>
+  /** 已存在的章节笔记数（>0 表示可断点续跑） */
+  existingCount: number
+  /** 产物目录（相对 knowledge/），完成后跳转 `${outputDir}/00-索引.md` */
+  outputDir: string
+  estimates: Record<DeepReadDepth, Record<DeepReadContentType, DeepReadEstimate>>
+}
+
+interface DeepReadStartParams {
+  depth: DeepReadDepth
+  contentType: DeepReadContentType
+}
+
+/** deep-read:get-status 返回（窗口重载后恢复 UI 的拉式通道） */
+interface DeepReadStatus {
+  running: boolean
+  progress: DeepReadProgress | null
+  error: string | null
+  result: {
+    products: number
+    failedChapters: string[]
+    skippedChapters: number
+    totalChapters: number
+  } | null
+}
+
+/** 'deep-read:progress' IPC 事件 payload */
+interface DeepReadProgressPayload {
+  avatarId: string
+  progress: DeepReadProgress
 }
 
 interface Window {

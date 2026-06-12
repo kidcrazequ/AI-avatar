@@ -93,7 +93,7 @@ const MIN_CHAPTER_CHARS = 500
  *
  * 若某章节文本超过 MAX_CHAPTER_CHARS，按段落二次切分。
  */
-export function splitIntoChapters(text: string): Chapter[] {
+export function detectChapterHeadings(lines: string[]): Array<{ lineIndex: number; title: string }> {
   // 数字编号标题要求：
   //   - 每级 1-2 位数字（排除 `220 94,5` 这类表格数据）
   //   - 数字后跟 tab/空格 + CJK 字符开头的标题（排除纯数字/ASCII 行）
@@ -108,7 +108,6 @@ export function splitIntoChapters(text: string): Chapter[] {
   // 典型：「系统运行模式」「离网模式」「电池充放电模式（并网电流源模式）」这类无编号短标题。
   const cjkHeadingPattern = /^[\u4E00-\u9FFF][\u4E00-\u9FFFA-Za-z0-9（）()·\-/]{1,29}$/
 
-  const lines = text.split('\n')
   const chapterBreaks: Array<{ lineIndex: number; title: string }> = []
 
   const isIsolated = (idx: number): boolean => {
@@ -140,6 +139,13 @@ export function splitIntoChapters(text: string): Chapter[] {
       chapterBreaks.push({ lineIndex: i, title: line })
     }
   }
+
+  return chapterBreaks
+}
+
+export function splitIntoChapters(text: string): Chapter[] {
+  const lines = text.split('\n')
+  const chapterBreaks = detectChapterHeadings(lines)
 
   const rawChapters: Chapter[] = []
 

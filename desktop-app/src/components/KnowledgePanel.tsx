@@ -57,6 +57,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   /** 异步任务开始时间，用于显示已用时间 */
   const [taskStartTime, setTaskStartTime] = useState<number | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  /** 精读：prepare 阶段（解析/切章） */
+  const [isPreparingDeepRead, setIsPreparingDeepRead] = useState(false)
+  /** 精读：后台蒸馏任务运行中（主进程编排，关面板不中断） */
+  const [isDeepReading, setIsDeepReading] = useState(false)
+  /** 精读：prepare 结果（非 null 时显示内联确认区） */
+  const [deepReadPrepare, setDeepReadPrepare] = useState<DeepReadPrepareResult | null>(null)
+  const [deepReadDepth, setDeepReadDepth] = useState<DeepReadDepth>('study')
+  const [deepReadType, setDeepReadType] = useState<DeepReadContentType>('text')
+  /** 精读产物目录，完成后跳转 00-索引.md 用 */
+  const deepReadOutputDirRef = useRef<string | null>(null)
   const newFileInputRef = useRef<HTMLInputElement>(null)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const fileSelectSeqRef = useRef(0)
@@ -93,7 +103,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
   }, [])
 
 
-  const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting || isFormatting
+  const isBusy = isImporting || isBatchImporting || isDetectingEvolution || isCompiling || isLinting || isFormatting || isPreparingDeepRead || isDeepReading
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 切换 busy 状态时同步管理 taskStartTime，是合法的派生联动（startTime 不可由 isBusy + 当前时间直接推出）
     if (isBusy && !taskStartTime) setTaskStartTime(Date.now())
@@ -148,6 +158,72 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     })
     return () => unsub()
   }, [loadTree])
+
+  // 订阅精读进度推送（主进程逐章蒸馏；复用导入进度条 UI）
+  useEffect(() => {
+    const unsub = window.electronAPI.deepRead.onProgress(({ avatarId: id, progress }) => {
+      if (!mountedRef.current || id !== avatarId) return
+      setImportProgress({ current: progress.current, total: progress.total, phase: progress.label })
+      showStatus(`精读 ${progress.current}/${progress.total} · ${progress.label}`, false)
+    })
+    return () => unsub()
+  }, [avatarId])
+
+  // 打开面板时检查精读状态：进行中 → 恢复进度 UI；面板关闭期间进入的失败终态 → 补一次提示
+  useEffect(() => {
+    let stale = false
+    window.electronAPI.deepRead.getStatus(avatarId).then((status) => {
+      if (stale || !mountedRef.current) return
+      if (status.running) {
+        setIsDeepReading(true)
+        if (status.progress) {
+          setImportProgress({ current: status.progress.current, total: status.progress.total, phase: status.progress.label })
+        }
+        showStatus('精读任务进行中...', false)
+        return
+      }
+      if (status.error) {
+        showStatus(`✗ 上次精读未完成：${status.error}`, 10000)
+      } else if (status.result && status.result.failedChapters.length > 0) {
+        showStatus(`⚠ 上次精读有 ${status.result.failedChapters.length} 章失败，重新选择同一文件可续跑补全`, 10000)
+      }
+    }).catch(() => { /* 状态查询失败忽略，不阻塞面板 */ })
+    return () => { stale = true }
+  }, [avatarId])
+
+  // 精读运行中轮询终态（done / error / cancel 统一从拉式 getStatus 收口，事件丢失也不卡 UI）
+  useEffect(() => {
+    if (!isDeepReading) return
+    const timer = setInterval(async () => {
+      try {
+        const status = await window.electronAPI.deepRead.getStatus(avatarId)
+        if (!mountedRef.current || status.running) return
+        setIsDeepReading(false)
+        setImportProgress(null)
+        if (status.error) {
+          showStatus(`✗ 精读未完成：${status.error}`, 12000)
+          return
+        }
+        if (status.result) {
+          const r = status.result
+          showStatus(
+            r.failedChapters.length > 0
+              ? `✓ 精读完成：${r.products} 个产物（${r.failedChapters.length} 章失败：${r.failedChapters.slice(0, 3).join('、')}${r.failedChapters.length > 3 ? '…' : ''}，重新选择同一文件可续跑补全）`
+              : `✓ 精读完成：${r.products} 个产物${r.skippedChapters > 0 ? `（续跑跳过 ${r.skippedChapters} 章）` : ''}`,
+            12000,
+          )
+          await loadTree()
+          if (deepReadOutputDirRef.current) {
+            void handleSelectFile(`${deepReadOutputDirRef.current}/00-索引.md`)
+          }
+          await onSaved?.()
+        }
+      } catch { /* 轮询失败忽略，下个 tick 重试 */ }
+    }, 2000)
+    return () => clearInterval(timer)
+    // showStatus / handleSelectFile / onSaved 在文件下方定义且每渲染重建，不进 deps（同文件既有惯例）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDeepReading, avatarId, loadTree])
 
   useEffect(() => {
     if (showNewFileDialog) {
@@ -789,6 +865,58 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
     }
   }
 
+  /**
+   * 精读导入第一步：选文件 → 主进程解析 + 切章 + 成本预估 → 显示内联确认区。
+   * 蒸馏不在这里发生；用户在确认区选深度/类型后点「开始精读」才启动。
+   */
+  const handleDeepReadSelect = async () => {
+    try {
+      const result = await window.electronAPI.showOpenDialog({
+        title: '选择要精读的书籍 / 长文档',
+        filters: [{ name: '文档', extensions: ['pdf', 'docx', 'doc', 'txt', 'md', 'html', 'htm'] }],
+        properties: ['openFile'],
+      })
+      if (result.canceled || result.filePaths.length === 0) return
+
+      setIsPreparingDeepRead(true)
+      showStatus('解析文档结构中（大文件可能需要几分钟）...', false)
+      const prepared = await window.electronAPI.deepRead.prepare(avatarId, result.filePaths[0])
+      if (!mountedRef.current) return
+      setDeepReadPrepare(prepared)
+      showStatus(`✓ 解析完成：《${prepared.bookTitle}》共 ${prepared.chapterCount} 章，请确认后开始`, 8000)
+    } catch (err) {
+      console.error('精读准备失败:', err)
+      showStatus('✗ 精读准备失败: ' + (err instanceof Error ? err.message : String(err)), 10000)
+    } finally {
+      setIsPreparingDeepRead(false)
+    }
+  }
+
+  /** 精读导入第二步：启动主进程后台蒸馏（fire-and-forget，进度走事件 + 轮询） */
+  const handleDeepReadStart = async () => {
+    if (!deepReadPrepare) return
+    try {
+      await window.electronAPI.deepRead.start(avatarId, { depth: deepReadDepth, contentType: deepReadType })
+      deepReadOutputDirRef.current = deepReadPrepare.outputDir
+      setDeepReadPrepare(null)
+      setIsDeepReading(true)
+      showStatus('精读已启动，逐章蒸馏中...', false)
+    } catch (err) {
+      console.error('启动精读失败:', err)
+      showStatus('✗ 启动精读失败: ' + (err instanceof Error ? err.message : String(err)), 10000)
+    }
+  }
+
+  /** 取消精读：已落盘章节保留，重新选同一文件即按文件存在性续跑 */
+  const handleDeepReadCancel = async () => {
+    try {
+      await window.electronAPI.deepRead.cancel(avatarId)
+      // 终态由轮询 effect 统一收口（显示「已取消」并复位 UI）
+    } catch (err) {
+      console.error('取消精读失败:', err)
+    }
+  }
+
   const handleGenerateTests = async () => {
     const testModel = creationModel?.apiKey ? creationModel : chatModel
     if (!selectedPath || !fileContent || !testModel?.apiKey) {
@@ -887,7 +1015,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           <div className="flex items-center gap-2">
             <button
               onClick={handleImportDocument}
-              disabled={isImporting || isBatchImporting}
+              disabled={isImporting || isBatchImporting || isDeepReading}
               className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="导入文档（单文件，支持 LLM 格式化）"
               title="单文件导入，PDF/Word 会经 LLM 重新格式化"
@@ -896,7 +1024,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
             </button>
             <button
               onClick={handleImportFolder}
-              disabled={isImporting || isBatchImporting}
+              disabled={isImporting || isBatchImporting || isDeepReading}
               className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="批量导入文件夹"
               title="批量导入整个文件夹（跳过 LLM 格式化以保证速度）"
@@ -905,7 +1033,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
             </button>
             <button
               onClick={handleImportArchive}
-              disabled={isImporting || isBatchImporting}
+              disabled={isImporting || isBatchImporting || isDeepReading}
               className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="导入压缩包"
               title="支持 zip / tar.gz / 7z / rar"
@@ -914,12 +1042,21 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
             </button>
             <button
               onClick={handleImportChatScreenshots}
-              disabled={isImporting || isBatchImporting}
+              disabled={isImporting || isBatchImporting || isDeepReading}
               className="pixel-btn-outline-light disabled:opacity-40"
               aria-label="导入企业微信聊天截图"
               title="多选聊天截图，视觉模型逐条转写为可检索的聊天记录"
             >
               {isImporting ? '...' : '[💬] CHAT'}
+            </button>
+            <button
+              onClick={handleDeepReadSelect}
+              disabled={isImporting || isBatchImporting || isPreparingDeepRead || isDeepReading || !!deepReadPrepare}
+              className="pixel-btn-outline-light disabled:opacity-40"
+              aria-label="精读导入书籍"
+              title="整本书/长文档逐章 LLM 蒸馏为结构化精读笔记（索引 + 章节笔记 + 术语表 + 速查表）"
+            >
+              {isPreparingDeepRead || isDeepReading ? '...' : '[📖] DEEP'}
             </button>
             <button
               onClick={() => setShowNewFileDialog(true)}
@@ -970,6 +1107,56 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           <button onClick={() => { setShowNewFileDialog(false); setNewFilePath('') }} className="pixel-btn-ghost py-1.5">CANCEL</button>
         </div>
       )}
+
+      {/* 精读确认区：解析结果 + 深度/类型选择 + 成本预估（确认后才烧 LLM） */}
+      {deepReadPrepare && (() => {
+        const est = deepReadPrepare.estimates[deepReadDepth][deepReadType]
+        const fmtK = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}K` : String(n))
+        return (
+          <div className="px-6 py-3 bg-px-elevated border-b-2 border-px-border space-y-2">
+            <div className="font-game text-[12px] text-px-primary tracking-wider">
+              精读《{deepReadPrepare.bookTitle}》 — {deepReadPrepare.chapterCount} 章 · 约 {Math.round(deepReadPrepare.totalChars / 10000)} 万字
+              {deepReadPrepare.existingCount > 0 && ` · 已有 ${deepReadPrepare.existingCount} 章笔记，将跳过续跑`}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-mono text-px-text-sec">
+              <span>深度:</span>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" checked={deepReadDepth === 'study'} onChange={() => setDeepReadDepth('study')} />
+                精读（含实例演算）
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" checked={deepReadDepth === 'reference'} onChange={() => setDeepReadDepth('reference')} />
+                速查（要点为主）
+              </label>
+              <span className="ml-2">类型:</span>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" checked={deepReadType === 'text'} onChange={() => setDeepReadType('text')} />
+                文字书
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input type="radio" checked={deepReadType === 'technical'} onChange={() => setDeepReadType('technical')} />
+                技术书（代码/表格）
+              </label>
+            </div>
+            <div className="text-[11px] font-mono text-px-text-dim">
+              预估：约 {est.llmCalls} 次模型调用 · 输入 ~{fmtK(est.inputTokens)} tokens + 输出 ~{fmtK(est.outputTokens)} tokens · 约 {est.estMinutes} 分钟（实际费用取决于所配置模型单价）
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleDeepReadStart} className="pixel-btn-primary py-1.5">开始精读</button>
+              <button
+                onClick={() => {
+                  setDeepReadPrepare(null)
+                  // 通知主进程丢弃 prepare 暂存的整本书文本，释放内存
+                  window.electronAPI.deepRead.cancel(avatarId).catch(() => undefined)
+                }}
+                className="pixel-btn-ghost py-1.5"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 批量导入结果抽屉：成功/跳过/失败明细 */}
       {batchResult && (
@@ -1046,6 +1233,16 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                 ? '正在从知识库中提取关键概念并生成百科词条，通常需要 30 秒 ~ 2 分钟，取决于知识库大小'
                 : '正在检查知识文件间是否存在矛盾或重复内容，完成后会显示检查结果'}
             </p>
+          )}
+          {isDeepReading && (
+            <div className="flex items-center justify-between mt-2">
+              <p className="font-game text-[12px] text-px-text-dim">
+                逐章蒸馏在后台运行，关闭面板不会中断；已完成章节实时写入知识库
+              </p>
+              <button onClick={handleDeepReadCancel} className="pixel-btn-ghost py-1" aria-label="取消精读">
+                取消精读
+              </button>
+            </div>
           )}
         </div>
       )}

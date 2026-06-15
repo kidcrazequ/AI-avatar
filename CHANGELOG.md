@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.18.4 (2026-06-15)
+
+### 新增
+
+- **整本书精读导入（deep-read）** — 知识库支持把整本书逐章精读导入：方法论移植自 `book-to-skill`（提炼框架而非摘要、逐章蒸馏、编译时付费运行时按需检索），产物为知识四件套（索引 + 逐章笔记 + 术语表 + 模式与决策 + 速查表），写入 `knowledge/精读/<书名>/`，frontmatter 带 `source_type/raw_file/pages` 溯源锚点，citation chip 可跳回原书。长任务走 `deep-read:prepare`（成本预估确认）→ `start`（fire-and-forget + 断点续跑）→ `cancel`/`get-status` 编排；单章失败不中断、全部失败拒绝写入，纯续跑不重付综合调用。精读产物隐藏 FORMAT 按钮并按自动生成文件只读处理。
+- **分身级 grepFirst 开关** — 新增 `avatar.config.json#grepFirst`（默认关闭，仅显式开启的分身生效）：大库分身走 `knowledge_grep`/`knowledge_glob`/`read_knowledge_file` 按需检索，跳过 BM25 后台预热（`warmUpAsync` 全库 chunk 构建），从根上消除同步读全库锁死主进程的风险；小堵等依赖 BM25 的小分身不受影响。
+
+### 修复
+
+- **容忍 deep-read 顶部注释，恢复 frontmatter 识别** — deep-read 在知识文件顶部写一行来源注释，把 YAML frontmatter 的 `---` 挤到第 3 行，导致 `parseFrontmatter`/`isRagOnly` 严格要求首行 `---` 而整体失效（带 `source` 的导入产物被误判为手写知识读全文、触发 stuff 预算降级）。新增 `leadingFrontmatterOffset` 跳过开头注释块再找 frontmatter，fast-path 头部读取扩到 1024 字节以容纳注释 + 长中文 `source_path`。
+
+### 性能
+
+- **deep-read 注释文件默认 prompt_excluded，索引转 grep-first** — 精读全库的纯注释产物（仅来源注释、无 frontmatter）过去被当手写知识全文塞进 system prompt，撑爆 stuff 预算（实测某大库 ~16MB）并拖慢启动。新增 `hasDeepReadProvenanceComment` 把该注释作为 `prompt_excluded` 信号，知识全部转按需检索（实测 stuff 字符降到 0、启动读取从 ~16MB 降为 1KB 头部）。知识索引工具指引同步改为 grep-first，`search_knowledge`（BM25）逐步淡出。
+
 ## v0.18.3 (2026-06-11)
 
 ### 新增

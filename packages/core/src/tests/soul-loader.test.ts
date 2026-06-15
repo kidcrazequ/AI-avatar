@@ -364,3 +364,39 @@ describe('SoulLoader — 项目知识隔离', () => {
     )
   })
 })
+
+// ─── case 7: deep-read 顶部注释 ⇒ prompt_excluded（grep-first 方案 B） ──────────
+
+describe('SoulLoader — deep-read 注释文件默认不进 system prompt', () => {
+  function writeKnowledge(relPath: string, content: string): void {
+    const full = path.join(avatarPath, 'knowledge', relPath)
+    fs.mkdirSync(path.dirname(full), { recursive: true })
+    fs.writeFileSync(full, content, 'utf-8')
+  }
+
+  it('只有 deep-read 来源注释、无 frontmatter 的文件：正文不进 prompt，但列入可检索索引', () => {
+    // D 类：deep-read 全文转换产物，仅顶部注释 + 正文，无 YAML frontmatter
+    writeKnowledge(
+      'deepread-doc.md',
+      '<!-- 来源相对路径: 储能/手册.md; 精读日期: 2026-06-05 -->\n\n# 储能手册\nDEEPREAD_BODY_CANARY 这段正文不应进 system prompt\n',
+    )
+    // 对照组：普通手写小文件（无注释）应照常塞进 prompt
+    writeKnowledge('handwritten.md', '# 手写索引\nHANDWRITTEN_BODY_CANARY 这段应进 system prompt\n')
+
+    const loader = new SoulLoader(avatarsRoot)
+    const { systemPrompt } = loader.loadAvatar(AVATAR_ID)
+
+    assert.ok(
+      !systemPrompt.includes('DEEPREAD_BODY_CANARY'),
+      'deep-read 注释文件正文不应被全文塞进 system prompt',
+    )
+    assert.ok(
+      systemPrompt.includes('HANDWRITTEN_BODY_CANARY'),
+      '无注释的手写文件应照常进 system prompt（行为不变）',
+    )
+    assert.ok(
+      systemPrompt.includes('deepread-doc.md'),
+      'deep-read 文件应出现在「可检索知识」索引中（供 grep 工具按需检索）',
+    )
+  })
+})

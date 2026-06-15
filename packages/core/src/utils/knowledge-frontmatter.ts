@@ -38,6 +38,20 @@ export function leadingFrontmatterOffset(src: string): number {
 }
 
 /**
+ * 判断文本是否以 deep-read 精读管线写入的来源注释开头，例如：
+ *   `<!-- 来源相对路径: 工商业储能/x.md; 精读日期: 2026-06-05 -->`
+ *
+ * 这类注释是「批量导入产物」的可靠标记——命中即按 `prompt_excluded` 处理（不塞
+ * system prompt，正文走 grep 工具 knowledge_grep / read_knowledge_file 按需检索）。
+ * 用 `精读日期` / `来源相对路径` 这两个 distinctive 标记，避免误伤恰好以普通 HTML
+ * 注释开头的手写知识文件。只看开头第一段注释（仅传头部即可，无需整文）。
+ */
+export function hasDeepReadProvenanceComment(text: string): boolean {
+  const m = /^\s*<!--([\s\S]*?)-->/.exec(text)
+  return m ? /精读日期|来源相对路径/.test(m[1]) : false
+}
+
+/**
  * 解析 YAML frontmatter（key: value + 简单数组）。
  *
  * @example

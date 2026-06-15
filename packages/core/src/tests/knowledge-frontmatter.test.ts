@@ -18,7 +18,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { leadingFrontmatterOffset, parseFrontmatterCore } from '../utils/knowledge-frontmatter'
+import { leadingFrontmatterOffset, parseFrontmatterCore, hasDeepReadProvenanceComment } from '../utils/knowledge-frontmatter'
 
 // deep-read 写入的真实文件形态：注释 + 空行 + frontmatter + 正文
 const DEEP_READ_DOC =
@@ -82,5 +82,24 @@ describe('parseFrontmatterCore — deep-read 前导注释容忍', () => {
     const { meta, body } = parseFrontmatterCore(src)
     assert.deepEqual(meta, {})
     assert.equal(body, src)
+  })
+})
+
+describe('hasDeepReadProvenanceComment — deep-read 来源注释识别', () => {
+  it('识别 deep-read 顶部来源注释（含「精读日期」/「来源相对路径」）', () => {
+    assert.equal(hasDeepReadProvenanceComment(DEEP_READ_DOC), true)
+    // 无 frontmatter、只有注释 + 正文的 deep-read 产物（D 类，本次方案核心目标）
+    const commentOnly = '<!-- 来源相对路径: 国标/x.md; 精读日期: 2026-06-05 -->\n\n# 全文转换内容\n...'
+    assert.equal(hasDeepReadProvenanceComment(commentOnly), true)
+  })
+
+  it('不误伤恰好以普通 HTML 注释开头的手写文件', () => {
+    assert.equal(hasDeepReadProvenanceComment('<!-- TODO: 补充符号表 -->\n# 手写知识'), false)
+    assert.equal(hasDeepReadProvenanceComment('# 没有注释的手写文件'), false)
+    assert.equal(hasDeepReadProvenanceComment(''), false)
+  })
+
+  it('只看开头第一段注释——正文里出现「精读日期」字样不算', () => {
+    assert.equal(hasDeepReadProvenanceComment('# 标题\n正文提到精读日期但不在注释里'), false)
   })
 })

@@ -5,7 +5,7 @@ import { DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints } from './tool-budget'
 import { combineSystemPromptSections } from './prompt-sections'
 import { assertSafeSegment } from './utils/path-security'
 import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
-import { leadingFrontmatterOffset } from './utils/knowledge-frontmatter'
+import { leadingFrontmatterOffset, hasDeepReadProvenanceComment } from './utils/knowledge-frontmatter'
 import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
 import {
   STRUCTURED_MEMORY_FILENAME,
@@ -428,9 +428,15 @@ export class SoulLoader {
         const { data: fm, body } = parseFrontmatter(f.content)
         // 批量导入产物带 source / source_type 字段（摄取脚本写的是 source_type +
         // source_path + ingested），运行时当 prompt_excluded 处理，不塞 system prompt，
-        // 保留通过工具按需检索的能力。prompt_excluded 是新规范字段，rag_only 是旧别名（向后兼容）。
-        if (fm.prompt_excluded === true || fm.rag_only === true || fm.source || fm.source_type) {
-          ragOnlyEntries.push({ relPath, meta: fm })
+        // 保留通过 grep 工具（knowledge_grep / read_knowledge_file）按需检索的能力。
+        // prompt_excluded 是新规范字段，rag_only 是旧别名（向后兼容）。
+        // deep-read 精读产物常只有顶部来源注释、无 frontmatter——注释本身即视为
+        // prompt_excluded 信号，合成 source:'deep-read' 供索引标注（须与 isRagOnly 对齐）。
+        const meta = (!fm.source && !fm.source_type && hasDeepReadProvenanceComment(f.content))
+          ? { ...fm, source: 'deep-read' }
+          : fm
+        if (fm.prompt_excluded === true || fm.rag_only === true || meta.source || meta.source_type) {
+          ragOnlyEntries.push({ relPath, meta })
         } else {
           stuffEntries.push({ relPath, body })
         }
@@ -482,7 +488,7 @@ export class SoulLoader {
           stableParts.push('\n\n---\n\n# 知识库（用工具按需检索，不在 system prompt 正文中）\n\n')
           stableParts.push(`覆盖领域（共 ${indexEntries.length} 个可检索文件）：\n`)
           lines.forEach(l => stableParts.push(l))
-          stableParts.push('\n专业问题先检索再作答（不要凭空回答）：`search_knowledge`（语义召回）/ `knowledge_grep`（按关键词搜路径或内容，可加 scope 限定目录）/ `knowledge_glob`（按文件名模式）/ `list_knowledge_files` / `read_knowledge_file`（读全文）。\n')
+          stableParts.push('\n专业问题先检索再作答（不要凭空回答）。**首选 grep 类精确检索**：`knowledge_grep`（按正则搜路径或内容，可加 scope 限定目录）/ `knowledge_glob`（按文件名模式）/ `list_knowledge_files` / `read_knowledge_file`（读全文）；`search_knowledge`（语义召回）作为召回不全时的补充。\n')
         } else {
           stableParts.push('\n\n---\n\n# 可检索知识（不在 system prompt 中，通过工具按需访问）\n\n')
           lines.forEach(l => stableParts.push(l))
@@ -695,7 +701,7 @@ export class SoulLoader {
       }))
       const { lines, summarized } = this.buildKnowledgeIndexLines(indexEntries, `projects/${projectId}/knowledge/`)
       stableParts.push(`\n\n---\n\n# 项目可检索文档（${projectId}）\n\n`)
-      if (summarized) stableParts.push(`覆盖领域（共 ${indexEntries.length} 个文件，用 search_knowledge / knowledge_grep 按需检索）：\n`)
+      if (summarized) stableParts.push(`覆盖领域（共 ${indexEntries.length} 个文件，用 knowledge_grep / knowledge_glob / read_knowledge_file 按需检索）：\n`)
       lines.forEach(l => stableParts.push(l))
     }
   }
@@ -922,15 +928,18 @@ export class SoulLoader {
   /**
    * 快速判断文件头部 frontmatter 是否让此文件不进 system prompt 正文。
    *
-   * 必须和 loadAvatar 的分流条件（`fm.rag_only === true || fm.source || fm.source_type`）
-   * 严格对齐——否则 fast-path 会把"按 source/source_type 排除"的导入文件按非 rag_only
-   * 当全文读取，浪费 IO 又把 body 透到下游再丢，违背 rag_only fast-path 的初衷。
+   * 必须和 loadAvatar 的分流条件（`fm.prompt_excluded || fm.source || fm.source_type ||
+   * hasDeepReadProvenanceComment(...)`）严格对齐——否则 fast-path 会把"应排除"的导入文件
+   * 按非 rag_only 当全文读取，浪费 IO 又把 body 透到下游再丢，违背 fast-path 的初衷。
    *
-   * 同 loadAvatar 的注释：任何带 source / source_type 字段的知识文件（pdf/word/excel/
-   * pptx/enhanced 等）运行时都按 rag_only 处理，不塞 system prompt，保留 search_knowledge
-   * 按需检索能力。
+   * 同 loadAvatar 的注释：任何带 source / source_type 字段、或带 deep-read 顶部来源注释
+   * 的知识文件，运行时都按 prompt_excluded 处理，不塞 system prompt，正文走 grep 工具
+   * （knowledge_grep / read_knowledge_file）按需检索。
    */
   private isRagOnly(header: string): boolean {
+    // deep-read 精读产物常只有顶部来源注释、无 frontmatter——注释即视为排除信号，
+    // 须早于下面的 frontmatter 检测（否则无 --- 会提前 return false）。
+    if (hasDeepReadProvenanceComment(header)) return true
     const offset = leadingFrontmatterOffset(header)
     const h = offset > 0 ? header.slice(offset) : header
     if (!h.startsWith('---\n') && !h.startsWith('---\r\n')) return false

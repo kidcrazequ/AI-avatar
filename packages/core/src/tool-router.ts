@@ -692,6 +692,12 @@ export class ToolRouter {
   readonly subAgentManager = new SubAgentManager()
   /** 主代理 system prompt（用于子代理共享上下文） */
   private systemPromptCache = new Map<string, string>()
+  /**
+   * grep-first 分身集合：这些分身的知识库走 grep 工具按需检索，BM25 `search_knowledge`
+   * 让位（返回引导用 knowledge_grep 的提示，不构建 chunk）。由 main 在 loadAvatar 时按
+   * avatar.config.json#grepFirst 推入。用于大库（如小凯 ~30MB）避免 BM25 预热/同步构建。
+   */
+  private grepFirstAvatars = new Set<string>()
   /** Excel 导入 JSON 的内存缓存（按文件 mtime + size 失效） */
   private excelSourceCache = new Map<string, CachedExcelSource>()
   /** 显式引用图缓存（knowledge/*.md -> linked files） */
@@ -994,6 +1000,12 @@ export class ToolRouter {
    */
   setSystemPrompt(avatarId: string, systemPrompt: string): void {
     this.systemPromptCache.set(avatarId, systemPrompt)
+  }
+
+  /** 标记/取消某分身为 grep-first（BM25 search_knowledge 让位 grep）。 */
+  setGrepFirst(avatarId: string, value: boolean): void {
+    if (value) this.grepFirstAvatars.add(avatarId)
+    else this.grepFirstAvatars.delete(avatarId)
   }
 
   /** 注入 / 清除 Hook 总线（仅 SOUL_USE_NEW_RUNTIME 开启时由 main 调用）。 */
@@ -2546,6 +2558,14 @@ ${content}` }
     if (this.isKnowledgeBaseEmpty(avatarId)) {
       console.log(`[tool-router] search_knowledge 短路：知识库为空 avatarId=${avatarId}`)
       return this.buildEmptyKnowledgeBaseHint()
+    }
+    // grep-first 分身：BM25 让位 grep。直接引导改用 grep 工具，不构建 chunk
+    // （避免大库同步 buildChunks 读全库锁死主进程）。跑过 build-knowledge-index 后可在
+    // avatar.config.json 关掉 grepFirst 恢复 BM25。
+    if (this.grepFirstAvatars.has(avatarId)) {
+      return {
+        content: '本分身知识库为 grep-first 检索模式，BM25 语义检索（search_knowledge）已停用。请改用 `knowledge_grep`（按关键词/正则精确搜路径或内容，可加 scope 限定目录）/ `knowledge_glob`（按文件名）/ `list_knowledge_files` / `read_knowledge_file`（读全文）检索。',
+      }
     }
     const query = args.query as string
     if (!query) return { content: '', error: '缺少 query 参数' }

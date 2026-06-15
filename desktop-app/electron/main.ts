@@ -1329,13 +1329,21 @@ wrapHandler('load-avatar', (_, avatarId: string, projectId?: string) => {
   // Feature 7: 缓存 system prompt 供子代理委派使用
   toolRouter.setSystemPrompt(avatarId, config.systemPrompt)
 
+  // grep-first 分身（avatar.config.json#grepFirst）：知识库走 grep 工具按需检索，
+  // BM25 search_knowledge 让位。大库（如小凯 ~30MB）据此跳过 BM25 预热，并让
+  // search_knowledge 引导改用 knowledge_grep，避免同步构建 chunk 读全库锁死主进程。
+  const grepFirst = isAvatarGrepFirst(avatarId)
+  toolRouter.setGrepFirst(avatarId, grepFirst)
+
   // 异步预热 chunk 缓存（fire-and-forget）：用 fs.promises.readFile 在
   // Node.js 线程池中读取文件，主线程不阻塞，不影响 UI 和 fetch stream。
-  // 用户提问前 chunks 已就绪，不会出彩色伞。
-  const retriever = toolRouter.getRetriever(avatarId)
-  retriever.warmUpAsync().catch(err => {
-    console.warn('[load-avatar] chunk 异步预热失败（不影响功能）:', err instanceof Error ? err.message : String(err))
-  })
+  // 用户提问前 chunks 已就绪，不会出彩色伞。grep-first 分身不预热（BM25 已让位）。
+  if (!grepFirst) {
+    const retriever = toolRouter.getRetriever(avatarId)
+    retriever.warmUpAsync().catch(err => {
+      console.warn('[load-avatar] chunk 异步预热失败（不影响功能）:', err instanceof Error ? err.message : String(err))
+    })
+  }
 
   return config
 })
@@ -3755,6 +3763,23 @@ wrapHandler('write-soul', async (_, avatarId: string, content: string) => {
 wrapHandler('list-avatars', () => {
   return avatarManager.listAvatars()
 })
+
+/**
+ * 读取分身 grepFirst 开关（avatar.config.json#grepFirst）。
+ *
+ * 为 true 时该分身知识库走 grep 工具按需检索：跳过 BM25 chunk 预热，
+ * search_knowledge 让位 knowledge_grep。大库（如小凯 ~30MB）据此避免预热浪费
+ * 与同步构建锁死。字段缺失 / 文件不存在 / 解析失败一律返回 false（默认保留 BM25）。
+ */
+function isAvatarGrepFirst(avatarId: string): boolean {
+  try {
+    assertSafeSegment(avatarId, '分身 ID')
+  } catch {
+    return false
+  }
+  const cfg = readJsonObject(path.join(avatarsPath, avatarId, 'avatar.config.json'))
+  return cfg?.grepFirst === true
+}
 
 /**
  * 读取分身 `defaultModel` 字段（avatar.config.json）。

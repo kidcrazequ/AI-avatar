@@ -5,6 +5,7 @@ import { DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints } from './tool-budget'
 import { combineSystemPromptSections } from './prompt-sections'
 import { assertSafeSegment } from './utils/path-security'
 import { DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+import { leadingFrontmatterOffset } from './utils/knowledge-frontmatter'
 import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
 import {
   STRUCTURED_MEMORY_FILENAME,
@@ -55,15 +56,17 @@ interface ExcelFileSchema {
  * 场景，不引入 yaml 依赖。如果 .md 文件第一行不是 `---` 则返回空对象。
  */
 function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string } {
-  if (!content.startsWith('---\n') && !content.startsWith('---\r\n')) {
+  const offset = leadingFrontmatterOffset(content)
+  const work = offset > 0 ? content.slice(offset) : content
+  if (!work.startsWith('---\n') && !work.startsWith('---\r\n')) {
     return { data: {}, body: content }
   }
-  const endMatch = content.match(/\n---\r?\n/)
+  const endMatch = work.match(/\n---\r?\n/)
   if (!endMatch || endMatch.index === undefined) {
     return { data: {}, body: content }
   }
-  const fmText = content.slice(4, endMatch.index)
-  const body = content.slice(endMatch.index + endMatch[0].length)
+  const fmText = work.slice(4, endMatch.index)
+  const body = work.slice(endMatch.index + endMatch[0].length)
   const data: Record<string, unknown> = {}
   for (const line of fmText.split(/\r?\n/)) {
     const m = line.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/)
@@ -864,8 +867,11 @@ export class SoulLoader {
           if (depth === 0 && skipTopLevelDirs.includes(entry.name)) continue
           files.push(...this.readDirectory(fullPath, depth + 1))
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          // 先只读头部 512 字节探测 rag_only frontmatter
-          const header = this.readFileHeader(fullPath, 512)
+          // 先只读头部 1024 字节探测 rag_only frontmatter。1024（非 512）是为了容纳
+          // deep-read 写在 frontmatter 上方的 `<!-- 来源相对路径...精读日期 -->` 注释
+          // （~90 字节）+ 含长中文 source_path 的 frontmatter——实测闭合 --- 最大字节
+          // 偏移 877，512 会截断约 46/638 个文件的闭合 --- 导致漏判为 rag_only。
+          const header = this.readFileHeader(fullPath, 1024)
           if (header !== null && this.isRagOnly(header)) {
             // rag_only 文件：只保留 frontmatter，loadAvatar 不需要 body
             files.push({ path: fullPath, content: header })
@@ -925,12 +931,14 @@ export class SoulLoader {
    * 按需检索能力。
    */
   private isRagOnly(header: string): boolean {
-    if (!header.startsWith('---\n') && !header.startsWith('---\r\n')) return false
-    const endIdx = header.indexOf('\n---\n')
-    const endIdx2 = header.indexOf('\n---\r\n')
+    const offset = leadingFrontmatterOffset(header)
+    const h = offset > 0 ? header.slice(offset) : header
+    if (!h.startsWith('---\n') && !h.startsWith('---\r\n')) return false
+    const endIdx = h.indexOf('\n---\n')
+    const endIdx2 = h.indexOf('\n---\r\n')
     const end = endIdx >= 0 ? endIdx : endIdx2
     if (end < 0) return false
-    const fm = header.slice(0, end)
+    const fm = h.slice(0, end)
     if (/\b(?:prompt_excluded|rag_only)\s*:\s*true\b/.test(fm)) return true
     // source 或 source_type 字段存在（非空值）即按 rag_only 处理。
     // 批量摄取脚本写的是 source_type（+ source_path / ingested），早期只认 source

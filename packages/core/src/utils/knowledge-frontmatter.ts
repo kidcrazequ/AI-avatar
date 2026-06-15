@@ -17,6 +17,27 @@ export interface FrontmatterParseResult {
 // ─── 解析 ─────────────────────────────────────────────────────────────────────
 
 /**
+ * 计算 frontmatter 检测应跳过的前导长度，使解析能容忍 deep-read 管线写在
+ * 文件顶部的 `<!-- 来源相对路径: ...; 精读日期: ... -->` 注释（该注释把 `---`
+ * 挤到第 3 行，会让「文件须以 `---` 开头」的检测整体失效）。
+ *
+ * 仅当文件**以 `<!--` 开头**时才生效——跳过开头连续的 `<!-- ... -->` 注释块及其后
+ * 的空白行，返回 frontmatter 应起始的偏移；其它文件一律返回 0，行为与原来完全一致。
+ * 注释未闭合时返回 0（按原样处理，不冒险跳过）。
+ */
+export function leadingFrontmatterOffset(src: string): number {
+  if (!src.startsWith('<!--')) return 0
+  let i = 0
+  while (src.startsWith('<!--', i)) {
+    const end = src.indexOf('-->', i + 4)
+    if (end === -1) return 0
+    i = end + 3
+    while (i < src.length && (src[i] === ' ' || src[i] === '\t' || src[i] === '\r' || src[i] === '\n')) i++
+  }
+  return i
+}
+
+/**
  * 解析 YAML frontmatter（key: value + 简单数组）。
  *
  * @example
@@ -24,15 +45,17 @@ export interface FrontmatterParseResult {
  * // meta = { source: 'excel' }, body = 'Hello'
  */
 export function parseFrontmatterCore(src: string): FrontmatterParseResult {
-  if (!src.startsWith('---\n') && !src.startsWith('---\r\n')) {
+  const offset = leadingFrontmatterOffset(src)
+  const work = offset > 0 ? src.slice(offset) : src
+  if (!work.startsWith('---\n') && !work.startsWith('---\r\n')) {
     return { meta: {}, body: src }
   }
-  const endMatch = src.match(/\n---\r?\n/)
+  const endMatch = work.match(/\n---\r?\n/)
   if (!endMatch || endMatch.index === undefined) {
     return { meta: {}, body: src }
   }
-  const fmText = src.slice(4, endMatch.index)
-  const body = src.slice(endMatch.index + endMatch[0].length)
+  const fmText = work.slice(4, endMatch.index)
+  const body = work.slice(endMatch.index + endMatch[0].length)
   const meta: Record<string, unknown> = {}
   for (const line of fmText.split(/\r?\n/)) {
     const m = line.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/)

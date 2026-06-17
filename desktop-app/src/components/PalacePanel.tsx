@@ -235,7 +235,7 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
   return (
     <Modal isOpen={true} onClose={onClose} size="xl">
       <PanelHeader
-        title="PALACE"
+        title="职场环境记忆"
         subtitle={subtitle}
         onClose={onClose}
         actions={(

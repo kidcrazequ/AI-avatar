@@ -662,7 +662,7 @@ function App() {
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
     { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
-    { label: '宫殿', icon: '▦', key: 'palace', onClick: () => setActivePanel('palace'), active: showPalacePanel },
+    { label: '职场', icon: '▦', key: 'palace', onClick: () => setActivePanel('palace'), active: showPalacePanel },
     { label: '人生', icon: '❀', key: 'life', onClick: () => setActivePanel('life'), active: showLifePanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },

@@ -2,6 +2,7 @@ import path from 'path'
 import fs from 'fs'
 import dns from 'dns'
 import net from 'net'
+import { execFileSync } from 'child_process'
 import { Agent } from 'undici'
 import { KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
 import { loadIndex } from './knowledge-indexer'
@@ -22,6 +23,47 @@ import {
 } from './memory/episode-store'
 import { appendStandingOrder } from './memory/standing-orders'
 import { listDailySummaries, readDailySummary } from './memory/daily-summary'
+import { buildPalaceContextCard } from './palace/context-card'
+import {
+  PALACE_COMMITMENT_DIRECTIONS,
+  PALACE_COMMITMENT_STATUSES,
+  type PalaceCommitmentCreateInput,
+  type PalaceCommitmentFilter,
+  type PalaceCommitmentUpdatePatch,
+} from './palace/commitments'
+import {
+  PALACE_INBOX_KINDS,
+  PALACE_INBOX_STATUSES,
+  PALACE_SEDIMENT_TARGETS,
+  type PalaceInboxCreateInput,
+  type PalaceInboxFilter,
+  type PalaceInboxUpdatePatch,
+} from './palace/inbox'
+import { matchPalaceRooms } from './palace/matcher'
+import {
+  addPalaceCommitment,
+  addPalaceInboxItem,
+  listPalaceCommitmentViews,
+  listPalaceContextExtras,
+  listPalaceInboxItems,
+  listPalaceRooms,
+  readPalaceRoom,
+  readPalaceProfile,
+  readPalaceCompany,
+  readPalaceCommitments,
+  readPalaceInbox,
+  updatePalaceCommitmentEntry,
+  updatePalaceInboxItemEntry,
+  upsertPalaceRoom,
+} from './palace/store'
+import type { PalaceRoomInput } from './palace/room'
+import type {
+  PalaceCommitmentDirection,
+  PalaceCommitmentStatus,
+  PalaceInboxKind,
+  PalaceInboxStatus,
+  PalaceSedimentTarget,
+} from './palace/types'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
 import { rerankChunksWithDiversity } from './rag-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
@@ -1261,6 +1303,24 @@ export class ToolRouter {
           result = this.listDailySummariesTool(avatarId, args); break
         case 'read_daily_summary':
           result = this.readDailySummaryTool(avatarId, args); break
+        case 'match_palace_rooms':
+          result = await this.matchPalaceRoomsTool(avatarId, args); break
+        case 'build_palace_context_card':
+          result = await this.buildPalaceContextCardTool(avatarId, args); break
+        case 'write_palace_room':
+          result = await this.writePalaceRoomTool(avatarId, args); break
+        case 'list_palace_commitments':
+          result = await this.listPalaceCommitmentsTool(avatarId, args); break
+        case 'add_palace_commitment':
+          result = await this.addPalaceCommitmentTool(avatarId, args); break
+        case 'update_palace_commitment':
+          result = await this.updatePalaceCommitmentTool(avatarId, args); break
+        case 'list_palace_inbox':
+          result = await this.listPalaceInboxTool(avatarId, args); break
+        case 'add_palace_inbox_item':
+          result = await this.addPalaceInboxItemTool(avatarId, args); break
+        case 'update_palace_inbox_item':
+          result = await this.updatePalaceInboxItemTool(avatarId, args); break
         case 'list_design_systems':
           result = this.listDesignSystems(args); break
         case 'read_design_system':
@@ -2551,6 +2611,599 @@ ${content}` }
     }
   }
 
+  /**
+   * match_palace_rooms：根据用户任务匹配 Palace 路线卡。
+   *
+   * P1 只读，不创建/修改 Palace。无 routes 时给出明确提示。
+   */
+  private async matchPalaceRoomsTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const task = typeof args.task === 'string' ? args.task.trim() : ''
+    if (!task) return { content: '', error: '缺少 task 参数' }
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 5
+    const topK = Math.max(1, Math.min(10, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      if (rooms.length === 0) {
+        return {
+          content: '[match_palace_rooms] 当前分身还没有 Palace 路线卡。可在 palace/rooms/ 下创建 <id>.md 路线卡后再匹配。',
+        }
+      }
+      const matches = matchPalaceRooms(rooms, task, { limit: topK })
+      if (matches.length === 0) {
+        return {
+          content: JSON.stringify({
+            task,
+            count: 0,
+            hint: '未命中路线卡。可先用通用方式澄清任务，或创建新的 palace/rooms/<id>.md。',
+            available_rooms: rooms.slice(0, 10).map(r => ({ id: r.id, name: r.name, triggers: r.triggers })),
+          }, null, 2),
+        }
+      }
+      return {
+        content: JSON.stringify({
+          task,
+          count: matches.length,
+          matches: matches.map(m => ({
+            id: m.room.id,
+            name: m.room.name,
+            score: Number(m.score.toFixed(2)),
+            reasons: m.reasons,
+            description: m.room.description,
+            triggers: m.room.triggers,
+            requires_context_card: m.room.requiresContextCard,
+            required_files: m.room.requiredFiles,
+            read_order: m.room.readOrder,
+            pitfalls: m.room.pitfalls,
+            output_location: m.room.outputLocation,
+            sediment_targets: m.room.sedimentTargets,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * build_palace_context_card：生成任务前上下文包。
+   *
+   * 返回的卡片用于先展示给用户确认；P1 不继续执行任务，也不写入 inbox/commitments。
+   */
+  private async buildPalaceContextCardTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const task = typeof args.task === 'string' ? args.task.trim() : ''
+    if (!task) return { content: '', error: '缺少 task 参数' }
+    const roomId = typeof args.room_id === 'string' ? args.room_id.trim() : ''
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 3
+    const topK = Math.max(1, Math.min(5, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      const matches = matchPalaceRooms(rooms, task, { limit: topK })
+      const room = roomId
+        ? await readPalaceRoom(this.avatarsPath, avatarId, roomId)
+        : matches[0]?.room
+
+      if (roomId && !room) {
+        return { content: '', error: `Palace 路线卡不存在: ${roomId}` }
+      }
+
+      const [profile, company, commitments, inbox, extras] = await Promise.all([
+        readPalaceProfile(this.avatarsPath, avatarId),
+        readPalaceCompany(this.avatarsPath, avatarId),
+        readPalaceCommitments(this.avatarsPath, avatarId),
+        readPalaceInbox(this.avatarsPath, avatarId),
+        listPalaceContextExtras(this.avatarsPath, avatarId, task),
+      ])
+
+      return {
+        content: buildPalaceContextCard({
+          task,
+          room: room ?? undefined,
+          matches,
+          profile,
+          company,
+          commitments,
+          inbox,
+          peopleProfiles: extras.peopleProfiles,
+          materials: extras.materials,
+        }),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * write_palace_room：创建或更新一张 Palace 路线卡（palace/rooms/<id>.md）。
+   *
+   * 持久写入，会改变分身的任务路由。只在用户明确要“把这类任务的流程固化成路线卡”，
+   * 或已把路线卡草案展示给用户并得到确认后调用。
+   */
+  private async writePalaceRoomTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      const name = this.optionalTrimmedString(args.name)
+      if (!id) return { content: '', error: '缺少 id 参数（路线卡文件名，如 daily-room，仅小写字母/数字/连字符）' }
+      if (!name) return { content: '', error: '缺少 name 参数' }
+
+      const input: PalaceRoomInput = { id, name }
+      this.assignOptionalString(input, 'description', args.description)
+      this.assignOptionalString(input, 'outputLocation', args.output_location)
+      this.assignOptionalString(input, 'toneGuidance', args.tone_guidance)
+      this.assignOptionalString(input, 'body', args.body)
+      const triggers = this.optionalStringArray(args.triggers); if (triggers) input.triggers = triggers
+      const requiredFiles = this.optionalStringArray(args.required_files); if (requiredFiles) input.requiredFiles = requiredFiles
+      const readOrder = this.optionalStringArray(args.read_order); if (readOrder) input.readOrder = readOrder
+      const conditionalReads = this.optionalStringArray(args.conditional_reads); if (conditionalReads) input.conditionalReads = conditionalReads
+      const pitfalls = this.optionalStringArray(args.pitfalls); if (pitfalls) input.pitfalls = pitfalls
+      const sedimentTargets = this.parsePalaceSedimentTargetList(args.sediment_targets); if (sedimentTargets) input.sedimentTargets = sedimentTargets
+      if (typeof args.priority === 'number' && Number.isFinite(args.priority)) input.priority = args.priority
+      if (typeof args.enabled === 'boolean') input.enabled = args.enabled
+      if (typeof args.requires_context_card === 'boolean') input.requiresContextCard = args.requires_context_card
+
+      const { room, created } = await upsertPalaceRoom(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          action: created ? 'created' : 'updated',
+          room: {
+            id: room.id,
+            name: room.name,
+            triggers: room.triggers,
+            priority: room.priority,
+            enabled: room.enabled,
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private parsePalaceSedimentTargetList(value: unknown): PalaceSedimentTarget[] | undefined {
+    const arr = this.optionalStringArray(value)
+    if (!arr) return undefined
+    return arr.filter((v): v is PalaceSedimentTarget => (PALACE_SEDIMENT_TARGETS as readonly string[]).includes(v))
+  }
+
+  /**
+   * list_palace_commitments：查看承诺账本，默认只返回未关闭承诺并按逾期/到期排序。
+   */
+  private async listPalaceCommitmentsTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const filter: PalaceCommitmentFilter = {
+        includeClosed: args.include_closed === true,
+      }
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) filter.status = status
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) filter.direction = direction
+      const query = this.optionalTrimmedString(args.query)
+      if (query) filter.query = query
+      const dueBefore = this.optionalTrimmedString(args.due_before)
+      if (dueBefore) filter.dueBefore = dueBefore
+      const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 20
+      filter.limit = Math.max(1, Math.min(100, Math.floor(rawLimit)))
+
+      const commitments = await listPalaceCommitmentViews(this.avatarsPath, avatarId, filter)
+      return {
+        content: JSON.stringify({
+          count: commitments.length,
+          include_closed: filter.includeClosed,
+          commitments: commitments.map(c => ({
+            id: c.id,
+            title: c.title,
+            counterparty: c.counterparty,
+            promise: c.promise,
+            direction: c.direction,
+            status: c.status,
+            due_at: c.dueAt,
+            urgency: c.urgency,
+            days_until_due: c.daysUntilDue,
+            owner: c.owner,
+            source: c.source,
+            tags: c.tags ?? [],
+            notes: c.notes ?? [],
+            updated_at: c.updatedAt,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_palace_commitment：新增明确承诺。不要把普通偏好或模糊意图写入账本。
+   */
+  private async addPalaceCommitmentTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const title = this.optionalTrimmedString(args.title)
+      const promise = this.optionalTrimmedString(args.promise)
+      if (!title) return { content: '', error: '缺少 title 参数' }
+      if (!promise) return { content: '', error: '缺少 promise 参数' }
+
+      const input: PalaceCommitmentCreateInput = { title, promise }
+      this.assignOptionalString(input, 'id', args.id)
+      this.assignOptionalString(input, 'counterparty', args.counterparty)
+      this.assignOptionalString(input, 'dueAt', args.due_at)
+      this.assignOptionalString(input, 'owner', args.owner)
+      this.assignOptionalString(input, 'source', args.source)
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) input.direction = direction
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) input.status = status
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) input.tags = tags
+      const notes = this.optionalStringArray(args.notes)
+      if (notes) input.notes = notes
+
+      const commitment = await addPalaceCommitment(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          commitment: {
+            id: commitment.id,
+            title: commitment.title,
+            counterparty: commitment.counterparty,
+            promise: commitment.promise,
+            direction: commitment.direction,
+            status: commitment.status,
+            due_at: commitment.dueAt,
+            urgency: commitment.urgency,
+            days_until_due: commitment.daysUntilDue,
+            owner: commitment.owner,
+            source: commitment.source,
+            tags: commitment.tags ?? [],
+            notes: commitment.notes ?? [],
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * update_palace_commitment：更新承诺状态、截止日或备注。
+   */
+  private async updatePalaceCommitmentTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      if (!id) return { content: '', error: '缺少 id 参数' }
+
+      const patch: PalaceCommitmentUpdatePatch = {}
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) patch.direction = direction
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) patch.status = status
+      this.assignOptionalString(patch, 'title', args.title)
+      this.assignOptionalString(patch, 'counterparty', args.counterparty)
+      this.assignOptionalString(patch, 'promise', args.promise)
+      this.assignOptionalNullableString(patch, 'dueAt', args.due_at)
+      this.assignOptionalNullableString(patch, 'owner', args.owner)
+      this.assignOptionalNullableString(patch, 'source', args.source)
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) patch.tags = tags
+      this.assignOptionalString(patch, 'appendNote', args.append_note)
+      if (Object.keys(patch).length === 0) {
+        return { content: '', error: '没有可更新字段。请至少传 status / due_at / append_note 等一个字段。' }
+      }
+
+      const commitment = await updatePalaceCommitmentEntry(this.avatarsPath, avatarId, id, patch)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          commitment: {
+            id: commitment.id,
+            title: commitment.title,
+            counterparty: commitment.counterparty,
+            promise: commitment.promise,
+            direction: commitment.direction,
+            status: commitment.status,
+            due_at: commitment.dueAt,
+            urgency: commitment.urgency,
+            days_until_due: commitment.daysUntilDue,
+            owner: commitment.owner,
+            source: commitment.source,
+            tags: commitment.tags ?? [],
+            notes: commitment.notes ?? [],
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * list_palace_inbox：查看任务后沉淀队列，默认只返回 pending 项。
+   */
+  private async listPalaceInboxTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const filter: PalaceInboxFilter = {
+        includeResolved: args.include_resolved === true,
+      }
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) filter.status = status
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) filter.kind = kind
+      const target = this.parsePalaceSedimentTarget(args.target, 'target')
+      if (target) filter.target = target
+      const query = this.optionalTrimmedString(args.query)
+      if (query) filter.query = query
+      const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 20
+      filter.limit = Math.max(1, Math.min(100, Math.floor(rawLimit)))
+
+      const items = await listPalaceInboxItems(this.avatarsPath, avatarId, filter)
+      return {
+        content: JSON.stringify({
+          count: items.length,
+          include_resolved: filter.includeResolved,
+          items: items.map(item => ({
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            content: item.content,
+            status: item.status,
+            target: item.target,
+            source: item.source,
+            confidence: item.confidence,
+            tags: item.tags ?? [],
+            created_at: item.createdAt,
+            updated_at: item.updatedAt,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_palace_inbox_item：把任务后可复用的新事实/写法/路线建议放入待确认队列。
+   */
+  private async addPalaceInboxItemTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const title = this.optionalTrimmedString(args.title)
+      const content = this.optionalTrimmedString(args.content)
+      if (!title) return { content: '', error: '缺少 title 参数' }
+      if (!content) return { content: '', error: '缺少 content 参数' }
+
+      const input: PalaceInboxCreateInput = { title, content }
+      this.assignOptionalString(input, 'id', args.id)
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) input.kind = kind
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) input.status = status
+      const target = this.parsePalaceSedimentTarget(args.target, 'target')
+      if (target) input.target = target
+      this.assignOptionalString(input, 'source', args.source)
+      const confidence = this.parseOptionalConfidence(args.confidence)
+      if (confidence !== undefined && confidence !== null) input.confidence = confidence
+      const tags = this.optionalStringArray(args.tags)
+      if (tags && tags.length > 0) input.tags = tags
+
+      const item = await addPalaceInboxItem(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          item: this.serializePalaceInboxItem(item),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * update_palace_inbox_item：按用户确认更新沉淀项状态、目标或正文。
+   */
+  private async updatePalaceInboxItemTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      if (!id) return { content: '', error: '缺少 id 参数' }
+
+      const patch: PalaceInboxUpdatePatch = {}
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) patch.kind = kind
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) patch.status = status
+      const target = this.parseOptionalNullablePalaceTarget(args.target, 'target')
+      if (target !== undefined) patch.target = target
+      this.assignOptionalString(patch, 'title', args.title)
+      this.assignOptionalString(patch, 'content', args.content)
+      this.assignOptionalNullableString(patch, 'source', args.source)
+      const confidence = this.parseOptionalConfidence(args.confidence)
+      if (confidence !== undefined) patch.confidence = confidence
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) patch.tags = tags
+      if (Object.keys(patch).length === 0) {
+        return { content: '', error: '没有可更新字段。请至少传 status / target / content 等一个字段。' }
+      }
+
+      const item = await updatePalaceInboxItemEntry(this.avatarsPath, avatarId, id, patch)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          item: this.serializePalaceInboxItem(item),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private parsePalaceCommitmentDirection(
+    value: unknown,
+    label: string,
+  ): PalaceCommitmentDirection | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_COMMITMENT_DIRECTIONS.includes(text as PalaceCommitmentDirection)) {
+      return text as PalaceCommitmentDirection
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_COMMITMENT_DIRECTIONS.join(' / ')}`)
+  }
+
+  private parsePalaceCommitmentStatus(
+    value: unknown,
+    label: string,
+  ): PalaceCommitmentStatus | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_COMMITMENT_STATUSES.includes(text as PalaceCommitmentStatus)) {
+      return text as PalaceCommitmentStatus
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_COMMITMENT_STATUSES.join(' / ')}`)
+  }
+
+  private parsePalaceInboxKind(value: unknown, label: string): PalaceInboxKind | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_INBOX_KINDS.includes(text as PalaceInboxKind)) return text as PalaceInboxKind
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_INBOX_KINDS.join(' / ')}`)
+  }
+
+  private parsePalaceInboxStatus(value: unknown, label: string): PalaceInboxStatus | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_INBOX_STATUSES.includes(text as PalaceInboxStatus)) return text as PalaceInboxStatus
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_INBOX_STATUSES.join(' / ')}`)
+  }
+
+  private parsePalaceSedimentTarget(value: unknown, label: string): PalaceSedimentTarget | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_SEDIMENT_TARGETS.includes(text as PalaceSedimentTarget)) {
+      return text as PalaceSedimentTarget
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_SEDIMENT_TARGETS.join(' / ')}`)
+  }
+
+  private parseOptionalNullablePalaceTarget(
+    value: unknown,
+    label: string,
+  ): PalaceSedimentTarget | null | undefined {
+    if (value === undefined) return undefined
+    if (value === null) return null
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (!text) return null
+    return this.parsePalaceSedimentTarget(text, label) ?? null
+  }
+
+  private parseOptionalConfidence(value: unknown): number | null | undefined {
+    if (value === undefined) return undefined
+    if (value === null || value === '') return null
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('confidence 必须是 0 到 1 之间的数字')
+    }
+    return Number(value.toFixed(4))
+  }
+
+  private serializePalaceInboxItem(item: {
+    id: string
+    kind: PalaceInboxKind
+    title: string
+    content: string
+    status: PalaceInboxStatus
+    createdAt: string
+    updatedAt: string
+    target?: PalaceSedimentTarget
+    source?: string
+    confidence?: number
+    tags?: string[]
+  }): Record<string, unknown> {
+    return {
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      content: item.content,
+      status: item.status,
+      target: item.target,
+      source: item.source,
+      confidence: item.confidence,
+      tags: item.tags ?? [],
+      created_at: item.createdAt,
+      updated_at: item.updatedAt,
+    }
+  }
+
+  private optionalTrimmedString(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined
+    const text = value.trim()
+    return text || undefined
+  }
+
+  private optionalStringArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) return undefined
+    const out = value
+      .filter((item): item is string => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean)
+    return out.length > 0 ? Array.from(new Set(out)) : []
+  }
+
+  private assignOptionalString<T extends object, K extends keyof T>(
+    target: T,
+    key: K,
+    value: unknown,
+  ): void {
+    const text = this.optionalTrimmedString(value)
+    if (text !== undefined) target[key] = text as T[K]
+  }
+
+  private assignOptionalNullableString<T extends object, K extends keyof T>(
+    target: T,
+    key: K,
+    value: unknown,
+  ): void {
+    if (value === undefined) return
+    if (value === null) {
+      target[key] = null as T[K]
+      return
+    }
+    const text = typeof value === 'string' ? value.trim() : ''
+    target[key] = (text || null) as T[K]
+  }
+
   private searchKnowledge(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const mode = typeof args.mode === 'string' ? args.mode : 'search'
     if (mode === 'list') return this.listKnowledgeFiles(avatarId)
@@ -2768,7 +3421,6 @@ ${content}` }
     // 优先用随应用 bundle 的 @vscode/ripgrep 二进制（Windows 用户无需自装 rg）；
     // 解析不到时退回 PATH 上的系统 `rg`，再缺失则 execFileSync 抛 ENOENT → 回退 Node 扫描。
     const rgPath = ToolRouter.resolveRgPath()
-    const { execFileSync } = require('child_process') as typeof import('child_process')
 
     const matches: Array<{ file: string; line: number; text: string }> = []
     let truncated = false

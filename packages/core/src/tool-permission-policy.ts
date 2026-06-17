@@ -48,6 +48,12 @@ export const PLAN_MODE_BLOCKED_TOOL_NAMES: ReadonlySet<string> = new Set([
   'task',
   'delegate_task',
   'generate_image',
+  // Palace 写入会改变长期职业处境记忆；Plan 模式只允许查看/规划，不落盘。
+  'add_palace_commitment',
+  'update_palace_commitment',
+  'add_palace_inbox_item',
+  'update_palace_inbox_item',
+  'write_palace_room',
 ])
 
 /**
@@ -81,6 +87,10 @@ export const GREY_ZONE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'export_pptx',
   'gen_pptx',
   'super_inline_html',
+  // Palace 写入虽不改工作区文件，但会持久改变分身的“职业处境记忆”。
+  'add_palace_commitment',
+  'update_palace_commitment',
+  'write_palace_room',
 ])
 
 const MODE_EXEMPT_TOOL_NAMES: ReadonlySet<string> = new Set(['switch_mode'])

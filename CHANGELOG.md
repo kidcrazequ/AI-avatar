@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### 新增
+
+- **Palace 记忆宫殿** — 新增分身级 `palace/` 文件协议，把“任务前该想起什么”做成可路由的职业处境层：路线卡、任务前上下文包、承诺台账、任务后 inbox 沉淀、ToolRouter 工具入口与桌面端“宫殿”面板。配套新增 `scripts/backfill-palace.ts` 幂等回填脚本和 `docs/palace-guide.md` 协议指南。
+
 ## v0.18.4 (2026-06-15)
 
 ### 新增

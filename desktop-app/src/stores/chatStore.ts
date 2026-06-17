@@ -1284,6 +1284,197 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // Palace P1：根据任务匹配记忆宫殿路线卡
+    type: 'function',
+    function: {
+      name: 'match_palace_rooms',
+      description: '根据用户当前任务匹配 Palace/记忆宫殿路线卡。路线卡不是知识内容，而是“遇到某类任务时先读什么、按什么顺序、避开什么坑、沉淀到哪里”的任务路由。适合用户说“写周报 / 给老板发消息 / 项目复盘 / 准备汇报”等职场处境任务时先调用；不要用于普通事实问答。',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: '用户的任务原文或你归纳后的任务，如“帮我写本周周报”' },
+          top_k: { type: 'number', description: '返回前 K 张路线卡，默认 5，上限 10' },
+        },
+        required: ['task'],
+      },
+    },
+  },
+  {
+    // Palace P1：生成任务前上下文包
+    type: 'function',
+    function: {
+      name: 'build_palace_context_card',
+      description: '生成 Palace 任务前上下文包：路线卡、匹配依据、必读文件、坑、承诺提示和待确认沉淀。调用后应先把上下文包简短展示给用户确认，再正式执行任务；本工具只读，不会写入记忆。',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: { type: 'string', description: '用户的任务原文或你归纳后的任务' },
+          room_id: { type: 'string', description: '可选。指定使用某张 palace/rooms/<id>.md；不传则自动匹配最高分路线卡' },
+          top_k: { type: 'number', description: '可选。上下文包中展示的匹配候选数量，默认 3，上限 5' },
+        },
+        required: ['task'],
+      },
+    },
+  },
+  {
+    // Palace P1.5：创建/更新路线卡
+    type: 'function',
+    function: {
+      name: 'write_palace_room',
+      description: '创建或更新一张 Palace 路线卡（palace/rooms/<id>.md），把“这类任务先读什么、按什么顺序、避开什么坑、用什么口径”固化成任务路由。持久写入，会在桌面端触发用户确认，Plan 模式不可用。只在用户明确要固化流程、或你已把路线卡草案展示给用户并得到确认后调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '路线卡 id（即文件名），仅小写字母/数字/连字符，如 daily-room' },
+          name: { type: 'string', description: '路线卡显示名，如“今日驾驶舱”' },
+          description: { type: 'string', description: '可选。一句话说明这张卡管什么任务' },
+          triggers: { type: 'array', items: { type: 'string' }, description: '可选。触发关键词，如 ["写周报","准备汇报"]' },
+          required_files: { type: 'array', items: { type: 'string' }, description: '可选。必读文件/目录，如 ["profile.md","reports/"]' },
+          read_order: { type: 'array', items: { type: 'string' }, description: '可选。按顺序的阅读清单' },
+          conditional_reads: { type: 'array', items: { type: 'string' }, description: '可选。条件读，每条形如“涉及 X → 重点看 Y”' },
+          pitfalls: { type: 'array', items: { type: 'string' }, description: '可选。要避开的坑 / 敏感点' },
+          output_location: { type: 'string', description: '可选。推荐输出位置，如 reports/' },
+          tone_guidance: { type: 'string', description: '可选。建议口径 / 语气基调' },
+          sediment_targets: { type: 'array', items: { type: 'string', enum: ['profile', 'company', 'people', 'projects', 'meetings', 'reports', 'decisions', 'achievements', 'wiki', 'commitments', 'rooms', 'inbox'] }, description: '可选。任务后沉淀目标目录' },
+          priority: { type: 'number', description: '可选。0-100 命中排序权重，默认 50' },
+          enabled: { type: 'boolean', description: '可选。是否启用，默认 true' },
+          body: { type: 'string', description: '可选。人类可读的完整路线说明 Markdown 正文' },
+        },
+        required: ['id', 'name'],
+      },
+    },
+  },
+  {
+    // Palace P2：读取承诺闭环账本
+    type: 'function',
+    function: {
+      name: 'list_palace_commitments',
+      description: '读取 Palace/记忆宫殿承诺账本，默认只返回未关闭承诺，并按逾期、今天到期、近期到期排序。适合任务开始前检查“我答应了谁什么 / 谁欠我什么”；本工具只读，不会写入记忆。',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['proposed', 'open', 'done', 'blocked', 'dropped'], description: '可选。按状态过滤' },
+          direction: { type: 'string', enum: ['i_owe_them', 'they_owe_me', 'mutual', 'watch'], description: '可选。按承诺方向过滤' },
+          query: { type: 'string', description: '可选。按标题、对象、承诺内容、标签、备注模糊过滤' },
+          include_closed: { type: 'boolean', description: '可选。是否包含 done/dropped，默认 false' },
+          due_before: { type: 'string', description: '可选。只看截止日在 YYYY-MM-DD 之前/当天的承诺' },
+          limit: { type: 'number', description: '可选。返回条数，默认 20，上限 100' },
+        },
+      },
+    },
+  },
+  {
+    // Palace P2：新增承诺闭环记录
+    type: 'function',
+    function: {
+      name: 'add_palace_commitment',
+      description: '新增 Palace 承诺记录。持久写入，会在桌面端触发用户确认，Plan 模式不可用。只在用户明确承诺、明确托付、或已确认的上下文包要求写入时调用；不要把随口偏好、模糊计划、未经确认的猜测写成承诺。',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '短标题，如“周五前交测算”' },
+          promise: { type: 'string', description: '承诺正文：谁要交付什么，验收口径是什么' },
+          counterparty: { type: 'string', description: '对方或对象，如“王总 / 项目组 / 客户 A”' },
+          direction: { type: 'string', enum: ['i_owe_them', 'they_owe_me', 'mutual', 'watch'], description: '承诺方向，默认 i_owe_them' },
+          due_at: { type: 'string', description: '可选截止日期，YYYY-MM-DD' },
+          owner: { type: 'string', description: '可选责任人' },
+          source: { type: 'string', description: '可选来源，如会议纪要文件、对话日期或用户原话' },
+          tags: { type: 'array', items: { type: 'string' }, description: '可选标签' },
+          notes: { type: 'array', items: { type: 'string' }, description: '可选备注' },
+        },
+        required: ['title', 'promise'],
+      },
+    },
+  },
+  {
+    // Palace P2：更新承诺闭环记录
+    type: 'function',
+    function: {
+      name: 'update_palace_commitment',
+      description: '更新 Palace 承诺记录，例如标记 done/blocked/dropped、调整截止日、追加备注。持久写入，会在桌面端触发用户确认，Plan 模式不可用。只更新已知 id 的承诺；不要凭空创建新承诺。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '承诺 id，如 cmt-20260617-001' },
+          status: { type: 'string', enum: ['proposed', 'open', 'done', 'blocked', 'dropped'], description: '可选。更新状态' },
+          due_at: { type: 'string', description: '可选。更新截止日期 YYYY-MM-DD；传空字符串表示清除' },
+          title: { type: 'string', description: '可选。更新短标题' },
+          counterparty: { type: 'string', description: '可选。更新对象' },
+          promise: { type: 'string', description: '可选。更新承诺正文' },
+          direction: { type: 'string', enum: ['i_owe_them', 'they_owe_me', 'mutual', 'watch'], description: '可选。更新承诺方向' },
+          owner: { type: 'string', description: '可选。更新责任人；传空字符串表示清除' },
+          source: { type: 'string', description: '可选。更新来源；传空字符串表示清除' },
+          tags: { type: 'array', items: { type: 'string' }, description: '可选。替换标签列表，传空数组表示清空' },
+          append_note: { type: 'string', description: '可选。在备注末尾追加一条记录' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
+    // Palace P3：读取任务后沉淀 inbox
+    type: 'function',
+    function: {
+      name: 'list_palace_inbox',
+      description: '读取 Palace 任务后沉淀 inbox，默认只返回 pending 项。适合查看哪些事实、项目变化、写法或路线建议还在等待用户确认；本工具只读。',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['pending', 'accepted', 'rejected'], description: '可选。按状态过滤；默认只看 pending' },
+          kind: { type: 'string', enum: ['fact', 'person', 'project', 'commitment', 'writing', 'route', 'other'], description: '可选。按沉淀类型过滤' },
+          target: { type: 'string', enum: ['profile', 'company', 'people', 'projects', 'meetings', 'reports', 'decisions', 'achievements', 'wiki', 'commitments', 'rooms', 'inbox'], description: '可选。按建议归档目标过滤' },
+          query: { type: 'string', description: '可选。按标题、正文、来源、标签模糊过滤' },
+          include_resolved: { type: 'boolean', description: '可选。是否包含 accepted/rejected，默认 false' },
+          limit: { type: 'number', description: '可选。返回条数，默认 20，上限 100' },
+        },
+      },
+    },
+  },
+  {
+    // Palace P3：新增任务后沉淀候选
+    type: 'function',
+    function: {
+      name: 'add_palace_inbox_item',
+      description: '把任务后发现的新事实、人物/项目变化、可复用写法或路线卡建议写入 Palace inbox 的 pending 队列，等待用户之后确认归档。它不是正式知识，不要用它代替 add_palace_commitment 或直接写 knowledge。',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: '沉淀项短标题' },
+          content: { type: 'string', description: '沉淀项正文：应该记住什么、为何可复用' },
+          kind: { type: 'string', enum: ['fact', 'person', 'project', 'commitment', 'writing', 'route', 'other'], description: '可选。沉淀类型，默认 other' },
+          target: { type: 'string', enum: ['profile', 'company', 'people', 'projects', 'meetings', 'reports', 'decisions', 'achievements', 'wiki', 'commitments', 'rooms', 'inbox'], description: '可选。建议归档目标' },
+          source: { type: 'string', description: '可选。来源，如本次任务、会议纪要文件、用户原话' },
+          confidence: { type: 'number', description: '可选。0-1 置信度；不确定就低一点或不填' },
+          tags: { type: 'array', items: { type: 'string' }, description: '可选标签' },
+        },
+        required: ['title', 'content'],
+      },
+    },
+  },
+  {
+    // Palace P3：更新任务后沉淀候选
+    type: 'function',
+    function: {
+      name: 'update_palace_inbox_item',
+      description: '按用户确认更新 Palace inbox 沉淀项，例如标为 accepted/rejected、调整归档目标或修正文案。没有用户确认时，不要把 pending 标为 accepted。',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: '沉淀项 id，如 inbox-20260617-001' },
+          status: { type: 'string', enum: ['pending', 'accepted', 'rejected'], description: '可选。更新状态' },
+          kind: { type: 'string', enum: ['fact', 'person', 'project', 'commitment', 'writing', 'route', 'other'], description: '可选。更新类型' },
+          target: { type: 'string', enum: ['profile', 'company', 'people', 'projects', 'meetings', 'reports', 'decisions', 'achievements', 'wiki', 'commitments', 'rooms', 'inbox'], description: '可选。更新归档目标；传空字符串表示清除' },
+          title: { type: 'string', description: '可选。更新短标题' },
+          content: { type: 'string', description: '可选。更新正文' },
+          source: { type: 'string', description: '可选。更新来源；传空字符串表示清除' },
+          confidence: { type: 'number', description: '可选。0-1；传 null 表示清除' },
+          tags: { type: 'array', items: { type: 'string' }, description: '可选。替换标签列表，传空数组表示清空' },
+        },
+        required: ['id'],
+      },
+    },
+  },
+  {
     // v18 OpenClaw 借鉴：写入"以后所有 X 都要 Y"类长期规则，注入 system prompt 永久生效
     type: 'function',
     function: {

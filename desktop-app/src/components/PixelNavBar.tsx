@@ -19,7 +19,7 @@ interface PixelNavBarProps {
   items: NavItem[]
 }
 
-const PRIMARY_NAV_KEYS = new Set(['soul', 'skills', 'docs', 'mem', 'life', 'user'])
+const PRIMARY_NAV_KEYS = new Set(['soul', 'skills', 'docs', 'mem', 'palace', 'life', 'user'])
 
 export default function PixelNavBar({ items }: PixelNavBarProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false)

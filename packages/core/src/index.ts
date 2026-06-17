@@ -464,6 +464,162 @@ export {
   applyDailySummaryAllDates,
 } from './memory/daily-summary'
 
+// Palace（记忆宫殿）：职业处境工作区 + 任务路线卡 + 承诺 / inbox 文件协议
+export {
+  PALACE_SCHEMA_VERSION,
+  PALACE_PROTOCOL_VERSION,
+  PALACE_ROOT_DIR,
+  PALACE_MANIFEST_FILE,
+  PALACE_PROFILE_FILE,
+  PALACE_COMPANY_FILE,
+  PALACE_COMMITMENTS_FILE,
+  PALACE_INBOX_FILE,
+  PALACE_COMMITMENTS_MD_FILE,
+  PALACE_INBOX_MD_FILE,
+  PALACE_INDEX_FILE,
+  PALACE_DIRECTORIES,
+} from './palace/types'
+export type {
+  PalaceDirectory,
+  PalaceSedimentTarget,
+  PalaceManifest,
+  PalaceRoom,
+  PalaceCommitmentDirection,
+  PalaceCommitmentStatus,
+  PalaceCommitment,
+  PalaceCommitmentDocument,
+  PalaceInboxKind,
+  PalaceInboxStatus,
+  PalaceInboxItem,
+  PalaceInboxDocument,
+} from './palace/types'
+export {
+  isPalaceDirectory,
+  assertSafePalaceId,
+  getPalaceDir,
+  getPalaceManifestPath,
+  getPalaceProfilePath,
+  getPalaceCompanyPath,
+  getPalaceCommitmentsPath,
+  getPalaceDirectoryPath,
+  getPalaceRoomsDir,
+  getPalaceRoomPath,
+  getPalaceInboxDir,
+  getPalaceInboxPath,
+  getPalaceCommitmentsMarkdownPath,
+  getPalaceInboxMarkdownPath,
+  getPalaceIndexPath,
+} from './palace/paths'
+export {
+  makeDefaultPalaceRoom,
+  mergePalaceRoom,
+  serializePalaceRoom,
+  parsePalaceRoomMarkdown,
+} from './palace/room'
+export type {
+  PalaceRoomInput,
+} from './palace/room'
+export {
+  renderPalaceCommitmentsMarkdown,
+  renderPalaceInboxMarkdown,
+} from './palace/markdown-mirror'
+export {
+  buildPalaceIndexMarkdown,
+} from './palace/index-builder'
+export type {
+  PalaceIndexInput,
+} from './palace/index-builder'
+export {
+  buildExamplePalaceRooms,
+} from './palace/seed-rooms'
+export {
+  matchPalaceRooms,
+  extractMatchTerms,
+} from './palace/matcher'
+export type {
+  PalaceRoomMatch,
+  PalaceMatchOptions,
+} from './palace/matcher'
+export {
+  buildPalaceContextCard,
+} from './palace/context-card'
+export type {
+  PalaceContextCardInput,
+} from './palace/context-card'
+export {
+  PALACE_COMMITMENT_DIRECTIONS,
+  PALACE_COMMITMENT_STATUSES,
+  normalizePalaceCommitmentDocument,
+  createPalaceCommitment,
+  addPalaceCommitmentToDocument,
+  updatePalaceCommitmentInDocument,
+  filterPalaceCommitments,
+  sortPalaceCommitmentViews,
+  getPalaceCommitmentUrgency,
+  daysUntilDue,
+  isOpenPalaceCommitmentStatus,
+  generatePalaceCommitmentId,
+} from './palace/commitments'
+export type {
+  PalaceCommitmentUrgency,
+  PalaceCommitmentCreateInput,
+  PalaceCommitmentUpdatePatch,
+  PalaceCommitmentFilter,
+  PalaceCommitmentView,
+} from './palace/commitments'
+export {
+  PALACE_INBOX_KINDS,
+  PALACE_INBOX_STATUSES,
+  PALACE_SEDIMENT_TARGETS,
+  normalizePalaceInboxDocument,
+  createPalaceInboxItem,
+  addPalaceInboxItemToDocument,
+  updatePalaceInboxItemInDocument,
+  filterPalaceInboxItems,
+  sortPalaceInboxItems,
+  generatePalaceInboxItemId,
+} from './palace/inbox'
+export type {
+  PalaceInboxCreateInput,
+  PalaceInboxUpdatePatch,
+  PalaceInboxFilter,
+  PalaceInboxItemView,
+} from './palace/inbox'
+export {
+  buildDefaultPalaceManifest,
+  emptyPalaceCommitmentDocument,
+  emptyPalaceInboxDocument,
+  buildDefaultPalaceProfile,
+  buildDefaultPalaceCompany,
+  ensurePalaceWorkspace,
+  readPalaceManifest,
+  writePalaceManifest,
+  readPalaceProfile,
+  writePalaceProfile,
+  readPalaceCompany,
+  writePalaceCompany,
+  readPalaceCommitments,
+  writePalaceCommitments,
+  listPalaceCommitmentViews,
+  addPalaceCommitment,
+  updatePalaceCommitmentEntry,
+  readPalaceInbox,
+  writePalaceInbox,
+  listPalaceInboxItems,
+  addPalaceInboxItem,
+  updatePalaceInboxItemEntry,
+  writePalaceRoom,
+  upsertPalaceRoom,
+  readPalaceRoom,
+  listPalaceRooms,
+  deletePalaceRoom,
+  listPalaceContextExtras,
+  regeneratePalaceIndex,
+} from './palace/store'
+export type {
+  PalaceContextExtras,
+} from './palace/store'
+
 // soul-pack（Letta .af 借鉴）：分身可移植打包，单 JSON 文件含所有文本 inline +
 // 二进制 sha256 ref + 外部技能引用。跨用户分发 / 备份回滚 / 版本管理。
 export {

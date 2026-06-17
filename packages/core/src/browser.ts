@@ -157,5 +157,90 @@ export {
 } from './avatar-self-description'
 export type { SelfDescriptionInput, SelfDescriptionSkill } from './avatar-self-description'
 
+// ─── Palace 路线卡协议（纯类型 + Markdown 解析/序列化，无 fs/path） ───────────
+export {
+  PALACE_SCHEMA_VERSION,
+  PALACE_PROTOCOL_VERSION,
+  PALACE_ROOT_DIR,
+  PALACE_MANIFEST_FILE,
+  PALACE_PROFILE_FILE,
+  PALACE_COMPANY_FILE,
+  PALACE_COMMITMENTS_FILE,
+  PALACE_INBOX_FILE,
+  PALACE_DIRECTORIES,
+} from './palace/types'
+export type {
+  PalaceDirectory,
+  PalaceSedimentTarget,
+  PalaceManifest,
+  PalaceRoom,
+  PalaceCommitmentDirection,
+  PalaceCommitmentStatus,
+  PalaceCommitment,
+  PalaceCommitmentDocument,
+  PalaceInboxKind,
+  PalaceInboxStatus,
+  PalaceInboxItem,
+  PalaceInboxDocument,
+} from './palace/types'
+export {
+  makeDefaultPalaceRoom,
+  serializePalaceRoom,
+  parsePalaceRoomMarkdown,
+} from './palace/room'
+export {
+  matchPalaceRooms,
+  extractMatchTerms,
+} from './palace/matcher'
+export type {
+  PalaceRoomMatch,
+  PalaceMatchOptions,
+} from './palace/matcher'
+export {
+  buildPalaceContextCard,
+} from './palace/context-card'
+export type {
+  PalaceContextCardInput,
+} from './palace/context-card'
+export {
+  PALACE_COMMITMENT_DIRECTIONS,
+  PALACE_COMMITMENT_STATUSES,
+  normalizePalaceCommitmentDocument,
+  createPalaceCommitment,
+  addPalaceCommitmentToDocument,
+  updatePalaceCommitmentInDocument,
+  filterPalaceCommitments,
+  sortPalaceCommitmentViews,
+  getPalaceCommitmentUrgency,
+  daysUntilDue,
+  isOpenPalaceCommitmentStatus,
+  generatePalaceCommitmentId,
+} from './palace/commitments'
+export type {
+  PalaceCommitmentUrgency,
+  PalaceCommitmentCreateInput,
+  PalaceCommitmentUpdatePatch,
+  PalaceCommitmentFilter,
+  PalaceCommitmentView,
+} from './palace/commitments'
+export {
+  PALACE_INBOX_KINDS,
+  PALACE_INBOX_STATUSES,
+  PALACE_SEDIMENT_TARGETS,
+  normalizePalaceInboxDocument,
+  createPalaceInboxItem,
+  addPalaceInboxItemToDocument,
+  updatePalaceInboxItemInDocument,
+  filterPalaceInboxItems,
+  sortPalaceInboxItems,
+  generatePalaceInboxItemId,
+} from './palace/inbox'
+export type {
+  PalaceInboxCreateInput,
+  PalaceInboxUpdatePatch,
+  PalaceInboxFilter,
+  PalaceInboxItemView,
+} from './palace/inbox'
+
 // ─── 上下文溢出识别（渲染进程 send 路径压缩重试用，纯函数） ──────────────────
 export { isContextOverflowError } from './context-overflow'

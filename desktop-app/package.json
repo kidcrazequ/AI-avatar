@@ -32,6 +32,7 @@
     "check:soul-rules": "../scripts/check-soul-rules.sh",
     "retrofit:skills": "tsx ../scripts/retrofit-skills.ts",
     "backfill:life": "tsx ../scripts/backfill-life.ts",
+    "backfill:palace": "tsx ../scripts/backfill-palace.ts",
     "knowledge:inspect": "tsx scripts/knowledge-inspect.ts",
     "test:simulation": "NODE_PATH=./test-support/node_modules npx --yes tsx --test src/stores/deliberation-extractors.test.ts src/stores/stable-system-prompt.test.ts src/stores/branch-nav.test.ts src/services/batch-report-generator.test.ts src/services/batch-regression-runner.test.ts src/services/manual-qa-scenarios.test.ts src/services/regression-telemetry.test.ts src/services/raw-file-resolver.test.ts src/services/wecom-chat-importer.test.ts src/services/llm-providers/cost-tracker.test.ts src/services/eval/eval.test.ts",
     "test:db-migrations": "npx --yes tsx scripts/test-db-migrations.ts",

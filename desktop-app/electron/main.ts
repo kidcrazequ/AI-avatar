@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -2896,6 +2896,89 @@ wrapHandler('standing-orders:read', (_, avatarId: string) => {
 wrapHandler('standing-orders:count', (_, avatarId: string) => {
   assertSafeSegment(avatarId, '分身ID')
   return countStandingOrders(avatarsPath, avatarId)
+})
+
+// Palace 记忆宫殿：桌面端可视化入口只读 overview + 小范围确认操作
+wrapHandler('palace:get-overview', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  // 首次打开「宫殿」面板时种入示例路线卡，避免空房子；已建好的宫殿不受影响。
+  await ensurePalaceWorkspace(avatarsPath, avatarId, new Date(), true)
+  // index.md 由各目录文件聚合而来，而这些目录可能被通用写入/人工填充（不经 palace
+  // mutator），所以打开面板时无条件刷新一次，保证 index 不陈旧。
+  await regeneratePalaceIndex(avatarsPath, avatarId)
+  const [profile, company, rooms, commitments, inbox] = await Promise.all([
+    readPalaceProfile(avatarsPath, avatarId),
+    readPalaceCompany(avatarsPath, avatarId),
+    listPalaceRooms(avatarsPath, avatarId),
+    listPalaceCommitmentViews(avatarsPath, avatarId, { includeClosed: true, limit: 100 }),
+    listPalaceInboxItems(avatarsPath, avatarId, { includeResolved: true, limit: 100 }),
+  ])
+  return {
+    avatarId,
+    profile,
+    company,
+    rooms,
+    commitments,
+    inbox,
+  }
+})
+
+wrapHandler('palace:update-commitment', async (
+  _,
+  avatarId: string,
+  id: string,
+  patch: { status?: string; appendNote?: string },
+) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return updatePalaceCommitmentEntry(avatarsPath, avatarId, id, patch as never)
+})
+
+wrapHandler('palace:add-inbox-item', async (
+  _,
+  avatarId: string,
+  input: {
+    title: string
+    content: string
+    kind?: string
+    target?: string
+    source?: string
+    confidence?: number
+    tags?: string[]
+  },
+) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return addPalaceInboxItem(avatarsPath, avatarId, input as never)
+})
+
+wrapHandler('palace:update-inbox-item', async (
+  _,
+  avatarId: string,
+  id: string,
+  patch: { status?: string; target?: string | null },
+) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return updatePalaceInboxItemEntry(avatarsPath, avatarId, id, patch as never)
+})
+
+wrapHandler('palace:write-room', async (_, avatarId: string, input: PalaceRoomInput) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (!input || typeof input.id !== 'string' || typeof input.name !== 'string') {
+    throw new Error('palace:write-room 需要 input.id 和 input.name')
+  }
+  const { room } = await upsertPalaceRoom(avatarsPath, avatarId, input)
+  return room
+})
+
+wrapHandler('palace:delete-room', async (_, avatarId: string, roomId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafePalaceId(roomId, '路线卡ID')
+  await deletePalaceRoom(avatarsPath, avatarId, roomId)
+})
+
+wrapHandler('palace:reveal', async (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  await ensurePalaceWorkspace(avatarsPath, avatarId)
+  shell.showItemInFolder(path.join(avatarsPath, avatarId, 'palace', 'manifest.json'))
 })
 
 // Lorebook keyword-trigger（SillyTavern 借鉴）：按 user message 关键词被动注入知识片段

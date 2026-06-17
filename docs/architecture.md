@@ -1,16 +1,16 @@
 # Soul Desktop 架构设计文档
 
-> **版本**: v1.2  
+> **版本**: v1.3  
 > **作者**: zhi.qu  
-> **日期**: 2026-04-10  
+> **日期**: 2026-06-17  
 > **范围**: 桌面端架构设计，涵盖整体工程结构、进程模型、数据流、核心模块及技术选型  
-> **更新**: v1.2 同步代码实际状态：新增提示词模板/用户画像/定时任务/数据备份/对话导出/多分身提及/子代理委派；DB schema 更新至 v4；工具列表扩展至 8 个
+> **更新**: v1.3 新增 Palace 记忆宫殿层：任务路线卡、承诺台账、任务后 inbox、桌面端宫殿面板与回填脚本
 
 ---
 
 ## 一、项目概览
 
-Soul 是一个 **AI 分身专家系统**，每个"分身"是一个独立的 AI 角色，拥有自己的人格（Soul）、知识库（Knowledge）、技能树（Skills）、长期记忆（Memory）和测试体系（Tests）。
+Soul 是一个 **AI 分身专家系统**，每个"分身"是一个独立的 AI 角色，拥有自己的人格（Soul）、知识库（Knowledge）、技能树（Skills）、长期记忆（Memory）、记忆宫殿（Palace）和测试体系（Tests）。
 
 桌面端应用（`desktop-app/`）是 Soul 的主要交互入口，目标是让非技术用户也能通过图形界面创建、管理和对话 AI 分身。
 
@@ -71,6 +71,7 @@ soul/
 │   │   │   ├── SkillProposalCard.tsx ← 技能创建建议确认卡片
 │   │   │   ├── TestPanel.tsx    ← 测试管理面板
 │   │   │   ├── MemoryPanel.tsx  ← 记忆管理面板
+│   │   │   ├── PalacePanel.tsx  ← 记忆宫殿面板（路线卡/承诺/inbox）
 │   │   │   ├── UserProfilePanel.tsx ← 用户画像管理面板
 │   │   │   ├── SoulEditorPanel.tsx ← 人格编辑器面板
 │   │   │   ├── PromptTemplatePanel.tsx ← 提示词模板库面板
@@ -103,6 +104,7 @@ soul/
 │       ├── rag-answerer.ts      ← RAG 增强（多跳检索 + prompt 构造）
 │       ├── wiki-compiler.ts     ← 知识百科编译器（Karpathy 融合层）
 │       ├── memory-manager.ts    ← 记忆管理（容量统计/LLM 整理/阈值判断）
+│       ├── palace/              ← 记忆宫殿：任务路线、承诺闭环、任务后沉淀
 │       ├── sub-agent-manager.ts ← 子代理管理（任务委派与并行执行）
 │       └── utils/
 │           ├── markdown-parser.ts   ← Markdown 解析工具
@@ -117,6 +119,7 @@ soul/
 │       ├── skills/              ← 技能定义（.md 文件）
 │       ├── memory/MEMORY.md     ← 长期记忆
 │       ├── memory/USER.md       ← 用户画像
+│       ├── palace/              ← 记忆宫殿（路线卡、承诺、inbox）
 │       └── tests/               ← 测试用例与报告
 │
 ├── templates/                   ← 分身创建模板
@@ -210,6 +213,7 @@ function wrapHandler(channel: string, handler: Function): void
 | 消息管理 | `save-message`, `get-messages` | 渲染 → 主 |
 | 知识库 | `get-knowledge-tree`, `read-knowledge-file`, `write-knowledge-file` | 渲染 → 主 |
 | 记忆/人格 | `read-memory`, `write-memory`, `read-soul`, `write-soul` | 渲染 → 主 |
+| 记忆宫殿 | `palace:get-overview`, `palace:update-commitment`, `palace:add-inbox-item`, `palace:update-inbox-item`, `palace:reveal` | 渲染 → 主 |
 | 技能管理 | `get-skills`, `toggle-skill`, `update-skill` | 渲染 → 主 |
 | 工具调用 | `execute-tool-call`, `search-knowledge-chunks` | 渲染 → 主 |
 | RAG/索引 | `build-knowledge-index`, `rag-retrieve` | 渲染 → 主 |
@@ -282,7 +286,14 @@ function wrapHandler(channel: string, handler: Function): void
 | **DocumentFormatter** | 文档切章 + 逐章 LLM 格式化重排版 | `formatDocument()`, `splitIntoChapters()` |
 | **WikiCompiler** | 知识百科编译：实体提取、概念页生成、交叉引用、知识自检、答案沉淀、知识演化检测 | `compileConceptPages()`, `lintKnowledge()`, `detectEvolution()`, `sedimentAnswer()` |
 | **MemoryManager** | 记忆容量统计、LLM 整理、阈值判断（是否需要整理/预警） | `consolidateMemory()`, `getMemoryStats()`, `shouldConsolidate()` |
+| **Palace** | 职业处境记忆宫殿：任务路线匹配、任务前上下文包、承诺台账、任务后 inbox 沉淀 | `ensurePalaceWorkspace()`, `matchPalaceRooms()`, `buildPalaceContextCard()`, `addPalaceCommitment()`, `addPalaceInboxItem()` |
 | **SubAgentManager** | 子任务委派与并行执行，使用相同知识库但独立对话上下文 | `delegate()`, `getStatus()` |
+
+#### Palace 记忆宫殿层
+
+Palace 与 `knowledge/`、`skills/`、`memory/` 并列。它不存专业事实本身，而存“某类任务开始前该想起什么”：命中哪张路线卡、先读哪些文件、哪些坑要避开、当前有哪些承诺需要追踪、任务后哪些材料先进 inbox 等待确认沉淀。
+
+详细协议见 [`docs/palace-guide.md`](palace-guide.md)。
 
 ### 4.2 主进程模块
 
@@ -330,6 +341,12 @@ function wrapHandler(channel: string, handler: Function): void
 │    ├── skills/*.md      ← 技能定义               │
 │    ├── skills/.config.json ← 技能禁用列表        │
 │    ├── memory/MEMORY.md ← 长期记忆               │
+│    ├── palace/          ← 记忆宫殿               │
+│    │   ├── manifest.json                         │
+│    │   ├── profile.md / company.md               │
+│    │   ├── commitments.json                      │
+│    │   ├── rooms/*.md ← 任务路线卡               │
+│    │   └── inbox/items.json ← 待确认沉淀         │
 │    └── tests/                                    │
 │        ├── cases/*.md   ← 测试用例               │
 │        └── reports/*.json ← 测试报告             │
@@ -1135,7 +1152,7 @@ App
 │
 ├── 顶部操作栏                    ← 分身切换 + 功能导航
 │   ├── AvatarSelector           ← 分身切换下拉
-│   └── NavButtons               ← [人格|技能|测试|知识库|记忆|用户|模板|设置]
+│   └── NavButtons               ← [人格|技能|测试|知识库|记忆|宫殿|用户|模板|设置]
 │
 ├── ChatWindow                   ← 对话窗口
 │   ├── MessageList              ← 消息列表
@@ -1151,6 +1168,7 @@ App
 ├── SkillsPanel (overlay)        ← 技能管理
 ├── TestPanel (overlay)          ← 测试管理
 ├── MemoryPanel (overlay)        ← 记忆编辑
+├── PalacePanel (overlay)        ← 记忆宫殿：路线卡/承诺/inbox/画像
 ├── UserProfilePanel (overlay)   ← 用户画像管理
 ├── SoulEditorPanel (overlay)    ← 人格编辑
 ├── PromptTemplatePanel (overlay)← 提示词模板库

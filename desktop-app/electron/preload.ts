@@ -292,6 +292,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('standing-orders:read', avatarId),
   countStandingOrders: (avatarId: string) =>
     ipcRenderer.invoke('standing-orders:count', avatarId),
+  palace: {
+    getOverview: (avatarId: string) => ipcRenderer.invoke('palace:get-overview', avatarId),
+    updateCommitment: (avatarId: string, id: string, patch: { status?: string; appendNote?: string }) =>
+      ipcRenderer.invoke('palace:update-commitment', avatarId, id, patch),
+    addInboxItem: (avatarId: string, input: {
+      title: string
+      content: string
+      kind?: string
+      target?: string
+      source?: string
+      confidence?: number
+      tags?: string[]
+    }) => ipcRenderer.invoke('palace:add-inbox-item', avatarId, input),
+    updateInboxItem: (avatarId: string, id: string, patch: { status?: string; target?: string | null }) =>
+      ipcRenderer.invoke('palace:update-inbox-item', avatarId, id, patch),
+    writeRoom: (avatarId: string, input: unknown) =>
+      ipcRenderer.invoke('palace:write-room', avatarId, input),
+    deleteRoom: (avatarId: string, roomId: string) =>
+      ipcRenderer.invoke('palace:delete-room', avatarId, roomId),
+    reveal: (avatarId: string) => ipcRenderer.invoke('palace:reveal', avatarId),
+  },
   // GAP7: 知识文件 CRUD（之前缺失）
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => ipcRenderer.invoke('create-knowledge-file', avatarId, relativePath, content),
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => ipcRenderer.invoke('delete-knowledge-file', avatarId, relativePath),

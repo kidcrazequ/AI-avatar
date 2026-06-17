@@ -8,6 +8,7 @@ import CreateAvatarWizard from './components/CreateAvatarWizard'
 import TestPanel from './components/TestPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
+import PalacePanel from './components/PalacePanel'
 import LifePanel from './components/LifePanel'
 import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
@@ -131,7 +132,7 @@ function App() {
   /** Project 管理面板 */
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
@@ -140,6 +141,7 @@ function App() {
   const showTestPanel = activePanel === 'test'
   const showSkillsPanel = activePanel === 'skills'
   const showMemoryPanel = activePanel === 'memory'
+  const showPalacePanel = activePanel === 'palace'
   const showLifePanel = activePanel === 'life'
   const showUserProfilePanel = activePanel === 'userProfile'
   const showSoulEditor = activePanel === 'soulEditor'
@@ -660,6 +662,7 @@ function App() {
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
     { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
+    { label: '宫殿', icon: '▦', key: 'palace', onClick: () => setActivePanel('palace'), active: showPalacePanel },
     { label: '人生', icon: '❀', key: 'life', onClick: () => setActivePanel('life'), active: showLifePanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
@@ -963,6 +966,13 @@ function App() {
 
       {showMemoryPanel && activeAvatarId && (
         <MemoryPanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
+        />
+      )}
+
+      {showPalacePanel && activeAvatarId && (
+        <PalacePanel
           avatarId={activeAvatarId}
           onClose={() => setActivePanel(null)}
         />

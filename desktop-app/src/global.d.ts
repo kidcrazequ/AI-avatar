@@ -284,6 +284,105 @@ interface UpdateEmbedInput {
   enabled?: boolean
 }
 
+type PalaceSedimentTargetDTO =
+  | 'profile'
+  | 'company'
+  | 'people'
+  | 'projects'
+  | 'meetings'
+  | 'reports'
+  | 'decisions'
+  | 'achievements'
+  | 'wiki'
+  | 'commitments'
+  | 'rooms'
+  | 'inbox'
+
+type PalaceCommitmentStatusDTO = 'proposed' | 'open' | 'done' | 'blocked' | 'dropped'
+type PalaceCommitmentDirectionDTO = 'i_owe_them' | 'they_owe_me' | 'mutual' | 'watch'
+type PalaceCommitmentUrgencyDTO = 'overdue' | 'due_today' | 'due_soon' | 'scheduled' | 'no_due' | 'closed'
+type PalaceInboxKindDTO = 'fact' | 'person' | 'project' | 'commitment' | 'writing' | 'route' | 'other'
+type PalaceInboxStatusDTO = 'pending' | 'accepted' | 'rejected'
+
+interface PalaceRoomDTO {
+  id: string
+  name: string
+  description: string
+  triggers: string[]
+  priority: number
+  enabled: boolean
+  requiresContextCard: boolean
+  requiredFiles: string[]
+  readOrder: string[]
+  conditionalReads: string[]
+  pitfalls: string[]
+  outputLocation: string
+  toneGuidance: string
+  sedimentTargets: PalaceSedimentTargetDTO[]
+  createdAt: string
+  updatedAt: string
+  body: string
+}
+
+interface PalaceRoomInputDTO {
+  id: string
+  name: string
+  description?: string
+  triggers?: string[]
+  requiredFiles?: string[]
+  readOrder?: string[]
+  conditionalReads?: string[]
+  pitfalls?: string[]
+  outputLocation?: string
+  toneGuidance?: string
+  sedimentTargets?: PalaceSedimentTargetDTO[]
+  priority?: number
+  enabled?: boolean
+  requiresContextCard?: boolean
+  body?: string
+}
+
+interface PalaceCommitmentDTO {
+  id: string
+  direction: PalaceCommitmentDirectionDTO
+  title: string
+  counterparty: string
+  promise: string
+  status: PalaceCommitmentStatusDTO
+  createdAt: string
+  updatedAt: string
+  dueAt?: string
+  owner?: string
+  source?: string
+  tags?: string[]
+  notes?: string[]
+  urgency: PalaceCommitmentUrgencyDTO
+  daysUntilDue: number | null
+}
+
+interface PalaceInboxItemDTO {
+  id: string
+  kind: PalaceInboxKindDTO
+  title: string
+  content: string
+  status: PalaceInboxStatusDTO
+  createdAt: string
+  updatedAt: string
+  target?: PalaceSedimentTargetDTO
+  source?: string
+  confidence?: number
+  tags?: string[]
+}
+
+interface PalaceOverviewDTO {
+  avatarId: string
+  profile: string
+  company: string
+  rooms: PalaceRoomDTO[]
+  commitments: PalaceCommitmentDTO[]
+  inbox: PalaceInboxItemDTO[]
+}
+
 /**
  * WebDAV 跨设备同步类型（#16 WebDAV cross-device sync，2026-05-09）。
  * 与 electron/sync/sync-manager.ts 的导出类型保持字段一致；密码字段绝不会
@@ -754,6 +853,34 @@ interface ElectronAPI {
   }>
   readStandingOrders: (avatarId: string) => Promise<string>
   countStandingOrders: (avatarId: string) => Promise<number>
+  palace: {
+    getOverview: (avatarId: string) => Promise<PalaceOverviewDTO>
+    updateCommitment: (
+      avatarId: string,
+      id: string,
+      patch: { status?: PalaceCommitmentStatusDTO; appendNote?: string },
+    ) => Promise<PalaceCommitmentDTO>
+    addInboxItem: (
+      avatarId: string,
+      input: {
+        title: string
+        content: string
+        kind?: PalaceInboxKindDTO
+        target?: PalaceSedimentTargetDTO
+        source?: string
+        confidence?: number
+        tags?: string[]
+      },
+    ) => Promise<PalaceInboxItemDTO>
+    updateInboxItem: (
+      avatarId: string,
+      id: string,
+      patch: { status?: PalaceInboxStatusDTO; target?: PalaceSedimentTargetDTO | null },
+    ) => Promise<PalaceInboxItemDTO>
+    writeRoom: (avatarId: string, input: PalaceRoomInputDTO) => Promise<PalaceRoomDTO>
+    deleteRoom: (avatarId: string, roomId: string) => Promise<void>
+    reveal: (avatarId: string) => Promise<void>
+  }
   // v18 Letta .af 借鉴：soul-pack 可移植打包格式
   // 主进程主导文件对话框：renderer 不传任何路径，避免任意文件读写。
   // import 流：preview → token → import；token 5 分钟过期 + 一次性消费。

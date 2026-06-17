@@ -615,6 +615,7 @@ export {
   deletePalaceRoom,
   listPalaceContextExtras,
   regeneratePalaceIndex,
+  seedExamplePalaceRooms,
 } from './palace/store'
 export type {
   PalaceContextExtras,

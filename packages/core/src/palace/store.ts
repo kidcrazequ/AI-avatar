@@ -213,14 +213,22 @@ export async function ensurePalaceWorkspace(
   return manifest
 }
 
-async function seedExamplePalaceRooms(
+/**
+ * 种入内置示例路线卡。幂等：用 writeIfMissing，已存在的同名卡不覆盖。
+ * 返回本次实际新增的卡数（用于回填脚本汇报）。不自动重建索引，调用方按需重建。
+ */
+export async function seedExamplePalaceRooms(
   avatarsRoot: string,
   avatarId: string,
-  now: Date,
-): Promise<void> {
+  now: Date = new Date(),
+): Promise<number> {
+  let written = 0
   for (const room of buildExamplePalaceRooms(now)) {
-    await writeIfMissing(getPalaceRoomPath(avatarsRoot, avatarId, room.id), serializePalaceRoom(room))
+    if (await writeIfMissing(getPalaceRoomPath(avatarsRoot, avatarId, room.id), serializePalaceRoom(room))) {
+      written += 1
+    }
   }
+  return written
 }
 
 async function ensurePalaceReadableArtifacts(
@@ -341,12 +349,15 @@ export async function regeneratePalaceIndex(
   await atomicWrite(getPalaceIndexPath(avatarsRoot, avatarId), markdown)
 }
 
-async function writeIfMissing(filePath: string, content: string): Promise<void> {
+/** 仅当文件不存在时写入。返回 true 表示本次写了，false 表示已存在被跳过。 */
+async function writeIfMissing(filePath: string, content: string): Promise<boolean> {
   try {
     await fs.promises.writeFile(filePath, content, { encoding: 'utf-8', flag: 'wx' })
+    return true
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
     if (code !== 'EEXIST') throw err
+    return false
   }
 }
 

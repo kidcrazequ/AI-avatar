@@ -7,7 +7,7 @@ interface Props {
   onClose: () => void
 }
 
-type PalaceTab = 'rooms' | 'commitments' | 'inbox' | 'profile'
+type PalaceTab = 'rooms' | 'commitments' | 'inbox' | 'docs' | 'profile'
 
 const INBOX_KINDS: Array<{ value: PalaceInboxKindDTO; label: string }> = [
   { value: 'fact', label: '事实' },
@@ -286,6 +286,7 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
           <TabButton active={tab === 'rooms'} onClick={() => setTab('rooms')}>路线</TabButton>
           <TabButton active={tab === 'commitments'} onClick={() => setTab('commitments')}>承诺</TabButton>
           <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>待归档</TabButton>
+          <TabButton active={tab === 'docs'} onClick={() => setTab('docs')}>资料</TabButton>
           <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>我与公司</TabButton>
         </div>
 
@@ -344,6 +345,8 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
                 submit: () => void handleAddInbox(),
               }}
             />
+          ) : tab === 'docs' ? (
+            <DocsTab avatarId={avatarId} />
           ) : (
             <ProfileTab profile={overview?.profile ?? ''} company={overview?.company ?? ''} />
           )}
@@ -804,6 +807,136 @@ function InboxTab({
           {item.tags && item.tags.length > 0 && <CompactList title="标签" items={item.tags} />}
         </section>
       ))}
+    </div>
+  )
+}
+
+const DOC_DIRS: Array<{ value: PalaceDocDirDTO; label: string }> = [
+  { value: 'people', label: '人物' },
+  { value: 'projects', label: '项目' },
+  { value: 'meetings', label: '会议' },
+  { value: 'reports', label: '汇报' },
+  { value: 'decisions', label: '决策' },
+  { value: 'achievements', label: '成果' },
+  { value: 'wiki', label: '知识' },
+]
+
+function DocsTab({ avatarId }: { avatarId: string }) {
+  const [dir, setDir] = useState<PalaceDocDirDTO>('people')
+  const [files, setFiles] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  // null = 文件列表视图；'' = 正在新建；其它字符串 = 正在编辑该文件
+  const [openFile, setOpenFile] = useState<string | null>(null)
+  const [content, setContent] = useState('')
+  const [newName, setNewName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const loadFiles = useCallback(async () => {
+    setLoading(true)
+    try {
+      setFiles(await window.electronAPI.palace.listDirFiles(avatarId, dir))
+    } catch (e) {
+      window.electronAPI.logEvent('error', 'palace-docs-list', e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [avatarId, dir])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadFiles() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadFiles])
+
+  const openExisting = async (name: string) => {
+    try {
+      setContent(await window.electronAPI.palace.readDirFile(avatarId, dir, name))
+      setOpenFile(name)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '打开失败')
+    }
+  }
+
+  const save = async () => {
+    let name = openFile
+    if (openFile === '') {
+      const base = newName.trim()
+      if (!base) { window.alert('给文件起个名字，如「王总」'); return }
+      name = /\.md$/i.test(base) ? base : `${base}.md`
+    }
+    if (!name) return
+    setSaving(true)
+    try {
+      await window.electronAPI.palace.writeDirFile(avatarId, dir, name, content)
+      setOpenFile(null)
+      await loadFiles()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const del = async (name: string) => {
+    if (!window.confirm(`删除「${name}」？不可撤销。`)) return
+    try {
+      await window.electronAPI.palace.deleteDirFile(avatarId, dir, name)
+      if (openFile === name) setOpenFile(null)
+      await loadFiles()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '删除失败')
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
+        <p className="text-[13px] text-px-text-sec leading-relaxed">
+          这里管你的<span className="text-px-primary">分类资料</span>：人物画像、项目、会议纪要、周报、决策、成果、知识。分身做任务时按需读这些。
+        </p>
+        <p className="text-[12px] text-px-text-dim mt-1">也可以让分身在对话里帮你写；这页是手动看 / 建 / 改 / 删。</p>
+      </div>
+
+      <ChipSelect label="选目录" value={dir} options={DOC_DIRS} onChange={(d) => { setDir(d); setOpenFile(null) }} />
+
+      {openFile === null ? (
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <button type="button" className="pixel-btn-primary py-1 text-[12px]" onClick={() => { setNewName(''); setContent(''); setOpenFile('') }}>+ 新建文件</button>
+          </div>
+          {loading ? (
+            <div className="font-game text-[12px] text-px-text-dim text-center py-8">LOADING...</div>
+          ) : files.length === 0 ? (
+            <EmptyState label="这个目录还没有文件，点「+ 新建文件」加一个" />
+          ) : (
+            <div className="space-y-2">
+              {files.map(name => (
+                <div key={name} className="flex items-center justify-between gap-3 border-2 border-px-border bg-px-elevated px-3 py-2">
+                  <span className="font-mono text-[12px] text-px-text truncate">{name}</span>
+                  <div className="flex gap-2 shrink-0">
+                    <button type="button" className="pixel-btn-outline-light py-1 text-[11px]" onClick={() => void openExisting(name)}>编辑</button>
+                    <button type="button" className="pixel-btn-outline-muted py-1 text-[11px] text-px-danger border-px-danger" onClick={() => void del(name)}>删除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            {openFile === '' ? (
+              <input value={newName} onChange={e => setNewName(e.target.value)} className={`${inputCls} max-w-[60%]`} placeholder="文件名，如 王总（自动加 .md）" />
+            ) : (
+              <span className="font-mono text-[12px] text-px-primary truncate">{dir}/{openFile}</span>
+            )}
+            <div className="flex gap-2 shrink-0">
+              <button type="button" disabled={saving} className="pixel-btn-outline-muted py-1 text-[11px]" onClick={() => setOpenFile(null)}>取消</button>
+              <button type="button" disabled={saving} className="pixel-btn-primary py-1 text-[12px]" onClick={() => void save()}>保存</button>
+            </div>
+          </div>
+          <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full min-h-[360px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text leading-relaxed" placeholder="用 Markdown 写，比如：# 王总（换行）只看数字和风险……" />
+        </div>
+      )}
     </div>
   )
 }

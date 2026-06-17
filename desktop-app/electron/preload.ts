@@ -318,6 +318,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('palace:write-room', avatarId, input),
     deleteRoom: (avatarId: string, roomId: string) =>
       ipcRenderer.invoke('palace:delete-room', avatarId, roomId),
+    listDirFiles: (avatarId: string, dir: string) =>
+      ipcRenderer.invoke('palace:list-dir-files', avatarId, dir),
+    readDirFile: (avatarId: string, dir: string, name: string) =>
+      ipcRenderer.invoke('palace:read-dir-file', avatarId, dir, name),
+    writeDirFile: (avatarId: string, dir: string, name: string, content: string) =>
+      ipcRenderer.invoke('palace:write-dir-file', avatarId, dir, name, content),
+    deleteDirFile: (avatarId: string, dir: string, name: string) =>
+      ipcRenderer.invoke('palace:delete-dir-file', avatarId, dir, name),
     reveal: (avatarId: string) => ipcRenderer.invoke('palace:reveal', avatarId),
   },
   // GAP7: 知识文件 CRUD（之前缺失）

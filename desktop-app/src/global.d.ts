@@ -303,6 +303,7 @@ type PalaceCommitmentDirectionDTO = 'i_owe_them' | 'they_owe_me' | 'mutual' | 'w
 type PalaceCommitmentUrgencyDTO = 'overdue' | 'due_today' | 'due_soon' | 'scheduled' | 'no_due' | 'closed'
 type PalaceInboxKindDTO = 'fact' | 'person' | 'project' | 'commitment' | 'writing' | 'route' | 'other'
 type PalaceInboxStatusDTO = 'pending' | 'accepted' | 'rejected'
+type PalaceDocDirDTO = 'people' | 'projects' | 'meetings' | 'reports' | 'decisions' | 'achievements' | 'wiki'
 
 interface PalaceRoomDTO {
   id: string
@@ -889,6 +890,10 @@ interface ElectronAPI {
     ) => Promise<PalaceInboxItemDTO>
     writeRoom: (avatarId: string, input: PalaceRoomInputDTO) => Promise<PalaceRoomDTO>
     deleteRoom: (avatarId: string, roomId: string) => Promise<void>
+    listDirFiles: (avatarId: string, dir: PalaceDocDirDTO) => Promise<string[]>
+    readDirFile: (avatarId: string, dir: PalaceDocDirDTO, name: string) => Promise<string>
+    writeDirFile: (avatarId: string, dir: PalaceDocDirDTO, name: string, content: string) => Promise<void>
+    deleteDirFile: (avatarId: string, dir: PalaceDocDirDTO, name: string) => Promise<void>
     reveal: (avatarId: string) => Promise<void>
   }
   // v18 Letta .af 借鉴：soul-pack 可移植打包格式

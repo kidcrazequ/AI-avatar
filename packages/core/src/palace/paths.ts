@@ -81,6 +81,26 @@ export function getPalaceRoomsDir(avatarsRoot: string, avatarId: string): string
   return getPalaceDirectoryPath(avatarsRoot, avatarId, 'rooms')
 }
 
+/**
+ * 解析 palace/<dir>/<fileName> 的安全路径。只允许 .md，禁止路径穿越和隐藏文件。
+ */
+export function getPalaceDirectoryFilePath(
+  avatarsRoot: string,
+  avatarId: string,
+  directory: PalaceDirectory,
+  fileName: string,
+): string {
+  const dirPath = getPalaceDirectoryPath(avatarsRoot, avatarId, directory)
+  assertSafeSegment(fileName, '文件名')
+  if (fileName.startsWith('.')) {
+    throw new Error(`非法文件名，不能以 . 开头: ${fileName}`)
+  }
+  if (!/\.md$/i.test(fileName)) {
+    throw new Error(`Palace 资料只支持 .md 文件: ${fileName}`)
+  }
+  return path.join(dirPath, fileName)
+}
+
 export function getPalaceRoomPath(
   avatarsRoot: string,
   avatarId: string,

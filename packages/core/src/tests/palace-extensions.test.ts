@@ -33,6 +33,11 @@ import {
   serializePalaceRoom,
   upsertPalaceRoom,
   writePalaceCommitments,
+  listPalaceDirectoryFiles,
+  readPalaceDirectoryFile,
+  writePalaceDirectoryFile,
+  deletePalaceDirectoryFile,
+  getPalaceDirectoryFilePath,
   type PalaceCommitmentDocument,
   type PalaceInboxDocument,
 } from '../index'
@@ -209,5 +214,23 @@ describe('palace workspace seeding + 派生文件', () => {
     assert.equal(second.room.name, '路线一改名')
     const index = fs.readFileSync(getPalaceIndexPath(avatarsRoot, AVATAR_ID), 'utf-8')
     assert.match(index, /路线一改名/)
+  })
+
+  it('目录文件 写/读/列/删 全链路 + 写人物刷新索引', async () => {
+    await writePalaceDirectoryFile(avatarsRoot, AVATAR_ID, 'people', '王总.md', '# 王总\n\n只看数字。')
+    assert.deepEqual(await listPalaceDirectoryFiles(avatarsRoot, AVATAR_ID, 'people'), ['王总.md'])
+    assert.match(await readPalaceDirectoryFile(avatarsRoot, AVATAR_ID, 'people', '王总.md'), /只看数字/)
+    // 写人物会刷新索引，index.md 应出现该人物
+    assert.match(fs.readFileSync(getPalaceIndexPath(avatarsRoot, AVATAR_ID), 'utf-8'), /王总/)
+
+    await deletePalaceDirectoryFile(avatarsRoot, AVATAR_ID, 'people', '王总.md')
+    assert.deepEqual(await listPalaceDirectoryFiles(avatarsRoot, AVATAR_ID, 'people'), [])
+    assert.equal(await readPalaceDirectoryFile(avatarsRoot, AVATAR_ID, 'people', '王总.md'), '')
+  })
+
+  it('目录文件路径拒绝非 .md、路径穿越、隐藏文件', () => {
+    assert.throws(() => getPalaceDirectoryFilePath(avatarsRoot, AVATAR_ID, 'people', '王总.txt'), /\.md/)
+    assert.throws(() => getPalaceDirectoryFilePath(avatarsRoot, AVATAR_ID, 'people', '../escape.md'), /文件名|路径/)
+    assert.throws(() => getPalaceDirectoryFilePath(avatarsRoot, AVATAR_ID, 'people', '.hidden.md'), /\./)
   })
 })

@@ -10,6 +10,7 @@ import {
   getPalaceCommitmentsPath,
   getPalaceCompanyPath,
   getPalaceDir,
+  getPalaceDirectoryFilePath,
   getPalaceDirectoryPath,
   getPalaceIndexPath,
   getPalaceInboxMarkdownPath,
@@ -276,6 +277,55 @@ async function listPalaceDirFiles(
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
     throw err
   }
+}
+
+/** 列出 palace/<dir>/ 下的 .md 文件名。给桌面端「资料」面板用。 */
+export async function listPalaceDirectoryFiles(
+  avatarsRoot: string,
+  avatarId: string,
+  directory: PalaceDirectory,
+): Promise<string[]> {
+  return listPalaceDirFiles(avatarsRoot, avatarId, directory)
+}
+
+/** 读取 palace/<dir>/<fileName> 内容；不存在返回空串。 */
+export async function readPalaceDirectoryFile(
+  avatarsRoot: string,
+  avatarId: string,
+  directory: PalaceDirectory,
+  fileName: string,
+): Promise<string> {
+  return (await readTextSafe(getPalaceDirectoryFilePath(avatarsRoot, avatarId, directory, fileName))) ?? ''
+}
+
+/** 写入/覆盖 palace/<dir>/<fileName>，并刷新索引。 */
+export async function writePalaceDirectoryFile(
+  avatarsRoot: string,
+  avatarId: string,
+  directory: PalaceDirectory,
+  fileName: string,
+  content: string,
+): Promise<void> {
+  await ensurePalaceWorkspace(avatarsRoot, avatarId)
+  await atomicWrite(getPalaceDirectoryFilePath(avatarsRoot, avatarId, directory, fileName), content)
+  await regeneratePalaceIndex(avatarsRoot, avatarId)
+}
+
+/** 删除 palace/<dir>/<fileName>（不存在则忽略），并刷新索引。 */
+export async function deletePalaceDirectoryFile(
+  avatarsRoot: string,
+  avatarId: string,
+  directory: PalaceDirectory,
+  fileName: string,
+): Promise<void> {
+  let removed = false
+  try {
+    await fs.promises.unlink(getPalaceDirectoryFilePath(avatarsRoot, avatarId, directory, fileName))
+    removed = true
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+  }
+  if (removed) await regeneratePalaceIndex(avatarsRoot, avatarId)
 }
 
 export interface PalaceContextExtras {

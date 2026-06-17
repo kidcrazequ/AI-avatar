@@ -509,6 +509,7 @@ export {
   getPalaceCommitmentsMarkdownPath,
   getPalaceInboxMarkdownPath,
   getPalaceIndexPath,
+  getPalaceDirectoryFilePath,
 } from './palace/paths'
 export {
   makeDefaultPalaceRoom,
@@ -616,6 +617,10 @@ export {
   listPalaceContextExtras,
   regeneratePalaceIndex,
   seedExamplePalaceRooms,
+  listPalaceDirectoryFiles,
+  readPalaceDirectoryFile,
+  writePalaceDirectoryFile,
+  deletePalaceDirectoryFile,
 } from './palace/store'
 export type {
   PalaceContextExtras,

@@ -855,6 +855,16 @@ interface ElectronAPI {
   countStandingOrders: (avatarId: string) => Promise<number>
   palace: {
     getOverview: (avatarId: string) => Promise<PalaceOverviewDTO>
+    addCommitment: (
+      avatarId: string,
+      input: {
+        title: string
+        promise: string
+        counterparty?: string
+        direction?: PalaceCommitmentDirectionDTO
+        dueAt?: string
+      },
+    ) => Promise<PalaceCommitmentDTO>
     updateCommitment: (
       avatarId: string,
       id: string,

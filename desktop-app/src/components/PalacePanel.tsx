@@ -20,19 +20,30 @@ const INBOX_KINDS: Array<{ value: PalaceInboxKindDTO; label: string }> = [
 ]
 
 const TARGETS: Array<{ value: PalaceSedimentTargetDTO; label: string }> = [
-  { value: 'profile', label: 'profile' },
-  { value: 'company', label: 'company' },
-  { value: 'people', label: 'people' },
-  { value: 'projects', label: 'projects' },
-  { value: 'meetings', label: 'meetings' },
-  { value: 'reports', label: 'reports' },
-  { value: 'decisions', label: 'decisions' },
-  { value: 'achievements', label: 'achievements' },
-  { value: 'wiki', label: 'wiki' },
-  { value: 'commitments', label: 'commitments' },
-  { value: 'rooms', label: 'rooms' },
-  { value: 'inbox', label: 'inbox' },
+  { value: 'profile', label: '画像' },
+  { value: 'company', label: '公司' },
+  { value: 'people', label: '人物' },
+  { value: 'projects', label: '项目' },
+  { value: 'meetings', label: '会议' },
+  { value: 'reports', label: '汇报' },
+  { value: 'decisions', label: '决策' },
+  { value: 'achievements', label: '成果' },
+  { value: 'wiki', label: '知识' },
+  { value: 'commitments', label: '承诺' },
+  { value: 'rooms', label: '路线卡' },
+  { value: 'inbox', label: '收件箱' },
 ]
+
+const TARGET_LABEL = Object.fromEntries(TARGETS.map(t => [t.value, t.label])) as Record<PalaceSedimentTargetDTO, string>
+const INBOX_KIND_LABEL = Object.fromEntries(INBOX_KINDS.map(k => [k.value, k.label])) as Record<PalaceInboxKindDTO, string>
+
+const DIRECTIONS: Array<{ value: PalaceCommitmentDirectionDTO; label: string }> = [
+  { value: 'i_owe_them', label: '我答应的' },
+  { value: 'they_owe_me', label: '别人欠我' },
+  { value: 'mutual', label: '双向约定' },
+  { value: 'watch', label: '盯着' },
+]
+const DIRECTION_LABEL = Object.fromEntries(DIRECTIONS.map(d => [d.value, d.label])) as Record<PalaceCommitmentDirectionDTO, string>
 
 const URGENCY_LABEL: Record<PalaceCommitmentUrgencyDTO, string> = {
   overdue: '已逾期',
@@ -151,6 +162,21 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
     }
   }
 
+  const handleAddCommitment = async (input: { title: string; promise: string; counterparty?: string; direction?: PalaceCommitmentDirectionDTO; dueAt?: string }) => {
+    setIsSaving(true)
+    try {
+      await window.electronAPI.palace.addCommitment(avatarId, input)
+      showStatus('SAVED')
+      await loadOverview()
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      window.electronAPI.logEvent('error', 'palace-commitment-add', msg)
+      showStatus('FAILED')
+    } finally {
+      if (mountedRef.current) setIsSaving(false)
+    }
+  }
+
   const handleInboxStatus = async (id: string, status: PalaceInboxStatusDTO) => {
     setIsSaving(true)
     try {
@@ -260,7 +286,7 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
           <TabButton active={tab === 'rooms'} onClick={() => setTab('rooms')}>路线</TabButton>
           <TabButton active={tab === 'commitments'} onClick={() => setTab('commitments')}>承诺</TabButton>
           <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>待归档</TabButton>
-          <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>档案</TabButton>
+          <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>我与公司</TabButton>
         </div>
 
         <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-px-bg border-b border-px-border-dim">
@@ -294,6 +320,7 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
               showClosed={showClosedCommitments}
               onToggleClosed={() => setShowClosedCommitments(v => !v)}
               onUpdateStatus={(id, status) => void handleCommitmentStatus(id, status)}
+              onAdd={(input) => void handleAddCommitment(input)}
               disabled={isSaving}
             />
           ) : tab === 'inbox' ? (
@@ -415,21 +442,6 @@ function RoomsTab({
 
 const ROOM_TARGET_VALUES: PalaceSedimentTargetDTO[] = TARGETS.map(t => t.value)
 
-const ROOM_TARGET_LABELS: Record<PalaceSedimentTargetDTO, string> = {
-  profile: '画像',
-  company: '组织',
-  people: '人物',
-  projects: '项目',
-  meetings: '会议',
-  reports: '汇报',
-  decisions: '决策',
-  achievements: '成果',
-  wiki: '知识',
-  commitments: '承诺',
-  rooms: '路线卡',
-  inbox: '收件箱',
-}
-
 function RoomEditor({
   initial,
   disabled,
@@ -544,7 +556,7 @@ function RoomEditor({
                   onClick={() => toggleTarget(value)}
                   className={`font-mono text-[11px] border px-2 py-0.5 ${sedimentTargets.includes(value) ? 'border-px-primary text-px-primary bg-px-primary/10' : 'border-px-border-dim text-px-text-dim'}`}
                 >
-                  {ROOM_TARGET_LABELS[value]}<span className="opacity-50 ml-1">{value}</span>
+                  {TARGET_LABEL[value]}<span className="opacity-50 ml-1">{value}</span>
                 </button>
               ))}
             </div>
@@ -605,28 +617,92 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
+/** 像素风单选：用一排可点的格子代替原生 <select>，全中文、与整体主题一致。 */
+function ChipSelect<T extends string>({ label, hint, value, options, onChange }: {
+  label: string
+  hint?: string
+  value: T
+  options: Array<{ value: T; label: string }>
+  onChange: (v: T) => void
+}) {
+  return (
+    <Field label={label} hint={hint}>
+      <div className="flex flex-wrap gap-1">
+        {options.map(o => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`font-mono text-[11px] border px-2 py-0.5 ${value === o.value ? 'border-px-primary text-px-primary bg-px-primary/10' : 'border-px-border-dim text-px-text-dim'}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </Field>
+  )
+}
+
 function CommitmentsTab({
   commitments,
   showClosed,
   onToggleClosed,
   onUpdateStatus,
+  onAdd,
   disabled,
 }: {
   commitments: PalaceCommitmentDTO[]
   showClosed: boolean
   onToggleClosed: () => void
   onUpdateStatus: (id: string, status: PalaceCommitmentStatusDTO) => void
+  onAdd: (input: { title: string; promise: string; counterparty?: string; direction?: PalaceCommitmentDirectionDTO; dueAt?: string }) => void
   disabled: boolean
 }) {
+  const [title, setTitle] = useState('')
+  const [promise, setPromise] = useState('')
+  const [counterparty, setCounterparty] = useState('')
+  const [direction, setDirection] = useState<PalaceCommitmentDirectionDTO>('i_owe_them')
+  const [dueAt, setDueAt] = useState('')
+
+  const submit = () => {
+    if (!title.trim()) { window.alert('给承诺起个短标题，如「周五前交测算」'); return }
+    if (!promise.trim()) { window.alert('写一下承诺内容：谁交付什么'); return }
+    onAdd({
+      title: title.trim(),
+      promise: promise.trim(),
+      counterparty: counterparty.trim() || undefined,
+      direction,
+      dueAt: dueAt.trim() || undefined,
+    })
+    setTitle(''); setPromise(''); setCounterparty(''); setDueAt(''); setDirection('i_owe_them')
+  }
+
   return (
     <div className="space-y-3">
+      <section className="border-2 border-px-border bg-px-bg p-3 space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="短标题，如「周五前交测算」" />
+          <input value={counterparty} onChange={e => setCounterparty(e.target.value)} className={inputCls} placeholder="对方（可空），如「王总」" />
+        </div>
+        <input value={promise} onChange={e => setPromise(e.target.value)} className={inputCls} placeholder="承诺内容：谁交付什么、验收口径" />
+        <ChipSelect label="方向" value={direction} options={DIRECTIONS} onChange={setDirection} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-end">
+          <Field label="截止日（可空）" hint="格式 2026-06-20">
+            <input value={dueAt} onChange={e => setDueAt(e.target.value)} className={inputCls} placeholder="2026-06-20" />
+          </Field>
+          <div className="flex justify-end">
+            <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={submit}>新增承诺</button>
+          </div>
+        </div>
+      </section>
+
       <div className="flex justify-end">
         <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onToggleClosed}>
           {showClosed ? '隐藏关闭项' : '显示关闭项'}
         </button>
       </div>
       {commitments.length === 0 ? (
-        <EmptyState label="暂无承诺" />
+        <EmptyState label="暂无承诺，用上面的表单加一条" />
       ) : commitments.map(item => (
         <section key={item.id} className="border-2 border-px-border bg-px-elevated p-4">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
@@ -638,7 +714,7 @@ function CommitmentsTab({
               </div>
               <p className="text-[13px] text-px-text-sec mt-2 leading-relaxed">{item.promise}</p>
               <div className="font-mono text-[11px] text-px-text-dim mt-2">
-                {item.counterparty} · {item.direction} {item.dueAt ? `· due ${item.dueAt}` : ''}
+                {item.counterparty} · {DIRECTION_LABEL[item.direction] ?? item.direction} {item.dueAt ? `· 截止 ${item.dueAt}` : ''}
               </div>
             </div>
             {item.status !== 'done' && item.status !== 'dropped' && (
@@ -685,19 +761,15 @@ function InboxTab({
 }) {
   return (
     <div className="space-y-3">
-      <section className="border-2 border-px-border bg-px-bg p-3">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-2">
-          <input value={draft.title} onChange={e => draft.setTitle(e.target.value)} className="px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text" placeholder="标题" />
-          <select value={draft.kind} onChange={e => draft.setKind(e.target.value as PalaceInboxKindDTO)} className="px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text">
-            {INBOX_KINDS.map(kind => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
-          </select>
-          <select value={draft.target} onChange={e => draft.setTarget(e.target.value as PalaceSedimentTargetDTO)} className="px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text">
-            {TARGETS.map(target => <option key={target.value} value={target.value}>{target.label}</option>)}
-          </select>
-          <input value={draft.source} onChange={e => draft.setSource(e.target.value)} className="px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text" placeholder="source" />
+      <section className="border-2 border-px-border bg-px-bg p-3 space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          <input value={draft.title} onChange={e => draft.setTitle(e.target.value)} className={inputCls} placeholder="标题，如「项目进入报价阶段」" />
+          <input value={draft.source} onChange={e => draft.setSource(e.target.value)} className={inputCls} placeholder="来源（可空），如某会议纪要" />
         </div>
-        <textarea value={draft.content} onChange={e => draft.setContent(e.target.value)} className="mt-2 w-full min-h-[76px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[13px] text-px-text" placeholder="正文" />
-        <div className="flex justify-between items-center gap-2 mt-2">
+        <ChipSelect label="类型" value={draft.kind} options={INBOX_KINDS} onChange={draft.setKind} />
+        <ChipSelect label="归档到哪个文件夹" value={draft.target} options={TARGETS} onChange={draft.setTarget} />
+        <textarea value={draft.content} onChange={e => draft.setContent(e.target.value)} className="w-full min-h-[76px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[13px] text-px-text" placeholder="正文：要记住什么、为什么值得归档" />
+        <div className="flex justify-between items-center gap-2">
           <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onToggleResolved}>
             {showResolved ? '隐藏已处理' : '显示已处理'}
           </button>
@@ -714,8 +786,8 @@ function InboxTab({
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-game text-[13px] text-px-text">{item.title}</h3>
                 <Badge label={INBOX_STATUS_LABEL[item.status]} tone={item.status === 'accepted' ? 'success' : item.status === 'rejected' ? 'danger' : 'warning'} />
-                <Badge label={item.kind} tone="muted" />
-                {item.target && <Badge label={item.target} tone="primary" />}
+                <Badge label={INBOX_KIND_LABEL[item.kind] ?? item.kind} tone="muted" />
+                {item.target && <Badge label={TARGET_LABEL[item.target] ?? item.target} tone="primary" />}
               </div>
               <p className="text-[13px] text-px-text-sec mt-2 leading-relaxed whitespace-pre-wrap">{item.content}</p>
               <div className="font-mono text-[11px] text-px-text-dim mt-2">
@@ -738,9 +810,17 @@ function InboxTab({
 
 function ProfileTab({ profile, company }: { profile: string; company: string }) {
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-      <TextBlock title="profile.md" text={profile} />
-      <TextBlock title="company.md" text={company} />
+    <div className="space-y-3">
+      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
+        <p className="text-[13px] text-px-text-sec leading-relaxed">
+          这里是你的<span className="text-px-primary">职业画像</span>（profile）和<span className="text-px-primary">公司情况</span>（company），分身做任何职场任务都先读这两份打底。
+        </p>
+        <p className="text-[12px] text-px-text-dim mt-1">只有这两份是正常的——其它资料（人物 / 项目 / 会议…）分门别类放在各自文件夹里，不在这页。</p>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        <TextBlock title="职业画像 · profile.md" text={profile} />
+        <TextBlock title="公司情况 · company.md" text={company} />
+      </div>
     </div>
   )
 }

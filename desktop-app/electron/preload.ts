@@ -294,6 +294,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('standing-orders:count', avatarId),
   palace: {
     getOverview: (avatarId: string) => ipcRenderer.invoke('palace:get-overview', avatarId),
+    addCommitment: (avatarId: string, input: {
+      title: string
+      promise: string
+      counterparty?: string
+      direction?: string
+      dueAt?: string
+    }) => ipcRenderer.invoke('palace:add-commitment', avatarId, input),
     updateCommitment: (avatarId: string, id: string, patch: { status?: string; appendNote?: string }) =>
       ipcRenderer.invoke('palace:update-commitment', avatarId, id, patch),
     addInboxItem: (avatarId: string, input: {

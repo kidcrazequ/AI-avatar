@@ -361,11 +361,20 @@ function RoomsTab({
 }) {
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <button type="button" className="pixel-btn-primary py-1 text-[12px]" onClick={onNew}>+ 新建房间</button>
+      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] text-px-text-sec leading-relaxed">
+            <span className="font-game text-[11px] text-px-primary mr-1">路线卡</span>
+            = 教分身「遇到某类任务先看什么、按什么顺序、避开什么坑」。
+          </p>
+          <p className="text-[12px] text-px-text-dim mt-1 leading-relaxed">
+            最快上手：点下面任意示例卡的「编辑」照着改。想从头建，点右边按钮。
+          </p>
+        </div>
+        <button type="button" className="pixel-btn-primary py-1 text-[12px] shrink-0" onClick={onNew}>+ 新建路线卡</button>
       </div>
       {rooms.length === 0 ? (
-        <EmptyState label="暂无路线卡，点「+ 新建房间」创建第一张" />
+        <EmptyState label="还没有路线卡。点「+ 新建路线卡」从头建一张" />
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           {rooms.map(room => (
@@ -406,6 +415,21 @@ function RoomsTab({
 
 const ROOM_TARGET_VALUES: PalaceSedimentTargetDTO[] = TARGETS.map(t => t.value)
 
+const ROOM_TARGET_LABELS: Record<PalaceSedimentTargetDTO, string> = {
+  profile: '画像',
+  company: '组织',
+  people: '人物',
+  projects: '项目',
+  meetings: '会议',
+  reports: '汇报',
+  decisions: '决策',
+  achievements: '成果',
+  wiki: '知识',
+  commitments: '承诺',
+  rooms: '路线卡',
+  inbox: '收件箱',
+}
+
 function RoomEditor({
   initial,
   disabled,
@@ -432,16 +456,19 @@ function RoomEditor({
   const [priority, setPriority] = useState(String(initial?.priority ?? 50))
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
   const [body, setBody] = useState(initial?.body ?? '')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const autoId = slugify(name)
+  const effectiveId = isEdit ? (initial?.id ?? '') : (id.trim() || autoId)
 
   const submit = () => {
-    const trimmedId = id.trim()
-    const trimmedName = name.trim()
-    if (!trimmedId) { window.alert('id 不能为空（仅小写字母/数字/连字符，如 daily-room）'); return }
-    if (!trimmedName) { window.alert('name 不能为空'); return }
+    if (!name.trim()) { window.alert('先给这张卡起个名字，比如「给老板写邮件」'); return }
+    if (arrayOf(triggers).length === 0) { window.alert('填一下「什么时候用这张卡」（触发词），否则分身不知道何时该用它'); return }
+    if (!effectiveId) { window.alert('生成不出 id，请展开「高级」手填一个英文 id'); return }
     const n = Number(priority)
     onSave({
-      id: trimmedId,
-      name: trimmedName,
+      id: effectiveId,
+      name: name.trim(),
       description: description.trim(),
       triggers: arrayOf(triggers),
       requiredFiles: arrayOf(requiredFiles),
@@ -464,63 +491,83 @@ function RoomEditor({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-game text-[13px] text-px-primary">{isEdit ? `编辑路线卡 · ${initial?.id}` : '新建路线卡'}</h3>
+        <h3 className="font-game text-[13px] text-px-primary">{isEdit ? `编辑 · ${initial?.name}` : '新建路线卡'}</h3>
         <div className="flex gap-2">
           <button type="button" disabled={disabled} className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onCancel}>取消</button>
           <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={submit}>保存</button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-        <Field label="id（文件名，小写/数字/连字符）">
-          <input value={id} disabled={isEdit} onChange={e => setId(e.target.value)} className={inputCls} placeholder="daily-room" />
+      <div className="space-y-3 border-2 border-px-border bg-px-elevated p-3">
+        <Field label="名字" required hint="这张卡叫什么，给人看的">
+          <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="例：给老板写邮件" />
         </Field>
-        <Field label="name（显示名）">
-          <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="今日驾驶舱" />
+        <Field label="什么时候用这张卡（触发词，每行一个）" required hint="用户说到这些词，分身就自动用这张卡">
+          <textarea value={triggers} onChange={e => setTriggers(e.target.value)} className={areaCls} placeholder={'例：\n写邮件\n给王总'} />
+        </Field>
+        <Field label="必读（按顺序，每行一个文件/目录）" hint="做这类任务前，先看哪些材料">
+          <textarea value={requiredFiles} onChange={e => setRequiredFiles(e.target.value)} className={areaCls} placeholder={'例：\nprofile.md\ncompany.md\npeople/'} />
+        </Field>
+        <Field label="坑 / 别踩（每行一个）" hint="这类任务最容易犯的错">
+          <textarea value={pitfalls} onChange={e => setPitfalls(e.target.value)} className={areaCls} placeholder={'例：\n别写成流水账\n别承诺没定的工期'} />
         </Field>
       </div>
 
-      <Field label="description（一句话说明）">
-        <input value={description} onChange={e => setDescription(e.target.value)} className={inputCls} />
-      </Field>
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(v => !v)}
+        className="w-full text-left font-game text-[11px] text-px-text-dim border-2 border-px-border-dim px-3 py-2"
+      >
+        {showAdvanced ? '▾' : '▸'} 高级选项（条件读 / 建议口径 / 沉淀目标 / 正文 / id）
+      </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-        <Field label="触发关键词（每行一个）"><textarea value={triggers} onChange={e => setTriggers(e.target.value)} className={areaCls} /></Field>
-        <Field label="必读文件/目录（每行一个）"><textarea value={requiredFiles} onChange={e => setRequiredFiles(e.target.value)} className={areaCls} /></Field>
-        <Field label="阅读顺序（每行一个）"><textarea value={readOrder} onChange={e => setReadOrder(e.target.value)} className={areaCls} /></Field>
-        <Field label="条件读（每行「涉及X → 重点看Y」）"><textarea value={conditionalReads} onChange={e => setConditionalReads(e.target.value)} className={areaCls} /></Field>
-        <Field label="坑/敏感点（每行一个）"><textarea value={pitfalls} onChange={e => setPitfalls(e.target.value)} className={areaCls} /></Field>
-        <Field label="建议口径"><textarea value={toneGuidance} onChange={e => setToneGuidance(e.target.value)} className={areaCls} /></Field>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-        <Field label="输出位置"><input value={outputLocation} onChange={e => setOutputLocation(e.target.value)} className={inputCls} /></Field>
-        <Field label="priority（0-100）"><input type="number" value={priority} onChange={e => setPriority(e.target.value)} className={inputCls} /></Field>
-        <Field label="启用">
-          <label className="flex items-center gap-2 font-mono text-[12px] text-px-text px-1 py-1">
-            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> enabled
+      {showAdvanced && (
+        <div className="space-y-3 border-l-2 border-px-border-dim pl-3">
+          <Field label="id（文件名）" hint={isEdit ? '已建卡的 id 不能改' : `留空就用名字自动生成：${autoId || '（先填名字）'}`}>
+            <input value={id} disabled={isEdit} onChange={e => setId(e.target.value)} className={inputCls} placeholder={autoId || 'daily-room'} />
+          </Field>
+          <Field label="一句话说明" hint="给这张卡写个简介（可选）">
+            <input value={description} onChange={e => setDescription(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="条件读（每行「涉及 X → 重点看 Y」）" hint="按场景追加读，不是固定必读">
+            <textarea value={conditionalReads} onChange={e => setConditionalReads(e.target.value)} className={areaCls} placeholder="例：涉及报价 → 重点看最新 reports/" />
+          </Field>
+          <Field label="建议口径" hint="给分身定对外措辞 / 语气基调">
+            <textarea value={toneGuidance} onChange={e => setToneGuidance(e.target.value)} className={areaCls} placeholder="例：结论先行，只给数字和风险" />
+          </Field>
+          <Field label="任务做完后把新发现归到哪些文件夹" hint="默认进收件箱等你确认；不确定就别动">
+            <div className="flex flex-wrap gap-1">
+              {ROOM_TARGET_VALUES.map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => toggleTarget(value)}
+                  className={`font-mono text-[11px] border px-2 py-0.5 ${sedimentTargets.includes(value) ? 'border-px-primary text-px-primary bg-px-primary/10' : 'border-px-border-dim text-px-text-dim'}`}
+                >
+                  {ROOM_TARGET_LABELS[value]}<span className="opacity-50 ml-1">{value}</span>
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
+            <Field label="阅读顺序（覆盖必读的展示顺序）" hint="一般不用填">
+              <textarea value={readOrder} onChange={e => setReadOrder(e.target.value)} className={areaCls} />
+            </Field>
+            <Field label="输出位置" hint="任务产物默认存哪">
+              <input value={outputLocation} onChange={e => setOutputLocation(e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="排序权重（0-100）" hint="多卡命中时分高的优先">
+              <input type="number" value={priority} onChange={e => setPriority(e.target.value)} className={inputCls} />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 font-mono text-[12px] text-px-text">
+            <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> 启用这张卡
           </label>
-        </Field>
-      </div>
-
-      <Field label="沉淀目标（多选）">
-        <div className="flex flex-wrap gap-1">
-          {ROOM_TARGET_VALUES.map(value => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => toggleTarget(value)}
-              className={`font-mono text-[11px] border px-2 py-0.5 ${sedimentTargets.includes(value) ? 'border-px-primary text-px-primary bg-px-primary/10' : 'border-px-border-dim text-px-text-dim'}`}
-            >
-              {value}
-            </button>
-          ))}
+          <Field label="正文（Markdown，可选）" hint="给人读的完整路线说明；留空会自动生成骨架">
+            <textarea value={body} onChange={e => setBody(e.target.value)} className="w-full min-h-[140px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text" />
+          </Field>
         </div>
-      </Field>
-
-      <Field label="正文（Markdown，可选）">
-        <textarea value={body} onChange={e => setBody(e.target.value)} className="w-full min-h-[140px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text" />
-      </Field>
+      )}
     </div>
   )
 }
@@ -528,10 +575,13 @@ function RoomEditor({
 const inputCls = 'w-full px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text'
 const areaCls = 'w-full min-h-[70px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text'
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: ReactNode }) {
   return (
     <div>
-      <div className="font-game text-[10px] text-px-text-dim mb-1">{label}</div>
+      <div className="font-game text-[10px] text-px-text-sec mb-0.5">
+        {label}{required && <span className="text-px-danger ml-1">*</span>}
+      </div>
+      {hint && <div className="text-[11px] text-px-text-dim mb-1 leading-snug">{hint}</div>}
       {children}
     </div>
   )
@@ -543,6 +593,16 @@ function linesOf(items: string[] | undefined): string {
 
 function arrayOf(text: string): string[] {
   return text.split('\n').map(s => s.trim()).filter(Boolean)
+}
+
+/** 从名字推一个安全的文件名 id：空白和点转连字符、去路径分隔符；中文原样保留。 */
+function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s.]+/g, '-')
+    .replace(/[/\\]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function CommitmentsTab({

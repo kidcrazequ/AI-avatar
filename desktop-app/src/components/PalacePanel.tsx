@@ -259,14 +259,14 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
         <div className="flex items-center gap-1 px-3 py-2 bg-px-elevated border-b-2 border-px-border">
           <TabButton active={tab === 'rooms'} onClick={() => setTab('rooms')}>路线</TabButton>
           <TabButton active={tab === 'commitments'} onClick={() => setTab('commitments')}>承诺</TabButton>
-          <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>沉淀</TabButton>
+          <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>待归档</TabButton>
           <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>档案</TabButton>
         </div>
 
         <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-px-bg border-b border-px-border-dim">
           <Metric label="路线卡" value={overview?.rooms.length ?? 0} />
           <Metric label="未关闭承诺" value={openCommitments.length} tone={openCommitments.some(c => c.urgency === 'overdue') ? 'danger' : 'primary'} />
-          <Metric label="待确认沉淀" value={pendingInbox.length} tone={pendingInbox.length > 0 ? 'warning' : 'primary'} />
+          <Metric label="待归档" value={pendingInbox.length} tone={pendingInbox.length > 0 ? 'warning' : 'primary'} />
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
@@ -399,7 +399,7 @@ function RoomsTab({
                 </div>
               )}
               <div className="mt-3 font-mono text-[11px] text-px-text-dim truncate">
-                输出：{room.outputLocation || 'inbox/'} · 沉淀：{room.sedimentTargets.join(' / ') || 'inbox'}
+                输出：{room.outputLocation || 'inbox/'} · 归档：{room.sedimentTargets.join(' / ') || 'inbox'}
               </div>
               <div className="mt-3 flex gap-2">
                 <button type="button" className="pixel-btn-outline-light py-1 text-[11px]" onClick={() => onEdit(room)}>编辑</button>
@@ -518,7 +518,7 @@ function RoomEditor({
         onClick={() => setShowAdvanced(v => !v)}
         className="w-full text-left font-game text-[11px] text-px-text-dim border-2 border-px-border-dim px-3 py-2"
       >
-        {showAdvanced ? '▾' : '▸'} 高级选项（条件读 / 建议口径 / 沉淀目标 / 正文 / id）
+        {showAdvanced ? '▾' : '▸'} 高级选项（条件读 / 建议口径 / 归档目标 / 正文 / id）
       </button>
 
       {showAdvanced && (
@@ -701,12 +701,12 @@ function InboxTab({
           <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onToggleResolved}>
             {showResolved ? '隐藏已处理' : '显示已处理'}
           </button>
-          <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={draft.submit}>添加沉淀候选</button>
+          <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={draft.submit}>手动加一条</button>
         </div>
       </section>
 
       {items.length === 0 ? (
-        <EmptyState label="暂无沉淀项" />
+        <EmptyState label="暂无待归档项" />
       ) : items.map(item => (
         <section key={item.id} className="border-2 border-px-border bg-px-elevated p-4">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">

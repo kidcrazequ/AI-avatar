@@ -959,6 +959,7 @@ function App() {
         <AvatarOffice
           avatars={avatarList}
           activeAvatarId={activeAvatarId || undefined}
+          conversations={conversations}
           onClose={() => setActivePanel(null)}
           onEnterAvatar={handleSelectAvatar}
         />

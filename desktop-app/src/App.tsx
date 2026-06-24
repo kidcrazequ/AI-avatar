@@ -14,6 +14,7 @@ import UserProfilePanel from './components/UserProfilePanel'
 import SoulEditorPanel from './components/SoulEditorPanel'
 import PromptTemplatePanel from './components/PromptTemplatePanel'
 import SchedulesPanel from './components/SchedulesPanel'
+import AvatarOffice from './components/AvatarOffice'
 import BatchRegressionPanel from './components/BatchRegressionPanel'
 import ExpertPackPanel from './components/ExpertPackPanel'
 import ImportAvatarPackPanel from './components/ImportAvatarPackPanel'
@@ -132,7 +133,7 @@ function App() {
   /** Project 管理面板 */
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | 'office' | null
   >(null)
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
@@ -148,6 +149,7 @@ function App() {
   const showPromptTemplatePanel = activePanel === 'promptTemplate'
   const showSchedulesPanel = activePanel === 'schedules'
   const showBatchRegression = activePanel === 'batchRegression'
+  const showOfficePanel = activePanel === 'office'
   /** 非空时打开"导出分身包"弹窗，值为要导出的分身 ID */
   const [exportAvatarId, setExportAvatarId] = useState<string | null>(null)
   const [templateFillText, setTemplateFillText] = useState<string | undefined>(undefined)
@@ -667,6 +669,7 @@ function App() {
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
+    { label: '办公室', icon: '▣', key: 'office', onClick: () => setActivePanel('office'), active: showOfficePanel },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
@@ -702,6 +705,12 @@ function App() {
               className="pixel-btn-primary px-5 py-3"
             >
               [+] 新建分身
+            </button>
+            <button
+              onClick={() => setActivePanel('office')}
+              className="pixel-btn-outline-muted px-5 py-3"
+            >
+              办公室
             </button>
             <button
               onClick={() => setActivePanel('expertPacks')}
@@ -943,6 +952,15 @@ function App() {
         <SettingsPanel
           activeAvatarId={activeAvatarId}
           onClose={() => setActivePanel(null)}
+        />
+      )}
+
+      {showOfficePanel && (
+        <AvatarOffice
+          avatars={avatarList}
+          activeAvatarId={activeAvatarId || undefined}
+          onClose={() => setActivePanel(null)}
+          onEnterAvatar={handleSelectAvatar}
         />
       )}
 

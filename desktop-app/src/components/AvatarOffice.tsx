@@ -1,8 +1,8 @@
 /**
  * AvatarOffice: 「AI 分身办公室」全屏可视化页面。
  *
- * 复刻 Marvis 的等距 3D 办公室（marvis.qq.com）：等距桌椅 + 小猪坐在办公椅里对着彩色
- * 屏幕办公（背面视角）+ 柔和落地投影 + 右侧 Token/任务面板。两段式：先「开启」引导页
+ * 复刻 Marvis 的等距 3D 办公室（marvis.qq.com）：等距桌椅 + Marvis 马（吉祥物）坐在办公椅里
+ * 对着彩色屏幕办公（背面视角）+ 柔和落地投影 + 右侧 Token/任务面板。两段式：先「开启」引导页
  * （图三/图四），点击开启进入正式办公室（图二）。纯 SVG/CSS，不依赖图片资源。
  *
  * 数据诚实声明：右侧面板的「对话明细」与计数全部来自真实会话数据（getConversations）。
@@ -10,8 +10,8 @@
  *
  * 设计取舍：
  * - 一个 Seat 单元（等距桌 + 椅 + 显示器 + 小猪）在原点画好，再 translate 到网格各点。
- * - 桌前小猪取背面视角（贴合参考图），用猪耳 + 卷尾 + 彩色围巾保留「猪」的识别度；
- *   档案管家保留正面猪脸（让用户始终能看到那张脸）。
+ * - 桌前 Marvis 取背面视角（贴合参考图）：扇形鬃毛 + 上扬鬃角 + 彩色围巾；
+ *   档案管家用正面侧脸（一睁一眨 + 红围巾），让用户看到完整吉祥物。
  * - 尊重 prefers-reduced-motion：减少动态偏好下全部动画暂停。
  *
  * @author Kian
@@ -24,7 +24,7 @@ import PanelHeader from './shared/PanelHeader'
 
 interface Props {
   avatars: Avatar[]
-  /** 当前激活的分身 id（决定哪只小猪在「工作」） */
+  /** 当前激活的分身 id（决定哪只 Marvis 在「工作」） */
   activeAvatarId?: string
   /** 真实会话列表（来自 App 的 getConversations），驱动右侧任务面板。 */
   conversations: Conversation[]
@@ -75,38 +75,61 @@ const INTRO_ANCHORS: ReadonlyArray<{ x: number; y: number }> = [
   { x: 710, y: 370 },
 ]
 
+const MARVIS_BLACK = '#141414'
+
+/** 生成扇形鬃毛（一组三角刺，从 (hcx,hcy) 沿各角度向外辐射）。 */
+function maneSpikes(
+  hcx: number,
+  hcy: number,
+  R: number,
+  defs: ReadonlyArray<{ a: number; l: number; w: number }>,
+  fill: string,
+) {
+  return defs.map((d, i) => {
+    const r = (d.a * Math.PI) / 180
+    const ux = Math.cos(r)
+    const uy = Math.sin(r)
+    const px = -uy
+    const py = ux
+    const bx = hcx + R * ux
+    const by = hcy + R * uy
+    const tx = hcx + (R + d.l) * ux
+    const ty = hcy + (R + d.l) * uy
+    return (
+      <path key={i} d={`M ${bx + px * d.w} ${by + py * d.w} L ${tx} ${ty} L ${bx - px * d.w} ${by - py * d.w} Z`} fill={fill} />
+    )
+  })
+}
+
+/** 鬃毛扇形定义（角度 deg，l 长度，w 半宽）。 */
+const PROFILE_MANE = [
+  { a: -72, l: 40, w: 14 }, { a: -54, l: 44, w: 15 }, { a: -34, l: 46, w: 16 }, { a: -14, l: 44, w: 15 },
+  { a: 6, l: 42, w: 14 }, { a: 24, l: 38, w: 13 }, { a: 40, l: 32, w: 12 },
+] as const
+const BACK_MANE = [
+  { a: -118, l: 30, w: 12 }, { a: -96, l: 34, w: 13 }, { a: -72, l: 37, w: 14 }, { a: -48, l: 36, w: 13 },
+  { a: -24, l: 31, w: 12 }, { a: 0, l: 26, w: 11 }, { a: 22, l: 22, w: 10 },
+] as const
+
 /**
- * 背面视角小猪（坐在办公椅里对着屏幕）：圆后脑勺 + 两只猪耳 + 卷尾，深色软 3D。
- * 头顶探出椅背 / 屏幕下沿；身体被椅背挡住。
+ * Marvis 马（背面视角，坐在办公椅里对着屏幕）：圆后脑勺 + 扇形鬃毛 + 上翘鬃角。
+ * 复刻 marvis.qq.com 吉祥物。头顶探出椅背 / 屏幕下沿；身体被椅背挡住，无脸。
  */
-function MascotBack({ cx, cy, scale, sleeping }: { cx: number; cy: number; scale: number; sleeping?: boolean }) {
-  const id = `mbk-${Math.round(cx)}-${Math.round(cy)}`
+function MarvisBack({ cx, cy, scale, sleeping }: { cx: number; cy: number; scale: number; sleeping?: boolean }) {
   return (
     <g transform={`translate(${cx} ${cy}) scale(${scale})`}>
       <g className={sleeping ? 'office-mascot office-mascot--sleep' : 'office-mascot'}>
-        <defs>
-          <radialGradient id={id} cx="42%" cy="26%" r="84%">
-            <stop offset="0%" stopColor="#3a3f47" />
-            <stop offset="55%" stopColor="#23262c" />
-            <stop offset="100%" stopColor="#14161a" />
-          </radialGradient>
-        </defs>
-        {/* 背 / 身体（多被椅背遮住） */}
-        <ellipse cx="0" cy="30" rx="33" ry="27" fill={`url(#${id})`} />
-        {/* 卷尾（猪的识别点） */}
-        <path d="M 28 28 q 12 -2 9 9 q -2 8 -10 5 q 5 -1 4 -6 q -1 -5 -3 -8 Z" fill="#cf8aa0" opacity="0.9" />
-        {/* 两只猪耳（背面：朝上外张，明显些才认得出是猪） */}
-        <path d="M -25 -18 Q -44 -52 -27 -56 Q -11 -47 -10 -18 Z" fill={`url(#${id})`} />
-        <path d="M 25 -18 Q 44 -52 27 -56 Q 11 -47 10 -18 Z" fill={`url(#${id})`} />
-        <path d="M -22 -22 Q -33 -45 -25 -48 Q -14 -42 -13 -22 Z" fill="#cf8aa0" opacity="0.5" />
-        <path d="M 22 -22 Q 33 -45 25 -48 Q 14 -42 13 -22 Z" fill="#cf8aa0" opacity="0.5" />
+        {/* 扇形鬃毛（在脑袋后面） */}
+        {maneSpikes(0, -2, 22, BACK_MANE, MARVIS_BLACK)}
+        {/* 上翘鬃角 */}
+        <path d="M -16 -14 Q -34 -34 -40 -20" stroke={MARVIS_BLACK} strokeWidth="11" fill="none" strokeLinecap="round" />
         {/* 后脑勺 */}
-        <circle cx="0" cy="-6" r="27" fill={`url(#${id})`} />
-        <ellipse cx="9" cy="-15" rx="7" ry="10" fill="#ffffff" opacity="0.07" />
+        <circle cx="0" cy="-2" r="25" fill={MARVIS_BLACK} />
+        <ellipse cx="8" cy="-11" rx="6" ry="9" fill="#ffffff" opacity="0.06" />
         {sleeping && (
           <g className="office-zzz" fill="#9aa1ac" fontFamily="monospace" fontWeight="700">
-            <text x="30" y="-30" fontSize="13">z</text>
-            <text x="41" y="-41" fontSize="17">Z</text>
+            <text x="28" y="-26" fontSize="13">z</text>
+            <text x="39" y="-37" fontSize="17">Z</text>
           </g>
         )}
       </g>
@@ -114,35 +137,35 @@ function MascotBack({ cx, cy, scale, sleeping }: { cx: number; cy: number; scale
   )
 }
 
-/** 正面猪脸（给档案管家用，让用户始终看得到那张脸）。 */
-function MascotFront({ cx, cy, scale, hue }: { cx: number; cy: number; scale: number; hue: number }) {
-  const id = `mfr-${Math.round(cx)}-${Math.round(cy)}`
+/**
+ * Marvis 马（正面侧脸，朝左）：忠实复刻 marvis.qq.com 吉祥物——方头马脸 + 上扬鬃角
+ * + 扇形鬃毛 + 一睁一眨的大眼 + 红围巾 + 方块手臂。给档案管家「门面」用。
+ * 局部画布约 0..240 × 0..230，视觉中心约 (118,116)，故内部反向平移让中心落在 (cx,cy)。
+ */
+function MarvisProfile({ cx, cy, scale }: { cx: number; cy: number; scale: number }) {
   return (
-    <g transform={`translate(${cx} ${cy}) scale(${scale})`}>
+    <g transform={`translate(${cx} ${cy}) scale(${scale}) translate(-118 -116)`}>
       <g className="office-mascot">
-        <defs>
-          <radialGradient id={id} cx="40%" cy="28%" r="82%">
-            <stop offset="0%" stopColor="#3a3f47" />
-            <stop offset="55%" stopColor="#23262c" />
-            <stop offset="100%" stopColor="#15171b" />
-          </radialGradient>
-        </defs>
-        <ellipse cx="0" cy="42" rx="42" ry="32" fill={`url(#${id})`} />
-        <path d="M -28 34 Q 0 48 28 34 L 26 48 Q 0 60 -26 48 Z" fill={`hsl(${hue} 68% 58%)`} />
-        <path d="M -26 -30 Q -42 -50 -31 -55 Q -16 -49 -13 -31 Z" fill={`url(#${id})`} />
-        <path d="M 26 -30 Q 42 -50 31 -55 Q 16 -49 13 -31 Z" fill={`url(#${id})`} />
-        <path d="M -24 -32 Q -34 -47 -28 -50 Q -19 -45 -17 -33 Z" fill="#cf8aa0" opacity="0.85" />
-        <path d="M 24 -32 Q 34 -47 28 -50 Q 19 -45 17 -33 Z" fill="#cf8aa0" opacity="0.85" />
-        <circle cx="0" cy="-4" r="32" fill={`url(#${id})`} />
-        <ellipse cx="-11" cy="-15" rx="10" ry="13" fill="#ffffff" opacity="0.09" />
-        <ellipse cx="-11" cy="-7" rx="4.2" ry="5" fill="#13151a" />
-        <ellipse cx="11" cy="-7" rx="4.2" ry="5" fill="#13151a" />
-        <circle cx="-9.5" cy="-9" r="1.5" fill="#ffffff" />
-        <circle cx="12.5" cy="-9" r="1.5" fill="#ffffff" />
-        <ellipse cx="0" cy="9" rx="17" ry="12" fill="#e3a3b6" />
-        <ellipse cx="0" cy="9" rx="17" ry="12" fill="none" stroke="#c98aa0" strokeWidth="1.2" opacity="0.6" />
-        <ellipse cx="-6" cy="9" rx="3" ry="4.6" fill="#a86079" />
-        <ellipse cx="6" cy="9" rx="3" ry="4.6" fill="#a86079" />
+        {maneSpikes(104, 98, 46, PROFILE_MANE, MARVIS_BLACK)}
+        {/* 脖子 / 身体 */}
+        <path d="M 90 150 L 168 150 L 168 230 L 90 230 Z" fill={MARVIS_BLACK} />
+        {/* 弯折方块手臂 */}
+        <path d="M 94 170 L 94 206 Q 94 220 78 220 L 42 220 Q 30 220 30 208 L 30 190 Q 30 180 42 180 L 70 180 L 70 170 Z" fill={MARVIS_BLACK} />
+        {/* 马头 + 方块口鼻（单条干净路径） */}
+        <path
+          d="M 22 86 C 18 76 24 70 34 68 L 70 58 L 104 46 L 118 44 C 152 50 172 78 170 110 C 169 134 148 150 118 153 L 92 154 C 74 152 64 140 58 128 L 44 114 L 22 114 Z"
+          fill={MARVIS_BLACK}
+        />
+        {/* 上扬鬃角（粗笔触） */}
+        <path d="M 104 48 Q 60 20 52 40" stroke={MARVIS_BLACK} strokeWidth="19" fill="none" strokeLinecap="round" />
+        {/* 红围巾：横带 + 竖摆 */}
+        <path d="M 68 150 L 230 138 L 230 172 L 68 184 Z" fill="#e8201c" />
+        <path d="M 100 178 L 140 175 L 136 224 L 106 226 Z" fill="#e8201c" />
+        {/* 双眼：一睁一眨 */}
+        <ellipse cx="90" cy="94" rx="18" ry="24" fill="#ffffff" />
+        <ellipse cx="134" cy="92" rx="16" ry="22" fill="#ffffff" />
+        <circle cx="86" cy="102" r="8.5" fill={MARVIS_BLACK} />
+        <path d="M 122 94 Q 134 105 146 92" stroke={MARVIS_BLACK} strokeWidth="4.5" fill="none" strokeLinecap="round" />
       </g>
     </g>
   )
@@ -150,7 +173,7 @@ function MascotFront({ cx, cy, scale, hue }: { cx: number; cy: number; scale: nu
 
 /**
  * 一个等距 3D 工位：落地投影 + 等距桌（桌面斜角 + 厚度 + 桌腿）+ 显示器（彩色亮屏）
- * + 办公椅（椅背朝我们）+ 背面小猪（头探出椅背）+ 工位铭牌。
+ * + 办公椅（椅背朝我们）+ 背面 Marvis（头探出椅背）+ 工位铭牌。
  * occupant 为 null = 空工位（熄屏、空椅）。
  */
 function Seat({
@@ -218,8 +241,8 @@ function Seat({
         </g>
       )}
 
-      {/* ── 小猪（坐在椅子里，头探出椅背） ── */}
-      {occupant && <MascotBack cx={x} cy={y - 16} scale={1.02} sleeping={state === 'idle'} />}
+      {/* ── Marvis 马（坐在椅子里，头探出椅背） ── */}
+      {occupant && <MarvisBack cx={x} cy={y - 16} scale={1.02} sleeping={state === 'idle'} />}
 
       {/* ── 办公椅（椅背朝我们，挡住小猪身体） ── */}
       <path d={`M ${x - 36} ${y + 18} q 0 -26 36 -26 q 36 0 36 26 l 0 30 q -36 12 -72 0 Z`} fill="#e7eaef" stroke="#d4d9e1" />
@@ -323,7 +346,7 @@ function Scene({
             <rect x="246" y="322" width="48" height="16" rx="5" fill="#2b2f36" />
           </g>
 
-          {/* 档案管家（正面猪脸 + 彩色档案架） */}
+          {/* 档案管家（正面 Marvis 侧脸 + 彩色档案架） */}
           <g>
             <ellipse cx="190" cy="628" rx="150" ry="30" fill="#000" opacity="0.06" filter="url(#officeSoftBlur)" />
             <rect x="72" y="516" width="120" height="104" rx="6" fill="#eef1f5" stroke="#dde2e9" />
@@ -335,7 +358,7 @@ function Scene({
                 ))}
               </g>
             ))}
-            <MascotFront cx={252} cy={582} scale={0.92} hue={278} />
+            <MarvisProfile cx={236} cy={576} scale={0.78} />
             <g className="office-nameplate">
               <rect x="194" y="494" width="116" height="24" rx="12" fill="#ffffff" stroke="#e2e6ec" />
               <circle cx="210" cy="506" r="5" fill="#9a6cff" />

@@ -146,3 +146,45 @@ export function shouldConfirmGreyZoneOnDesktop(toolName: string): boolean {
   if (MODE_EXEMPT_TOOL_NAMES.has(toolName)) return false
   return GREY_ZONE_TOOL_NAMES.has(toolName)
 }
+
+/**
+ * BR-3：灰名单确认的「会话级始终允许」记忆（借鉴 Claude Agent SDK 的 allow_always / remember）。
+ *
+ * 语义要点（决定安全边界，务必保持）：
+ *   - **会话级、内存态**：key = conversationId，value = 该会话已「始终允许」的工具名集合。
+ *     不落盘、不跨会话、不跨重启——避免「一次批准 exec_shell 就永久放行」的安全隐患，
+ *     只消除同一任务内的重复弹窗摩擦。
+ *   - 未记住的工具仍每次弹窗；不同会话相互隔离（A 会话记住不影响 B 会话）。
+ */
+export type GreyZoneSessionMemory = Map<string, Set<string>>
+
+/** 用户在本会话是否已对该工具选择「始终允许」（可跳过确认弹窗）。 */
+export function isGreyZoneSessionAllowed(
+  memory: GreyZoneSessionMemory,
+  conversationId: string,
+  toolName: string,
+): boolean {
+  return memory.get(conversationId)?.has(toolName) ?? false
+}
+
+/** 记住用户在本会话对该工具的「始终允许」选择。 */
+export function rememberGreyZoneSessionAllow(
+  memory: GreyZoneSessionMemory,
+  conversationId: string,
+  toolName: string,
+): void {
+  let set = memory.get(conversationId)
+  if (!set) {
+    set = new Set<string>()
+    memory.set(conversationId, set)
+  }
+  set.add(toolName)
+}
+
+/** 会话结束 / 删除时清理其记忆，防内存无界增长。 */
+export function clearGreyZoneSessionMemory(
+  memory: GreyZoneSessionMemory,
+  conversationId: string,
+): void {
+  memory.delete(conversationId)
+}

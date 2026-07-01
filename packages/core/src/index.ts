@@ -88,6 +88,9 @@ export {
   evaluateConversationModeToolPolicy,
   evaluateProxyTrustGreyDenial,
   shouldConfirmGreyZoneOnDesktop,
+  isGreyZoneSessionAllowed,
+  rememberGreyZoneSessionAllow,
+  clearGreyZoneSessionMemory,
 } from './tool-permission-policy'
 export type {
   ConversationModeForTools,
@@ -95,6 +98,7 @@ export type {
   ToolPermissionEval,
   ToolPermissionDenied,
   ToolPermissionAllowed,
+  GreyZoneSessionMemory,
 } from './tool-permission-policy'
 export type { ToolForRerank } from './skill-reranker-types'
 export {

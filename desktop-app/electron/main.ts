@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, isGreyZoneSessionAllowed, rememberGreyZoneSessionAllow, clearGreyZoneSessionMemory, type GreyZoneSessionMemory, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -1999,6 +1999,7 @@ wrapHandler('delete-conversation', (_, id: string) => {
   // 清理按 conversationId keyed 的进程级 Map，避免删除会话后僵尸条目无限累积撑 V8 堆
   bridgeConversationTokens.delete(id)
   messageSeqCounters.delete(id)
+  clearGreyZoneSessionMemory(greyZoneSessionMemory, id) // BR-3：清理灰名单「会话始终允许」记忆
 })
 
 // ─── Workspace（L3 Phase A）──────────────────────────────────────────────────
@@ -4511,28 +4512,42 @@ wrapHandler('conversation:sync-tool-mode', (_, conversationId: string, mode: str
 })
 
 /**
- * #7：灰名单工具在桌面端弹出系统确认框；无可用主窗口则拒绝执行。
+ * BR-3：灰名单确认的「会话级始终允许」记忆（借鉴 Claude Agent SDK allow_always）。
+ * 内存态、按 conversationId 隔离、不落盘、不跨重启——删除会话时清理（见 delete-conversation）。
  */
-async function approveGreyZoneToolInMainProcess(toolName: string): Promise<boolean> {
+const greyZoneSessionMemory: GreyZoneSessionMemory = new Map()
+
+/**
+ * #7：灰名单工具在桌面端弹出系统确认框；无可用主窗口则拒绝执行。
+ * BR-3：新增第三个按钮「本次会话始终允许」——返回 remember=true 时调用方记入 greyZoneSessionMemory，
+ * 之后本会话同名工具免弹窗。默认按钮仍是「允许一次」，取消保持 cancelId=0，行为向后兼容。
+ */
+async function approveGreyZoneToolInMainProcess(
+  toolName: string,
+): Promise<{ allowed: boolean; remember: boolean }> {
   const win = mainWindow
-  if (!win || win.isDestroyed()) return false
+  if (!win || win.isDestroyed()) return { allowed: false, remember: false }
   try {
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
-      buttons: ['取消', `允许执行「${toolName}」`],
+      buttons: ['取消', `允许一次`, `本次会话始终允许「${toolName}」`],
+      // defaultId=0（取消）：高风险工具确认框刻意把默认/回车落在「取消」上，
+      // 避免误按回车放行 exec_shell/delete_file 等破坏性工具（安全默认，勿改回允许）。
       defaultId: 0,
       cancelId: 0,
       title: 'Soul · 高风险工具',
       message: `模型请求执行高风险工具：${toolName}`,
       detail:
+        '「允许一次」仅放行本次；「本次会话始终允许」在当前对话内免除该工具的后续确认（换对话或重启后恢复确认）。' +
         '若并非您本意，请点击「取消」。来自远程 API（Proxy）的同类请求不会弹出此框，且已被默认拒绝。',
     })
-    const ok = response === 1
-    if (ok) logger.activity('tool-permission-grey-approved', toolName)
-    return ok
+    const allowed = response === 1 || response === 2
+    const remember = response === 2
+    if (allowed) logger.activity('tool-permission-grey-approved', `${toolName}${remember ? ' (会话始终允许)' : ''}`)
+    return { allowed, remember }
   } catch (e) {
     logger.error('tool-permission-grey-dialog', e instanceof Error ? e : new Error(String(e)))
-    return false
+    return { allowed: false, remember: false }
   }
 }
 
@@ -4570,10 +4585,17 @@ wrapHandler(
   if (proxyDecision.denied) {
     return { content: '', error: proxyDecision.message }
   }
-  if (trustTier === 'ui' && shouldConfirmGreyZoneOnDesktop(name)) {
-    const confirmed = await approveGreyZoneToolInMainProcess(name)
-    if (!confirmed) {
+  if (
+    trustTier === 'ui' &&
+    shouldConfirmGreyZoneOnDesktop(name) &&
+    !isGreyZoneSessionAllowed(greyZoneSessionMemory, conversationId, name)
+  ) {
+    const decision = await approveGreyZoneToolInMainProcess(name)
+    if (!decision.allowed) {
       return { content: '', error: `用户已取消高风险工具「${name}」的执行。` }
+    }
+    if (decision.remember) {
+      rememberGreyZoneSessionAllow(greyZoneSessionMemory, conversationId, name)
     }
   }
 

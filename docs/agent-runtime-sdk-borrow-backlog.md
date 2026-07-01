@@ -18,12 +18,44 @@
 | **BR-3** | 权限 + ASK | ✅ **已实现(delta)** `6d70c0f` | **实读发现 ~80% 已 live**（`main.ts:4573` 灰名单原生对话框）；只补了 SDK 的 allow_always（会话级「始终允许」） |
 | **BR-4** | 读工具并行 | ⏸️ **暂缓** | 最高风险最低 ROI；工具循环有 cap 计数/converge-flag/顺序 append 等共享状态，安全并行是 L 重构，只利好"多独立读"的偶发场景 |
 | **BR-5** | Hook 总线 | ⛔ **撤回** | 边界审查发现现成熔断 hook 挂进程级单例会**永久锁死工具**（PRE deny 后永不再走 POST 清零）；PRE-fire 无消费者，折进 BR-6/未来 |
-| **BR-6** | Typed 子 agent | ⏸️ **需独立立项(L/XL)** | dormant 的 `typed-sub-agent-manager`/`spawn-guard` **只做 system-prompt 提示 + rank 校验，不真正 gate 子 agent 工具**；要兑现最小权限需：点亮 blueprint-loader + 重写 sub-agent callLLM 工具收窄 + DB `agent_type` 迁移 + `task` 工具加 agentType 参数。非"M"，另立项 |
+| **BR-6** | Typed 子 agent | ❌ **评估后不做** | 前提不成立 + 与溯源红线对冲。详见下方「BR-6 决策」。 |
 | **BR-7** | Typed 观测面 | ❌ **冗余，不做** | `run-trace.ts` 的 `RunTraceSummary`（`1647b09` 已 live）已聚合 cost/tokens/usage/artifacts/sources，且当前**无 UI 消费方**；再建 ResultMessage 是无读者的重复管线 |
 | **BR-8** | 渐进工具披露 | ⏸️ **暂缓** | 弱开源模型（DeepSeek/Qwen/Ollama）工具发现可靠性差，延后长尾工具有真实召回风险 |
 | **BR-9** | 会话 fork | ✅ **已存在** | `forkConversation` 全链路已实现（`global.d.ts:833` + preload + `main.ts:2076` + `db.forkConversationFromMessage`，消息树 leaf 指针分叉） |
 
-**结论**：backlog 的**高价值、可干净落地**部分已交付（BR-1/BR-2/BR-3-delta）。其余要么已存在（BR-3 主体/BR-9）、要么冗余（BR-7）、要么高风险低 ROI（BR-4/BR-8）、要么是需单独立项的大工程（BR-6）。**不应为"继续"而机械地接 dormant 模块或建无消费方的管线。** 下一步真要推进，唯一值得的是把 **BR-6 作为专项**（含 DB 迁移评审 + 子 agent 工具 gating 的真实落地）来做。
+**结论**：backlog 的**高价值、可干净落地**部分已交付（BR-1/BR-2/BR-3-delta）。其余要么已存在（BR-3 主体/BR-9）、要么冗余（BR-7）、要么高风险低 ROI（BR-4/BR-8）、要么**评估后不做**（BR-6，见下）。**不应为"继续"而机械地接 dormant 模块或建无消费方的管线。** 就 SDK 借鉴而言，本 backlog 视为**收口**：Soul 要的是"更可信的单代理"，不是"更多代理 / 更多治理管线"。
+
+---
+
+## BR-6 决策：评估后不做（2026-07-02）
+
+> 从"Soul 需不需要子代理"的第一性原理评估后结论：**不做 typed 子代理，保留现有 toolless 跨分身委派即可。**
+
+### 实读前提（决定为何不做）
+
+1. **`task` 工具没有 agentType 参数**（`src/stores/chatStore.ts` AVATAR_TOOLS：仅 `task` / `target_avatar` / `expected_output`）。
+2. **Soul 子代理是"单发、无工具"的文本补全**：`task` → `SubAgentManager` → `callLLM = createLLMFn(...)`，而 `createLLMFn`（`electron/llm-factory.ts:90`）的请求体是 `{ model, messages:[system,user], stream:false, max_tokens }`——**没有 `tools` 字段**，子代理压根不能调工具。
+3. dormant 的 `typed-sub-agent-manager.ts` / `governance/spawn-guard.ts` **只做 system-prompt 提示文字 + blueprint rank 校验**，`callLLM(systemPrompt, task)` 不把受限工具集传进去——**不真正 gate 子代理工具**。
+
+### 为何不做（三条理由）
+
+1. **核心卖点是空的**：BR-6/spawn-guard 的设计是"限制子代理的工具子集"，但 Soul 子代理**没有工具可限**（toolless 单发）。要 gate 的东西不存在。
+2. **与溯源红线对冲**：让子代理"能自己调工具"会把它的检索/取数证据链埋进**不透明的子 transcript**，主代理只拿摘要——**溯源变难**，直接戳中 Soul 第一红线（每个数字定位到原始 sheet / md 路径）。现有 toolless 设计不是能力缺失，而是**刻意的安全约束**（便宜、有界 30s、不制造不可溯源检索）。
+3. **产品定位不匹配**：Soul = 桌面端、交互式、单分身知识库问答/交付。多代理编排的收益（隔离 + 最小权限 + 深度并行）更适合后台/批处理，不适合同步聊天；且上下文压力已由 **BR-2 压缩**更直接地解决。
+
+### 现有能力已够用
+
+现有 toolless 跨分身委派已很好地服务两个真实场景，且都不需要工具型子代理：
+- **跨分身借专长**（`target_avatar`，差异化卖点，已 work）；
+- **上下文隔离的自成一体子任务**。
+
+### 唯一例外及其更优替代
+
+四类角色里只有 **verifier 复核**与溯源红线同频。但要真复算数字，verifier 得能"读"（query_excel/read_file）→ 又变回工具型子代理，把溯源矛盾请回来。**更优路径 = 在主循环内联跑一遍复核 pass**：主循环本就有工具 + 完整溯源上下文，证据链全程留在同一条 transcript 里，比派子代理更简单、更守红线。Soul 已有复核原语（`verifyAgentAnswer` 启发式 + `fork_verifier_agent` HTML 截图复核）可在此基础上扩展。
+
+### 若未来确实要重启 BR-6
+
+前置是**产品决策**（"要不要让子代理能调工具"），不是写代码；且真做是 L/XL：点亮 blueprint-loader + 从零建 sub-agent 工具循环 + 按类型 gating + DB `agent_type` 迁移（走 sqlite-migration-reviewer）+ `task` 工具加 agentType 参数。届时必须先给出溯源红线的保全方案。
 
 ---
 

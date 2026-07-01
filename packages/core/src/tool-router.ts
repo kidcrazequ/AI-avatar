@@ -626,8 +626,9 @@ const HTML_ENTITIES: Readonly<Record<string, string>> = {
  * 命令白名单（首词必须命中）。首批保守：覆盖文件浏览、文本处理、版本控制、
  * 解释器、压缩归档。后续按真实需求再扩。
  *
- * 不放：网络请求工具的执行入口（curl/wget/ssh/scp/rsync）—— 联网必须走 web_fetch
- * 工具，避免 shell 直接拉远程脚本执行。
+ * 不放：通用网络请求工具的执行入口（curl/wget/ssh/scp/rsync）—— 联网页面读取
+ * 必须走 web_fetch 工具，避免 shell 直接拉远程脚本执行。Agent Reach 这类
+ * 专用只读 CLI 作为显式安装能力按需放行。
  */
 const EXEC_SHELL_WHITELIST: ReadonlySet<string> = new Set([
   // 文件 / 目录
@@ -643,6 +644,8 @@ const EXEC_SHELL_WHITELIST: ReadonlySet<string> = new Set([
   'pip', 'pip3', 'tsx', 'deno', 'bun',
   // 归档 / 压缩
   'tar', 'gzip', 'gunzip', 'zip', 'unzip', '7z',
+  // 联网只读 CLI（显式安装能力；通用 curl/wget 仍禁用）
+  'agent-reach', 'mcporter', 'gh', 'yt-dlp',
   // 帮助类
   'man', 'help',
 ])
@@ -665,7 +668,20 @@ const EXEC_SHELL_BLACKLIST: readonly RegExp[] = [
   /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,           // fork bomb
   /\beval\s+["'`]?\$/i,                                        // eval $ 动态执行
   /\bbase64\s+-d\b.*\|\s*(sh|bash)/i,                          // base64 解码后执行
+  // agent-reach 加固：gh / yt-dlp 是多用途二进制，first-word 白名单不足以约束其写操作 / 凭据访问 /
+  // 任意命令执行。黑名单校验整条命令串，也覆盖 `grep x; gh secret set` 这类链式绕过。
+  /--exec(-before-download|-on-playlist)?\b/i,                 // yt-dlp --exec 家族：任意命令执行
+  /\bgh\s+(auth|secret|variable|api|workflow|codespace|ssh-key|gpg-key|ruleset|org|extension)\b/i, // gh 高危/可写/凭据子命令整体禁
+  /\bgh\s+(repo|release|pr|issue|gist|label|cache|run|project)\s+(create|delete|edit|merge|close|upload|rename|archive|sync|set|add|remove|disable|enable|cancel|rerun|approve|review|comment|lock|unlock|pin|unpin|transfer|fork|restore|develop|ready|reopen)\b/i, // gh 资源写操作（只读 view/list/status/checks/diff/search 仍放行）
 ]
+
+/** 返回命令命中的首个危险黑名单模式（供 execShell 与测试统一使用）；未命中返回 null。 */
+export function findDangerousShellPattern(command: string): RegExp | null {
+  for (const pattern of EXEC_SHELL_BLACKLIST) {
+    if (pattern.test(command)) return pattern
+  }
+  return null
+}
 
 
 interface CachedExcelSource {
@@ -4475,12 +4491,11 @@ ${content}` }
     }
 
     // 第 3 层：黑名单（完整命令字符串校验）
-    for (const pattern of EXEC_SHELL_BLACKLIST) {
-      if (pattern.test(command)) {
-        return {
-          content: '',
-          error: `命令命中危险模式（${pattern.source}），已拒绝执行。常见原因：sudo / rm 根目录 / 远程脚本管道执行 / 写设备文件等。请改写后重试。`,
-        }
+    const dangerousPattern = findDangerousShellPattern(command)
+    if (dangerousPattern) {
+      return {
+        content: '',
+        error: `命令命中危险模式（${dangerousPattern.source}），已拒绝执行。常见原因：sudo / rm 根目录 / 远程脚本管道执行 / gh 写操作 / yt-dlp --exec 等。请改写后重试。`,
       }
     }
 

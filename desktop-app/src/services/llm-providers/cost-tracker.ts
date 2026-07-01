@@ -161,3 +161,16 @@ class CostTracker {
 
 /** 全局单例（chatStore / eval Solver / 报告页面都引用同一份） */
 export const costTracker = new CostTracker()
+
+/**
+ * BR-1：把用户设置里的"单轮成本上限"字符串解析为 USD 数值。
+ *
+ * 语义要点（决定 cap 会不会误触发，务必保持）：
+ *   - 空 / 未配置 / 非数字(NaN) / ≤ 0 → 一律返回 0 = **关闭**上限。
+ *     宁可不设限，也不能因解析歧义误停一次正常对话（未知/本地模型成本本就算 0）。
+ *   - 有效正数 → 原样返回，作为单次 sendMessage 的累计成本硬上限。
+ */
+export function resolveTurnBudgetUsd(raw: string | null | undefined): number {
+  const parsed = Number.parseFloat(raw ?? '')
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}

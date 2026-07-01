@@ -7,7 +7,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert'
-import { costTracker, DEFAULT_PRICING } from './cost-tracker'
+import { costTracker, DEFAULT_PRICING, resolveTurnBudgetUsd } from './cost-tracker'
 
 test('computeCost: Claude sonnet 价位换算', () => {
   costTracker.reset()
@@ -74,4 +74,23 @@ test('DEFAULT_PRICING 覆盖 Soul 当前两个 provider 的主流型号', () => 
   for (const key of ['claude-opus-4-7', 'claude-sonnet-4-6', 'deepseek-chat']) {
     assert.ok(DEFAULT_PRICING[key], `缺少定价: ${key}`)
   }
+})
+
+// BR-1: 单轮成本上限解析——关键不变量是"歧义即关闭"，绝不能因解析问题误停一次正常对话
+test('resolveTurnBudgetUsd: 空/非法/≤0 一律关闭（返回 0），避免误停正常对话', () => {
+  assert.strictEqual(resolveTurnBudgetUsd(undefined), 0)
+  assert.strictEqual(resolveTurnBudgetUsd(null), 0)
+  assert.strictEqual(resolveTurnBudgetUsd(''), 0)
+  assert.strictEqual(resolveTurnBudgetUsd('   '), 0)
+  assert.strictEqual(resolveTurnBudgetUsd('abc'), 0)
+  assert.strictEqual(resolveTurnBudgetUsd('NaN'), 0)
+  assert.strictEqual(resolveTurnBudgetUsd('0'), 0)
+  assert.strictEqual(resolveTurnBudgetUsd('-1.5'), 0)
+})
+
+test('resolveTurnBudgetUsd: 有效正数原样返回，作为单轮成本硬上限', () => {
+  assert.strictEqual(resolveTurnBudgetUsd('0.5'), 0.5)
+  assert.strictEqual(resolveTurnBudgetUsd('2'), 2)
+  assert.strictEqual(resolveTurnBudgetUsd('10.25'), 10.25)
+  assert.strictEqual(resolveTurnBudgetUsd(' 3.0 '), 3) // parseFloat 容忍首尾空白
 })

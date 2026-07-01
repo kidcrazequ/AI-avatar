@@ -20,6 +20,7 @@ import {
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
+import { costTracker, resolveTurnBudgetUsd } from '../services/llm-providers/cost-tracker'
 import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
 import { extractUncertain, extractReconsider } from './deliberation-extractors'
 import { buildStableSystemText, RED_LINE_SUMMARY } from './stable-system-prompt'
@@ -4431,6 +4432,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     let forceConvergeNoTools = false
     let convergeHintInjected = false
     let softWarnInjected = false
+    // BR-1: 本轮（单次 sendMessage）累计成本预算上限——超过则强制收敛（tools-off），与轮数硬上限
+    // HARD_MAX_ROUNDS 互补。成本按 costTracker.computeCost 用 provider 归一化 usage 计；未知/本地模型
+    // 定价为 0 → cap 永不误触发，天然多 provider 中立。设置空/非法/≤0 时 resolveTurnBudgetUsd 返回 0 = 关闭。
+    const maxTurnBudgetUsd = resolveTurnBudgetUsd(await window.electronAPI.getSetting('max_budget_usd_per_turn'))
+    let turnCostUsd = 0
+    let budgetStopped = false
+    let budgetWarnInjected = false
     let dsmlCorrectionInjected = false
 
     /** 取消残留的 rAF，防止跨对话消息污染 */
@@ -4634,6 +4642,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             cancelPendingChunk()
             // usage 在 isStale 之前先 emit：即便结果被丢弃，token 已经计费产生
             if (usage) {
+              // BR-1: 累计本轮成本（同样在 isStale 之前——token 已计费，丢弃的结果也要计入预算）
+              turnCostUsd += costTracker.computeCost(effectiveModelConfig.model, usage).total
               safeEmit({
                 type: 'usage',
                 conversationId,
@@ -5183,6 +5193,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             timestamp: Date.now(),
             round,
           })
+        }
+
+        // BR-1: 本轮累计成本达上限 → 复用强制收敛路径（下一轮 tools-off），与轮数硬上限并列。
+        //  - 80% 预警：仅 logPerf，不打断模型
+        //  - 100% 硬停：注入预算上限提示 + forceConvergeNoTools（下一轮不再下发 tools），
+        //    并置 convergeHintInjected 以免下方 converge-hint 重复注入
+        if (maxTurnBudgetUsd > 0 && !budgetWarnInjected && turnCostUsd >= maxTurnBudgetUsd * 0.8) {
+          budgetWarnInjected = true
+          logPerf('tool-loop:budget-warn', `round=${round} spent=$${turnCostUsd.toFixed(4)} cap=$${maxTurnBudgetUsd.toFixed(2)}`)
+        }
+        if (maxTurnBudgetUsd > 0 && !budgetStopped && turnCostUsd >= maxTurnBudgetUsd) {
+          apiMessages.push({
+            role: 'user',
+            content: `[系统预算上限] 本轮对话累计成本已达 $${turnCostUsd.toFixed(4)}（上限 $${maxTurnBudgetUsd.toFixed(2)}），必须立即停止调用工具，基于当前已获得的信息直接给出最终答案。\n\n**输出硬性要求**：以 markdown 正文写入 message.content（用户唯一可见区），不要只在 reasoning_content 里推理；若信息不足，请说明已尝试的工具路径和缺失数据。`,
+          })
+          budgetStopped = true
+          convergeHintInjected = true
+          forceConvergeNoTools = true
+          logPerf('tool-loop:budget-stop', `round=${round} spent=$${turnCostUsd.toFixed(4)} cap=$${maxTurnBudgetUsd.toFixed(2)}`)
         }
 
         // 收敛模式下仅注入一次简短指令，强制下一轮直接给最终答案，避免冗长分析。

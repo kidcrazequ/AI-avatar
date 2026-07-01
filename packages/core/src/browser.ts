@@ -157,6 +157,71 @@ export {
 } from './avatar-self-description'
 export type { SelfDescriptionInput, SelfDescriptionSkill } from './avatar-self-description'
 
+// ─── Agent Runtime P0 行为模式（纯函数，无 fs/path/process）───────────────
+export {
+  DEFAULT_BEHAVIOR_MODES,
+  buildBehaviorModePromptBlock,
+  conversationModeToBehaviorModeIds,
+  detectBehaviorModes,
+  getBehaviorMode,
+  normalizeBehaviorModeId,
+  normalizeBehaviorModeIntensity,
+  summarizeBehaviorModeActivations,
+} from './agent-runtime/behavior-modes'
+export type {
+  BehaviorModeActivation,
+  BehaviorModeDefinition,
+  BehaviorModeId,
+  BehaviorModeIntensity,
+  ConversationModeLike,
+} from './agent-runtime/behavior-modes'
+
+// ─── Agent Runtime P1 协议与 guardrail（纯函数，无 fs/path/process）───────
+export {
+  DEFAULT_GUARDRAIL_POLICIES,
+  buildGuardrailPromptBlock,
+  detectGuardrails,
+  evaluateGuardrailToolCall,
+  isReadonlyDeniedTool,
+} from './agent-runtime/guardrails'
+export type {
+  DetectGuardrailsInput,
+  GuardrailAction,
+  GuardrailActivation,
+  GuardrailPolicy,
+  GuardrailPolicyId,
+  GuardrailToolCallContext,
+  GuardrailToolDecision,
+} from './agent-runtime/guardrails'
+export {
+  AGENT_GATEWAY_PROTOCOL_VERSION,
+  buildAgentGatewayRunPlan,
+  summarizeAgentGatewayRunPlan,
+} from './agent-runtime/gateway'
+export type {
+  AgentGatewayChannel,
+  AgentGatewayRequest,
+  AgentGatewayRunPlan,
+  AgentGatewayRunStatus,
+} from './agent-runtime/gateway'
+export {
+  verifyAgentAnswer,
+} from './agent-runtime/verifier'
+export type {
+  AgentAnswerVerificationIssue,
+  AgentAnswerVerificationResult,
+  AgentAnswerVerificationSeverity,
+  VerifyAgentAnswerInput,
+} from './agent-runtime/verifier'
+export {
+  SKILL_DRAFT_PROTOCOL_VERSION,
+  buildSkillDraftFromConversation,
+} from './agent-runtime/skill-draft'
+export type {
+  BuildSkillDraftInput,
+  SkillDraft,
+} from './agent-runtime/skill-draft'
+
 // ─── Palace 路线卡协议（纯类型 + Markdown 解析/序列化，无 fs/path） ───────────
 export {
   PALACE_SCHEMA_VERSION,

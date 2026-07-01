@@ -541,6 +541,145 @@ interface WorkspaceGrepResult {
   text: string
 }
 
+type AgentRunTraceEventKind =
+  | 'run_started'
+  | 'run_finished'
+  | 'model_call'
+  | 'tool_call'
+  | 'subagent'
+  | 'artifact'
+  | 'source_hit'
+  | 'guardrail'
+  | 'error'
+
+interface AgentRunTraceStartInput {
+  runId: string
+  conversationId: string
+  avatarId: string
+  requestId?: number
+  channel?: 'desktop' | 'cli' | 'mcp' | 'api' | 'im'
+  model?: string
+  behaviorModeIds?: string[]
+  guardrailIds?: string[]
+  metadata?: Record<string, unknown>
+}
+
+interface AgentRunTraceStartResult {
+  runId: string
+  traceRelPath: string
+  summaryRelPath: string
+}
+
+interface AgentRunTraceSummary {
+  runId: string
+  conversationId?: string
+  avatarId?: string
+  startedAt: string
+  finishedAt?: string
+  status: 'running' | 'done' | 'error'
+  durationMs?: number
+  eventCount: number
+  modelCallCount: number
+  toolCallCount: number
+  subagentCount: number
+  guardrailDecisionCount: number
+  errorCount: number
+  artifacts: string[]
+  sources: string[]
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+  }
+  estimatedCostUsd?: number
+}
+
+interface AgentGatewayWorkspaceSnapshot {
+  protocolVersion: string
+  root: string
+  dirs: Record<string, string>
+  virtualDirs: Record<string, string>
+}
+
+interface AgentGatewayThreadSnapshot {
+  protocolVersion: string
+  conversation: Conversation | null
+  messageCount: number
+  workspace: AgentGatewayWorkspaceSnapshot
+  secretsExposed: false
+}
+
+interface AgentGatewayRunSnapshot {
+  runId: string
+  conversationId: string
+  exists: boolean
+  traceRelPath: string
+  summaryRelPath: string
+  summary: unknown | null
+  secretsExposed: false
+}
+
+interface AgentGatewayArtifact {
+  bucket: 'outputs' | 'artifacts' | 'traces'
+  path: string
+  type: 'file' | 'directory'
+  size: number
+  mtimeMs: number
+}
+
+interface AgentGatewayAvatarsSnapshot {
+  protocolVersion: string
+  avatars: Avatar[]
+  secretsExposed: false
+}
+
+interface AgentCapabilityDirDescriptor {
+  kind: string
+  path: string
+  virtualPath: string
+  purpose: string
+  required: boolean
+}
+
+interface AgentCapabilityLayoutSnapshot {
+  protocolVersion: string
+  avatarRoot: string
+  dirs: Record<string, string>
+  virtualDirs: Record<string, string>
+  descriptors: AgentCapabilityDirDescriptor[]
+}
+
+interface AgentGatewayAvatarCapabilitiesSnapshot {
+  protocolVersion: string
+  layout: AgentCapabilityLayoutSnapshot
+  promptHint: string
+  secretsExposed: false
+}
+
+interface AgentSkillDraftCreateInput {
+  avatarId: string
+  conversationId: string
+  userText: string
+  assistantText: string
+  title?: string
+}
+
+interface AgentSkillDraft {
+  protocolVersion: string
+  suggestedId: string
+  filename: string
+  title: string
+  content: string
+  rationale: string
+}
+
+interface AgentSkillDraftCreateResult {
+  draft: AgentSkillDraft
+  path: string
+  relPath: string
+}
+
 /** 消息全文搜索结果（FTS5） */
 interface MessageSearchResult {
   conversationId: string
@@ -751,6 +890,11 @@ interface ElectronAPI {
   openDocument: (conversationId: string, filePath: string) => Promise<string>
   /** 在系统资源管理器/Finder 中显示文档（FileCard 次按钮）。签名同 openDocument。 */
   showDocumentInFolder: (conversationId: string, filePath: string) => Promise<{ ok: boolean; error?: string }>
+  /** 另存生成文档到用户选择的位置（FileCard 下载按钮）。 */
+  downloadDocument: (
+    conversationId: string,
+    filePath: string,
+  ) => Promise<{ ok: boolean; canceled?: boolean; path?: string; error?: string }>
 
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) => Promise<Array<{ file: string; size: number; mtime: number }>>
@@ -1186,6 +1330,16 @@ interface ElectronAPI {
     segmentCount: number
     segments: Array<{ id: string; version: string; cacheable: boolean; chars: number }>
   }>
+  agentTraceStart: (input: AgentRunTraceStartInput) => Promise<AgentRunTraceStartResult>
+  agentTraceEvent: (runId: string, kind: AgentRunTraceEventKind, payload?: Record<string, unknown>) => Promise<boolean>
+  agentTraceFinish: (runId: string, status: 'done' | 'error', payload?: Record<string, unknown>) => Promise<AgentRunTraceSummary | null>
+  agentGatewayThread: (conversationId: string) => Promise<AgentGatewayThreadSnapshot>
+  agentGatewayRun: (conversationId: string, runId: string) => Promise<AgentGatewayRunSnapshot>
+  agentGatewayRunEvents: (conversationId: string, runId: string, limit?: number) => Promise<unknown[]>
+  agentGatewayArtifacts: (conversationId: string) => Promise<AgentGatewayArtifact[]>
+  agentGatewayAvatars: () => Promise<AgentGatewayAvatarsSnapshot>
+  agentGatewayAvatarCapabilities: (avatarId: string) => Promise<AgentGatewayAvatarCapabilitiesSnapshot>
+  createAgentSkillDraft: (input: AgentSkillDraftCreateInput) => Promise<AgentSkillDraftCreateResult>
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) => Promise<void>
   writeSkillFile: (avatarId: string, fileName: string, content: string) => Promise<void>
   deleteAvatar: (id: string) => Promise<void>
@@ -1443,6 +1597,10 @@ interface ElectronAPI {
   exportErrorLog: (days?: number) => Promise<{ success: boolean; message?: string; filePath?: string }>
   /** 读取指定日期的工具调用审计日志（jsonl 字符串），默认今天，不存在返回 '' */
   readToolCallLog: (date?: string) => Promise<string>
+  /** 写入性能诊断日志，落到 logs/perf-YYYY-MM-DD.log */
+  logPerfEvent: (action: string, detail?: string) => Promise<void>
+  /** 读取指定日期的性能诊断日志，默认今天，不存在返回 '' */
+  readPerfLog: (date?: string) => Promise<string>
 
   // ─── MCP server 管理 ─────────────────────────────────────────────
   /** 列出所有 MCP server（合并 DB 配置 + 运行时状态） */

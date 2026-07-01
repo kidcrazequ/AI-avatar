@@ -27,10 +27,87 @@ interface PromptCacheStats {
 }
 
 const blueprintCache = new Map<string, AgentRuntime.AgentBlueprint>()
+const runTraceRecorders = new Map<string, InstanceType<typeof AgentRuntime.RunTraceRecorder>>()
+
+export interface AgentRunTraceStartInput {
+  runId: string
+  conversationId: string
+  avatarId: string
+  requestId?: number
+  channel?: AgentRuntime.AgentGatewayChannel
+  model?: string
+  behaviorModeIds?: string[]
+  guardrailIds?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export interface AgentRunTraceStartResult {
+  runId: string
+  traceRelPath: string
+  summaryRelPath: string
+}
+
+export interface AgentRunTraceEventInput {
+  kind: AgentRuntime.RunTraceEventKind
+  payload?: Record<string, unknown>
+}
 
 export function clearBlueprintCache(avatarId?: string): void {
   if (avatarId) blueprintCache.delete(avatarId)
   else blueprintCache.clear()
+}
+
+export function startAgentRunTrace(
+  traceDir: string,
+  input: AgentRunTraceStartInput
+): AgentRunTraceStartResult {
+  const previous = runTraceRecorders.get(input.runId)
+  if (previous) {
+    previous.finish('error', { reason: 'run trace replaced before finish' })
+    void previous.flush()
+    runTraceRecorders.delete(input.runId)
+  }
+
+  const recorder = new AgentRuntime.RunTraceRecorder({
+    traceDir,
+    runId: input.runId,
+    conversationId: input.conversationId,
+    avatarId: input.avatarId,
+  })
+  runTraceRecorders.set(input.runId, recorder)
+  recorder.start({
+    requestId: input.requestId,
+    channel: input.channel ?? 'desktop',
+    model: input.model,
+    behaviorModeIds: input.behaviorModeIds ?? [],
+    guardrailIds: input.guardrailIds ?? [],
+    ...(input.metadata ?? {}),
+  })
+  return {
+    runId: input.runId,
+    traceRelPath: `traces/${input.runId}.jsonl`,
+    summaryRelPath: `traces/${input.runId}.summary.json`,
+  }
+}
+
+export function recordAgentRunTraceEvent(runId: string, input: AgentRunTraceEventInput): boolean {
+  const recorder = runTraceRecorders.get(runId)
+  if (!recorder) return false
+  recorder.record(input.kind, input.payload ?? {})
+  return true
+}
+
+export async function finishAgentRunTrace(
+  runId: string,
+  status: 'done' | 'error',
+  payload: Record<string, unknown> = {}
+): Promise<AgentRuntime.RunTraceSummary | null> {
+  const recorder = runTraceRecorders.get(runId)
+  if (!recorder) return null
+  recorder.finish(status, payload)
+  await recorder.flush()
+  runTraceRecorders.delete(runId)
+  return recorder.getSummary()
 }
 
 export function loadAvatarBlueprintCached(

@@ -97,6 +97,86 @@ export {
   type SegmentedPromptInput,
 } from './prompts/segmented-builder'
 
+// ── P0: Behavior modes + task workspace + run trace ─────────────────────
+export {
+  AGENT_CAPABILITY_PROTOCOL_VERSION,
+  buildAgentCapabilityLayout,
+  buildAgentCapabilityPromptHint,
+  describeAgentCapabilityLayout,
+  type AgentCapabilityDirDescriptor,
+  type AgentCapabilityDirKind,
+  type AgentCapabilityLayout,
+} from './capability-directories'
+export {
+  DEFAULT_BEHAVIOR_MODES,
+  buildBehaviorModePromptBlock,
+  conversationModeToBehaviorModeIds,
+  detectBehaviorModes,
+  getBehaviorMode,
+  normalizeBehaviorModeId,
+  normalizeBehaviorModeIntensity,
+  summarizeBehaviorModeActivations,
+  type BehaviorModeActivation,
+  type BehaviorModeDefinition,
+  type BehaviorModeId,
+  type BehaviorModeIntensity,
+  type ConversationModeLike,
+} from './behavior-modes'
+export {
+  TASK_WORKSPACE_PROTOCOL_VERSION,
+  buildTaskWorkspaceLayout,
+  buildTaskWorkspacePromptHint,
+  ensureTaskWorkspace,
+  resolveTaskWorkspacePath,
+  type EnsureTaskWorkspaceOptions,
+  type TaskWorkspaceDirKind,
+  type TaskWorkspaceLayout,
+} from './task-workspace'
+export {
+  RunTraceRecorder,
+  type RunTraceEvent,
+  type RunTraceEventKind,
+  type RunTraceRecorderOptions,
+  type RunTraceSummary,
+  type TokenUsageLike,
+} from './run-trace'
+export {
+  DEFAULT_GUARDRAIL_POLICIES,
+  buildGuardrailPromptBlock,
+  detectGuardrails,
+  evaluateGuardrailToolCall,
+  isReadonlyDeniedTool,
+  type DetectGuardrailsInput,
+  type GuardrailAction,
+  type GuardrailActivation,
+  type GuardrailPolicy,
+  type GuardrailPolicyId,
+  type GuardrailToolCallContext,
+  type GuardrailToolDecision,
+} from './guardrails'
+export {
+  AGENT_GATEWAY_PROTOCOL_VERSION,
+  buildAgentGatewayRunPlan,
+  summarizeAgentGatewayRunPlan,
+  type AgentGatewayChannel,
+  type AgentGatewayRequest,
+  type AgentGatewayRunPlan,
+  type AgentGatewayRunStatus,
+} from './gateway'
+export {
+  verifyAgentAnswer,
+  type AgentAnswerVerificationIssue,
+  type AgentAnswerVerificationResult,
+  type AgentAnswerVerificationSeverity,
+  type VerifyAgentAnswerInput,
+} from './verifier'
+export {
+  SKILL_DRAFT_PROTOCOL_VERSION,
+  buildSkillDraftFromConversation,
+  type BuildSkillDraftInput,
+  type SkillDraft,
+} from './skill-draft'
+
 // ── Phase 6: Memory 3 层 ─────────────────────────────────────────────────
 export {
   type MemoryRecord,

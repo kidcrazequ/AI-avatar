@@ -60,7 +60,13 @@ import { SkillsShManager } from './skills-sh-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
 import { DoubaoAsrSession } from './asr-session'
-import { getPromptCacheStats, clearBlueprintCache } from './agent-runtime-bridge'
+import {
+  getPromptCacheStats,
+  clearBlueprintCache,
+  startAgentRunTrace,
+  recordAgentRunTraceEvent,
+  finishAgentRunTrace,
+} from './agent-runtime-bridge'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -457,7 +463,7 @@ function wrapHandler(
   handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => any
 ): void {
   ipcMain.handle(channel, async (event, ...args) => {
-    const isHighFreq = ['save-message', 'get-messages', 'get-recent-messages', 'get-conversations', 'get-knowledge-tree', 'deep-read:get-status'].includes(channel)
+    const isHighFreq = ['save-message', 'get-messages', 'get-recent-messages', 'get-conversations', 'get-knowledge-tree', 'deep-read:get-status', 'agent-runtime:trace-event'].includes(channel)
     if (!isHighFreq && logger) {
       logger.activity(channel, formatIpcPreview(channel, args))
     }
@@ -1313,6 +1319,235 @@ wrapHandler(
     return getPromptCacheStats(avatarId, avatarsPath, parts, knowledgeHits ?? [])
   }
 )
+
+function normalizeGatewayChannel(value: unknown): AgentRuntime.AgentGatewayChannel {
+  return value === 'cli' || value === 'mcp' || value === 'api' || value === 'im' || value === 'desktop'
+    ? value
+    : 'desktop'
+}
+
+function peekWorkspaceContext(
+  conversationId: string,
+): { avatarId: string; projectId: string; workspaceRoot: string } {
+  assertSafeSegment(conversationId, 'conversationId')
+  const conv = getDb().getConversation(conversationId)
+  if (!conv) {
+    throw new Error(`会话不存在: ${conversationId}`)
+  }
+  const avatarId = conv.avatar_id
+  assertSafeSegment(avatarId, '分身ID')
+  const projectId = typeof conv.project_id === 'string' && conv.project_id.trim().length > 0
+    ? conv.project_id.trim()
+    : DEFAULT_AVATAR_PROJECT_ID
+  assertSafeSegment(projectId, 'projectId')
+  return {
+    avatarId,
+    projectId,
+    workspaceRoot: workspaceManager.getRoot(avatarId, projectId, conversationId),
+  }
+}
+
+function readJsonFileSafe(filePath: string): unknown | null {
+  if (!fs.existsSync(filePath)) return null
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+  } catch {
+    return null
+  }
+}
+
+function readJsonlTailSafe(filePath: string, limit = 200): unknown[] {
+  if (!fs.existsSync(filePath)) return []
+  const rawLimit = typeof limit === 'number' && Number.isFinite(limit) ? limit : 200
+  const safeLimit = Math.min(1000, Math.max(1, Math.floor(rawLimit)))
+  const raw = fs.readFileSync(filePath, 'utf-8').trim()
+  if (!raw) return []
+  return raw
+    .split(/\r?\n/)
+    .slice(-safeLimit)
+    .map((line) => {
+      try {
+        return JSON.parse(line)
+      } catch {
+        return null
+      }
+    })
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+}
+
+function listGatewayWorkspaceArtifacts(layout: AgentRuntime.TaskWorkspaceLayout): Array<{
+  bucket: 'outputs' | 'artifacts' | 'traces'
+  path: string
+  type: 'file' | 'directory'
+  size: number
+  mtimeMs: number
+}> {
+  const buckets: Array<'outputs' | 'artifacts' | 'traces'> = ['outputs', 'artifacts', 'traces']
+  const out: Array<{
+    bucket: 'outputs' | 'artifacts' | 'traces'
+    path: string
+    type: 'file' | 'directory'
+    size: number
+    mtimeMs: number
+  }> = []
+  const walk = (bucket: 'outputs' | 'artifacts' | 'traces', root: string, current: string, depth: number): void => {
+    if (!fs.existsSync(current) || depth < 0) return
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name)
+      const stat = fs.statSync(full)
+      const rel = path.relative(root, full).replace(/\\/g, '/')
+      out.push({
+        bucket,
+        path: `${bucket}/${rel}`,
+        type: entry.isDirectory() ? 'directory' : 'file',
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+      })
+      if (entry.isDirectory()) walk(bucket, root, full, depth - 1)
+    }
+  }
+  for (const bucket of buckets) {
+    walk(bucket, layout.dirs[bucket], layout.dirs[bucket], 3)
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+wrapHandler('agent-runtime:trace-start', (_, input: {
+  runId: string
+  conversationId: string
+  avatarId: string
+  requestId?: number
+  channel?: string
+  model?: string
+  behaviorModeIds?: string[]
+  guardrailIds?: string[]
+  metadata?: Record<string, unknown>
+}) => {
+  assertSafeSegment(input.runId, 'runId')
+  assertSafeSegment(input.conversationId, 'conversationId')
+  const { avatarId, projectId } = resolveWorkspaceContext(input.conversationId)
+  if (input.avatarId && input.avatarId !== avatarId) {
+    throw new Error(`trace avatar mismatch: request=${input.avatarId} conversation=${avatarId}`)
+  }
+  const root = workspaceManager.ensure(avatarId, projectId, input.conversationId)
+  const layout = AgentRuntime.ensureTaskWorkspace(root)
+  return startAgentRunTrace(layout.dirs.traces, {
+    ...input,
+    avatarId,
+    channel: normalizeGatewayChannel(input.channel),
+  })
+})
+
+wrapHandler('agent-runtime:trace-event', (_, runId: string, input: {
+  kind: AgentRuntime.RunTraceEventKind
+  payload?: Record<string, unknown>
+}) => {
+  assertSafeSegment(runId, 'runId')
+  return recordAgentRunTraceEvent(runId, input)
+})
+
+wrapHandler('agent-runtime:trace-finish', async (_, runId: string, status: 'done' | 'error', payload?: Record<string, unknown>) => {
+  assertSafeSegment(runId, 'runId')
+  return finishAgentRunTrace(runId, status === 'error' ? 'error' : 'done', payload ?? {})
+})
+
+wrapHandler('agent-runtime:gateway-thread', (_, conversationId: string) => {
+  const ctx = peekWorkspaceContext(conversationId)
+  const layout = AgentRuntime.buildTaskWorkspaceLayout(ctx.workspaceRoot)
+  return {
+    protocolVersion: AgentRuntime.AGENT_GATEWAY_PROTOCOL_VERSION,
+    conversation: getDb().getConversation(conversationId) ?? null,
+    messageCount: getDb().getActivePathMessages(conversationId).length,
+    workspace: {
+      protocolVersion: layout.protocolVersion,
+      root: layout.root,
+      virtualDirs: layout.virtualDirs,
+      dirs: layout.dirs,
+    },
+    secretsExposed: false,
+  }
+})
+
+wrapHandler('agent-runtime:gateway-run', (_, conversationId: string, runId: string) => {
+  assertSafeSegment(runId, 'runId')
+  const ctx = peekWorkspaceContext(conversationId)
+  const layout = AgentRuntime.buildTaskWorkspaceLayout(ctx.workspaceRoot)
+  const summaryPath = path.join(layout.dirs.traces, `${runId}.summary.json`)
+  const tracePath = path.join(layout.dirs.traces, `${runId}.jsonl`)
+  return {
+    runId,
+    conversationId,
+    exists: fs.existsSync(summaryPath) || fs.existsSync(tracePath),
+    traceRelPath: `traces/${runId}.jsonl`,
+    summaryRelPath: `traces/${runId}.summary.json`,
+    summary: readJsonFileSafe(summaryPath),
+    secretsExposed: false,
+  }
+})
+
+wrapHandler('agent-runtime:gateway-run-events', (_, conversationId: string, runId: string, limit?: number) => {
+  assertSafeSegment(runId, 'runId')
+  const ctx = peekWorkspaceContext(conversationId)
+  const layout = AgentRuntime.buildTaskWorkspaceLayout(ctx.workspaceRoot)
+  return readJsonlTailSafe(path.join(layout.dirs.traces, `${runId}.jsonl`), limit)
+})
+
+wrapHandler('agent-runtime:gateway-artifacts', (_, conversationId: string) => {
+  const ctx = peekWorkspaceContext(conversationId)
+  const layout = AgentRuntime.buildTaskWorkspaceLayout(ctx.workspaceRoot)
+  return listGatewayWorkspaceArtifacts(layout)
+})
+
+wrapHandler('agent-runtime:gateway-avatars', () => {
+  return {
+    protocolVersion: AgentRuntime.AGENT_GATEWAY_PROTOCOL_VERSION,
+    avatars: avatarManager.listAvatars(),
+    secretsExposed: false,
+  }
+})
+
+wrapHandler('agent-runtime:gateway-avatar-capabilities', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const layout = AgentRuntime.buildAgentCapabilityLayout(path.join(avatarsPath, avatarId))
+  return {
+    protocolVersion: AgentRuntime.AGENT_CAPABILITY_PROTOCOL_VERSION,
+    layout,
+    promptHint: AgentRuntime.buildAgentCapabilityPromptHint(layout),
+    secretsExposed: false,
+  }
+})
+
+wrapHandler('agent-runtime:create-skill-draft', (_, input: {
+  avatarId: string
+  conversationId: string
+  userText: string
+  assistantText: string
+  title?: string
+}) => {
+  assertSafeSegment(input.avatarId, '分身ID')
+  const ctx = peekWorkspaceContext(input.conversationId)
+  if (ctx.avatarId !== input.avatarId) {
+    throw new Error(`skill draft avatar mismatch: request=${input.avatarId} conversation=${ctx.avatarId}`)
+  }
+  const draft = AgentRuntime.buildSkillDraftFromConversation({
+    avatarId: input.avatarId,
+    conversationId: input.conversationId,
+    userText: String(input.userText ?? ''),
+    assistantText: String(input.assistantText ?? ''),
+    title: input.title,
+  })
+  assertSafeSegment(draft.filename, '技能草稿文件名')
+  const draftRoot = path.join(avatarsPath, input.avatarId, 'drafts', 'skills')
+  fs.mkdirSync(draftRoot, { recursive: true })
+  const absPath = resolveUnderRoot(draftRoot, draft.filename)
+  fs.writeFileSync(absPath, draft.content, 'utf-8')
+  if (logger) logger.logEvent('info', 'skill-draft-created', `avatar=${input.avatarId} conversation=${input.conversationId} path=${absPath}`)
+  return {
+    draft,
+    path: absPath,
+    relPath: `drafts/skills/${draft.filename}`,
+  }
+})
 
 // 加载分身配置（GAP3/GAP6: 重新调用后 systemPrompt 会根据最新技能/知识/记忆重建）
 wrapHandler('load-avatar', (_, avatarId: string, projectId?: string) => {
@@ -4387,7 +4622,12 @@ wrapHandler(
     const collected = await readSpoolLineRange(abs, startLine, requestedEnd)
 
     if (collected.lastLine < startLine) {
-      return { content: '', error: `start_line=${startLine} 超过总行数 ${collected.lastLine}` }
+      return {
+        content: [
+          `已到达文件末尾：start_line=${startLine} 超过总行数 ${collected.lastLine}。`,
+          '无需继续读取这个 tool-result；请基于已读取内容收敛回答。',
+        ].join('\n'),
+      }
     }
     const { body, cappedEnd, byteCapped } = collected
     const truncated = collected.truncated || requestedEnd > cappedEnd
@@ -7137,6 +7377,15 @@ ipcMain.handle('log-event', (_, level: 'info' | 'warn' | 'error', action: string
 })
 
 /**
+ * log-perf-event: 渲染进程性能诊断日志。
+ * 仅由前端在 perf_logging_enabled=true 时调用，独立写入 logs/perf-YYYY-MM-DD.log，
+ * 避免污染普通 activity/error 日志。
+ */
+ipcMain.handle('log-perf-event', (_, action: string, detail?: string) => {
+  if (logger) logger.channel('perf', action, detail)
+})
+
+/**
  * read-tool-call-log: 读取指定日期（默认今天）的工具调用审计日志（jsonl）。
  *
  * 供 SettingsPanel「工具调用审计」入口展示，
@@ -7144,6 +7393,10 @@ ipcMain.handle('log-event', (_, level: 'info' | 'warn' | 'error', action: string
  */
 wrapHandler('read-tool-call-log', (_, date?: string) => {
   return logger ? logger.readToolCallLog(date) : ''
+})
+
+wrapHandler('read-perf-log', (_, date?: string) => {
+  return logger ? logger.readChannelLog('perf', date) : ''
 })
 
 wrapHandler('get-activity-logs', (_, date?: string) => {
@@ -7276,6 +7529,38 @@ wrapHandler('document:show-in-folder', async (_, conversationId: string, filePat
   if (!fs.existsSync(abs)) return { ok: false, error: `文件不存在: ${abs}` }
   shell.showItemInFolder(abs)
   return { ok: true }
+})
+
+/**
+ * 把工作区 exports/ 内的生成文档另存到用户选择的位置（FileCard 下载按钮）。
+ * 仍复用 resolveTrustedDocumentPath，不接受渲染层传入任意绝对路径。
+ */
+wrapHandler('document:download', async (_, conversationId: string, filePath: string) => {
+  const abs = resolveTrustedDocumentPath(conversationId, filePath)
+  if (!abs) return { ok: false, error: `非法路径或 conversation 不存在: ${filePath}` }
+  if (!fs.existsSync(abs)) return { ok: false, error: `文件不存在: ${abs}` }
+
+  const ext = path.extname(abs).replace(/^\./, '').toLowerCase()
+  const filename = path.basename(abs)
+  const win = mainWindow ?? BrowserWindow.getFocusedWindow()
+  const saveDialogOptions = {
+    title: '下载生成文件',
+    defaultPath: path.join(app.getPath('downloads'), filename),
+    ...(ext ? { filters: [{ name: `${ext.toUpperCase()} 文件`, extensions: [ext] }] } : {}),
+  }
+  const saveResult = win
+    ? await dialog.showSaveDialog(win, saveDialogOptions)
+    : await dialog.showSaveDialog(saveDialogOptions)
+  if (saveResult.canceled || !saveResult.filePath) {
+    return { ok: false, canceled: true }
+  }
+
+  try {
+    fs.copyFileSync(abs, saveResult.filePath)
+    return { ok: true, path: saveResult.filePath }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
 })
 
 wrapHandler('export-error-log', async (_, days = 3) => {

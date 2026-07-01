@@ -14,6 +14,18 @@ export type { AvatarConfig } from './soul-loader'
 export { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
 export { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
 export { CompositeKnowledgeRetriever, reciprocalRankFusion } from './composite-knowledge-retriever'
+export {
+  TASK_WORKSPACE_PROTOCOL_VERSION,
+  buildTaskWorkspaceLayout,
+  buildTaskWorkspacePromptHint,
+  ensureTaskWorkspace,
+  resolveTaskWorkspacePath,
+} from './agent-runtime/task-workspace'
+export type {
+  EnsureTaskWorkspaceOptions,
+  TaskWorkspaceDirKind,
+  TaskWorkspaceLayout,
+} from './agent-runtime/task-workspace'
 
 export { AvatarManager } from './avatar-manager'
 export type { Avatar } from './avatar-manager'

@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('document:open', conversationId, filePath),
   showDocumentInFolder: (conversationId: string, filePath: string) =>
     ipcRenderer.invoke('document:show-in-folder', conversationId, filePath),
+  downloadDocument: (conversationId: string, filePath: string) =>
+    ipcRenderer.invoke('document:download', conversationId, filePath),
 
   // 工具结果 spool 查看入口（Stage 三 P2 范围外 2）
   listToolResults: (conversationId: string) =>
@@ -481,6 +483,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     parts: { stableSystemPrompt: string; dynamicSystemPrompt?: string },
     knowledgeHits?: string[]
   ) => ipcRenderer.invoke('agent-runtime:prompt-cache-stats', avatarId, parts, knowledgeHits),
+  agentTraceStart: (input: AgentRunTraceStartInput) =>
+    ipcRenderer.invoke('agent-runtime:trace-start', input),
+  agentTraceEvent: (runId: string, kind: AgentRunTraceEventKind, payload?: Record<string, unknown>) =>
+    ipcRenderer.invoke('agent-runtime:trace-event', runId, { kind, payload }),
+  agentTraceFinish: (runId: string, status: 'done' | 'error', payload?: Record<string, unknown>) =>
+    ipcRenderer.invoke('agent-runtime:trace-finish', runId, status, payload),
+  agentGatewayThread: (conversationId: string) =>
+    ipcRenderer.invoke('agent-runtime:gateway-thread', conversationId),
+  agentGatewayRun: (conversationId: string, runId: string) =>
+    ipcRenderer.invoke('agent-runtime:gateway-run', conversationId, runId),
+  agentGatewayRunEvents: (conversationId: string, runId: string, limit?: number) =>
+    ipcRenderer.invoke('agent-runtime:gateway-run-events', conversationId, runId, limit),
+  agentGatewayArtifacts: (conversationId: string) =>
+    ipcRenderer.invoke('agent-runtime:gateway-artifacts', conversationId),
+  agentGatewayAvatars: () =>
+    ipcRenderer.invoke('agent-runtime:gateway-avatars'),
+  agentGatewayAvatarCapabilities: (avatarId: string) =>
+    ipcRenderer.invoke('agent-runtime:gateway-avatar-capabilities', avatarId),
+  createAgentSkillDraft: (input: AgentSkillDraftCreateInput) =>
+    ipcRenderer.invoke('agent-runtime:create-skill-draft', input),
   createAvatar: (id: string, soulContent: string, skills: string[], knowledgeFiles: Array<{ name: string; content: string }>) =>
     ipcRenderer.invoke('create-avatar', id, soulContent, skills, knowledgeFiles),
   writeSkillFile: (avatarId: string, fileName: string, content: string) =>
@@ -755,6 +777,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 日志系统
   logEvent: (level: 'info' | 'warn' | 'error', action: string, detail?: string) =>
     ipcRenderer.invoke('log-event', level, action, detail),
+  logPerfEvent: (action: string, detail?: string) =>
+    ipcRenderer.invoke('log-perf-event', action, detail),
   getActivityLogs: (date?: string) => ipcRenderer.invoke('get-activity-logs', date),
   getErrorLogs: (date?: string) => ipcRenderer.invoke('get-error-logs', date),
   getGeneratedIndex: () => ipcRenderer.invoke('get-generated-index'),
@@ -764,6 +788,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportErrorLog: (days?: number) => ipcRenderer.invoke('export-error-log', days),
   // 工具调用审计日志（Stage 三 P2 #16 / 范围外 3）
   readToolCallLog: (date?: string) => ipcRenderer.invoke('read-tool-call-log', date),
+  readPerfLog: (date?: string) => ipcRenderer.invoke('read-perf-log', date),
   // 数据库备份
   dbBackup: () => ipcRenderer.invoke('db-backup'),
   // 对话导出

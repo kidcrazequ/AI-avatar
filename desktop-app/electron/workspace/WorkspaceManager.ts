@@ -17,6 +17,7 @@ import {
   DEFAULT_MAX_DIR_DEPTH,
   DEFAULT_AVATAR_PROJECT_ID,
   resolveAvatarWorkspaceSessionRoot,
+  ensureTaskWorkspace,
 } from '@soul/core'
 
 export interface WorkspaceListItem {
@@ -56,7 +57,7 @@ export class WorkspaceManager {
 
   ensure(avatarId: string, projectId: string, conversationId: string): string {
     const root = this.getRoot(avatarId, projectId, conversationId)
-    fs.mkdirSync(root, { recursive: true })
+    ensureTaskWorkspace(root)
     return root
   }
 

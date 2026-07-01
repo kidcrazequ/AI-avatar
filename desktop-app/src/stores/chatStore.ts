@@ -9,6 +9,13 @@ import {
   detectSelfDescriptionIntent,
   buildSelfDescriptionAnswer,
   isContextOverflowError,
+  buildAgentGatewayRunPlan,
+  buildBehaviorModePromptBlock,
+  buildGuardrailPromptBlock,
+  conversationModeToBehaviorModeIds,
+  detectBehaviorModes,
+  evaluateGuardrailToolCall as evaluateGuardrailToolCallCore,
+  verifyAgentAnswer,
 } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
@@ -90,6 +97,11 @@ function shouldSediment(answer: string): boolean {
 export function nextMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
+
+const evaluateRuntimeGuardrailToolCall: typeof evaluateGuardrailToolCallCore =
+  typeof evaluateGuardrailToolCallCore === 'function'
+    ? evaluateGuardrailToolCallCore
+    : () => ({ action: 'allow' as const })
 
 /**
  * 消息携带的附件引用（对话框附件扩展，2026-05-01）。
@@ -1587,7 +1599,7 @@ const AVATAR_TOOLS: LLMTool[] = [
     type: 'function',
     function: {
       name: 'export_excel',
-      description: `把 query_excel 查到的数据 / 对比结果 / 分析结论落盘为 .xlsx 文件，供用户下载。
+      description: `把 query_excel 查到的数据 / 对比结果 / 分析结论落盘为真正的 .xlsx 文件，供用户在当前聊天窗口下载。
 
 何时用：用户明确要求"输出 Excel / 导出 Excel / 生成 Excel 报告 / 把对比结果存成文件"时。
 何时不用：单纯展示对比结论用 markdown 表格就够，不要为了用而用。
@@ -1595,7 +1607,8 @@ const AVATAR_TOOLS: LLMTool[] = [
 与 query_excel 的关系：本工具不读数据，只写。rows 必须由你从 query_excel 结果里整理出来。
 
 落盘位置：当前对话的工作区 exports/ 目录，文件名你自己起（中文/英文/数字/-/_合法）。
-调用后请在主回答末尾用一句话告知用户文件路径。`,
+调用后桌面端会自动在当前 assistant 气泡下展示文件卡片，用户可直接点"下载"保存。
+严禁：用 exec_shell / write_file / echo / python 手写 .csv 冒充 Excel；用户要 Excel 时必须调用本工具输出 .xlsx，避免中文乱码。`,
       parameters: {
         type: 'object',
         properties: {
@@ -1932,6 +1945,7 @@ IR 语法（markdown + 扩展）：
         '',
         '何时不用（请改用专用工具）：',
         '- 单文件读写 → read_file / write_file / str_replace_edit',
+        '- 用户要求导出 Excel / 下载 Excel → 必须用 export_excel 输出 .xlsx，禁止用 exec_shell 生成 .csv 冒充 Excel',
         '- 网络请求 → web_fetch / web_search',
         '- 复杂逻辑 → exec_code（Python/Node 沙箱）',
         '',
@@ -2900,6 +2914,51 @@ export function tryExtractDocumentAttachment(
   }
 }
 
+const TEXT_EXPORT_PATH_RE = /(?:^|[`"'(<\s])((?:\.\/)?exports\/[^`"'<>\n\r]+?\.(?:md|pdf|docx|xlsx))(?=$|[`"')>\s,，。；;])/gi
+const TEXT_EXPORT_FORMATS = new Set(['md', 'pdf', 'docx', 'xlsx'])
+
+function buildDocumentAttachmentFromExportPath(
+  rawPath: string,
+  conversationId: string,
+): DocumentAttachment | null {
+  const normalized = rawPath
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .trim()
+    .replace(/[，。；;,.)\]}]+$/g, '')
+  if (!normalized.startsWith('exports/')) return null
+  if (normalized.split('/').some((seg) => seg.length === 0 || seg === '..')) return null
+  const ext = normalized.split('.').pop()?.toLowerCase() ?? ''
+  if (!TEXT_EXPORT_FORMATS.has(ext)) return null
+  return {
+    kind: 'document',
+    format: ext as DocumentAttachmentFormat,
+    filePath: normalized,
+    absolutePath: '',
+    conversationId,
+    sizeBytes: 0,
+    filename: normalized.split('/').pop() || normalized,
+  }
+}
+
+export function extractDocumentAttachmentsFromText(
+  text: string,
+  conversationId: string,
+  existing: DocumentAttachment[] = [],
+): DocumentAttachment[] {
+  const out = [...existing]
+  const seen = new Set(out.map((item) => item.filePath))
+  for (const match of text.matchAll(TEXT_EXPORT_PATH_RE)) {
+    const rawPath = match[1]
+    if (!rawPath) continue
+    const attachment = buildDocumentAttachmentFromExportPath(rawPath, conversationId)
+    if (!attachment || seen.has(attachment.filePath)) continue
+    out.push(attachment)
+    seen.add(attachment.filePath)
+  }
+  return out
+}
+
 /**
  * 把当前 tasks 异步落盘到主进程 DB（Stage 三 P2 范围外 1）。
  *
@@ -3241,11 +3300,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 替换这个占位，避免出现两条 assistant。
     const assistantMsgId = nextMessageId()
     const perfTag = `[chat-perf][conv:${conversationId}][req:${requestId}]`
+    const perfLoggingEnabledPromise = _hiddenRepairEarly
+      ? Promise.resolve(false)
+      : window.electronAPI
+        .getSetting('perf_logging_enabled')
+        .then((value) => value === 'true')
+        .catch(() => false)
     const logPerf = (event: string, extra?: string): void => {
-      const elapsed = Date.now() - requestStartedAt
+      const eventAt = Date.now()
       const suffix = extra ? ` ${extra}` : ''
-      // eslint-disable-next-line no-console -- 本地性能诊断日志，便于定位对话链路慢点
-      console.log(`${perfTag} ${event} (+${elapsed}ms)${suffix}`)
+      void perfLoggingEnabledPromise.then((enabled) => {
+        if (!enabled) return
+        const elapsed = eventAt - requestStartedAt
+        void window.electronAPI
+          .logPerfEvent(event, `${perfTag} (+${elapsed}ms)${suffix}`)
+          .catch(() => undefined)
+      })
     }
     /** #7：Proxy/API 同源 sendMessage，工具走主进程时需标 trustTier 以便拦截灰名单 */
     const toolInvocationMeta =
@@ -3409,6 +3479,99 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 文档 / @ 引用发送但没配 key 时，输入区已清空、历史里的 user 消息却只剩裸 content，
     // imageUrls / inline snapshot 丢失、已上传附件也不会 link 到 message。
     const missingApiKey = missingVisionForImages || !activeModel.apiKey
+
+    let behaviorModeActivations: ReturnType<typeof detectBehaviorModes> = []
+    try {
+      behaviorModeActivations = detectBehaviorModes(content, conversationModeToBehaviorModeIds(get().mode))
+    } catch {
+      behaviorModeActivations = []
+    }
+    const activeBehaviorModeIds = behaviorModeActivations.map((activation) => activation.mode.id)
+    const gatewayRunId = `run-${requestStartedAt}-${requestId}`
+    const gatewayChannel = proxyOpts?.proxyJobId !== undefined ? 'api' : 'desktop'
+    const gatewayMetadata = {
+      requestId,
+      hasImages,
+      hasAttachments: Boolean(attachments && attachments.length > 0),
+      chatModelMode,
+    } satisfies Record<string, string | number | boolean | null>
+    let gatewayPlan: ReturnType<typeof buildAgentGatewayRunPlan> | null = null
+    try {
+      gatewayPlan = buildAgentGatewayRunPlan({
+        runId: gatewayRunId,
+        threadId: conversationId,
+        avatarId,
+        userText: content,
+        channel: gatewayChannel,
+        model: activeModel.model,
+        behaviorModeIds: activeBehaviorModeIds,
+        traceEnabled: !isHiddenRepair,
+        metadata: gatewayMetadata,
+      })
+    } catch (gatewayErr) {
+      window.electronAPI.logEvent(
+        'warn',
+        'agent-gateway-plan-failed',
+        gatewayErr instanceof Error ? gatewayErr.message : String(gatewayErr),
+      )
+    }
+    const guardrailActivations = gatewayPlan?.guardrails ?? []
+    const activeGuardrailIds = guardrailActivations.map((activation) => activation.policy.id)
+    let activeTraceRunId: string | null = null
+    let traceClosed = false
+    let traceQueue: Promise<unknown> = Promise.resolve()
+    const emitTrace = (kind: AgentRunTraceEventKind, payload: Record<string, unknown> = {}): void => {
+      if (!activeTraceRunId || isHiddenRepair) return
+      const runId = activeTraceRunId
+      traceQueue = traceQueue.then(() =>
+        window.electronAPI.agentTraceEvent(runId, kind, payload).catch(() => undefined)
+      )
+    }
+    const startTrace = async (): Promise<void> => {
+      if (isHiddenRepair || activeTraceRunId) return
+      try {
+        const trace = await window.electronAPI.agentTraceStart({
+          runId: gatewayPlan?.runId ?? gatewayRunId,
+          conversationId,
+          avatarId,
+          requestId,
+          channel: gatewayPlan?.channel ?? gatewayChannel,
+          model: activeModel.model,
+          behaviorModeIds: activeBehaviorModeIds,
+          guardrailIds: activeGuardrailIds,
+          metadata: gatewayPlan?.metadata ?? gatewayMetadata,
+        })
+        activeTraceRunId = trace.runId
+        if (activeGuardrailIds.length > 0) {
+          emitTrace('guardrail', {
+            stage: 'prompt',
+            guardrailIds: activeGuardrailIds,
+          })
+        }
+      } catch (traceErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'agent-trace-start-failed',
+          traceErr instanceof Error ? traceErr.message : String(traceErr),
+        )
+      }
+    }
+    const finishTrace = async (status: 'done' | 'error', payload: Record<string, unknown> = {}): Promise<void> => {
+      if (!activeTraceRunId || traceClosed || isHiddenRepair) return
+      traceClosed = true
+      const runId = activeTraceRunId
+      activeTraceRunId = null
+      try {
+        await traceQueue.catch(() => undefined)
+        await window.electronAPI.agentTraceFinish(runId, status, payload)
+      } catch (traceErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'agent-trace-finish-failed',
+          traceErr instanceof Error ? traceErr.message : String(traceErr),
+        )
+      }
+    }
 
     // 多分身 @提及：检测 @分身ID，并发拉取所有目标分身 soul.md 前缀，追加到 system prompt
     let effectiveSystemPrompt = systemPrompt
@@ -3979,12 +4142,39 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 注入失败不阻塞 user message
       void lorebookErr
     }
+    // P0 behavior modes：请求级工作方式开关，放在 dynamic 段，不污染 stable prompt cache。
+    let behaviorModeText = ''
+    try {
+      if (behaviorModeActivations.length > 0) {
+        behaviorModeText = '\n\n' + buildBehaviorModePromptBlock(behaviorModeActivations)
+        window.electronAPI.logEvent(
+          'info',
+          'behavior-modes',
+          `conversation=${conversationId} modes=${behaviorModeActivations.map((a) => `${a.mode.id}:${a.intensity}`).join(',')}`,
+        )
+      }
+    } catch (behaviorModeErr) {
+      void behaviorModeErr
+    }
+    let guardrailText = ''
+    try {
+      if (guardrailActivations.length > 0) {
+        guardrailText = '\n\n' + buildGuardrailPromptBlock(guardrailActivations)
+        window.electronAPI.logEvent(
+          'info',
+          'runtime-guardrails',
+          `conversation=${conversationId} guardrails=${activeGuardrailIds.join(',')}`,
+        )
+      }
+    } catch (guardrailErr) {
+      void guardrailErr
+    }
     // 注入真实当前日期到非 cacheable 动态段（每条消息重算，不污染 stable cache）。
     // 修复：soul-loader 的工具指引声称"system 已注入 currentDate"，但此前从未真正注入，
     // 模型对"今天天气"这类时效问题只能臆测日期（曾把 2026-06-02 答成 6-04）。
     const currentWeekdayCn = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date().getDay()]
     const currentDateLine = `【当前日期】今天是 ${localDateString()}（${currentWeekdayCn}）。涉及"今天/现在/最近/最新"的时效问题（天气、新闻、行情等）一律以此日期为准；联网检索结果标注的"访问日期"也用它，不要臆测、也不要照搬搜索结果页里出现的其它日期。`
-    const dynamicSystemText = currentDateLine + '\n\n' + dynamicAppended + lorebookText + snipNoticeBlock
+    const dynamicSystemText = currentDateLine + behaviorModeText + guardrailText + '\n\n' + dynamicAppended + lorebookText + snipNoticeBlock
 
     // agent-runtime 观测接入：保留原有 stats 上报，flag off 时无副作用
     try {
@@ -4453,6 +4643,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 round,
               })
             }
+            emitTrace('model_call', {
+              round,
+              model: effectiveModelConfig.model,
+              durationMs: Date.now() - roundStartedAt,
+              messageCount: apiMessages.length,
+              toolCount: _diagToolCount,
+              textLength: assistantText.length,
+              reasoningLength: reasoning?.length ?? 0,
+              toolCallCount: toolCalls?.length ?? 0,
+              usage,
+            })
             // 截断检测：当前轮如果设了 maxTokens，且 outputTokens 接近上限（留 4 token 容差），
             // 视为被强制截断。供 tool-loop 末尾决定是否兜底重试 + auto-seal 任务状态。
             const effectiveMaxTokens = shouldConvergeFast && !emptyTextRetryMode
@@ -4490,6 +4691,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             cancelPendingChunk()
             const errMsg = error instanceof Error ? error.message : String(error)
             logPerf('llm-round:error', `round=${round} duration=${Date.now() - roundStartedAt}ms ${errMsg}`)
+            emitTrace('error', {
+              source: 'llm',
+              round,
+              model: effectiveModelConfig.model,
+              durationMs: Date.now() - roundStartedAt,
+              error: errMsg,
+            })
             reject(error)
           },
           {
@@ -4589,6 +4797,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return true
     }
 
+    await startTrace()
+
     try {
       await forceLoadChartSkillIfNeeded()
       if (isStale()) return
@@ -4649,8 +4859,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // Stage 三 P2 #14：本次工具调用是否成功（用于关联到当前 in_progress 任务的 toolCalls 列表）。
           // 任何抛错或执行失败前缀都置 false；前置守卫拦截算"被拒绝"，也算 false。
           let toolOk = true
+          const runtimeGuardrailDecision = evaluateRuntimeGuardrailToolCall({
+            toolName: tc.function.name,
+            args: toolArgs,
+            behaviorModeIds: activeBehaviorModeIds,
+            userText: content,
+          })
+          if (runtimeGuardrailDecision.action === 'deny') {
+            emitTrace('guardrail', {
+              stage: 'pre_tool',
+              action: runtimeGuardrailDecision.action,
+              policyId: runtimeGuardrailDecision.policyId,
+              tool: tc.function.name,
+              reason: runtimeGuardrailDecision.reason,
+            })
+          }
           try {
-            if (tc.function.name === 'todo_write') {
+            if (runtimeGuardrailDecision.action === 'deny') {
+              resultText = `工具执行已跳过：${runtimeGuardrailDecision.reason ?? 'runtime guardrail denied the tool call'}`
+              toolOk = false
+            } else if (tc.function.name === 'todo_write') {
               const modePol = evaluateConversationModeToolPolicy(get().mode, 'todo_write')
               if (modePol.denied) {
                 resultText = `工具执行失败: ${modePol.message}`
@@ -4809,6 +5037,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ok: toolOk,
             errorMsg: toolOk ? undefined : resultText.slice(0, 200),
           })
+          emitTrace('tool_call', {
+            tool: tc.function.name,
+            toolCallId: tc.id,
+            round,
+            durationMs: toolDurationMs,
+            ok: toolOk,
+            skipped: wasSkipped,
+            resultLength: resultText.length,
+          })
+          if (tc.function.name === 'task') {
+            emitTrace('subagent', {
+              toolCallId: tc.id,
+              status: toolOk ? 'completed' : 'failed',
+              targetAvatar: typeof toolArgs.target_avatar === 'string' ? toolArgs.target_avatar : avatarId,
+              taskPreview: typeof toolArgs.task === 'string' ? toolArgs.task.slice(0, 200) : '',
+              durationMs: toolDurationMs,
+            })
+          }
+          if (['search_knowledge', 'read_knowledge_file', 'knowledge_grep', 'query_excel', 'read_attachment', 'search_attachment'].includes(tc.function.name)) {
+            emitTrace('source_hit', {
+              source: tc.function.name,
+              toolCallId: tc.id,
+              resultLength: resultText.length,
+            })
+          }
 
           // Stage 三 P2 #14：把本次工具调用挂到当前 in_progress 任务，让 UI 显示"任务 → 工具调用"对应关系。
           // 例外：todo_write 本身就是管理任务的工具，不挂到自己上避免噪音。
@@ -4863,6 +5116,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const attachment = tryExtractDocumentAttachment(tc.function.name, resultText, conversationId)
             if (attachment) {
               collectedDocumentAttachments.push(attachment)
+              emitTrace('artifact', {
+                tool: tc.function.name,
+                path: attachment.filePath,
+                filename: attachment.filename,
+                format: attachment.format,
+                sizeBytes: attachment.sizeBytes,
+                sources: attachment.sources?.map((source) => source.source) ?? [],
+              })
               if (isViewedConv() && !isHiddenRepair) {
                 set((state) => ({
                   messages: upsertLastAssistant(
@@ -5202,6 +5463,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const { cleanText, proposals: skillProposals } = extractSkillCreate(recCleanText)
       const hasUpdates = memUpdates.length > 0 || userUpdates.length > 0 || skillProposals.length > 0 || standingOrders.length > 0
       const displayText = cleanText || assistantText || (hasUpdates ? '（已更新记忆/画像/技能）' : '')
+      const finalDocumentAttachments = extractDocumentAttachmentsFromText(
+        displayText,
+        conversationId,
+        collectedDocumentAttachments,
+      )
+      try {
+        const answerVerification = verifyAgentAnswer({
+          userText: content,
+          answerText: displayText,
+          behaviorModeIds: activeBehaviorModeIds,
+          guardrailPolicyIds: activeGuardrailIds,
+          sourceCount: phase05SearchKnowledgeCalls,
+          toolCallCount,
+        })
+        if (answerVerification.issues.length > 0) {
+          emitTrace('guardrail', {
+            stage: 'answer_verifier',
+            ok: answerVerification.ok,
+            summary: answerVerification.summary,
+            issues: answerVerification.issues,
+          })
+          const level = answerVerification.issues.some((issue) => issue.severity === 'warn' || issue.severity === 'block')
+            ? 'warn'
+            : 'info'
+          window.electronAPI.logEvent(
+            level,
+            'answer-verifier',
+            `conv=${conversationId} run=${gatewayPlan?.runId ?? gatewayRunId} ${answerVerification.summary}`,
+          )
+        }
+      } catch (verifyErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'answer-verifier-failed',
+          verifyErr instanceof Error ? verifyErr.message : String(verifyErr),
+        )
+      }
 
       // GAP2: 如果有 memory 更新，追加写入记忆文件（含容量管理）
       if (memUpdates.length > 0) {
@@ -5353,7 +5651,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             assistantMsgId,
             displayText,
             reasoningText,
-            collectedDocumentAttachments,
+            finalDocumentAttachments,
             uncertainMarkers,
             reconsiderMarkers,
           ),
@@ -5563,6 +5861,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         timestamp: Date.now(),
         content: displayText,
       })
+      await finishTrace('done', {
+        displayLength: displayText.length,
+        toolCallCount,
+        round,
+      })
       await invokeProxyComplete({ ok: true, assistantText: displayText })
       // 流式完成：cleanupRequest 内部自检 requestId/abortController/assistantMsgId，
       // 即使 isStale 也是 no-op；不再依赖外层判断。
@@ -5588,6 +5891,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         timestamp: Date.now(),
         error: errMsg,
       })
+      await finishTrace('error', {
+        error: errMsg,
+        round,
+        toolCallCount,
+      })
       await invokeProxyComplete({ ok: false, error: errMsg })
       // hiddenRepair 模式：错误消息也不入 UI / 不入 DB，对用户完全静默；
       // 失败仅靠 phase05 埋点 + chat-error 日志记账。
@@ -5609,6 +5917,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 错误路径：cleanupRequest 自检本请求是否仍 active，避免覆盖后续请求的状态
       cleanupRequest()
     } finally {
+      await finishTrace('error', {
+        reason: isStale() ? 'request_stale_or_aborted' : 'request_finished_without_explicit_trace_close',
+        round,
+        toolCallCount,
+      })
       // 兜底：catch 内部若再次抛错而跳过上面的 cleanupRequest，这里再保险一次（幂等）。
       cleanupRequest()
     }

@@ -75,6 +75,20 @@ export interface CompactionOutcome {
   /** 被摘要替换掉的原始消息条数 */
   summarizedCount: number
   summary?: string
+  /** A3-5 负收益回退：压缩后估算体积 ≥ 压缩前，已整体回退返回原始输入 */
+  inflationRollback?: boolean
+}
+
+/** 粗粒度 token 估算（字符数近似），只用于压缩前后的相对比较（inflation guard）。 */
+function estimateSize(messages: readonly LLMMessage[]): number {
+  let total = 0
+  for (const m of messages) {
+    total += typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length
+    for (const c of m.tool_calls ?? []) {
+      total += (c.function?.name?.length ?? 0) + (c.function?.arguments?.length ?? 0)
+    }
+  }
+  return total
 }
 
 /**
@@ -110,5 +124,9 @@ export async function compactContextIfSafe(input: {
     summaryMsg,
     ...input.messages.slice(plan.tailStart),
   ]
+  // A3-5 inflation guard：摘要 + 固定提示头反而比中段原文更长 → 负收益回退，原样返回
+  if (estimateSize(newMessages) >= estimateSize(input.messages)) {
+    return { compacted: false, messages: input.messages, summarizedCount: 0, inflationRollback: true }
+  }
   return { compacted: true, messages: newMessages, summarizedCount: mid.length, summary: summary.trim() }
 }

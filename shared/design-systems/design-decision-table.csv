@@ -1,0 +1,71 @@
+category,industry_or_context,recommendation,must_have,anti_pattern,severity,source
+色彩,if 企业级 B2B / 密集数据工具,单一强调色策略：所有交互元素（按钮/链接/焦点/激活态）只用一个品牌蓝 IBM Blue 60 #0f62fe，其余全为灰阶,全站交互色唯一,引入第二强调色；monochrome+blue 体系里混入其他彩色,red,design-md/media-and-consumer-tech/ibm.md
+字体,if 企业级展示标题（42px+）,展示级标题用 Light 300 权重制造轻盈的权威；微字距只加在小字号：14px 加 0.16px、12px 加 0.32px,letter-spacing 仅用于 14px 及以下,给展示级大标题加 letter-spacing；使用 700 Bold（该体系权重止步 600）,yellow,design-md/media-and-consumer-tech/ibm.md
+组件,if 企业级按钮/表单,按钮、输入框、卡片一律 0px 直角；输入框只用 2px 底边框，不做四边包围盒,主按钮 0px 圆角 + 48px 高度,圆角按钮；输入框全包围边框,yellow,design-md/media-and-consumer-tech/ibm.md
+深度层次,if 企业级密集 UI,用背景色分层（#ffffff→#f4f4f4→#e0e0e0）表达深度；阴影只保留给真正悬浮的元素（下拉/tooltip/modal）,,卡片/瓦片加 box-shadow；渐变背景,yellow,design-md/media-and-consumer-tech/ibm.md
+布局,if 企业级栅格,8px 基础网格，一切间距可被 8 整除（2px/4px 仅作微调）；主要区块转换用 48px 垂直节奏,间距全部落在 8px 网格上,任意间距值（如 13px/21px）,info,design-md/media-and-consumer-tech/ibm.md
+响应式,if 企业工具触控目标,交互元素统一高度：按钮默认 48px、输入框 40-48px、图标按钮 48px 见方、移动菜单行 48px,触控目标 ≥40px,,info,design-md/media-and-consumer-tech/ibm.md
+组件,if 标签/徽章（企业级）,Tag 用语义色 10% 透明度背景 + 对应 60 级前景色，4px 8px 内边距；24px 胶囊是 0px 直角体系的唯一例外,,,info,design-md/media-and-consumer-tech/ibm.md
+字体,if 企业级双密度场景,Productive（密集 UI，行高 1.29）与 Expressive（营销/编辑内容，行高 1.40-1.50）双行高模式按场景切换,,,info,design-md/media-and-consumer-tech/ibm.md
+色彩,if 深色主题下的交互色,深色主题（Gray 100 #161616 底）交互蓝提亮为 Blue 40 #78a9ff 保证对比度,,深色底沿用浅色主题的深蓝导致对比不足,info,design-md/media-and-consumer-tech/ibm.md
+色彩,if 金融科技高端定位,标题用深海军蓝 #061b31 而非纯黑（暖度传达金融级质感）；深色区块用品牌靛蓝 #1c1e54,,纯黑 #000000 做标题色；深色区块用纯黑或中性灰,yellow,design-md/fintech-and-crypto/stripe.md
+深度层次,if 金融科技品牌化阴影,"阴影带品牌色调：rgba(50,50,93,0.25) 蓝调远影 + rgba(0,0,0,0.1) 中性近影，双层视差",,中性灰/纯黑单层阴影,info,design-md/fintech-and-crypto/stripe.md
+字体,if 金融数字/表格展示,所有表格与金融数据启用 OpenType tnum 等宽数字；段落内数字仍用正文特性，两者不重叠,表格数字启用 tnum,用比例数字排金融表格,yellow,design-md/fintech-and-crypto/stripe.md
+字体,if 高端金融展示标题,展示级 300 极轻权重 + 负字距渐进收紧（-1.4px@56px → -0.96px@48px → -0.64px@32px），轻盈即奢侈,,600-700 重磅标题；展示级正字距,info,design-md/fintech-and-crypto/stripe.md
+组件,if 金融科技按钮/卡片圆角,圆角保守区间 4-8px（4px 按钮徽章、6px 导航、8px 特色卡）,,12px 以上大圆角；胶囊形按钮/卡片,yellow,design-md/fintech-and-crypto/stripe.md
+色彩,if 装饰性强调色（金融）,Ruby #ea2261 / Magenta #f96bee 只用于渐变与装饰元素,,用装饰色（ruby/magenta）做按钮或链接交互色,yellow,design-md/fintech-and-crypto/stripe.md
+布局,if 金融数据密度,密数据、松边框：表格图表紧凑排布，包裹它们的 UI chrome 宽松留白,,,info,design-md/fintech-and-crypto/stripe.md
+字体,if 品牌化 OpenType 特性,全站启用品牌 stylistic set（如 ss01）定义字形个性；跳过它等于失去品牌字体 DNA,,跳过 stylistic set 用默认字形,info,design-md/fintech-and-crypto/stripe.md
+响应式,if 金融数据表移动端,金融数据表在移动端横向滚动，不强行折行,,表格强行折行破坏可读性,info,design-md/fintech-and-crypto/stripe.md
+色彩,if 深色模式优先产品,画布近黑 #08090a、面板 #0f1011、浮起面 #191a1b 三档；主文本 #f7f8f8 近白防眩光,主文本不用纯白,纯白 #ffffff 做主文本（刺眼）,yellow,design-md/productivity-and-saas/linear.app.md
+深度层次,if 深色模式 elevation,"用背景亮度阶梯 rgba(255,255,255,0.02→0.04→0.05) + 半透明白边框表达层级，不靠投影",,深色表面用暗色投影表达 elevation（黑上黑不可见）,yellow,design-md/productivity-and-saas/linear.app.md
+色彩,if 深色 SaaS 强调色纪律,全体系近乎无彩，唯一彩色为品牌靛紫 #5e6ad2（底）/#7170ff（交互），仅用于 CTA、激活态、品牌元素,品牌色只出现在交互/CTA 元素,品牌色装饰性铺开；UI chrome 引入暖色,red,design-md/productivity-and-saas/linear.app.md
+组件,if 深色模式边框,"边框一律半透明白 rgba(255,255,255,0.05-0.08)，细若发丝",,深色背景用不透明深色/实心边框,info,design-md/productivity-and-saas/linear.app.md
+字体,if 精密工具型 SaaS 权重,可变字体中间权重做签名（Inter 510 介于 regular 与 medium），权重梯 400/510/590,,使用 700 bold（该体系上限 590）,info,design-md/productivity-and-saas/linear.app.md
+字体,if 深色 SaaS 展示标题字距,激进负字距随字号缩放：-1.584px@72px、-1.056px@48px、-0.704px@32px，16px 以下归零,,展示文字正字距,info,design-md/productivity-and-saas/linear.app.md
+组件,if 深色 UI 按钮底色,"按钮背景近零透明 rgba(255,255,255,0.02-0.05)，靠边框与亮度成形",,深色 UI 上做实心色块按钮,info,design-md/productivity-and-saas/linear.app.md
+组件,if 极简开发者工具边框,"shadow-as-border：box-shadow 0px 0px 0px 1px rgba(0,0,0,0.08) 取代传统 border，圆角无裁切、视觉更轻",,卡片用传统 CSS border,info,design-md/developer-tools-and-ides/vercel.md
+色彩,if 开发者基础设施/极简,全灰阶 #171717→#ffffff；工作流色（Ship 红 #ff5b4f / Preview 粉 #de1d8d / Develop 蓝 #0a72ef）只出现在对应工作流上下文,色彩功能化，不做装饰,工作流强调色拿来装饰；UI chrome 引入暖色（橙/黄/绿）,yellow,design-md/developer-tools-and-ides/vercel.md
+深度层次,if 极简卡片阴影,多层阴影栈各司其职：1px 环边框 + 2px ambient + 8px 负 spread 深度 + 内圈 #fafafa 高光,保留内圈 #fafafa ring（内发光）,重阴影（透明度 >0.1）；省略内圈 ring,info,design-md/developer-tools-and-ides/vercel.md
+字体,if 极简 dev 展示标题,极限负字距 -2.4~-2.88px@48px 随字号递减（-1.28px@32px、-0.96px@24px）；三权重 400/500/600 严格分工,,正文 700 bold；Geist 类字体加正字距,info,design-md/developer-tools-and-ides/vercel.md
+组件,if 极简按钮几何,主操作按钮 6px 圆角；9999px 胶囊只留给徽章/标签,,主操作按钮用胶囊圆角,info,design-md/developer-tools-and-ides/vercel.md
+布局,if 极简/画廊式留白,区块间 80-120px+ 垂直 padding；白与白区块之间只靠 hairline 边框 + 间距分隔，不换底色,,,info,design-md/developer-tools-and-ides/vercel.md
+色彩,if 浅色界面正文色,正文近黑 #171717 而非 #000000，微暖降低刺目感,,纯黑 #000000 正文,info,design-md/developer-tools-and-ides/vercel.md
+色彩,if 焦点可达性,"统一焦点环：2px solid 饱和蓝 hsla(212,100%,48%,1)，全部交互元素一致",焦点环全站一致,,info,design-md/developer-tools-and-ides/vercel.md
+响应式,if 极简营销页移动端,区块间距 80px+ 收到 48px；3 列卡片 → 单列；展示标题负字距按比例保持,,移动端保留桌面级区块间距,info,design-md/developer-tools-and-ides/vercel.md
+色彩,if 消费级产品展示（摄影主导）,单一 Action Blue #0066cc 承载全部交互信号（链接/胶囊 CTA/焦点）；深色 tile 上换 Sky Link Blue #2997ff,唯一交互色 + 深浅表面变体切换,引入第二强调色；Sky Link Blue #2997ff 用在浅色表面,red,design-md/media-and-consumer-tech/apple.md
+深度层次,if 摄影主导产品页,"全系统唯一投影 rgba(0,0,0,0.22) 3px 5px 30px 只给落在表面上的产品渲染图；卡片/按钮/文字零阴影",,给卡片/按钮/文字加阴影；装饰性 CSS 渐变背景（如 AI 惯用的紫粉渐变铺 hero）,yellow,design-md/media-and-consumer-tech/apple.md
+布局,if 产品瓦片叙事,全出血 tile 交替 白/羊皮纸 #f5f5f7 ↔ 近黑 #272729，颜色切换本身就是分隔；tile 内 80px 垂直 padding、tile 间 0 间隙,,给全出血 tile 加圆角；tile 之间加分隔线,info,design-md/media-and-consumer-tech/apple.md
+字体,if 消费级阅读正文,正文 17px（打破 16px 惯例）、行高 1.47；权重梯 300/400/600/700，500 刻意缺席,正文行高 ≥1.47,正文用 weight 500；行高压到 1.47 以下,info,design-md/media-and-consumer-tech/apple.md
+动效,if 按钮按压反馈,全系统按钮 active 态统一 transform: scale(0.95) 微交互，不靠换色,,,info,design-md/media-and-consumer-tech/apple.md
+组件,if 圆角语法分层（消费级）,胶囊 9999px = 动作信号（CTA/搜索框/配置 chip）；8px 紧凑工具按钮、18px 商店卡片；语法不得互换,圆角语法按角色分层,混用圆角语法（如内容卡用胶囊、CTA 用直角）,info,design-md/media-and-consumer-tech/apple.md
+布局,if 内容最大宽度分档,文本重区 ~980px、产品网格 ~1440px、产品 tile 全出血——按内容类型分档而非一刀切,,,info,design-md/media-and-consumer-tech/apple.md
+色彩,if 内容媒体深色应用,近黑多阶 #121212/#181818/#1f1f1f 沉浸画布；色彩由内容（专辑封面）提供，UI 保持无彩；品牌绿 #1ed760 只做播放/激活/CTA,品牌绿只做功能性使用,Spotify 绿铺背景或做装饰；追加其他品牌色,yellow,design-md/media-and-consumer-tech/spotify.md
+组件,if 媒体播放控件,胶囊 500px-9999px 按钮 + 50% 正圆播放钮；按钮标签大写 + 1.4-2px 宽字距形成系统性标签声音,,方直角按钮（破坏产品识别）,info,design-md/media-and-consumer-tech/spotify.md
+深度层次,if 深色应用浮层,"深色底上的阴影必须重才可见：卡片 rgba(0,0,0,0.3) 8px、弹窗 rgba(0,0,0,0.5) 24px",,细淡阴影（深色上不可见等于没有）,info,design-md/media-and-consumer-tech/spotify.md
+布局,if 应用型密集内容（非营销页）,字号紧凑区间 10-24px、内容密集排布，深色背景本身提供视觉休息,,松散行高、杂志式留白（这是 app 不是杂志）,info,design-md/media-and-consumer-tech/spotify.md
+字体,if 全球多脚本产品,字体 fallback 栈覆盖阿拉伯/希伯来/西里尔/希腊/天城文/CJK 全脚本,多脚本 fallback 完整,只留拉丁 fallback,info,design-md/media-and-consumer-tech/spotify.md
+色彩,if 奢侈品牌强调色,品牌红 #DA291C 外科手术式克制——每屏只保留一个红色元素（如 Subscribe CTA），克制即权威,每屏品牌红唯一,品牌红铺陈成主题色/一屏多处出现,red,design-md/automotive/ferrari.md
+布局,if 奢侈品/编辑式叙事,黑白 chiaroscuro 明暗交替分节：黑=沉浸时刻、白=编辑内容，形成杂志翻页节奏；每节一个故事,每节单一叙事焦点；编辑级影棚摄影,多焦点拥挤布局；低质量/用户生成图片,yellow,design-md/automotive/ferrari.md
+组件,if 奢侈品交互元素,2px 近直角圆角传达工程精密（按钮/输入统一），12px/10px 紧凑内边距,,胶囊按钮/大圆角的圆润友好化,yellow,design-md/automotive/ferrari.md
+色彩,if 语义色系统独立性,警告色 #F13A2C 刻意区别于品牌红 #DA291C——语义层（warning/success/info）独立于品牌层,语义色不被品牌色覆盖,拿品牌红当 error/warning 色,red,design-md/automotive/ferrari.md
+字体,if 双字体编辑体系,叙事字体（标题/正文/按钮）与标注字体（大写 + 1px 宽字距标签）两声部分工，同一文本块内不混用,,给叙事标题加 uppercase（大写只属于标注层）；同一文本块混用两字体,info,design-md/automotive/ferrari.md
+深度层次,if 摄影驱动奢侈品牌,深度全部来自表面黑白对比 + 影棚摄影（反光/地面阴影/氛围雾）；UI 零渐变、零 glow、零 blur,,UI 渐变/发光/毛玻璃堆效果,info,design-md/automotive/ferrari.md
+组件,if 高强调 CTA 稀缺性,品牌红只给一个按钮（Subscribe 级转化动作）；常规 CTA 用白底黑字 2px 圆角的建筑式按钮,,多个红色按钮同屏（红失去权威）,yellow,design-md/automotive/ferrari.md
+色彩,if 创意工具/作品展示平台,白墙画廊策略：界面 chrome 严格黑白二元（#000000/#ffffff），彩色只存在于内容（作品/渐变 hero）,chrome 层无彩,给界面 chrome 添彩色,yellow,design-md/design-and-creative-tools/figma.md
+字体,if 可变字体精调层级,非常规权重档 320/330/340/450/480/540 制造微差层级；正文用轻权重 320-340 营造空气感,,正文权重超过 450；退回 400/700 粗细二元,info,design-md/design-and-creative-tools/figma.md
+组件,if 创意工具几何语言,胶囊 50px + 正圆 50% 按钮几何；dashed 2px 焦点框呼应编辑器选择手柄（网站 UI 语言引用产品 UI 语言）,,直角按钮；实线焦点框,info,design-md/design-and-creative-tools/figma.md
+字体,if mono 标注层字距,mono 大写标签用正字距 0.54-0.6px 做结构路标；正文一律负字距 -0.1~-0.26px,,正文加正字距,info,design-md/design-and-creative-tools/figma.md
+色彩,if AI 产品差异化定位,暖奶油画布 #faf9f5 + 珊瑚 #cc785c 强调，反向定位于全行业的冷蓝/冷灰,画布保持暖色调,冷灰/纯白画布（读作任何一家 AI 工具）；冷蓝/饱和青强调色,yellow,design-md/ai-and-llm-platforms/claude.md
+字体,if 文学编辑式品牌,衬线展示标题（Copernicus 类 400 权重 + 负字距 -0.3~-1.5px）+ 人文无衬线正文，双声部即品牌声音,衬线展示标题保持权重 400,衬线加粗到 700（夸张化）；用无衬线（如 Inter）做展示标题,yellow,design-md/ai-and-llm-platforms/claude.md
+信息架构,if 长页面表面节奏,表面模式逐 band 交替：cream → cream-card → dark-mockup → coral-callout → dark-footer,相邻 band 表面模式不同,连续两个相同表面模式的 band,info,design-md/ai-and-llm-platforms/claude.md
+组件,if 开发者产品营销展示,展示真实产品 chrome（代码编辑器 mockup、终端输出、模型对比卡）而非抽象营销插画,,画代码的营销插画（能展示真代码时）,info,design-md/ai-and-llm-platforms/claude.md
+色彩,if 强调色使用密度,珊瑚在单个元素上稀缺（按钮/徽章级），只在整版 callout 卡上整面铺开——稀缺处克制、放开处彻底,,强调色到处点缀（稀释品牌电压）,yellow,design-md/ai-and-llm-platforms/claude.md
+组件,if 圆角层级体系,四级圆角分层：8px 按钮/输入、12px 内容卡、16px hero 容器、pill 徽章,,,info,design-md/ai-and-llm-platforms/claude.md
+色彩,if 表面色纪律,cream + coral + dark navy 三位一体，不引入第四表面色,表面色不超过三色体系,紫色卡片/绿色区块乱入,yellow,design-md/ai-and-llm-platforms/claude.md
+字体,if 代码内容展示,代码块一律 JetBrains Mono 14px / 行高 1.6，置于 dark surface 内嵌 soft dark 底（#1f1e1b in #181715）,,,info,design-md/ai-and-llm-platforms/claude.md
+布局,if 编辑式页面留白,band 间统一 96px、卡内 32px 宽裕 padding，营造长文杂志节奏,,,info,design-md/ai-and-llm-platforms/claude.md
+响应式,if 代码展示移动端,代码块保持字号、卡内横向滚动，不折行代码,,移动端折行代码,info,design-md/ai-and-llm-platforms/claude.md
+色彩,if 加密/金融消费级,Coinbase Blue #0052ff 唯一品牌强调，只做功能性使用（链接/CTA 边框）,,品牌蓝装饰化使用,yellow,design-md/fintech-and-crypto/coinbase.md
+组件,if 金融消费级 CTA,56px 大圆角胶囊 CTA，hover 过渡到亮蓝 #578bfa,CTA 圆角 ≥56px,CTA 直角/小圆角,info,design-md/fintech-and-crypto/coinbase.md
+布局,if 金融消费级页面节奏,白色内容区与近黑 #0a0b0d 功能区交替；展示标题行高 1.00 极紧,,,info,design-md/fintech-and-crypto/coinbase.md

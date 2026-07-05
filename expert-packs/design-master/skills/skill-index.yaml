@@ -297,3 +297,58 @@ shared_skills:
     keywords: [开发交付, handoff, 交给开发, claude code 交接]
     when: 用户要求把设计交付给开发
     priority: 2
+
+# ═══════════════════════════════════════
+# 分身专属技能（source: local，path 相对分身目录）
+# ═══════════════════════════════════════
+local_skills:
+  # ── 设计决策表检索（B6：结构化规则集 + 薄检索层） ──
+  - name: design-decision-lookup
+    path: skills/design-decision-lookup.md
+    source: local
+    domain: 设计决策
+    keywords:
+      - 设计方案
+      - 视觉方案
+      - 视觉方向
+      - 设计风格
+      - 出个设计
+      - 设计一个页面
+      - 落地页设计
+      - 官网设计
+      - 界面设计
+      - 改版
+      - 设计评审
+      - 配色
+      - 配色方案
+      - 色板
+      - palette
+      - 强调色
+      - 品牌色
+      - 字体方案
+      - typography
+      - 字阶
+      - 圆角
+      - 阴影
+      - elevation
+      - 深色模式
+      - dark mode
+      - 浅色模式
+      - 组件规范
+      - 按钮样式
+      - 卡片样式
+      - 留白
+      - 布局风格
+      - 品牌感
+      - 高级感
+      - 什么风格
+      - 行业风格
+      - 企业级设计
+      - 金融科技设计
+      - SaaS 设计
+      - 开发者工具设计
+      - 奢侈品牌设计
+      - AI 产品设计
+      - 决策表
+    when: 用户要求输出任何设计方案/视觉方向/配色/字体/组件规范，或询问某行业该用什么设计风格时，先检索 shared/design-systems/design-decision-table.csv 命中行，方案逐条对照 must_have 与 anti_pattern 并引用行号作为来源
+    priority: 1

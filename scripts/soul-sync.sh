@@ -20,6 +20,11 @@ SOURCES_FILE="$SOUL_ROOT/shared/skills/sources.yaml"
 COMMUNITY_DIR="$SOUL_ROOT/shared/skills/community"
 LOCK_FILE="$SOUL_ROOT/shared/skills/sources.lock"
 TMP_DIR="$SOUL_ROOT/.soul-sync-tmp"
+# A2 安装门禁（scripts/soul-scan.py）：clone 之后、cp 进 community/ 之前扫描。
+# 中风险 finding 需 SOUL_SYNC_FORCE=1 环境变量强制放行；Unicode 硬拦截不可绕过。
+SCAN_SCRIPT="$SOUL_ROOT/scripts/soul-scan.py"
+SCAN_BASELINE="$COMMUNITY_DIR/.scan-baseline.yaml"
+INSTALL_LOCK="$COMMUNITY_DIR/.install-lock.yaml"
 
 # ═══════════════════════════════════════
 # 颜色输出
@@ -119,6 +124,47 @@ sync_source() {
     local actual_commit
     actual_commit=$(cd "$clone_dir" && git rev-parse HEAD)
 
+    # ── A2 安装门禁：clone 之后、cp 之前，扫描「将要安装」的技能文件 ──
+    # 命中 Unicode 隐藏字符 / 高风险 pattern → 整源跳过安装（fail-loud）
+    local scan_files=()
+    if [[ -n "$file" ]]; then
+        [[ -f "$clone_dir/$file" ]] && scan_files+=("$clone_dir/$file")
+    else
+        local scan_src_dir="$clone_dir/$path"
+        local scan_skill_list
+        scan_skill_list=$(echo "$skills" | python3 -c "import sys,json; print(' '.join(json.load(sys.stdin)))")
+        if [[ -z "$scan_skill_list" ]]; then
+            local scan_f
+            for scan_f in "$scan_src_dir"/*.md; do
+                [[ -f "$scan_f" ]] && scan_files+=("$scan_f")
+            done
+        else
+            local scan_name
+            for scan_name in $scan_skill_list; do
+                [[ -f "$scan_src_dir/${scan_name}.md" ]] && scan_files+=("$scan_src_dir/${scan_name}.md")
+            done
+        fi
+    fi
+    local scan_score=0
+    if [[ ${#scan_files[@]} -gt 0 ]]; then
+        local scan_args=(scan --root "$clone_dir" --baseline "$SCAN_BASELINE" --source-name "$name")
+        if [[ "${SOUL_SYNC_FORCE:-0}" == "1" ]]; then
+            scan_args+=(--force)
+        fi
+        local scan_rc=0 scan_summary=""
+        scan_summary=$(python3 "$SCAN_SCRIPT" "${scan_args[@]}" -- "${scan_files[@]}") || scan_rc=$?
+        if [[ $scan_rc -ne 0 ]]; then
+            case $scan_rc in
+                4) log_error "  安装门禁拒绝: 检测到 Unicode 隐藏字符（硬拦截，SOUL_SYNC_FORCE 无效），跳过该源" ;;
+                3) log_error "  安装门禁拒绝: risk_score 达到拒装线（详见上方扫描报告），跳过该源" ;;
+                2) log_error "  安装门禁拒绝: 中风险 finding（详见上方扫描报告）。确认无害后可 SOUL_SYNC_FORCE=1 重跑强制安装" ;;
+                *) log_error "  安装门禁执行失败 (exit=$scan_rc)，为安全起见跳过该源" ;;
+            esac
+            return 1
+        fi
+        scan_score=$(echo "$scan_summary" | python3 -c "import sys,json; print(json.load(sys.stdin).get('risk_score',0))" 2>/dev/null || echo 0)
+    fi
+
     # 准备目标目录
     rm -rf "$target_dir"
     mkdir -p "$target_dir"
@@ -190,6 +236,14 @@ sync_source() {
 
     # 写入 lock 信息
     echo "$name|$repo|$ref|$actual_commit|$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOCK_FILE"
+
+    # ── A2 来源持久化：source_repo / source_commit / installed_at / scan_score
+    #    写入 community/.install-lock.yaml（按源名分节，由 soul-scan.py 维护格式）──
+    if ! python3 "$SCAN_SCRIPT" write-lock --lock "$INSTALL_LOCK" \
+        --name "$name" --repo "$repo" --ref "$ref" \
+        --commit "$actual_commit" --score "$scan_score"; then
+        log_warn "  写入 .install-lock.yaml 失败（不影响本次安装，请检查 soul-scan.py）"
+    fi
 
     return 0
 }
@@ -309,6 +363,11 @@ main() {
         log_info "  1. 在分身的 skill-index.yaml 中添加社区技能引用"
         log_info "  2. 格式: path: shared/skills/community/<name>/skills/<skill>.md"
         log_info "  3. 设置: source: community"
+    fi
+
+    # A2 fail-loud：只要有源同步失败（含被安装门禁拒绝），整体退出码非零
+    if [[ $failed -gt 0 ]]; then
+        exit 1
     fi
 }
 

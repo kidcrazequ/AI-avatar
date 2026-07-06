@@ -6414,3 +6414,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
   clearMessages: () => set({ messages: [], skillProposals: [], toolCallStatus: '', isLoading: false, toolCallTimeline: [] }),
 }))
+
+// zustand store 模块 HMR 防裂脑（2026-07-06）：本模块被热替换时 create() 重建
+// 空 store——App 的 mount 已跑过不会重灌模型配置，旧组件树可能仍握着旧实例
+// （16:02 与 18:20 两次 apiKey"凭空丢失"均源于此）。把热更升级为整页刷新，
+// 配置随 mount 重灌；代价是 dev 下改本文件必刷页，行为可预期。
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot?.invalidate()
+  })
+}

@@ -4848,7 +4848,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               if (streamingSnapshot && streamingSnapshot.conversationId === conversationId) {
                 streamingSnapshot.reasoning = reasoningText
               }
-              if (round === 0 && pendingChunkUpdate === null && !isHiddenRepair) {
+              // thinking 全轮次实时流式（2026-07-06）：agent 模式下大头思考都发生在
+              // 工具轮（round>0），原 round===0 门槛让用户盯着空转圈几十秒。
+              // reasoning 跨轮累积成同一个思考块，实时上屏无重复风险。
+              if (pendingChunkUpdate === null && !isHiddenRepair) {
                 pendingChunkUpdate = requestAnimationFrame(() => {
                   pendingChunkUpdate = null
                   if (isStale()) return
@@ -4866,11 +4869,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               streamingSnapshot.text = assistantText
             }
             writeProxyStreamDelta(chunk)
-            // 工具调用中间轮次（round > 0）不实时显示文字给用户，
-            // 避免 LLM 在中间轮输出半成品分析后最终轮又重复一遍。
-            // 只在第一轮（用户刚发消息）和最终轮（下面 resolve 后判断无 tool_calls 再刷新）时显示。
+            // 正文全轮次实时流式（2026-07-06 改）：原设计只在 round===0 实时显示，
+            // 防"中间轮半成品分析与最终轮重复"；代价是 agent 模式下最终答案一次性上屏。
+            // 现在改为全轮流式，防重复意图由轮次收尾处理保住：本轮以 tool_calls 结束时
+            // 清掉已上屏的半成品文字（见 completion 回调）。多数 thinking 模型工具轮
+            // textLen=0，实际只有真最终轮会流式出文字。
             // hiddenRepair 模式跳过——本轮 messages 里没有占位 message，set 会插入新气泡污染 UI。
-            if (round === 0 && pendingChunkUpdate === null && !isHiddenRepair) {
+            if (pendingChunkUpdate === null && !isHiddenRepair) {
               pendingChunkUpdate = requestAnimationFrame(() => {
                 pendingChunkUpdate = null
                 if (isStale()) return
@@ -4926,6 +4931,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               return
             }
             pendingToolCalls = toolCalls
+            // 本轮以工具调用收尾：清掉已实时上屏的本轮半成品文字（thinking 保留），
+            // 防止与最终轮答案重复——原"round>0 不实时显示"设计的防重复意图由此保住。
+            // cancelPendingChunk 已在本回调开头执行，不会有滞后 RAF 把旧文字写回。
+            if (assistantText.length > 0 && isViewedConv() && !isHiddenRepair && !isStale()) {
+              set((state) => ({
+                messages: upsertLastAssistant(state.messages, assistantMsgId, '', reasoningText),
+              }))
+            }
             // thinking 模型本轮 reasoning_content，下一步在 apiMessages.push 时原样回传
             roundReasoningText = reasoning ?? ''
             logPerf(

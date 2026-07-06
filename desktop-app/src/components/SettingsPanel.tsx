@@ -23,6 +23,13 @@ interface ToolCallAuditEntry {
   error?: string
 }
 
+interface PerfLogModalState {
+  date: string
+  raw: string
+  loading: boolean
+  error?: string
+}
+
 interface Props {
   activeAvatarId?: string
   onClose: () => void
@@ -345,6 +352,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const { themeId, setTheme } = useThemeStore()
   const [isExporting, setIsExporting] = useState(false)
   const [logMsg, setLogMsg] = useState('')
+  const [perfLoggingEnabled, setPerfLoggingEnabled] = useState(false)
+  const [perfLogModal, setPerfLogModal] = useState<PerfLogModalState | null>(null)
   /**
    * 工具调用审计 modal 状态（Stage 三 P2 范围外 3）。
    *
@@ -360,7 +369,6 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     error?: string
   }>(null)
   // Wiki 设置状态
-  const [wikiInjectRag, setWikiInjectRag] = useState(false)
   const [wikiAutoSediment, setWikiAutoSediment] = useState(false)
   // 知识库 import 完成后自动重编译实体概念页（PAP 学习笔记借鉴，默认关，避免静默烧 LLM token）
   const [wikiAutoCompileOnImport, setWikiAutoCompileOnImport] = useState(false)
@@ -571,7 +579,6 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
 
       // 并行加载 Wiki / 记忆 / 定时任务 / 工具集成设置
       const [
-        wikiInject,
         wikiSediment,
         wikiAutoCompileRaw,
         nudge,
@@ -591,8 +598,8 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         anthroKey,
         anthroBase,
         webFetchAllowPrivateRaw,
+        perfLoggingRaw,
       ] = await Promise.all([
-        window.electronAPI.getSetting('wiki_inject_rag'),
         window.electronAPI.getSetting('wiki_auto_sediment'),
         window.electronAPI.getSetting('wiki_auto_compile_on_import'),
         window.electronAPI.getSetting('memory_nudge_interval'),
@@ -612,9 +619,9 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         window.electronAPI.getSetting('anthropic_api_key'),
         window.electronAPI.getSetting('anthropic_base_url'),
         window.electronAPI.getSetting('web_fetch_allow_private'),
+        window.electronAPI.getSetting('perf_logging_enabled'),
       ])
       if (loadSeqRef.current !== seq) return
-      setWikiInjectRag(wikiInject === 'true')
       setWikiAutoSediment(wikiSediment === 'true')
       setWikiAutoCompileOnImport(wikiAutoCompileRaw === 'true')
       setNudgeInterval(nudge ?? '5')
@@ -637,6 +644,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       setProxyToken(proxTok ?? '')
       setAnthropicApiKey(anthroKey ?? '')
       setAnthropicBaseUrl(anthroBase && anthroBase.trim() !== '' ? anthroBase : 'https://api.anthropic.com')
+      setPerfLoggingEnabled(perfLoggingRaw === 'true')
 
       // MCP servers（独立 try，避免一个面板失败影响其他设置加载）
       try {
@@ -849,6 +857,32 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
     }
   }
 
+  /** 性能诊断开关：只影响后续 sendMessage 的 perf 日志写入。 */
+  const handleTogglePerfLogging = async (next: boolean) => {
+    setPerfLoggingEnabled(next)
+    try {
+      await window.electronAPI.setSetting('perf_logging_enabled', next ? 'true' : 'false')
+      setLogMsg(next ? '性能诊断已开启' : '性能诊断已关闭')
+      clearTimeout(logMsgTimerRef.current)
+      logMsgTimerRef.current = setTimeout(() => setLogMsg(''), 3000)
+    } catch (err) {
+      setPerfLoggingEnabled(!next)
+      setLogMsg(`保存失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /** 读取并展示某日 perf-YYYY-MM-DD.log。 */
+  const handleViewPerfLog = async (date?: string) => {
+    const d = date ?? localDateString()
+    setPerfLogModal({ date: d, raw: '', loading: true })
+    try {
+      const raw = await window.electronAPI.readPerfLog(d)
+      setPerfLogModal({ date: d, raw, loading: false })
+    } catch (err) {
+      setPerfLogModal({ date: d, raw: '', loading: false, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
   /** 导出错误日志到桌面 */
   const handleExportErrorLog = async () => {
     setIsExporting(true)
@@ -873,7 +907,6 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   const handleSaveWikiSettings = async () => {
     try {
       await Promise.all([
-        window.electronAPI.setSetting('wiki_inject_rag', wikiInjectRag ? 'true' : 'false'),
         window.electronAPI.setSetting('wiki_auto_sediment', wikiAutoSediment ? 'true' : 'false'),
         window.electronAPI.setSetting('wiki_auto_compile_on_import', wikiAutoCompileOnImport ? 'true' : 'false'),
       ])
@@ -1729,27 +1762,6 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                   <div className="border-l-3 border-px-primary pl-4 py-1">
                     <h3 className="font-game text-[16px] font-bold text-px-text mb-1">知识百科</h3>
                     <p className="font-game text-[14px] text-px-text-sec">将知识库内容提炼为百科词条，让 AI 回答更专业准确</p>
-                  </div>
-
-                  {/* 回答时参考百科 */}
-                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <span
-                        className="pixel-checkbox"
-                        role="checkbox"
-                        aria-checked={wikiInjectRag}
-                        data-checked={wikiInjectRag || undefined}
-                        onClick={() => setWikiInjectRag(!wikiInjectRag)}
-                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setWikiInjectRag(!wikiInjectRag) } }}
-                        tabIndex={0}
-                      />
-                      <div>
-                        <div className="font-game text-[14px] text-px-text">回答时参考百科</div>
-                        <div className="font-game text-[12px] text-px-text-dim mt-0.5">
-                          AI 回答问题时自动查阅百科词条，作为补充参考提升回答质量
-                        </div>
-                      </div>
-                    </label>
                   </div>
 
                   {/* 自动收藏优质回答 */}
@@ -3365,6 +3377,41 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                       <div className="text-[12px] text-px-text-dim mt-0.5">展示当日 LLM 调用工具的入参/耗时/成败摘要（脱敏）</div>
                     </div>
                   </button>
+
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-game text-[14px] text-px-text tracking-wider">性能诊断</div>
+                        <div className="font-game text-[12px] text-px-text-dim mt-1">
+                          开启后记录对话链路耗时、消息长度和工具轮次，用于排查滚动卡顿
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleTogglePerfLogging(!perfLoggingEnabled)}
+                        className={`font-game text-[12px] px-3 py-1.5 border-2 tracking-wider shrink-0 ${
+                          perfLoggingEnabled
+                            ? 'border-px-success text-px-success bg-px-success/10'
+                            : 'border-px-border-dim text-px-text-dim hover:border-px-primary hover:text-px-primary'
+                        }`}
+                        aria-pressed={perfLoggingEnabled}
+                      >
+                        {perfLoggingEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => void handleViewPerfLog()}
+                      className="w-full flex items-center gap-3 px-4 py-2 border border-px-border-dim
+                        bg-px-bg text-px-text-sec font-game text-[13px] tracking-wider
+                        hover:border-px-primary hover:text-px-primary transition-none"
+                    >
+                      <span className="w-7 h-7 border border-px-border flex items-center justify-center text-px-text-dim font-game text-[11px] flex-shrink-0">PF</span>
+                      <div className="text-left">
+                        <div>查看性能日志</div>
+                        <div className="text-[11px] text-px-text-dim mt-0.5">打开 logs/perf-YYYY-MM-DD.log 的当天内容</div>
+                      </div>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 操作结果提示 */}
@@ -3541,6 +3588,13 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
           onChangeDate={(d) => handleViewToolCallAudit(d)}
         />
       )}
+      {perfLogModal && (
+        <PerfLogModal
+          state={perfLogModal}
+          onClose={() => setPerfLogModal(null)}
+          onChangeDate={(d) => handleViewPerfLog(d)}
+        />
+      )}
     </Modal>
   )
 }
@@ -3662,6 +3716,90 @@ function ToolCallAuditModal(props: {
               )
             })}
           </ul>
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={onClose} className="pixel-btn-ghost">CLOSE</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * 性能诊断日志 modal。
+ *
+ * 展示 logs/perf-YYYY-MM-DD.log 的原始内容。perf 日志是开发/诊断开关开启后才写入的
+ * 轻量链路日志，适合直接看原文，不额外结构化解析。
+ */
+function PerfLogModal(props: {
+  state: PerfLogModalState
+  onClose: () => void
+  onChangeDate: (date: string) => void
+}) {
+  const { state, onClose, onChangeDate } = props
+
+  const shiftDate = (base: string, days: number): string => {
+    const [y, m, d] = base.split('-').map(Number)
+    const dt = new Date(y, (m ?? 1) - 1, d ?? 1)
+    dt.setDate(dt.getDate() + days)
+    const yy = dt.getFullYear()
+    const mm = String(dt.getMonth() + 1).padStart(2, '0')
+    const dd = String(dt.getDate()).padStart(2, '0')
+    return `${yy}-${mm}-${dd}`
+  }
+
+  return (
+    <Modal isOpen={true} onClose={onClose} size="md">
+      <div className="flex items-center justify-between px-4 py-2 border-b-2 border-px-border bg-px-elevated">
+        <h3 className="font-game text-[14px] text-px-primary tracking-wider">
+          性能诊断 · {state.date}
+        </h3>
+        <button
+          onClick={onClose}
+          className="font-game text-[12px] text-px-text-dim hover:text-px-danger px-2"
+          aria-label="关闭"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="flex-1 flex flex-col gap-3 p-4 overflow-hidden">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="font-game text-[12px] text-px-text-sec">
+            {state.loading ? '加载中...' : state.error ? `错误: ${state.error}` : `${state.raw.trim() ? state.raw.split('\n').filter(Boolean).length : 0} 行`}
+          </div>
+          <div className="flex items-center gap-1 font-game text-[11px]">
+            <button
+              onClick={() => onChangeDate(shiftDate(state.date, -1))}
+              className="px-2 py-1 border border-px-border-dim hover:border-px-primary"
+            >
+              ← 前一天
+            </button>
+            <button
+              onClick={() => onChangeDate(localDateString())}
+              className="px-2 py-1 border border-px-border-dim hover:border-px-primary"
+            >
+              今天
+            </button>
+            <button
+              onClick={() => onChangeDate(shiftDate(state.date, 1))}
+              className="px-2 py-1 border border-px-border-dim hover:border-px-primary"
+            >
+              后一天 →
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto border border-px-border-dim bg-px-bg">
+          {!state.loading && !state.raw.trim() ? (
+            <div className="p-6 text-center font-game text-[12px] text-px-text-dim">
+              {state.error ? '加载失败' : '该日暂无性能诊断记录'}
+            </div>
+          ) : (
+            <pre className="p-3 font-mono text-[11px] leading-relaxed text-px-text-sec whitespace-pre-wrap break-words">
+              {state.raw}
+            </pre>
+          )}
         </div>
 
         <div className="flex justify-end">

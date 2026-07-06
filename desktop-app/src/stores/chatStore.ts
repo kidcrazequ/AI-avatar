@@ -8,6 +8,7 @@ import {
   evaluateConversationModeToolPolicy,
   detectSelfDescriptionIntent,
   buildSelfDescriptionAnswer,
+  normalizeIntentLocal,
   isContextOverflowError,
   buildAgentGatewayRunPlan,
   buildBehaviorModePromptBlock,
@@ -16,12 +17,20 @@ import {
   detectBehaviorModes,
   evaluateGuardrailToolCall as evaluateGuardrailToolCallCore,
   verifyAgentAnswer,
+  extractSourceAnchorsFromContent,
+  extractSourceAnchorsFromMessages,
 } from '@soul/core/browser'
 import { regressionTelemetry } from '../services/regression-telemetry'
 import { maybeRerankToolsWithIss } from '../services/iss-tool-rerank'
 import type { DocumentAttachment, DocumentAttachmentFormat, DocumentAttachmentSource } from '../services/chat-types'
 import { costTracker, resolveTurnBudgetUsd } from '../services/llm-providers/cost-tracker'
 import { compactContextIfSafe, renderMiddleForSummary } from '../services/context-compaction'
+import {
+  compressToolResult,
+  markSupersededToolResults,
+  COMPRESSED_MARKER_PREFIX,
+  SUPERSEDED_MARKER_PREFIX,
+} from '../services/tool-result-compressor'
 import { formatSseEvent, textDeltaJson } from '../lib/anthropic-proxy-protocol'
 import { extractUncertain, extractReconsider } from './deliberation-extractors'
 import { buildStableSystemText, RED_LINE_SUMMARY } from './stable-system-prompt'
@@ -222,17 +231,17 @@ export interface AgentTaskToolCall {
  *     给 ChatWindow 顶部"工具调用时间线"完整呈现一轮对话的全部工具执行过程
  *
  * 字段含义：
- *   - id            条目唯一 ID（tool 用 tool_call_id；rag/skill 用 `${kind}-${startedAt}`）
- *   - name          工具名 / RAG 阶段名 / Skill 名（英文原名，等宽字体小号显示）
+ *   - id            条目唯一 ID（tool 用 tool_call_id；旧检索/skill 用 `${kind}-${startedAt}`）
+ *   - name          工具名 / 旧检索阶段名 / Skill 名（英文原名，等宽字体小号显示）
  *   - argsPreview   tool: tc.function.arguments 截前 80 字符（不解析直接截原文）；
- *                   rag/skill: 中文友好文本（detail），渲染时作为主标签优先于 name
- *   - resultPreview 工具结果文本截前 200 字符（rag/skill 通常为空）
+ *                   旧检索/skill: 中文友好文本（detail），渲染时作为主标签优先于 name
+ *   - resultPreview 工具结果文本截前 200 字符（旧检索/skill 通常为空）
  *   - durationMs    本次执行耗时
  *   - ok            true=成功；false=失败（**真错误**，不含守卫拦截）
  *   - startedAt     开始时间戳（Date.now()），用于按时序排序/展示
  *   - kind          条目种类（默认 'tool'，向后兼容）：
  *                     tool  - LLM function-calling 工具调用（前缀 ▷）
- *                     rag   - 主进程 RAG 检索阶段事件（前缀 ⌕）
+ *                     rag   - 历史兼容：旧程序化检索阶段事件（前缀 ⌕），新会话不再产生
  *                     skill - Skill 路由命中事件（前缀 ★）
  *   - skipped       v19 (2026-05-21)：本次调用被**守卫主动拦截**（如 load_skill 同 skill 重复加载）。
  *                   与 ok=false 区分：跳过不是错误而是预期行为；UI 用 ⊘ 中性色显示，
@@ -1504,6 +1513,44 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // A4（Hermes 借鉴）：有界长期记忆原子编辑——预算即遗忘，删除留痕
+    type: 'function',
+    function: {
+      name: 'memory_update',
+      description: '对有界长期记忆做原子编辑。store="memory"（MEMORY.md 分身运行笔记：环境约定、用户纠偏、关键决策教训）或 "user"（USER.md 用户画像：偏好、沟通风格）。op="add"（新增条目）/"replace"（改写指定 id 条目）/"remove"（删除指定 id 条目，被删内容会回显留痕）。每个库有全文件字符预算（system prompt 注入表头可见，形如 [82% — 1,804/5,000 chars]），预算满时 add 会被拒绝——必须先 remove 或 replace 合并旧条目（预算即遗忘）。**禁止写入**：专业事实/参数/数据（属于 knowledge/，走溯源规范）、对工具或环境的负面断言（一次故障不是长期事实）、过程性内容（用 session_search 找）、秘密凭据。写入只落盘，下个会话装配 system prompt 时生效。',
+      parameters: {
+        type: 'object',
+        properties: {
+          store: { type: 'string', description: '"memory"（MEMORY.md）或 "user"（USER.md）' },
+          op: { type: 'string', description: '"add" / "replace" / "remove"' },
+          id: { type: 'string', description: 'replace/remove 必填：条目 id（取自记忆条目标记 <!-- mem:<id> ... -->，或上次工具结果回显）' },
+          content: { type: 'string', description: 'add/replace 必填：条目正文，一两句话、面向未来可复用，≤ 1000 字符' },
+        },
+        required: ['store', 'op'],
+      },
+    },
+  },
+  {
+    // A4（Hermes 借鉴）：会话历史 FTS 检索——情节记忆泄压阀，零 LLM 成本
+    type: 'function',
+    function: {
+      name: 'session_search',
+      description: '在自己与当前用户的全部历史会话上做全文检索（SQLite FTS5，零 LLM 成本）。三种模式：mode="search" 按关键词检索，返回命中片段 ±N 条消息上下文 + 会话首尾锚点，按会话去重（定时任务会话降权但不排除）；mode="view" 按 conversation_id 翻页阅读某个历史会话全文；mode="browse" 浏览最近会话列表。何时用：用户问"上次/之前/那次聊过什么"、需要找回过程性细节（当时执行了什么步骤、给过什么结论）——**过程性内容不进长期记忆，用本工具找**。当前会话不会出现在 search 结果里。',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', description: '"search"（关键词检索，默认）/ "view"（读单个会话）/ "browse"（会话列表）' },
+          query: { type: 'string', description: 'search 模式必填：检索关键词（多个词空格分隔，避免特殊符号）' },
+          conversation_id: { type: 'string', description: 'view 模式必填：目标会话 ID（从 search/browse 结果里取）' },
+          offset: { type: 'number', description: 'view/browse 模式翻页起点（默认 0）' },
+          limit: { type: 'number', description: 'search=最多返回会话数（默认 3）；view=每页消息数（默认 20）；browse=每页会话数（默认 10）' },
+          window: { type: 'number', description: 'search 模式命中点上下文窗口 ±N 条（默认 2，最大 6）' },
+        },
+        required: ['mode'],
+      },
+    },
+  },
+  {
     // v18 Letta-style：agent 主动给已有 episode 追加笔记（不覆盖 LLM 抽取的 summary/quotes）
     type: 'function',
     function: {
@@ -2432,7 +2479,7 @@ const COMPACTION_MIN_MIDDLE = 6 // 中段至少 6 条才值得摘要，避免小
 const MAX_CONTEXT_MESSAGES = 40
 /** 单轮 LLM 调用总超时（5 分钟），防止长回答永久阻塞；重任务（PDF 生成/收益测算）单轮可能需要 3-4 分钟 */
 const ROUND_TIMEOUT_MS = 300_000
-/** 首 token 超时：RAG 已完成后如果模型仍长时间无响应，尽早暴露慢模型/网关问题；重任务模型思考期长，120s 较合理 */
+/** 首 token 超时：模型长时间无响应时尽早暴露慢模型/网关问题；重任务模型思考期长，120s 较合理 */
 const ROUND_FIRST_TOKEN_TIMEOUT_MS = 120_000
 /** 流中断静默超时：已开始输出后若长时间无新 token，主动终止本轮（重上下文任务模型思考时间较长，45s 不够） */
 const ROUND_STREAM_IDLE_TIMEOUT_MS = 90_000
@@ -2511,10 +2558,6 @@ const TIME_RANGE_KEYWORDS = /(20\d{2}年|[1-9]|1[0-2])\s*(月|~|～|到|至|-|�
 const FORCED_CHART_SKILL_ID = 'chart-from-knowledge'
 /** 部分模型会把内部 DSML 工具调用协议当文本吐出，必须拦截，避免伪工具调用泄漏给用户。 */
 const DSML_TOOL_CALL_LEAK_REGEX = /<\s*[|｜]{2}\s*DSML\s*[|｜]{2}\s*tool_calls[\s\S]*?>/i
-/** 这些意图仍需要工具能力，不能走 RAG 直答快路径。 */
-const RAG_DIRECT_TOOL_INTENT_REGEX = /(画图|图表|可视化|excel|csv|表格|sheet|附件|文件|读取|写入|保存|删除|执行|运行|命令|shell|网页|联网|搜索网页|github|生成图片|导出|下载|PPT|PDF|测试|回归)/i
-const MATERIAL_COMPARE_REGEX = /(?=.*(?:铜|铝|钢|不锈钢|合金))(?=.*(?:哪个高|哪个低|对比|比较|高低|差异))/i
-
 /**
  * 从 apiMessages 扫描 assistant 各轮里的 query_excel tool_calls，解析 arguments.file（basename）。
  * 与执行路径上写入的 excelBasenamesUsed 合并后再 saveChartCacheEntry，避免守卫关闭或仅走同参缓存时漏记 Excel 依赖。
@@ -2546,21 +2589,6 @@ function shouldEnableChartConsistencyMode(content: string, hasImages: boolean): 
 
 function shouldForceChartSkillFirst(content: string, hasImages: boolean): boolean {
   return !hasImages && CHART_KEYWORDS.test(content)
-}
-
-function shouldUseRagDirectAnswerFastPath(
-  content: string,
-  ragEnhanced: boolean,
-  hasImages: boolean,
-  hasAttachments: boolean,
-  currentMode: ConversationMode,
-  shouldForceChartSkill: boolean,
-  chartConsistencyMode: boolean,
-): boolean {
-  if (!ragEnhanced || hasImages || hasAttachments || currentMode !== 'agent') return false
-  if (shouldForceChartSkill || chartConsistencyMode) return false
-  // RAG 已把知识片段注入 user prompt；普通知识问答禁用工具可避免模型再进入 search/tool 决策慢路径。
-  return !RAG_DIRECT_TOOL_INTENT_REGEX.test(content) && !MATERIAL_COMPARE_REGEX.test(content)
 }
 
 function hasDsmlToolCallLeak(text: string): boolean {
@@ -2711,20 +2739,41 @@ function normalizeQueryExcelArgs(args: Record<string, unknown>): string {
 
 /**
  * 工具结果压缩阈值（字符数）。
- * 当一轮工具调用完成后、进入下一轮 LLM 调用前，
- * 将 apiMessages 中超过此阈值的旧 tool 结果截断为摘要，
+ * 超过此阈值的旧 tool 结果才是压缩候选，
  * 防止 query_excel 等工具的大 JSON 累积撑爆 context。
  */
 const TOOL_RESULT_COMPRESS_THRESHOLD = 2000
 
 /**
- * 压缩 apiMessages 中已完成轮次的 tool 结果。
- * 只保留最近一轮的 tool 结果原文，更早的 tool 结果截断为摘要。
- * 这样 LLM 仍能看到最新数据，但不会被历史工具返回值撑爆 context。
+ * A3-3（headroom 借鉴）：批量压缩触发阈值（字符数）。
+ * 旧实现每轮都改写旧 tool 结果 → apiMessages 前缀每轮变化 → prompt cache 全 miss
+ * （DeepSeek / Anthropic 同害）。改为旧区候选累计字节超过本阈值才批量压一次：
+ * 未触发的轮次前缀完全稳定（cache 命中），触发时一次压完一批再进入稳定期。
+ * 上下文溢出自救路径用 force 跳过阈值（那时必须真的变小）。
+ * 24000 字符 ≈ 6k-15k token，DeepSeek 64K 上限下留有余量。
  */
-function compressOldToolResults(messages: LLMMessage[]): void {
-  // 从末尾找倒数第 2 个 assistant 位置：保留最近 2 轮工具结果完整，
-  // 避免 LLM 因"上一轮刚查的数据被压缩"被诱导重新调用工具
+const TOOL_RESULT_BATCH_COMPRESS_TRIGGER_CHARS = 24_000
+
+/**
+ * A3-2：统计压缩目标预算（软约束：错误行 / 锚点行可超）。
+ * 必须显著小于 TOOL_RESULT_COMPRESS_THRESHOLD，保证压缩产物通常不再成为下一批候选。
+ */
+const TOOL_RESULT_COMPRESSED_TARGET_CHARS = 1600
+
+/**
+ * 压缩 apiMessages 中已完成轮次的 tool 结果（A3 批量入口，就地修改）。
+ * 只保留最近 2 轮的 tool 结果原文（避免 LLM 因"上一轮刚查的数据被压缩"被诱导重调工具），
+ * 更早的按顺序做：
+ *   A3-4 SUPERSEDED：同工具同参数已被重调的旧结果 → 一行 marker（零信息损失）
+ *   A3-2 统计压缩：错误行 / 来源锚点 / query 命中 / 罕见值 / 首尾行保留，
+ *                  数字原样、零模型调用；产物头部带 A3-1 CCR 取回 marker
+ * A3-3 cache 对齐：候选累计字节 < TOOL_RESULT_BATCH_COMPRESS_TRIGGER_CHARS 且非 force
+ * 时整体不动（不碰前缀，保 prompt cache 多轮稳定）。
+ * 注意：A1 的 turnSourceAnchors 锚点登记发生在本函数**之前**（工具结果落地时），
+ * 且压缩器承诺锚点字符串原样保留——两层保证闭集白名单不缩水。
+ */
+function compressOldToolResults(messages: LLMMessage[], opts?: { force?: boolean; query?: string }): void {
+  // 从末尾找倒数第 2 个 assistant 位置：保留最近 2 轮工具结果完整
   let assistantsSeen = 0
   let preserveFromIdx = -1
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -2739,15 +2788,35 @@ function compressOldToolResults(messages: LLMMessage[]): void {
   // 不足 2 个 assistant 消息（第一轮工具调用前 / 刚结束第一轮）→ 无需压缩
   if (preserveFromIdx <= 0) return
 
-  // 压缩 preserveFromIdx 之前的所有 tool 结果
+  // 收集候选：旧区超阈值、且不是既有压缩产物的 tool 结果
+  const candidateIdx: number[] = []
+  let candidateChars = 0
   for (let i = 0; i < preserveFromIdx; i++) {
     const msg = messages[i]
-    if (msg.role === 'tool' && typeof msg.content === 'string' && msg.content.length > TOOL_RESULT_COMPRESS_THRESHOLD) {
-      // 保留前 500 字符作为摘要 + 禁止性截断提示（不再诱导 LLM 重调工具）
-      messages[i] = {
-        ...msg,
-        content: msg.content.slice(0, 500) + `\n\n[... 已压缩，原文 ${msg.content.length} 字符。⚠️ **不要因为这段被压缩就重新调用相同参数的工具** —— 这是你之前已经查询过的数据，结果的要点应该还在你的推理链路和最近轮次回答里。仅当你需要**不同 filter / sheet / file** 的新数据时才调用工具。]`,
-      }
+    if (msg.role !== 'tool' || typeof msg.content !== 'string') continue
+    if (msg.content.startsWith(COMPRESSED_MARKER_PREFIX) || msg.content.startsWith(SUPERSEDED_MARKER_PREFIX)) continue
+    if (msg.content.length <= TOOL_RESULT_COMPRESS_THRESHOLD) continue
+    candidateIdx.push(i)
+    candidateChars += msg.content.length
+  }
+  // A3-3：未达批量触发线且非 force → 整体不动，前缀稳定保 cache
+  if (!opts?.force && candidateChars < TOOL_RESULT_BATCH_COMPRESS_TRIGGER_CHARS) return
+  if (candidateIdx.length === 0 && !opts?.force) return
+
+  // A3-4 先做：被 SUPERSEDED 替换的旧结果不再进入统计压缩
+  markSupersededToolResults(messages, { endIndex: preserveFromIdx })
+
+  for (const i of candidateIdx) {
+    const msg = messages[i]
+    if (typeof msg.content !== 'string') continue
+    if (msg.content.startsWith(SUPERSEDED_MARKER_PREFIX)) continue // 刚被 A3-4 替换
+    const outcome = compressToolResult(msg.content, {
+      maxChars: TOOL_RESULT_COMPRESSED_TARGET_CHARS,
+      query: opts?.query,
+      mode: opts?.force ? 'force' : 'standard',
+    })
+    if (outcome.compressed) {
+      messages[i] = { ...msg, content: outcome.content }
     }
   }
 }
@@ -2759,7 +2828,8 @@ function truncateToolResultForContext(toolName: string, content: string): { cont
     return { content, truncated: false, originalLength }
   }
   const clipped = content.slice(0, MAX_TOOL_RESULT_CONTEXT_CHARS)
-  const note = `\n\n[系统提示] 工具 ${toolName} 返回内容过长（原始 ${originalLength} 字符），已截断为前 ${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符用于上下文续推。请基于现有结果直接收敛回答，除非用户明确要求新的查询维度。`
+  // A3-1 CCR marker 形态：此路径的原文低于 spool 阈值（12000）未落盘，如实标注不可取回
+  const note = `\n\n[已压缩 ${originalLength}→${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符，原文未落盘不可取回][系统提示] 工具 ${toolName} 返回内容过长（原始 ${originalLength} 字符），已截断为前 ${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符用于上下文续推。请基于现有结果直接收敛回答，除非用户明确要求新的查询维度。`
   return { content: clipped + note, truncated: true, originalLength }
 }
 
@@ -3198,11 +3268,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
       }
       // 未传 target：旧版本会回退到"最后一条 assistant"启发式，但这会让同一分身
-      // 下的 late RAG/skill progress 污染当前会话的最后一条 assistant（rag-progress
-      // 事件目前不带 conversationId，ChatWindow 只按 avatarId 过滤，跨会话窜入）。
+      // 下的无目标异步进度污染当前会话的最后一条 assistant。
       // 修复策略：仅写全局 transient timeline（顶部视图，切换会话会清），完全不动
       // messages。任何想真正挂到具体 message 的调用方必须显式传 target。
-      // 未来 rag-progress 协议加 conversationId 后，可同步给 ChatWindow 派传 target。
       return { toolCallTimeline: [...s.toolCallTimeline, entry] }
     })
     // 同步进 streaming snapshot：传 target 时校验 snapshot 是同一请求的，避免误写到
@@ -3289,8 +3357,160 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     //   - 不清 toolCallTimeline（outer 的工具时间线对用户仍可见）
     // 配合 line ~3076 的 isHiddenRepair 后续守卫，整轮对 isLoading / 视图 transient 状态零影响。
     const _hiddenRepairEarly = options?.hiddenRepair === true
+    const earlyBoundaryGuardrail = _hiddenRepairEarly ? undefined : normalizeIntentLocal(content).guardrail
     if (get().isLoading && !_hiddenRepairEarly) {
       await invokeProxyComplete({ ok: false, error: 'Soul 正有一条对话进行中（isLoading）' })
+      return
+    }
+    if (earlyBoundaryGuardrail) {
+      const requestId = ++chatRequestSeq
+      const requestStartedAt = Date.now()
+      const userMessageId = nextMessageId()
+      const assistantMsgId = nextMessageId()
+      const answer = earlyBoundaryGuardrail.response
+      const shouldRenderLocally = proxyOpts?.proxyJobId === undefined
+      const stateBeforeBoundary = get()
+      const baseMessages = stateBeforeBoundary.currentConversationId === conversationId
+        ? stateBeforeBoundary.messages
+        : []
+      const userMessage: ChatMessage = {
+        id: userMessageId,
+        role: 'user',
+        content,
+        imageUrls: images && images.length > 0 ? images : undefined,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      }
+      const assistantMessage: ChatMessage = {
+        id: assistantMsgId,
+        role: 'assistant',
+        content: answer,
+      }
+
+      if (shouldRenderLocally) {
+        set({
+          currentConversationId: conversationId,
+          messages: [...baseMessages, userMessage, assistantMessage],
+          isLoading: false,
+          toolCallStatus: '',
+          toolCallTimeline: [],
+        })
+      }
+
+      if (proxyOpts?.proxyStream) {
+        writeProxyStreamDelta(answer)
+      }
+
+      const stripped = content.trim().replace(/\s+/g, ' ')
+      if (stripped.length > 0 && baseMessages.length === 0 && shouldRenderLocally) {
+        const snippet = stripped.slice(0, 20)
+        const newTitle = snippet.length < stripped.length ? `${snippet}…` : snippet
+        void window.electronAPI.updateConversationTitle(conversationId, newTitle)
+          .then(() => {
+            window.dispatchEvent(
+              new CustomEvent('conversation-title-changed', {
+                detail: { conversationId, title: newTitle },
+              }),
+            )
+            window.electronAPI.logEvent(
+              'info',
+              'conversation-auto-titled',
+              `id=${conversationId} title=${newTitle.replace(/\n/g, ' ')}`,
+            )
+          })
+          .catch((renameErr) => {
+            window.electronAPI.logEvent(
+              'warn',
+              'conversation-auto-title-failed',
+              renameErr instanceof Error ? renameErr.message : String(renameErr),
+            )
+          })
+      }
+
+      let savedBoundaryUserMessageId: string | null = null
+      try {
+        savedBoundaryUserMessageId = await window.electronAPI.saveMessage(
+          conversationId,
+          'user',
+          content,
+          undefined,
+          images,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          userMessageId,
+        )
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error)
+        window.electronAPI.logEvent('error', 'save-boundary-user-message-error', errMsg)
+        if (shouldRenderLocally) {
+          set((state) => ({
+            messages: upsertLastAssistant(state.messages, assistantMsgId, `抱歉，保存消息失败：${errMsg}`),
+            isLoading: false,
+            toolCallStatus: '',
+          }))
+        }
+        await invokeProxyComplete({ ok: false, error: `保存用户消息失败：${errMsg}` })
+        return
+      }
+
+      if (savedBoundaryUserMessageId && attachments && attachments.length > 0) {
+        try {
+          await window.electronAPI.linkAttachmentToMessage(
+            savedBoundaryUserMessageId,
+            attachments.map(a => a.id),
+            conversationId,
+          )
+        } catch (linkErr) {
+          const linkMsg = linkErr instanceof Error ? linkErr.message : String(linkErr)
+          window.electronAPI.logEvent('warn', 'boundary-link-attachment-to-message-error', linkMsg)
+        }
+      }
+
+      try {
+        await window.electronAPI.saveMessage(
+          conversationId,
+          'assistant',
+          answer,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          assistantMsgId,
+        )
+      } catch (saveErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'boundary-guardrail-save-message-error',
+          saveErr instanceof Error ? saveErr.message : String(saveErr),
+        )
+      }
+
+      if (shouldRenderLocally) {
+        set((state) => ({
+          messages: state.currentConversationId === conversationId && !state.messages.some(m => m.id === assistantMsgId)
+            ? [...state.messages, userMessage, assistantMessage]
+            : state.messages,
+          isLoading: false,
+          toolCallStatus: '',
+        }))
+      }
+
+      const perfTag = `[chat-perf][conv:${conversationId}][req:${requestId}]`
+      void window.electronAPI
+        .getSetting('perf_logging_enabled')
+        .then((value) => {
+          if (value !== 'true') return
+          return window.electronAPI.logPerfEvent(
+            'sendMessage:success',
+            `${perfTag} (+${Date.now() - requestStartedAt}ms) via-early-boundary-guardrail type=${earlyBoundaryGuardrail.type}`,
+          )
+        })
+        .catch(() => undefined)
+
+      await invokeProxyComplete({ ok: true, assistantText: answer })
       return
     }
     // 每次新提问都清空上一轮的工具调用时间线，保证 UI 顶部只展示本轮（hiddenRepair 跳过）
@@ -3669,7 +3889,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 本对话发送前的消息数（含 system 等），用于触发首条消息自动改名
     const _messageCountBeforeUserSend = messages.length
     // user 消息 + 空 assistant 占位同帧插入：用户提问后立刻看到分身气泡 +
-    // 时间线里的"思考中... · Xs"，避免 cache/RAG/TTFT 期间界面像卡死。
+    // 时间线里的"思考中... · Xs"，避免 cache/TTFT 期间界面像卡死。
     // 占位会被后续 cache 命中、流式 chunk、或错误路径通过 upsertLastAssistant 替换。
     // hiddenRepair 模式跳过——不入 UI，不入 DB，对用户完全不可见。
     const assistantPlaceholder: ChatMessage = {
@@ -3902,7 +4122,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
 
-    // 图表答案 cache 早命中：在 RAG / LLM 调用前查一次 cache；
+    // 图表答案 cache 早命中：在 LLM 调用前查一次 cache；
     // 命中 → 直接返回缓存的 assistant markdown（含 ```chart 块），跳过整个 LLM 循环。
     // 仅在 chartConsistencyMode 命中（图表 + 时间范围关键词）且无图片时启用。
     if (
@@ -3954,13 +4174,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }
 
-    // Phase 1 (2026-05-13) agentic-only：删除 pre-message RAG 注入。
-    // 知识检索现在完全由 LLM 通过 search_knowledge tool 决定何时调用。
+    // Agentic-only：不做 pre-message 知识注入。
+    // 知识检索完全由 LLM 通过 search_knowledge / knowledge_grep / query_excel 等工具决定何时调用。
     // 寒暄/确认消息（包括"好的"/"谢谢"）不再触发 BM25 检索，由 LLM 看上下文自己判断不 call。
-    // 下游 ragEnhanced 永远为 false → shouldUseRagDirectAnswerFastPath 永远不命中（符合预期：
-    // 没有 pre-injected chunks，LLM 必须走 tool 路径取知识）。
-    const enhancedContent = content
-    const ragEnhanced = false
 
     // 对话框附件扩展（2026-05-01）：构造附件相关的额外文本块。
     //   - 大文档：注入 <attachment id name pages outline summary /> 元信息（XML 标签便于解析）
@@ -4005,8 +4221,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
       attachmentBlock += fenceLines.join('\n')
     }
-    // 把附件块拼到 enhancedContent 末尾（不要在前面，否则 RAG 已注入的指令会被推后）
-    const contentWithAttachments = attachmentBlock ? `${enhancedContent}\n${attachmentBlock}` : enhancedContent
+    // 把附件块拼到用户正文末尾，避免打乱用户原始表达。
+    const contentWithAttachments = attachmentBlock ? `${content}\n${attachmentBlock}` : content
 
     // 构建用户消息内容（纯文字 or 多模态）
     const userContent: LLMMessage['content'] = (images && images.length > 0)
@@ -4064,14 +4280,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     if (!skipNudgeForChart) {
       try {
-        const nudgeIntervalStr = await window.electronAPI.getSetting('memory_nudge_interval')
-        const nudgeInterval = nudgeIntervalStr ? parseInt(nudgeIntervalStr, 10) : 5
-        if (!isNaN(nudgeInterval) && nudgeInterval > 0) {
-          const userRounds = messages.filter(m => m.role === 'user').length + 1
-          if (userRounds > 0 && userRounds % nudgeInterval === 0) {
-            // 仅文字消息时拼接，多模态消息不附加（视觉模型一般不处理记忆提醒）
-            if (typeof nudgedUserContent === 'string') {
-              nudgedUserContent = nudgedUserContent + '\n\n' + MEMORY_NUDGE_TEXT
+        // A4（Hermes 借鉴）：抽取改为 N 轮一次后台复盘（memory_review_enabled，默认开）。
+        // 复盘启用时跳过旧的 per-N-turn nudge，避免双通道重复抽取；
+        // 设 memory_review_enabled='false' 可回滚到旧 nudge + [MEMORY_UPDATE] 标签路径。
+        const memoryReviewEnabled = (await window.electronAPI.getSetting('memory_review_enabled')) !== 'false'
+        if (!memoryReviewEnabled) {
+          const nudgeIntervalStr = await window.electronAPI.getSetting('memory_nudge_interval')
+          const nudgeInterval = nudgeIntervalStr ? parseInt(nudgeIntervalStr, 10) : 5
+          if (!isNaN(nudgeInterval) && nudgeInterval > 0) {
+            const userRounds = messages.filter(m => m.role === 'user').length + 1
+            if (userRounds > 0 && userRounds % nudgeInterval === 0) {
+              // 仅文字消息时拼接，多模态消息不附加（视觉模型一般不处理记忆提醒）
+              if (typeof nudgedUserContent === 'string') {
+                nudgedUserContent = nudgedUserContent + '\n\n' + MEMORY_NUDGE_TEXT
+              }
             }
           }
         }
@@ -4329,13 +4551,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 拿到 <attachment id /> 元信息却无法读取本体。这里只保留附件相关工具集。
     const ATTACHMENT_REQUIRED_TOOL_NAMES = new Set(['read_attachment', 'search_attachment'])
     /**
-     * RAG 直答快路径下保留的「联网兜底工具」白名单。
-     * 设计考量：RAG 命中知识库后会清空大部分工具以加速回答，但用户问及"最新政策/新闻/
-     * 实时数据"时，知识库内容可能已过时，需要让 LLM 仍能自主决定联网补全。
-     * 不保留 search_knowledge / query_excel 等"知识层"工具，避免与 RAG 注入内容重复检索。
-     */
-    const RAG_FAST_PATH_NETWORK_TOOLS = new Set(['web_search', 'web_fetch'])
-    /**
      * 联网工具白名单：由「设置 → 工具集成 → 启用联网功能」总开关控制。
      * 关闭时从所有分支的 tools 数组里剔除，连 LLM 都看不到这两个工具——
      * 配合 tool-router 的 webSearch / webFetch 入口闸门双层保护。
@@ -4344,20 +4559,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const webSearchEnabledRaw = await window.electronAPI.getSetting('web_search_enabled')
     const webSearchEnabled = webSearchEnabledRaw === 'true'
     let tools: LLMTool[]
-    const ragDirectAnswerFastPath = shouldUseRagDirectAnswerFastPath(
-      content,
-      ragEnhanced,
-      Boolean(images && images.length > 0),
-      Boolean(attachments && attachments.length > 0),
-      currentMode,
-      shouldForceChartSkill,
-      chartConsistencyMode,
-    )
-    if (ragDirectAnswerFastPath) {
-      tools = AVATAR_TOOLS.filter(t => RAG_FAST_PATH_NETWORK_TOOLS.has(t.function.name))
-      logPerf('rag-direct-answer:enabled', `enhancedLen=${enhancedContent.length} keepTools=${tools.length}`)
-      window.electronAPI.logEvent('info', 'rag-direct-answer-fast-path', `conversation=${conversationId} model=${activeModel.model} keepTools=${tools.length}`)
-    } else if (images && images.length > 0) {
+    if (images && images.length > 0) {
       if (attachments && attachments.length > 0) {
         tools = AVATAR_TOOLS.filter(t => ATTACHMENT_REQUIRED_TOOL_NAMES.has(t.function.name))
       } else {
@@ -4371,14 +4573,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       tools = AVATAR_TOOLS
     }
 
-    // 总开关关闭 → 剔除联网工具（覆盖所有分支，含 ragDirectAnswerFastPath 兜底分支）
+    // 总开关关闭 → 剔除联网工具（覆盖所有分支）
     if (!webSearchEnabled) {
       tools = tools.filter(t => !NETWORK_TOOL_NAMES.has(t.function.name))
     }
 
     tools = await maybeRerankToolsWithIss(content, tools)
 
-    logPerf('tools:selected', `mode=${currentMode} count=${tools.length} ragDirect=${ragDirectAnswerFastPath}`)
+    logPerf('tools:selected', `mode=${currentMode} count=${tools.length}`)
 
     /**
      * GAP4: 工具调用循环
@@ -4420,6 +4622,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 最终随 upsertLastAssistant 一起写到 message.documentAttachments。
      */
     const collectedDocumentAttachments: DocumentAttachment[] = []
+    /**
+     * A1 溯源闭集：本轮工具结果实际下发过的 [来源: ...] 锚点全集。
+     * 在结果截断（truncateToolResultForContext）之后、旧轮压缩（compressOldToolResults）
+     * 之前收集，保证即使旧 tool 结果后续被压缩，锚点白名单仍完整；
+     * 最终与 apiMessages 现存锚点取并集传给 verifyAgentAnswer 做闭集后置断言。
+     */
+    const turnSourceAnchors = new Set<string>()
     let loadSkillCallCount = 0
     /**
      * 已加载的 skill_id 集合（去重）。
@@ -4729,7 +4938,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             maxTokens: shouldConvergeFast && !emptyTextRetryMode ? CONVERGE_FINAL_ROUND_MAX_TOKENS : undefined,
             temperature: effectiveTemperature,
             seed: deterministicSeed,
-            reasoningEffort: activeModelReasoning && (ragDirectAnswerFastPath || shouldConvergeFast) ? 'low' : undefined,
+            reasoningEffort: activeModelReasoning && shouldConvergeFast ? 'low' : undefined,
             systemBlocks,
           }
         )
@@ -4782,7 +4991,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (contextOverflowRetried || !isContextOverflowError(err)) throw err
         contextOverflowRetried = true
         const beforeChars = JSON.stringify(apiMessages).length
-        compressOldToolResults(apiMessages)
+        // force：溢出自救必须真的变小，跳过 A3-3 批量阈值；统计压不动时退化盲截断
+        compressOldToolResults(apiMessages, { force: true, query: content })
         const afterChars = JSON.stringify(apiMessages).length
         if (afterChars >= beforeChars) {
           window.electronAPI.logEvent(
@@ -5041,6 +5251,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             )
           }
           resultText = truncatedResult.content
+          // A1 溯源闭集：登记本条工具结果里下发的所有来源锚点（截断后的可见文本口径）
+          for (const anchorText of extractSourceAnchorsFromContent(resultText)) {
+            turnSourceAnchors.add(anchorText)
+          }
           const toolDurationMs = Date.now() - toolStartedAt
           if (tc.function.name === 'search_knowledge') {
             phase05SearchKnowledgeCalls += 1
@@ -5184,7 +5398,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         set({ toolCallStatus: '' })
 
         // 压缩更早轮次的 tool 结果，防止累积撑爆 context
-        compressOldToolResults(apiMessages)
+        // （A3-3：内部按累计字节阈值批量触发，未触发时不动前缀、保 prompt cache）
+        compressOldToolResults(apiMessages, { query: content })
 
         // BR-2: 主动上下文压缩（默认关闭：compaction_trigger_input_tokens=0）。触发信号 = 上一轮
         // 上下文 token 规模（多 provider 中立）。tool-call 安全边界见 compactContextIfSafe；apiMessages
@@ -5551,6 +5766,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           guardrailPolicyIds: activeGuardrailIds,
           sourceCount: phase05SearchKnowledgeCalls,
           toolCallCount,
+          // A1 溯源闭集：本轮工具下发锚点 ∪ 上下文（system/历史轮）已存在锚点。
+          // 取并集是为了不误报"复述上一轮已给来源"的合法引用；集合外路径仍会命中
+          // source_anchor_out_of_set（advisory warn，不阻断）。
+          availableSourceAnchors: Array.from(new Set([
+            ...turnSourceAnchors,
+            ...extractSourceAnchorsFromMessages(apiMessages),
+          ])),
         })
         if (answerVerification.issues.length > 0) {
           emitTrace('guardrail', {
@@ -5797,6 +6019,33 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // 抽取失败绝不影响用户体验
           const m = extractErr instanceof Error ? extractErr.message : String(extractErr)
           window.electronAPI.logEvent('warn', 'extract-conversation-episode-throw', m)
+        }
+      })()
+
+      // A4（Hermes 借鉴）：N 轮一次后台记忆复盘（fire-and-forget）。
+      // 工程铁律：记忆写入/复盘永远不阻塞回复路径——回复已送达，这里异步跑；
+      // 未达 memory_review_turns（默认 10 用户轮）时主进程快速返回不调 LLM。
+      // 写入只落盘，不重载 systemPrompt（冻结快照，下个 session 生效）。
+      void (async () => {
+        try {
+          const reviewEnabled = (await window.electronAPI.getSetting('memory_review_enabled')) !== 'false'
+          if (!reviewEnabled) return
+          const [apiKey, baseUrl] = await Promise.all([
+            window.electronAPI.getSetting('chat_api_key').then(v => v ?? ''),
+            window.electronAPI.getSetting('chat_base_url').then(v => v ?? ''),
+          ])
+          if (!apiKey || !baseUrl) return // 未配 LLM 凭据，跳过
+          const r = await window.electronAPI.runMemoryReview(avatarId, conversationId, apiKey, baseUrl)
+          if (r.ok && (r.applied ?? 0) > 0) {
+            window.electronAPI.logEvent('info', 'memory-review-applied', `conv=${conversationId} applied=${r.applied} rejected=${r.rejected ?? 0}`)
+          } else if (!r.ok && r.reason && !r.reason.includes('未达')) {
+            // "未达复盘轮数"是常态跳过，不记日志；真实失败才 warn
+            window.electronAPI.logEvent('warn', 'memory-review', r.reason)
+          }
+        } catch (reviewErr) {
+          // 复盘失败绝不影响用户体验
+          const m = reviewErr instanceof Error ? reviewErr.message : String(reviewErr)
+          window.electronAPI.logEvent('warn', 'memory-review-throw', m)
         }
       })()
 

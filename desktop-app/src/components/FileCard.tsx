@@ -7,6 +7,7 @@
  * 设计：
  *   - 主按钮 [打开]：调 window.electronAPI.openDocument(absolutePath)，
  *     失败时 toast + logEvent；成功时按钮短暂高亮反馈
+ *   - 下载按钮 [下载]：调 downloadDocument，用户选择保存位置
  *   - 次按钮 [显示在文件夹]：调 showDocumentInFolder
  *   - 引用来源（cite 块抽出）：默认折叠，点击展开
  *   - 像素游戏风格与 AskQuestionCard 对齐（pixel-* / font-game / px-* 配色）
@@ -46,7 +47,9 @@ function formatBytes(n: number): string {
 
 export default function FileCard({ attachment }: Props): ReactElement {
   const [opening, setOpening] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [openOk, setOpenOk] = useState(false)
+  const [downloadOk, setDownloadOk] = useState(false)
   const [openErr, setOpenErr] = useState<string | null>(null)
   const [sourcesExpanded, setSourcesExpanded] = useState(false)
 
@@ -74,6 +77,30 @@ export default function FileCard({ attachment }: Props): ReactElement {
       window.electronAPI.logEvent('error', 'file-card-open-error', `${attachment.filename}: ${msg}`)
     } finally {
       setOpening(false)
+    }
+  }
+
+  const handleDownload = async (): Promise<void> => {
+    if (downloading) return
+    setDownloading(true)
+    setOpenErr(null)
+    setDownloadOk(false)
+    try {
+      const result = await window.electronAPI.downloadDocument(attachment.conversationId, attachment.filePath)
+      if (result.ok) {
+        setDownloadOk(true)
+        window.electronAPI.logEvent('info', 'file-card-download-ok', `${attachment.filename}: ${result.path ?? ''}`)
+        setTimeout(() => setDownloadOk(false), 1500)
+      } else if (!result.canceled) {
+        setOpenErr(result.error ?? '下载失败')
+        window.electronAPI.logEvent('warn', 'file-card-download-failed', `${attachment.filename}: ${result.error ?? ''}`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setOpenErr(msg)
+      window.electronAPI.logEvent('error', 'file-card-download-error', `${attachment.filename}: ${msg}`)
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -116,6 +143,19 @@ export default function FileCard({ attachment }: Props): ReactElement {
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className={`font-game text-[11px] tracking-wider px-3 py-1 border-2 transition-none
+              ${downloadOk
+                ? 'border-px-success text-px-success bg-px-success/10'
+                : 'border-px-primary text-px-primary bg-px-surface hover:bg-px-primary/10'}
+              disabled:opacity-50 disabled:cursor-not-allowed`}
+            aria-label={`下载 ${attachment.filename}`}
+          >
+            {downloading ? '下载中' : downloadOk ? '已下载' : '下载'}
+          </button>
           <button
             type="button"
             onClick={handleOpen}

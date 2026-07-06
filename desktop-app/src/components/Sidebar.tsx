@@ -33,7 +33,7 @@ export default function Sidebar({
   children,
 }: Props) {
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen min-h-0 overflow-hidden">
       <div className="w-64 flex-shrink-0">
         <ConversationList
           conversations={conversations}
@@ -50,7 +50,7 @@ export default function Sidebar({
           isCreatingConversation={isCreatingConversation}
         />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 min-h-0">
         {children}
       </div>
     </div>

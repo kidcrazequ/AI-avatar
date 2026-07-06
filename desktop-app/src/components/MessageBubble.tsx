@@ -1061,6 +1061,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
   const displayContent = canCollapse && collapsed
     ? truncateAtBoundary(contentForDisplay, COLLAPSED_PREVIEW_CHARS)
     : contentForDisplay
+  const shouldReserveLiveAssistantWidth = !isUser && isLive && displayContent.length === 0
 
   const handleSave = () => {
     if (!onSaveAnswer || !previousUserMessage || saved) return
@@ -1108,7 +1109,7 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
         </div>
       )}
 
-      <div className={`max-w-[75%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`max-w-[75%] ${shouldReserveLiveAssistantWidth ? 'w-full' : ''} ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         {/* 角色标签：助手消息加 role chip，让"和不同工种专家说话"在视觉上立得住 */}
         {isUser ? (
           <div className="font-game text-[12px] tracking-widest mb-1.5 text-right text-px-primary">
@@ -1218,13 +1219,17 @@ const MessageBubble = memo(function MessageBubble({ message, previousUserMessage
                 </details>
               )}
               {/*
-                isLive 占位期（user 提问后到首个 chunk 到达之前）content 为空，
-                跳过 ReactMarkdown 渲染。否则 prose 容器会留出 leading-[1.75]
-                高度的空行，让"思考中..."占位行被推到一个孤立的空白下方，
-                视觉上像空气泡。chart/mermaid/infographic 的"生成中"占位由
-                ChartCodeBlock 内部判定，不受此分支影响。
+                直播态每个 RAF 都会刷新 displayContent。此时如果持续跑完整
+                ReactMarkdown + 图表/信息图解析，长回答会占满主线程，表现成滚动短暂失灵。
+                所以流式期间先用轻量纯文本承接内容；回答完成后再恢复完整 Markdown 渲染。
               */}
-              {!(isLive && displayContent.length === 0) && (
+              {isLive ? (
+                displayContent.length > 0 ? (
+                  <div className="not-prose whitespace-pre-wrap break-words font-body text-[14px] leading-[1.75] text-px-text">
+                    {displayContent}
+                  </div>
+                ) : null
+              ) : (
                 <ReactMarkdown
                   remarkPlugins={REMARK_PLUGINS}
                   urlTransform={safeUrlTransform}

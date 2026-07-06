@@ -804,7 +804,7 @@ function App() {
           isCreatingConversation={isCreatingConversation}
         >
           {activeConversationId ? (
-            <div className="flex flex-col h-screen min-w-0">
+            <div className="flex flex-col h-screen min-w-0 min-h-0">
               {/* ── 更新提示横幅 ── */}
               {updateInfo && (
                 <div className="flex items-center justify-between px-4 py-2 bg-px-primary/10 border-b border-px-primary/30 text-[12px]">
@@ -851,7 +851,7 @@ function App() {
                   <PixelNavBar items={navButtons} />
                 </div>
               </div>
-              <div className="flex-1 min-w-0 overflow-hidden">
+              <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
                 <ChatWindow
                   conversationId={activeConversationId}
                   avatarId={activeAvatarId}

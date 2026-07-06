@@ -1,9 +1,13 @@
-import { useCallback, useMemo, useRef } from 'react'
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { Virtuoso, type StateSnapshot, type VirtuosoHandle } from 'react-virtuoso'
 import MessageBubble from './MessageBubble'
 import { ChatMessage } from '../stores/chatStore'
 
+const conversationScrollSnapshots = new Map<string, StateSnapshot>()
+const MAX_CONVERSATION_SCROLL_SNAPSHOTS = 100
+
 interface Props {
+  conversationId: string
   messages: ChatMessage[]
   isLoading?: boolean
   /** 本轮 sendMessage 的累计耗时（秒）。仅对"最后一条且 isLoading"的 assistant 有意义；
@@ -23,8 +27,40 @@ interface Props {
   avatarId: string
 }
 
-export default function MessageList({ messages, isLoading, elapsedSec, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId }: Props) {
+export default function MessageList({ conversationId, messages, isLoading, elapsedSec, quickQuestions, onQuickQuestion, onSaveAnswer, avatarImage, avatarName, avatarRole, avatarId }: Props) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
+  const previousMessageIdsRef = useRef<string[]>([])
+
+  const restoreStateFrom = useMemo(() => {
+    return conversationScrollSnapshots.get(conversationId)
+  }, [conversationId])
+
+  const rememberScrollState = useCallback(() => {
+    if (messages.length === 0) return
+    virtuosoRef.current?.getState((state) => {
+      conversationScrollSnapshots.set(conversationId, state)
+      if (conversationScrollSnapshots.size > MAX_CONVERSATION_SCROLL_SNAPSHOTS) {
+        const oldestKey = conversationScrollSnapshots.keys().next().value
+        if (oldestKey) conversationScrollSnapshots.delete(oldestKey)
+      }
+    })
+  }, [conversationId, messages.length])
+
+  const shouldFollowOutput = useCallback((isAtBottom: boolean) => {
+    const previousIds = previousMessageIdsRef.current
+    const appendedToCurrentList = previousIds.length > 0 &&
+      previousIds.length < messages.length &&
+      previousIds.every((id, index) => messages[index]?.id === id)
+    return isAtBottom && appendedToCurrentList ? 'smooth' : false
+  }, [messages])
+
+  useEffect(() => {
+    previousMessageIdsRef.current = messages.map((message) => message.id)
+  }, [messages])
+
+  useEffect(() => {
+    return () => rememberScrollState()
+  }, [rememberScrollState])
 
   /**
    * 预计算 previousUserMessage Map（单次线性扫描），避免在 itemContent 内 O(n) 查找。
@@ -129,8 +165,14 @@ export default function MessageList({ messages, isLoading, elapsedSec, quickQues
       className="h-full bg-px-bg"
       data={messages}
       itemContent={itemContent}
-      // 新消息到来时自动滚底（smooth）；流式更新时 followOutput=false 避免抢占滚动
-      followOutput={(isAtBottom) => isAtBottom ? 'smooth' : false}
+      computeItemKey={(_, message) => message.id}
+      restoreStateFrom={restoreStateFrom}
+      isScrolling={(scrolling) => {
+        if (!scrolling) rememberScrollState()
+      }}
+      rangeChanged={rememberScrollState}
+      // 仅同一消息链尾部追加时自动滚底；打开/切换历史会话的 DB 回填不触发滚动。
+      followOutput={shouldFollowOutput}
       // 底部额外留白，避免最后一条消息紧贴边缘
       style={{ height: '100%' }}
     />

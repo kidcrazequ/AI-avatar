@@ -563,12 +563,12 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       //     \u8ba9 enhance-knowledge-files \u81ea\u52a8\u626b\u63cf\u636e\u6b64\u51b3\u5b9a\u662f\u5426\u9700\u8981\u8865\u8dd1 LLM \u683c\u5f0f\u5316
       //   - raw_file \u6307\u5411 _raw/ \u4e0b\u539f\u59cb PDF/DOCX\uff0c\u8ba9"\u6253\u5f00\u539f\u59cb\u6587\u4ef6"\u6309\u94ae\u80fd\u8df3\u8f6c
       //   - rag_only \u9632\u6b62\u5927\u6587\u6863\u88ab SoulLoader \u6574\u6bb5\u585e\u8fdb system prompt\uff08>50KB \u65f6\u6253\u5f00\uff09
-      const RAG_ONLY_THRESHOLD = 50_000
+      const PROMPT_EXCLUDED_THRESHOLD = 50_000
       const generalSystemMeta: Record<string, unknown> = {
         source: llmFormatted ? 'enhanced' : parsed.fileType,
       }
       if (rawRelPath) generalSystemMeta.raw_file = rawRelPath
-      if (finalContent.length > RAG_ONLY_THRESHOLD) generalSystemMeta.prompt_excluded = true
+      if (finalContent.length > PROMPT_EXCLUDED_THRESHOLD) generalSystemMeta.prompt_excluded = true
       const generalEnhanced = extractFrontmatterFields(parsed.fileName, finalContent)
       const generalFmBlock = buildFrontmatterBlock(mergeFrontmatter(generalSystemMeta, generalEnhanced))
       finalContent = `${generalFmBlock}\n\n${finalContent}`
@@ -607,7 +607,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         console.warn('README.md 回填失败（不影响导入）:', readmeErr)
       }
 
-      // 构建检索索引（上下文摘要 + 向量嵌入），提升 RAG 检索质量
+      // 构建检索索引（上下文摘要 + 向量嵌入），提升知识工具检索质量
       const indexApiKey = ocrModel?.apiKey || baseModel?.apiKey
       const indexBaseUrl = ocrModel?.baseUrl || baseModel?.baseUrl || 'https://dashscope.aliyuncs.com/compatible-mode/v1'
       if (indexApiKey) {

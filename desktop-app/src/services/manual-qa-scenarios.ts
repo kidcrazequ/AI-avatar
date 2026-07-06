@@ -77,7 +77,7 @@ function inferRoutingSummary(content: string): MinimalDiagnosticSummary {
   if (isImage) {
     return {
       routing: {
-        contextStrategy: 'no-rag',
+        contextStrategy: 'skip-tools',
         toolProfile: 'minimal',
         reason: 'images',
         modelKind: 'vision',
@@ -101,7 +101,7 @@ function inferRoutingSummary(content: string): MinimalDiagnosticSummary {
   if (isKnowledge || normalized.includes('policy')) {
     return {
       routing: {
-        contextStrategy: 'light-rag',
+        contextStrategy: 'knowledge-tools',
         toolProfile: 'standard',
         reason: 'factual-question',
         modelKind: 'chat',
@@ -112,7 +112,7 @@ function inferRoutingSummary(content: string): MinimalDiagnosticSummary {
 
   return {
     routing: {
-      contextStrategy: 'no-rag',
+      contextStrategy: 'skip-tools',
       toolProfile: 'minimal',
       reason: 'short-or-ack',
       modelKind: 'chat',

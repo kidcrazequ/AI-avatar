@@ -18,7 +18,7 @@ describe('manual-qa-scenarios', () => {
     assert.equal(result.scenarios.length, 4)
 
     const knowledge = requireScenario(result.scenarios, 'knowledge-fact')
-    assert.equal(knowledge.routing?.contextStrategy, 'light-rag')
+    assert.equal(knowledge.routing?.contextStrategy, 'knowledge-tools')
     assert.equal(knowledge.routing?.toolProfile, 'standard')
     assert.equal(knowledge.workflow?.assistantSummaries[0]?.referenceCount, 1)
     assert.equal(knowledge.workflow?.assistantSummaries[0]?.summaryStatus, 'all-current-context')

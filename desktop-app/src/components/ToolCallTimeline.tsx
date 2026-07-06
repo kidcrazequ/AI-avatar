@@ -23,7 +23,7 @@
  * @date 2026-05-05
  */
 
-import { memo, useState, useCallback } from 'react'
+import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import { TOOL_NAME_MAP } from '../lib/tool-name-map'
 import type { ToolCallTimelineEntry } from '../stores/chatStore'
 
@@ -61,6 +61,41 @@ function formatElapsedSec(sec: number): string {
   return `${minutes}m ${seconds.toFixed(1)}s`
 }
 
+function normalizeElapsedSec(sec: number | undefined): number | null {
+  return typeof sec === 'number' && Number.isFinite(sec) && sec >= 0 ? sec : null
+}
+
+function useSmoothElapsedSec(isLoading: boolean, elapsedSec?: number): number | undefined {
+  const [smoothSec, setSmoothSec] = useState<number | undefined>(() => normalizeElapsedSec(elapsedSec) ?? undefined)
+  const anchorRef = useRef<{ baseSec: number; startedAtMs: number } | null>(null)
+
+  useEffect(() => {
+    const baseSec = normalizeElapsedSec(elapsedSec)
+    if (!isLoading) {
+      anchorRef.current = null
+      const resetTimer = setTimeout(() => setSmoothSec(baseSec ?? undefined), 0)
+      return () => clearTimeout(resetTimer)
+    }
+
+    anchorRef.current = { baseSec: baseSec ?? 0, startedAtMs: Date.now() }
+
+    const tick = () => {
+      const anchor = anchorRef.current
+      if (!anchor) return
+      const nextSec = anchor.baseSec + (Date.now() - anchor.startedAtMs) / 1000
+      setSmoothSec(+nextSec.toFixed(1))
+    }
+    const firstTickTimer = setTimeout(tick, 0)
+    const timer = setInterval(tick, 100)
+    return () => {
+      clearTimeout(firstTickTimer)
+      clearInterval(timer)
+    }
+  }, [isLoading, elapsedSec])
+
+  return smoothSec
+}
+
 /** 单行 props（仅给内部 TimelineRow 用） */
 interface TimelineRowProps {
   entry: ToolCallTimelineEntry
@@ -70,7 +105,7 @@ interface TimelineRowProps {
  * 按 kind 决定行首前缀字符 + 颜色 class。
  *
  *   tool  ▷ 主色（默认，向后兼容旧条目无 kind 字段）
- *   rag   ⌕ 强调色（次于主色，与 tool 区分）
+ *   rag   ⌕ 历史兼容：旧程序化检索事件
  *   skill ★ 成功色（命中 skill 是积极信号）
  */
 function getKindGlyph(kind: ToolCallTimelineEntry['kind']): { glyph: string; cls: string } {
@@ -89,7 +124,7 @@ function getKindGlyph(kind: ToolCallTimelineEntry['kind']): { glyph: string; cls
 /**
  * 按 kind 决定主标签文本：
  *   tool  → 优先 TOOL_NAME_MAP 中文名，没有就用工具原名
- *   rag/skill → 优先 argsPreview（主进程已传中文 detail），fallback 到 name
+ *   旧检索/skill → 优先 argsPreview（主进程已传中文 detail），fallback 到 name
  */
 function getDisplayName(entry: ToolCallTimelineEntry): string {
   if (entry.kind === 'rag' || entry.kind === 'skill') {
@@ -122,11 +157,11 @@ const TimelineRow = memo(function TimelineRow({ entry }: TimelineRowProps) {
   const okLabel = entry.skipped ? '已跳过' : entry.ok ? '成功' : '失败'
   const duration = formatDuration(entry.durationMs)
 
-  // rag/skill 条目展开后只显示 args（resultPreview 通常为空，显示也无意义）
+  // 旧检索/skill 条目展开后只显示 args（resultPreview 通常为空，显示也无意义）
   // tool 条目按原逻辑：args 或 result 任一非空即可展开
-  const isRagOrSkill = entry.kind === 'rag' || entry.kind === 'skill'
-  // rag/skill 的 argsPreview 已经显示在主标签里，不需要再展开
-  const hasDetail = isRagOrSkill ? false : (entry.argsPreview.length > 0 || entry.resultPreview.length > 0)
+  const isLegacyRetrievalOrSkill = entry.kind === 'rag' || entry.kind === 'skill'
+  // 旧检索/skill 的 argsPreview 已经显示在主标签里，不需要再展开
+  const hasDetail = isLegacyRetrievalOrSkill ? false : (entry.argsPreview.length > 0 || entry.resultPreview.length > 0)
 
   return (
     <li className="border-b border-px-border-dim/40 last:border-b-0">
@@ -145,14 +180,14 @@ const TimelineRow = memo(function TimelineRow({ entry }: TimelineRowProps) {
             toggle()
           }
         }}
-        title={isRagOrSkill ? entry.name : `tool_call_id: ${entry.id}`}
+        title={isLegacyRetrievalOrSkill ? entry.name : `tool_call_id: ${entry.id}`}
       >
         {/* 行首种类前缀：tool ▷ / rag ⌕ / skill ★（替代原折叠箭头位置） */}
         <span className={`font-game text-[12px] w-3 shrink-0 ${kindCls}`} aria-hidden="true">
           {hasDetail ? (expanded ? '▾' : kindGlyph) : kindGlyph}
         </span>
 
-        {/* 中文工具名 / RAG 阶段中文 / Skill 中文（主标签） */}
+        {/* 中文工具名 / 旧检索阶段中文 / Skill 中文（主标签） */}
         <span className="font-game text-[12px] tracking-wider text-px-text-sec shrink-0">
           {cnName}
         </span>
@@ -264,6 +299,7 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
   // 切换会话时 ChatWindow 不会卸载本组件，故折叠态会跨会话保留，符合"操作即偏好"的直觉
   const [collapsed, setCollapsed] = useState(false)
   const toggleCollapsed = useCallback(() => setCollapsed(v => !v), [])
+  const smoothElapsedSec = useSmoothElapsedSec(isLoading, elapsedSec)
 
   // 规则：空 + 非加载态，整个组件不渲染
   if (entries.length === 0 && !isLoading) return null
@@ -316,9 +352,9 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
             </span>
             <span className="font-game text-[11px] tracking-wider text-px-text-sec">
               思考中...
-              {typeof elapsedSec === 'number' && Number.isFinite(elapsedSec) && (
+              {typeof smoothElapsedSec === 'number' && Number.isFinite(smoothElapsedSec) && (
                 <span className="ml-1 font-mono text-[11px] text-px-text-dim">
-                  · {formatElapsedSec(elapsedSec)}
+                  · {formatElapsedSec(smoothElapsedSec)}
                 </span>
               )}
             </span>
@@ -336,7 +372,7 @@ function ToolCallTimelineImpl({ entries, isLoading, elapsedSec }: ToolCallTimeli
           {entries.map((entry) => (
             <TimelineRow key={entry.id} entry={entry} />
           ))}
-          {isLoading && <ThinkingRow elapsedSec={elapsedSec} />}
+          {isLoading && <ThinkingRow elapsedSec={smoothElapsedSec} />}
         </ul>
       )}
     </div>

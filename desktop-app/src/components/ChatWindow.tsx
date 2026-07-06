@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { useChatStore, nextMessageId, tryExtractDocumentAttachment, type AttachmentRef, type ChatMessage } from '../stores/chatStore'
+import { useChatStore, nextMessageId, tryExtractDocumentAttachment, extractDocumentAttachmentsFromText, type AttachmentRef, type ChatMessage } from '../stores/chatStore'
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import SkillProposalCard from './SkillProposalCard'
@@ -92,11 +92,10 @@ interface Props {
 }
 
 export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName, avatarRole, showToast }: Props) {
-  const { messages, isLoading, appendToolCallTimeline, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, setConversationTree, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
+  const { messages, isLoading, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, setConversationTree, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
       isLoading: s.isLoading,
-      appendToolCallTimeline: s.appendToolCallTimeline,
       skillProposals: s.skillProposals,
       clearSkillProposals: s.clearSkillProposals,
       resetTransientState: s.resetTransientState,
@@ -144,6 +143,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   /** 九层重构 #12 ask_question：当前等待用户回答的问题 */
   const [pendingAsk, setPendingAsk] = useState<PendingAskQuestion | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [initializedConversationId, setInitializedConversationId] = useState<string | null>(null)
   const [isRunningTests, setIsRunningTests] = useState(false)
   const [exportStatus, setExportStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -152,6 +152,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const conversationIdRef = useRef(conversationId)
   // eslint-disable-next-line react-hooks/refs -- 让事件回调（emit 给 main 的 async path）能拿到最新 conversationId，render-期同步写比 effect 同步更新及时（effect 写会让 event 期间读到旧值）
   conversationIdRef.current = conversationId
+  const lastLoadedConversationIdRef = useRef(conversationId)
   /** L3 桌面工具事件触发的临时输入填充（来自 inspector / form / canva 等卡片） */
   const [l3InjectedFill, setL3InjectedFill] = useState<string | undefined>(undefined)
   /**
@@ -173,7 +174,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     setL3InjectedFill(text)
     setTimeout(() => setL3InjectedFill(undefined), 0)
   }, [])
-  /** 已耗时（秒，精度 0.1s），isLoading 期间递增，用于在"思考中..."旁显示进度感知 */
+  /** 已耗时（秒），isLoading 期间递增，用于在"思考中..."旁显示进度感知 */
   const [elapsedSec, setElapsedSec] = useState(0)
 
   useEffect(() => {
@@ -182,7 +183,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       setElapsedSec(0)
       return
     }
-    const timer = setInterval(() => setElapsedSec(s => +(s + 0.1).toFixed(1)), 100)
+    const timer = setInterval(() => setElapsedSec(s => s + 1), 1000)
     return () => clearInterval(timer)
   }, [isLoading])
 
@@ -191,50 +192,6 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       if (exportTimerRef.current) clearTimeout(exportTimerRef.current)
     }
   }, [])
-
-  /**
-   * 监听主进程 RAG / Skill 进度推送，把每个 phase 作为一条 timeline entry 追加，
-   * 让用户在普通问答（无 function-calling）场景下也能看到完整检索链路。
-   *
-   * duration 计算：每条 entry 的耗时 = 收到本 phase 时刻 - 收到上一 phase 时刻；
-   * 第一条用 0（无前置阶段可减）。done 不 push，仅用于关闭活动状态。
-   *
-   * 跨分身隔离：只接受当前 avatarId 的事件；切换分身时 ref 会随 effect 销毁清空。
-   */
-  const ragLastEventAtRef = useRef<number | null>(null)
-  useEffect(() => {
-    ragLastEventAtRef.current = null
-    const unsubscribe = window.electronAPI.onRagProgress((data) => {
-      if (data.avatarId !== avatarId) return
-      const now = Date.now()
-      if (data.phase === 'done') {
-        ragLastEventAtRef.current = null
-        return
-      }
-
-      // skill-loaded 是主进程在 skillRouter 命中后单独 emit 的伪 phase（不在 RAGProgressPhase 枚举内）。
-      const isSkill = data.phase === 'skill-loaded'
-      const last = ragLastEventAtRef.current
-      const durationMs = last === null ? 0 : Math.max(0, now - last)
-      ragLastEventAtRef.current = now
-      try {
-        appendToolCallTimeline({
-          id: `${isSkill ? 'skill' : 'rag'}-${now}`,
-          name: data.phase,
-          argsPreview: data.detail || '',
-          resultPreview: '',
-          durationMs,
-          ok: true,
-          startedAt: now,
-          kind: isSkill ? 'skill' : 'rag',
-        })
-      } catch (pushErr) {
-        const msg = pushErr instanceof Error ? pushErr.message : String(pushErr)
-        window.electronAPI.logEvent('warn', 'append-rag-timeline-failed', `${data.phase}: ${msg}`)
-      }
-    })
-    return () => unsubscribe()
-  }, [avatarId, appendToolCallTimeline])
 
   /**
    * 九层重构 #12 ask_question：监听主进程推送，弹出 AskQuestionCard。
@@ -281,6 +238,13 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   }, [conversationId])
 
   useEffect(() => {
+    const switchedConversation = lastLoadedConversationIdRef.current !== conversationId
+    lastLoadedConversationIdRef.current = conversationId
+    if (switchedConversation) {
+      // 切换会话时先进入当前会话的加载态，避免用上一会话的消息和滚动位置过渡渲染。
+      setIsInitialized(false)
+      setMessages([])
+    }
     resetTransientState()
     // Stage 三 P2 范围外 1：绑定当前会话并从 DB 恢复任务列表（异步，失败兜底为空列表）
     bindConversation(conversationId).catch((err) => {
@@ -316,72 +280,87 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         }
         const documentAttachmentsByAssistantId = collectDocumentAttachmentsByAssistantId(dbMessages, conversationId)
 
-        setMessages(
-          dbMessages
-            .filter(m => m.role === 'user' || m.role === 'assistant')
-            .map((m, i) => {
-              const role = m.role as 'user' | 'assistant'
-              // 修复历史会话重开时 image_urls 丢失的 bug：
-              // 原实现完全忽略了 m.image_urls，所以重开后只剩文字。这里复原成 string[]。
-              let imageUrls: string[] | undefined
-              if (m.image_urls) {
-                try {
-                  const parsed = JSON.parse(m.image_urls)
-                  if (Array.isArray(parsed) && parsed.every(u => typeof u === 'string')) {
-                    imageUrls = parsed as string[]
-                  }
-                } catch (parseErr) {
-                  void parseErr
+        const dbChatMessages = dbMessages
+          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .map((m, i) => {
+            const role = m.role as 'user' | 'assistant'
+            // 修复历史会话重开时 image_urls 丢失的 bug：
+            // 原实现完全忽略了 m.image_urls，所以重开后只剩文字。这里复原成 string[]。
+            let imageUrls: string[] | undefined
+            if (m.image_urls) {
+              try {
+                const parsed = JSON.parse(m.image_urls)
+                if (Array.isArray(parsed) && parsed.every(u => typeof u === 'string')) {
+                  imageUrls = parsed as string[]
                 }
+              } catch (parseErr) {
+                void parseErr
               }
-              const attachments = role === 'user' ? attachmentsByMsgId.get(m.id) : undefined
-              const documentAttachments = role === 'assistant'
-                ? documentAttachmentsByAssistantId.get(m.id)
-                : undefined
-              // v17：从 DB 的 uncertain_markers / reconsider_markers 列恢复 chip。
-              // 列存 JSON 数组字符串；NULL/损坏/非数组都退化为 undefined（与无 chip 等价）。
-              const parseMarkers = (raw: string | null | undefined): string[] | undefined => {
-                if (!raw) return undefined
-                try {
-                  const parsed = JSON.parse(raw)
-                  if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') && parsed.length > 0) {
-                    return parsed as string[]
-                  }
-                } catch { /* swallow: 损坏列等价于无 chip */ }
-                return undefined
-              }
-              // v19：工具调用时间线从 DB tool_call_timeline_json 列恢复，让切换会话回来时
-              // 仍能完整看到每条 assistant 当时调用了哪些工具（之前是全局 store 状态，
-              // 切对话就被清空）。损坏/非数组的列退化为 undefined。
-              const parseTimeline = (raw: string | null | undefined) => {
-                if (!raw) return undefined
-                try {
-                  const parsed = JSON.parse(raw)
-                  if (Array.isArray(parsed) && parsed.length > 0) {
-                    return parsed as ChatMessage['toolCallTimeline']
-                  }
-                } catch { /* swallow: 损坏列等价于无时间线 */ }
-                return undefined
-              }
-              return {
-                // 直接用 DB 的 messageId 作为 UI bubble id——便于 deleteMessage(uiId)
-                // 直接命中 DB 行（"重新生成"按钮路径）。之前包成 db-${conv}-${id}
-                // 让 DB 删不到导致旧回答刷新后复活。i 兜底防 m.id 缺失（理论不发生）
-                id: m.id || `local-${conversationId}-${i}`,
-                role,
-                content: m.content,
-                imageUrls,
-                attachments,
-                documentAttachments,
-                // thinking 模型的思考过程从 DB reasoning_content 列恢复（v13 schema 起持久化），
-                // 让切换回该会话时折叠区能复现；历史无此列的行返回 NULL，与 undefined 同行为
-                reasoning: m.reasoning_content || undefined,
-                uncertainMarkers: parseMarkers(m.uncertain_markers),
-                reconsiderMarkers: parseMarkers(m.reconsider_markers),
-                toolCallTimeline: parseTimeline(m.tool_call_timeline_json),
-              }
-            })
-        )
+            }
+            const attachments = role === 'user' ? attachmentsByMsgId.get(m.id) : undefined
+            const documentAttachments = role === 'assistant'
+              ? extractDocumentAttachmentsFromText(
+                m.content,
+                conversationId,
+                documentAttachmentsByAssistantId.get(m.id) ?? [],
+              )
+              : undefined
+            // v17：从 DB 的 uncertain_markers / reconsider_markers 列恢复 chip。
+            // 列存 JSON 数组字符串；NULL/损坏/非数组都退化为 undefined（与无 chip 等价）。
+            const parseMarkers = (raw: string | null | undefined): string[] | undefined => {
+              if (!raw) return undefined
+              try {
+                const parsed = JSON.parse(raw)
+                if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') && parsed.length > 0) {
+                  return parsed as string[]
+                }
+              } catch { /* swallow: 损坏列等价于无 chip */ }
+              return undefined
+            }
+            // v19：工具调用时间线从 DB tool_call_timeline_json 列恢复，让切换会话回来时
+            // 仍能完整看到每条 assistant 当时调用了哪些工具（之前是全局 store 状态，
+            // 切对话就被清空）。损坏/非数组的列退化为 undefined。
+            const parseTimeline = (raw: string | null | undefined) => {
+              if (!raw) return undefined
+              try {
+                const parsed = JSON.parse(raw)
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  return parsed as ChatMessage['toolCallTimeline']
+                }
+              } catch { /* swallow: 损坏列等价于无时间线 */ }
+              return undefined
+            }
+            return {
+              // 直接用 DB 的 messageId 作为 UI bubble id——便于 deleteMessage(uiId)
+              // 直接命中 DB 行（"重新生成"按钮路径）。之前包成 db-${conv}-${id}
+              // 让 DB 删不到导致旧回答刷新后复活。i 兜底防 m.id 缺失（理论不发生）
+              id: m.id || `local-${conversationId}-${i}`,
+              role,
+              content: m.content,
+              imageUrls,
+              attachments,
+              documentAttachments,
+              // thinking 模型的思考过程从 DB reasoning_content 列恢复（v13 schema 起持久化），
+              // 让切换回该会话时折叠区能复现；历史无此列的行返回 NULL，与 undefined 同行为
+              reasoning: m.reasoning_content || undefined,
+              uncertainMarkers: parseMarkers(m.uncertain_markers),
+              reconsiderMarkers: parseMarkers(m.reconsider_markers),
+              toolCallTimeline: parseTimeline(m.tool_call_timeline_json),
+            }
+          })
+
+        const liveState = useChatStore.getState()
+        const liveMessages = liveState.currentConversationId === conversationId ? liveState.messages : []
+        const dbMessageIds = new Set(dbChatMessages.map(m => m.id))
+        const now = Date.now()
+        const hasFreshLocalOnlyMessage = liveMessages.some((m) => {
+          const match = /^msg-(\d+)-/.exec(m.id)
+          if (!match || dbMessageIds.has(m.id)) return false
+          return now - Number(match[1]) < 30_000
+        })
+        if (!hasFreshLocalOnlyMessage) {
+          setMessages(dbChatMessages)
+        }
         // 切走→切回会话时回灌 in-flight streaming：DB 里还没有落盘的 assistant 消息，
         // 此处把 sendMessage 闭包累积的 text/reasoning/toolCallTimeline 从 snapshot 拼到末尾，
         // 避免用户切回时看到空白（2026-05-22 回归修复）。
@@ -395,10 +374,20 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       } catch (err) {
         if (!cancelled) {
           console.error('[ChatWindow] 加载消息失败:', err instanceof Error ? err.message : String(err))
-          setMessages([])
+          const liveState = useChatStore.getState()
+          const liveMessages = liveState.currentConversationId === conversationId ? liveState.messages : []
+          const now = Date.now()
+          const hasFreshLocalMessage = liveMessages.some((m) => {
+            const match = /^msg-(\d+)-/.exec(m.id)
+            return Boolean(match) && now - Number(match?.[1]) < 30_000
+          })
+          if (!hasFreshLocalMessage) setMessages([])
         }
       } finally {
-        if (!cancelled) setIsInitialized(true)
+        if (!cancelled) {
+          setInitializedConversationId(conversationId)
+          setIsInitialized(true)
+        }
       }
     }
     loadMessages()
@@ -556,7 +545,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     }
   }, [avatarId, showToast])
 
-  if (!isInitialized) {
+  if (!isInitialized || initializedConversationId !== conversationId) {
     return (
       <div className="flex items-center justify-center h-full bg-px-bg">
         <div className="flex items-center gap-3">
@@ -570,7 +559,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   }
 
   return (
-    <div className="flex flex-col h-full bg-px-bg">
+    <div className="flex flex-col h-full min-h-0 bg-px-bg">
       {/* 顶栏：模式徽章 + 工具按钮（九层重构 #17） */}
       <div className="flex items-center justify-end px-4 py-1.5 border-b border-px-border-dim bg-px-surface gap-2">
         {/*
@@ -683,8 +672,9 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
       </div>
 
       {/* 消息列表 */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <MessageList
+          conversationId={conversationId}
           messages={messages}
           isLoading={isLoading || isRunningTests}
           elapsedSec={elapsedSec}
@@ -731,8 +721,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
         通过 messages.tool_call_timeline_json 持久化。本处不再需要全局渲染。
       */}
 
-      {/* 兜底：仅回归测试运行时显示（RAG 阶段已并入 ToolCallTimeline；
-          ragProgress state 仍保留但不再渲染，作为内部状态供未来其他用途读取）。 */}
+      {/* 兜底：仅回归测试运行时显示。 */}
       {isRunningTests && (
         <div className="px-6 py-2 bg-px-surface border-t-2 border-px-border">
           <div className="flex items-center gap-2">

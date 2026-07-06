@@ -1,6 +1,7 @@
 import { ClaudeProvider } from './llm-providers/claude'
 import { OpenAICompatProvider } from './llm-providers/openai-compat'
 import type { LLMProvider, SystemBlock } from './llm-providers/types'
+import { normalizeIntentLocal } from '@soul/core/browser'
 
 // 重新导出，让调用方从 llm-service 一处取就行
 export type { SystemBlock }
@@ -232,6 +233,12 @@ export class LLMService {
     onError: (error: Error) => void,
     options: ChatOptions = {},
   ): Promise<void> {
+    const boundaryResponse = getUserFacingBoundaryResponse(messages)
+    if (boundaryResponse) {
+      onChunk(boundaryResponse, 'content')
+      onDone(boundaryResponse)
+      return
+    }
     return this.provider.chat(messages, onChunk, onDone, onError, options)
   }
 
@@ -239,4 +246,23 @@ export class LLMService {
   async complete(messages: LLMMessage[], options: ChatOptions = {}): Promise<string> {
     return this.provider.complete(messages, options)
   }
+}
+
+function getUserFacingBoundaryResponse(messages: LLMMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role !== 'user') continue
+    const text = messageContentToText(message.content)
+    if (!text.trim()) return undefined
+    return normalizeIntentLocal(text).guardrail?.response
+  }
+  return undefined
+}
+
+function messageContentToText(content: LLMMessage['content']): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((part): part is Extract<ContentPart, { type: 'text' }> => part.type === 'text')
+    .map(part => part.text)
+    .join('\n')
 }

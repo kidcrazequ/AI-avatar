@@ -176,6 +176,24 @@ export {
   type BuildSkillDraftInput,
   type SkillDraft,
 } from './skill-draft'
+export {
+  WORKFLOW_SKILL_DISTILL_PROTOCOL_VERSION,
+  WORKFLOW_DISTILL_MAX_MESSAGES,
+  WORKFLOW_DISTILL_MSG_TRUNCATE,
+  WORKFLOW_SKILL_REQUIRED_SECTIONS,
+  buildWorkflowDistillPrompt,
+  parseWorkflowDistillResponse,
+  buildWorkflowSkillDraftFile,
+  validateWorkflowSkillPromotion,
+  type WorkflowDistillTranscriptMessage,
+  type BuildWorkflowDistillPromptOptions,
+  type ParsedWorkflowSkill,
+  type WorkflowDistillParseResult,
+  type BuildWorkflowSkillDraftFileInput,
+  type WorkflowSkillDraftFile,
+  type WorkflowSkillPromotionInput,
+  type WorkflowSkillPromotionResult,
+} from './workflow-skill-distill'
 
 // ── Phase 6: Memory 3 层 ─────────────────────────────────────────────────
 export {

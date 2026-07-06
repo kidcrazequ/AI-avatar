@@ -416,6 +416,64 @@ export class SkillManager {
     fs.writeFileSync(indexPath, raw, 'utf-8')
   }
 
+  /**
+   * 把一个 local 技能条目写入分身 skill-index.yaml（读-改-写最小 diff）。
+   * 供「对话沉淀技能晋升」链路使用：技能文件先由 createSkill 落盘，再调本方法收录。
+   *
+   * - 幂等：index 中任意 section 已有同名 `- name:` entry → 不重复写入，返回 false
+   * - `local_skills:` 段已存在 → 在段标题行后插入 entry；不存在 → 文件末尾新建段
+   * - 只追加，不重排 / 不改写已有条目与注释（与 toggleSharedSkill 同一保守策略）
+   *
+   * @returns 是否实际写入了 index
+   */
+  addLocalSkillToIndex(avatarId: string, skillId: string, meta: { description?: string; domain?: string } = {}): boolean {
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(skillId, '技能ID')
+    if (!/^[A-Za-z0-9_-]+$/.test(skillId)) {
+      throw new Error(`技能 ID 必须只包含英文字母、数字、连字符或下划线: ${skillId}`)
+    }
+    const indexDir = path.join(this.avatarsPath, avatarId, 'skills')
+    const indexPath = path.join(indexDir, 'skill-index.yaml')
+    if (!fs.existsSync(indexDir)) {
+      fs.mkdirSync(indexDir, { recursive: true })
+    }
+    let raw = fs.existsSync(indexPath)
+      ? fs.readFileSync(indexPath, 'utf-8')
+      : 'version: "1.0"\n'
+
+    // 幂等：任意 section 已有同名 entry 不重复追加（skillId 已限定字符集，无需转义）
+    const nameRe = new RegExp(`^\\s*-\\s*name:\\s*['"]?${skillId}['"]?\\s*$`, 'm')
+    if (nameRe.test(raw)) return false
+
+    // `#` 一并剔除：skill-index 走自制行级解析器，值内 `#` 会被当注释静默截断
+    const domainLine = (meta.domain || meta.description || '').replace(/[#\s]+/g, ' ').trim().slice(0, 30)
+    const entryBlock = [
+      `  - name: ${skillId}`,
+      `    path: skills/${skillId}.md`,
+      `    source: local`,
+      ...(domainLine ? [`    domain: ${domainLine}`] : []),
+      `    keywords: []  # 对话沉淀晋升，如需精确路由请手动补充关键词`,
+      `    priority: 5`,
+      '',
+    ].join('\n')
+
+    if (/^local_skills:\s*$/m.test(raw)) {
+      // 段已存在：在段标题行紧跟其后插入新 entry（函数式替换，避免 entry 内容中的 $ 被当替换模式）
+      raw = raw.replace(/^(local_skills:\s*\n)/m, (m) => `${m}${entryBlock}`)
+    } else {
+      if (!raw.endsWith('\n')) raw += '\n'
+      raw +=
+        '\n# ═══════════════════════════════════════\n' +
+        '# 分身本地技能（由桌面端「技能沉淀晋升」维护）\n' +
+        '# ═══════════════════════════════════════\n' +
+        'local_skills:\n' +
+        entryBlock
+    }
+
+    fs.writeFileSync(indexPath, raw, 'utf-8')
+    return true
+  }
+
   /** 从 skill-index.yaml 解析出所有 source: shared 的 entry name（仅扫文本，不依赖 yaml 库） */
   private readSharedSkillNamesFromIndex(avatarId: string): Set<string> {
     const indexPath = path.join(this.avatarsPath, avatarId, 'skills', 'skill-index.yaml')

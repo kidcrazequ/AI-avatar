@@ -61,17 +61,105 @@ check_deps() {
 # 解析 sources.yaml（用 Python 避免依赖 yq）
 # ═══════════════════════════════════════
 parse_sources() {
-    python3 << 'PYEOF'
-import yaml, json, sys
+    # `-` 让 python 从 stdin 读程序、后续参数进 sys.argv（否则 argv[1] 永远为空静默退出）。
+    # 零外部依赖：系统 python3 无 PyYAML，与 soul-scan.py / validate-skills.py 同款
+    # 受限 YAML 子集解析器（只支持 sources.yaml 文件头注释里声明的写法），
+    # 解析不了的行 fail-loud 报行号退出，绝不静默猜测。
+    python3 - "$1" << 'PYEOF'
+import json, re, sys
 
 sources_file = sys.argv[1] if len(sys.argv) > 1 else ""
 if not sources_file:
-    sys.exit(0)
+    sys.exit("parse_sources: 缺少 sources.yaml 路径参数")
 
-with open(sources_file, 'r') as f:
-    data = yaml.safe_load(f)
+def strip_comment(line):
+    # 引号外、且前面是行首/空白的 "#" 起为注释（受限子集：不处理引号内转义）
+    out, in_q = [], None
+    for i, ch in enumerate(line):
+        if in_q:
+            out.append(ch)
+            if ch == in_q:
+                in_q = None
+        elif ch in ('"', "'"):
+            in_q = ch
+            out.append(ch)
+        elif ch == '#' and (i == 0 or line[i - 1] in ' \t'):
+            break
+        else:
+            out.append(ch)
+    return ''.join(out).rstrip()
 
-sources = data.get('sources', []) or []
+def unquote(v):
+    v = v.strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
+        return v[1:-1]
+    return v
+
+def inline_list(v):
+    inner = v.strip()[1:-1].strip()
+    return [unquote(x) for x in inner.split(',')] if inner else []
+
+KV = re.compile(r'^([A-Za-z_][\w-]*):(?:\s+(.*))?$')
+
+sources, cur = [], None
+in_sources = False
+item_indent = None      # source 条目 "- " 的缩进
+list_key = None         # 等待块列表项的键（如 skills）
+
+def set_kv(d, text, lineno):
+    global list_key
+    m = KV.match(text)
+    if not m:
+        sys.exit(f"parse_sources: 第 {lineno} 行无法解析（受限 YAML 子集）: {text}")
+    key, val = m.group(1), (m.group(2) or '').strip()
+    if not val:
+        d[key] = []           # 空值 = 块列表开头（如 skills:）
+        list_key = key
+    elif val.startswith('[') and val.endswith(']'):
+        d[key] = inline_list(val)
+        list_key = None
+    else:
+        d[key] = unquote(val)
+        list_key = None
+
+with open(sources_file, encoding='utf-8') as f:
+    for lineno, raw in enumerate(f, 1):
+        line = strip_comment(raw.rstrip('\n'))
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        text = line.strip()
+
+        if indent == 0:
+            in_sources, list_key, cur = False, None, None
+            m = KV.match(text)
+            if not m:
+                sys.exit(f"parse_sources: 第 {lineno} 行无法解析（受限 YAML 子集）: {text}")
+            if m.group(1) == 'sources':
+                val = (m.group(2) or '').strip()
+                if val == '[]' or not val:
+                    in_sources = True    # [] = 空清单；无值 = 后接块列表
+                else:
+                    sys.exit(f"parse_sources: 第 {lineno} 行 sources 只支持块列表或 []: {val}")
+            continue          # version 等其他顶层键忽略
+
+        if not in_sources:
+            continue
+
+        if text.startswith('- '):
+            rest = text[2:].strip()
+            if list_key is not None and item_indent is not None and indent > item_indent:
+                cur[list_key].append(unquote(rest))     # skills 块列表项
+                continue
+            item_indent, list_key = indent, None        # 新 source 条目
+            cur = {}
+            sources.append(cur)
+            set_kv(cur, rest, lineno)
+        else:
+            if cur is None:
+                sys.exit(f"parse_sources: 第 {lineno} 行不在任何 source 条目内: {text}")
+            set_kv(cur, text, lineno)
+
 if not sources:
     print("__EMPTY__")
     sys.exit(0)

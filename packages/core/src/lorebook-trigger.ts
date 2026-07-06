@@ -19,7 +19,7 @@
  * 数据流：
  *   user message → matchTriggers() → buildTriggerInjection(retriever) → 拼到 prompt
  *
- * 与 RAG 的关系：互补不替代。BM25 走"相关性 topk"，trigger 走"keyword → 指定文件"，
+ * 与工具检索的关系：互补不替代。BM25 走"相关性 topk"，trigger 走"keyword → 指定文件"，
  * 适合"提到 X 就一定要看 Y"的强约束场景。
  */
 

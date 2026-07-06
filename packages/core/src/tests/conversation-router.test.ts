@@ -2,8 +2,8 @@
  * conversation-router 测试（PR1·P0-1 重构后）。
  *
  * 重构后路由器只做两件事：
- *   1) 图片 → 走 vision 模型 + no-rag
- *   2) 极短/确认句 → no-rag（避免空检索）
+ *   1) 图片 → 走 vision 模型 + skip-tools
+ *   2) 极短/确认句 → skip-tools（避免空检索）
  *
  * 业务路由（chart/excel/cross-file/long-query 等）已下放给 LLM 通过工具调用决定。
  *
@@ -19,30 +19,30 @@ describe('conversation-router', () => {
   const chatModel = { baseUrl: 'x', model: 'chat', apiKey: 'k' }
   const visionModel = { baseUrl: 'x', model: 'vision', apiKey: 'k' }
 
-  it('短确认句应走 no-rag（避免空检索浪费 token）', () => {
+  it('短确认句应走 skip-tools（避免空检索浪费 token）', () => {
     const d = routeConversation({ content: '好的', hasImages: false, chatModel, visionModel })
-    assert.equal(d.contextStrategy, 'no-rag')
+    assert.equal(d.contextStrategy, 'skip-tools')
     assert.equal(d.modelKind, 'chat')
     assert.equal(d.reason, 'ack')
   })
 
-  it('空输入应走 no-rag', () => {
+  it('空输入应走 skip-tools', () => {
     const d = routeConversation({ content: '   ', hasImages: false, chatModel, visionModel })
-    assert.equal(d.contextStrategy, 'no-rag')
+    assert.equal(d.contextStrategy, 'skip-tools')
     assert.equal(d.reason, 'empty')
   })
 
-  it('超短输入（< minRagQueryLength）应走 no-rag', () => {
+  it('超短输入（< minQueryLength）应走 skip-tools', () => {
     const d = routeConversation({ content: 'hi', hasImages: false, chatModel, visionModel })
-    assert.equal(d.contextStrategy, 'no-rag')
+    assert.equal(d.contextStrategy, 'skip-tools')
     assert.equal(d.reason, 'too-short')
   })
 
-  it('带图片问题应走 vision 模型 + no-rag', () => {
+  it('带图片问题应走 vision 模型 + skip-tools', () => {
     const d = routeConversation({ content: '图里是什么', hasImages: true, chatModel, visionModel })
     assert.equal(d.model, visionModel)
     assert.equal(d.modelKind, 'vision')
-    assert.equal(d.contextStrategy, 'no-rag')
+    assert.equal(d.contextStrategy, 'skip-tools')
     assert.equal(d.reason, 'images')
   })
 
@@ -83,7 +83,7 @@ describe('conversation-router', () => {
     const d = routeConversation({ content: '图里是什么', hasImages: true, chatModel })
     assert.equal(d.model, chatModel)
     assert.equal(d.modelKind, 'chat')
-    // 此时不命中 vision 路由，按其余规则继续判断；因为 trimmed.length >= minRagQueryLength 走 auto
+    // 此时不命中 vision 路由，按其余规则继续判断；因为 trimmed.length >= minQueryLength 走 auto
     assert.equal(d.contextStrategy, 'auto')
   })
 

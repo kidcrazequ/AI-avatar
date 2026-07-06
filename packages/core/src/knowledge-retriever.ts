@@ -405,7 +405,7 @@ export class KnowledgeRetriever {
   }
 
   /**
-   * 获取当前 embedding Map 的浅拷贝，用于 RAG 时注入 __query__ 向量。
+   * 获取当前 embedding Map 的浅拷贝，供外部检索实验或索引调试使用。
    * 返回副本防止外部意外篡改内部状态。
    */
   getEmbeddings(): Map<string, number[]> {
@@ -483,7 +483,7 @@ export class KnowledgeRetriever {
    * - BM25 + 向量 RRF：当注入了 embedding 时，两路检索结果用 RRF 融合
    *
    * coverage 反映**本次检索**的命中健康度（非整库健康度），供 tool 层拼成
-   * 给 LLM 看的 header（参见 [[soul-rag-architecture-direction]] 的"召回不全应明示"原则）。
+   * 给 LLM 看的 header（遵循"召回不全应明示"原则）。
    */
   searchChunksWithCoverage(
     query: string,

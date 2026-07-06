@@ -39,6 +39,11 @@ export const SkillRefSchema = z.object({
   version: z.string().optional(),
   domain: z.string().optional(),
   keywords: z.array(z.string()).default([]),
+  aliases: z.array(z.string()).default([]),
+  handles_intents: z.array(z.string()).default([]),
+  provides: z.array(z.string()).default([]),
+  consumes: z.array(z.string()).default([]),
+  can_compose_with: z.array(z.string()).default([]),
   when: z.string().optional(),
   priority: z.number().optional(),
 })

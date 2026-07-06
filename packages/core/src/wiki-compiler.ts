@@ -6,8 +6,8 @@
  *   - qa/                沉淀的优质问答
  *   - lint-report.json   自检报告
  *
- * 安全保证：wiki/ 目录独立于 knowledge/，不影响现有 SoulLoader、
- * KnowledgeRetriever、RAG 流程。所有数据只在 wiki/ 目录下读写。
+ * 安全保证：wiki/ 目录独立于 knowledge/，不影响现有 SoulLoader
+ * 与 KnowledgeRetriever。所有数据只在 wiki/ 目录下读写。
  *
  * @author zhi.qu
  * @date 2026-04-09

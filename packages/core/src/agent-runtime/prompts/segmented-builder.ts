@@ -3,7 +3,7 @@
  *
  *   1. soul.persona + redline       永久 → cacheable
  *   2. skill-index 摘要              日级 → cacheable
- *   3. knowledge index 摘要 / RAG hits  每次变 → 不 cache
+ *   3. knowledge index 摘要 / knowledge hits  每次变 → 不 cache
  *   4. （由调用方拼接对话历史）       动态
  *
  * 让 Anthropic prompt_caching 利用率最大化：段 1+2 形成稳定前缀。
@@ -16,7 +16,7 @@ import { makeSegment, type PromptSegment } from './registry'
 
 export interface SegmentedPromptInput {
   blueprint: AgentBlueprint
-  /** RAG / 知识检索命中（每次对话不同，不可缓存） */
+  /** 知识检索命中（每次对话不同，不可缓存） */
   knowledgeHits?: string[]
   /** 可选自定义段（如对话补丁、强制规则） */
   extra?: PromptSegment[]
@@ -43,7 +43,9 @@ export function buildSegmentedSystemPrompt(input: SegmentedPromptInput): PromptS
     const skillIndex = blueprint.skills
       .map((s) => {
         const kw = s.keywords?.length ? `（关键词：${s.keywords.slice(0, 4).join('/')}）` : ''
-        return `- **${s.id}**${kw}：${s.when ?? '—'}`
+        const intents = s.handles_intents?.length ? `；意图：${s.handles_intents.slice(0, 4).join('/')}` : ''
+        const provides = s.provides?.length ? `；产物：${s.provides.slice(0, 4).join('/')}` : ''
+        return `- **${s.id}**${kw}：${s.when ?? '—'}${intents}${provides}`
       })
       .join('\n')
     segments.push(
@@ -56,7 +58,7 @@ export function buildSegmentedSystemPrompt(input: SegmentedPromptInput): PromptS
     )
   }
 
-  // ── 段 3：knowledge / RAG hits（每次变化，不 cache）
+  // ── 段 3：knowledge hits（每次变化，不 cache）
   if (knowledgeHits.length > 0) {
     segments.push(
       makeSegment(

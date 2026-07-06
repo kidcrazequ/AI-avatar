@@ -18,6 +18,7 @@ import {
   computeWallClockRecencyFactor,
 } from './memory/salience'
 import { readStandingOrders } from './memory/standing-orders'
+import { formatMemoryUsageHeader, resolveMemoryCharBudget } from './memory/bounded-store'
 
 export interface AvatarConfig {
   id: string
@@ -240,6 +241,8 @@ export class SoulLoader {
       '- **read_knowledge_file(file_path)**: 读取知识库指定文件的完整内容',
       '- **list_knowledge_files()**: 列出知识库中所有可用文件',
       '- **read_life_episode(id)**: 读取自己人生时间轴中某个具体事件的完整正文（id 形如 `ep-0007-first-snow`）。仅在用户问起具体往事、需要还原细节时调用；日常对话不要主动调用。',
+      '- **session_search(mode, query?, conversation_id?, offset?, limit?, window?)**: 在自己与用户的全部历史会话上做 SQLite 全文检索（零 LLM 成本）。mode="search" 关键词检索（返回命中片段 ±N 条上下文 + 会话首尾锚点，按会话去重，定时任务会话降权不排除）；mode="view" 按 conversation_id 翻页阅读某个历史会话；mode="browse" 浏览最近会话列表。**过程性内容（当时做了什么/说了什么）不进长期记忆，用本工具找**。',
+      '- **memory_update(store, op, id?, content?)**: 对有界长期记忆做原子编辑。store="memory"（MEMORY.md 运行笔记）或 "user"（USER.md 用户画像）；op="add"/"replace"/"remove"。每个库有字符预算（注入表头可见），预算满时 add 会被拒绝——必须先 remove/replace 合并旧条目（预算即遗忘，删除内容会回显留痕）。禁止写入：专业事实（进 knowledge/ 走溯源）、对工具/环境的负面断言、过程性内容（用 session_search 找）、秘密凭据。写入只落盘，下个会话生效。',
       '- **match_palace_rooms(task, top_k?)**: 在记忆宫殿 `palace/rooms/` 中匹配任务路线卡。路线卡存的是“某类任务开始前该先想起什么”：必读材料、阅读顺序、坑、输出位置和沉淀目标。适合写周报、给老板发消息、项目复盘、准备汇报等**职场处境任务**；普通事实问答不要调用。',
       '- **build_palace_context_card(task, room_id?, top_k?)**: 生成任务前上下文包（路线卡、条件读、对方画像、能用素材、坑、建议口径、承诺提示、待确认沉淀）。调用后应先把这张卡用简短中文展示给用户确认，再正式执行任务；本工具只读，不会写入记忆。',
       '- **write_palace_room(id, name, triggers?, required_files?, read_order?, conditional_reads?, pitfalls?, output_location?, tone_guidance?, sediment_targets?, body?, ...)**: 创建或更新一张路线卡（`palace/rooms/<id>.md`）。把“这类任务该先读什么、按什么顺序、避开什么坑、用什么口径”固化成路由。持久写入：只在用户明确要固化流程、或你已把路线卡草案展示给用户并得到确认后调用。',
@@ -435,15 +438,14 @@ export class SoulLoader {
 
     // 知识库文件（递归读取所有 knowledge/ 子目录文件）
     // 知识文件注入策略：
-    //   - 批量导入产物（有 source: pdf/word/pptx/... frontmatter）→ 运行时 rag_only，
-    //     通过 search_knowledge / query_excel / read_knowledge_file 按需检索（Channel B+C）
+    //   - 批量导入产物（有 source: pdf/word/pptx/... frontmatter）→ 运行时 prompt_excluded，
+    //     通过 search_knowledge / query_excel / read_knowledge_file 按需检索（工具通道）
     //   - 用户手写文件（无 source 字段）→ 塞进 system prompt（Channel A 全量注入）
     //   - 显式标记 prompt_excluded: true（旧名 rag_only，仍兼容）的文件 → 同上，不塞 prompt
     //
     // 为什么不全塞？237 文件 × 大多 < 50KB = 184K tokens，超 DeepSeek 131K 窗口。
     // 即使不超窗口，128K+ 长上下文的 LLM 注意力退化严重（"lost in the middle"），
-    // 全量注入的实际完整性远低于理论值。Channel B（RAG top-12）+ Channel C（10 轮
-    // search_knowledge / read_knowledge_file）完全可以兜底。
+    // 全量注入的实际完整性远低于理论值；按需工具检索可以兜底。
     if (knowledgeRootFiles.length > 0) {
       const knowledgeBase = path.join(avatarPath, 'knowledge')
       const stuffEntries: Array<{ relPath: string; body: string }> = []
@@ -496,7 +498,7 @@ export class SoulLoader {
         })
       }
 
-      // RAG-only 文件索引：小库逐个列路径；大库（如小凯 1885 文件）只按顶层领域归并，
+      // 可检索文件索引：小库逐个列路径；大库（如小凯 1885 文件）只按顶层领域归并，
       // 避免上千路径整块灌进 system prompt（曾占 ~5.5 万 token，拖慢每次请求的首 token）。
       // agentic 方向：分身知道覆盖哪些领域 + 用工具下钻即可，不需要预先看到全部文件名。
       if (ragOnlyEntries.length > 0 || demotedStuff.length > 0) {
@@ -546,9 +548,9 @@ export class SoulLoader {
         stableParts.push('1. 先用 `query_excel({mode:"schema", file, sheet})` 拿到所有相关 sheet 的列结构（schema 不计入 24 次精确查询预算的"试探"，但仍占预算 1 次）\n')
         stableParts.push('2. 用 `query_excel`（不带 mode）做精确查询，把要对比的行拉下来（注意预算 24 次/轮）\n')
         stableParts.push('3. 在主回答中先用 markdown 表格展示对比结论，让用户先看到答案\n')
-        stableParts.push('4. 调 `export_excel({filename, sheets:[{name, rows}, ...]})` 把结构化结果落盘\n')
-        stableParts.push('5. 在回答末尾告知用户："已输出到 workspaces/<conversationId>/exports/<filename>.xlsx，可在桌面端「设置 → 打开工作区目录」查看"\n\n')
-        stableParts.push('严禁：跳过 export_excel 直接说"我已生成 Excel 文件"——没调工具就是没生成，属于幻觉。\n')
+        stableParts.push('4. 调 `export_excel({filename, sheets:[{name, rows}, ...]})` 把结构化结果落盘为真正的 `.xlsx`\n')
+        stableParts.push('5. 在回答末尾告知用户："已生成 <filename>.xlsx，可在下方文件卡片点击下载或打开"\n\n')
+        stableParts.push('严禁：跳过 export_excel 直接说"我已生成 Excel 文件"——没调工具就是没生成，属于幻觉。严禁用 `.csv` 冒充 Excel；用户要 Excel 时必须输出 `.xlsx`，避免中文乱码。\n')
       }
     }
 
@@ -637,13 +639,20 @@ export class SoulLoader {
     stableParts.push('严禁：把整段 markdown 答案抄进 IR 而不构造结构化块（要让 IR 用 frontmatter 和扩展语法表达层次）。\n')
 
     // GAP2: 长期记忆 / 用户画像改为 dynamic 段，放在 system prompt 尾部，利好前缀缓存。
+    // A4（Hermes 借鉴）：注入时带用量表头（如 `[82% — 1,804/5,000 chars]`）——
+    // 用量可见本身就是 consolidate 的 nudge。冻结快照语义：本段内容在 loadAvatar
+    // 时快照；会话中途的记忆写入（memory_update 工具 / 后台复盘）只落盘，
+    // 下次装配 system prompt 才生效，保整个会话的 prefix cache。
+    const memoryCharBudget = resolveMemoryCharBudget(this.avatarsPath, avatarId)
     if (longTermMemoryBody.trim()) {
       dynamicParts.push('\n\n---\n\n# 长期记忆\n\n')
+      dynamicParts.push(`${formatMemoryUsageHeader(memoryContent.length, memoryCharBudget)}\n\n`)
       dynamicParts.push(longTermMemoryBody)
     }
 
     if (userProfileContent.trim()) {
       dynamicParts.push('\n\n---\n\n# 用户画像\n\n')
+      dynamicParts.push(`${formatMemoryUsageHeader(userProfileContent.length, memoryCharBudget)}\n\n`)
       dynamicParts.push(userProfileContent)
     }
 

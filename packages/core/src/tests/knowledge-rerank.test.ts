@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeJaccardSimilarity, rerankChunksWithDiversity } from '../rag-rerank'
+import { computeJaccardSimilarity, rerankChunksWithDiversity } from '../knowledge-rerank'
 
-describe('rag-rerank', () => {
+describe('knowledge-rerank', () => {
   it('应去掉高度重复片段', () => {
     const results = rerankChunksWithDiversity([
       { file: 'a.md', heading: 'A1', content: '储能系统 215 机型 2026年1月效率 90.1%', score: 0.99 },

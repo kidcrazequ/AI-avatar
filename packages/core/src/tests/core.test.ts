@@ -160,7 +160,7 @@ describe('KnowledgeRetriever', () => {
   })
 })
 
-describe('KnowledgeRetriever Excel rag_only .md 不参与 RAG', () => {
+describe('KnowledgeRetriever Excel rag_only .md 不参与普通 chunk 检索', () => {
   let tmpExcelDir: string
 
   before(() => {

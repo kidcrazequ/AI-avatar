@@ -140,6 +140,8 @@ export type {
 
 export {
   extractParsedSourceAnchors,
+  extractSourceAnchorsFromContent,
+  extractSourceAnchorsFromMessages,
 } from './source-anchor'
 
 export {
@@ -156,6 +158,15 @@ export {
   buildSelfDescriptionAnswer,
 } from './avatar-self-description'
 export type { SelfDescriptionInput, SelfDescriptionSkill } from './avatar-self-description'
+
+// ─── 对话边界守卫（纯函数；渲染进程 send 路径无 LLM 短路用）──────────────
+export {
+  normalizeIntentLocal,
+  IMPLEMENTATION_PRIVACY_RESPONSE,
+  RETRIEVAL_BOUNDARY_RESPONSE,
+  KNOWLEDGE_PIPELINE_BOUNDARY_RESPONSE,
+} from './intent-normalizer'
+export type { IntentFrame, IntentGuardrail, IntentOverlay } from './intent-normalizer'
 
 // ─── Agent Runtime P0 行为模式（纯函数，无 fs/path/process）───────────────
 export {

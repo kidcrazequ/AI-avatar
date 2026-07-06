@@ -41,7 +41,14 @@ export type { Skill } from './skill-manager'
 
 export { ToolRouter } from './tool-router'
 export { SkillRouter } from './skill-router'
-export type { SkillIndexEntry, SkillIndex, RouteResult, RouteLog } from './skill-router'
+export type { SkillIndexEntry, SkillIndex, RouteResult, RouteLog, RoutePlan, RouteStep } from './skill-router'
+export {
+  normalizeIntentLocal,
+  IMPLEMENTATION_PRIVACY_RESPONSE,
+  RETRIEVAL_BOUNDARY_RESPONSE,
+  KNOWLEDGE_PIPELINE_BOUNDARY_RESPONSE,
+} from './intent-normalizer'
+export type { IntentFrame, IntentGuardrail, IntentOverlay } from './intent-normalizer'
 
 export type {
   CommunitySkillSource,
@@ -108,9 +115,6 @@ export {
   serializeSkillEmbeddingCacheJson,
   trimSkillEmbeddingCache,
 } from './utils/skill-embedding-store'
-
-export { retrieveAndBuildPrompt, ENTITY_EXTRACT_PROMPT } from './rag-answerer'
-export type { RAGConfig } from './rag-answerer'
 
 export { WikiCompiler } from './wiki-compiler'
 export type {
@@ -225,8 +229,8 @@ export type { ConsistencyMode, ConsistencyPolicy, ResolvePolicyOptions } from '.
 export { ToolBudget, DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints, normalizeQueryExcelArgs } from './tool-budget'
 export type { ToolPolicy, ToolBudgetConsumeResult, ToolBudgetMessage } from './tool-budget'
 export { buildApiMessages } from './prompt-builder'
-export { rerankChunksWithDiversity, computeJaccardSimilarity } from './rag-rerank'
-export type { RerankableChunk, RerankOptions } from './rag-rerank'
+export { rerankChunksWithDiversity, computeJaccardSimilarity } from './knowledge-rerank'
+export type { RerankableChunk, RerankOptions } from './knowledge-rerank'
 export type { BuildApiMessagesOptions, HistoryMessageLike, ApiMessageLike } from './prompt-builder'
 export { DYNAMIC_SYSTEM_PROMPT_MARKER, combineSystemPromptSections, splitSystemPromptSections, normalizeSystemPromptSections } from './prompt-sections'
 export type { SystemPromptSections } from './prompt-sections'
@@ -467,6 +471,49 @@ export {
   MAX_ORDER_LENGTH,
 } from './memory/standing-orders'
 export type { AppendStandingOrderResult } from './memory/standing-orders'
+
+// Bounded Memory Store（A4 · Hermes Agent 借鉴）：有界条目化 MEMORY.md / USER.md，
+// 全文件字符预算 + add/replace/remove 原子操作，预算即遗忘、遗忘留痕
+export {
+  DEFAULT_MEMORY_CHAR_BUDGET,
+  MIN_MEMORY_CHAR_BUDGET,
+  MAX_MEMORY_CHAR_BUDGET,
+  MAX_BOUNDED_ENTRY_CHARS,
+  EMPTY_BOUNDED_MEMORY_DOC,
+  newBoundedMemoryEntryId,
+  parseBoundedMemoryMarkdown,
+  serializeBoundedMemoryDoc,
+  boundedMemoryChars,
+  getBoundedMemoryUsage,
+  formatMemoryUsageHeader,
+  applyBoundedMemoryOp,
+  listBoundedEntriesSummary,
+  readBoundedMemoryFile,
+  writeBoundedMemoryFileAtomic,
+  resolveMemoryCharBudget,
+} from './memory/bounded-store'
+export type {
+  BoundedMemoryEntry,
+  BoundedMemoryDoc,
+  BoundedMemoryOp,
+  BoundedMemoryUsage,
+  BoundedMemoryOpResult,
+} from './memory/bounded-store'
+
+// Memory Review（A4 · Hermes Agent 借鉴）：N 轮一次后台复盘的 prompt 构造与响应解析
+export {
+  MEMORY_REVIEW_DEFAULT_TURNS,
+  MEMORY_REVIEW_MAX_OPS,
+  MEMORY_REVIEW_MAX_MESSAGES,
+  MEMORY_REVIEW_SYSTEM_PROMPT,
+  buildMemoryReviewUserPrompt,
+  parseMemoryReviewResponse,
+} from './memory/memory-review'
+export type {
+  MemoryReviewStoreOp,
+  MemoryReviewParseResult,
+  MemoryReviewTranscriptMessage,
+} from './memory/memory-review'
 
 // Daily Summary Memory Tree（OpenHuman 借鉴）：每日 cron 把当天 episode 按时间维度
 // 合并成 daily-<YYYY-MM-DD>.md，补 WikiCompiler 实体维度之外的时间锚定

@@ -42,7 +42,7 @@ export default tseslint.config(
     },
   },
 
-  // 测试/调试脚本允许 console.log——qa-test / simulate-xiaodu / journey.test
+  // 测试/调试脚本允许 console.log——qa-test / journey.test
   // 是命令行跑的诊断工具，stdout 输出本来就是用户接口
   {
     files: ['src/tests/**/*.ts'],
@@ -51,15 +51,14 @@ export default tseslint.config(
     },
   },
 
-  // tool-router / rag-answerer / skill-router 是 RAG / 工具路由的诊断重镇，
-  // 正常路径上就有大量 `[RAG] xxx`、`[tool-router] xxx` 信息日志。core 无 logger
+  // tool-router / skill-router 是工具路由的诊断重镇，
+  // 正常路径上就有大量 `[tool-router] xxx` 信息日志。core 无 logger
   // 抽象，把它们改成 console.warn 会让 stderr 被正常诊断刷屏，info 语义也错。
   // 这里按文件白名单放开 console.log；错误路径仍应该用 console.warn / console.error
   // 以便和正常 info 分流。
   {
     files: [
       'src/tool-router.ts',
-      'src/rag-answerer.ts',
       'src/skill-router.ts',
     ],
     rules: {

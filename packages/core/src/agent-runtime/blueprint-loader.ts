@@ -39,6 +39,11 @@ interface SkillIndexEntry {
   source?: 'local' | 'shared' | 'community'
   domain?: string
   keywords?: string[]
+  aliases?: string[]
+  handles_intents?: string[]
+  provides?: string[]
+  consumes?: string[]
+  can_compose_with?: string[]
   when?: string
   priority?: number
   version?: string
@@ -182,6 +187,11 @@ function readSkillIndex(avatarDir: string): SkillRef[] {
         version: entry.version,
         domain: entry.domain,
         keywords: entry.keywords || [],
+        aliases: entry.aliases || [],
+        handles_intents: entry.handles_intents || [],
+        provides: entry.provides || [],
+        consumes: entry.consumes || [],
+        can_compose_with: entry.can_compose_with || [],
         when: entry.when,
         priority: entry.priority,
       })

@@ -19,6 +19,7 @@
 import fs from 'fs'
 import path from 'path'
 import { tokenize } from './knowledge-retriever'
+import { normalizeIntentLocal, sanitizeForRouteLog, type IntentFrame } from './intent-normalizer'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,6 +28,11 @@ export interface SkillIndexEntry {
   path: string
   domain: string
   keywords: string[]
+  aliases: string[]
+  handles_intents: string[]
+  provides: string[]
+  consumes: string[]
+  can_compose_with: string[]
   when: string
   priority: number
   /** 技能来源：local=分身专属，shared=公共，community=社区（默认 local） */
@@ -43,20 +49,88 @@ export interface SkillIndex {
 export interface RouteResult {
   /** 选中的 skill name（null = 没有匹配的 skill，走普通对话） */
   selectedSkill: string | null
+  /** 多技能/虚拟能力的规划结果；selectedSkill 保留给旧调用方兼容 */
+  selectedSkills: string[]
   /** 完整 SKILL.md 内容（选中时有值） */
   skillContent: string | null
+  /** 已选中 skill 的内容映射；旧路径仍只消费 skillContent */
+  skillContents: Record<string, string>
+  /** 本地意图归一化结果，不调用云端模型 */
+  intentFrame: IntentFrame
+  /** 能力规划结果 */
+  routePlan: RoutePlan
+  /** 路由层本地拒答，如实现隐私守卫命中 */
+  guardrailResponse?: string
+  /** 路由层本地澄清响应，如模糊意图且不应进入 LLM */
+  clarificationResponse?: string
+  /** 可注入到后续回答的路由提示 */
+  promptHint?: string
   /** 路由决策过程日志 */
   log: RouteLog
+}
+
+export interface RouteStep {
+  id: string
+  kind: 'skill' | 'capability' | 'guardrail' | 'clarify'
+  skillName?: string
+  capability?: string
+  purpose: string
+  dependsOn?: string[]
+}
+
+export interface RoutePlan {
+  mode: 'none' | 'single_skill' | 'composite' | 'guardrail' | 'clarify'
+  steps: RouteStep[]
+  reason: string
+  confidence: number
 }
 
 export interface RouteLog {
   timestamp: string
   input: string
   keywordsExtracted: string[]
-  matchedSkills: Array<{ name: string; hitCount: number; priority: number }>
+  intentFrame: Pick<IntentFrame, 'entity' | 'intents' | 'artifact' | 'format' | 'metrics' | 'aliases' | 'confidence' | 'needsClarification'>
+  matchedSkills: Array<{ name: string; hitCount: number; priority: number; capabilityScore: number }>
   fallbackTriggered: boolean
   selectedSkill: string | null
+  selectedSkills: string[]
   durationMs: number
+}
+
+type CapabilityFields = Pick<
+  SkillIndexEntry,
+  'aliases' | 'handles_intents' | 'provides' | 'consumes' | 'can_compose_with'
+>
+
+const DEFAULT_SKILL_CAPABILITIES: Record<string, Partial<CapabilityFields>> = {
+  'draw-mermaid': {
+    aliases: ['X 光透视', 'X光透视', '透视', '扒开看', '拆开看', '内部结构', '结构展开', '拓扑', '部件关系'],
+    handles_intents: ['expose_internal_relation', 'draw_structure', 'map_process', 'plan_timeline', 'annotate_with_metrics'],
+    provides: ['structure_diagram', 'mermaid.flowchart', 'mermaid.sequence', 'mermaid.gantt', 'mermaid.state', 'mermaid.er', 'mermaid.class', 'mermaid.mindmap'],
+    consumes: ['entities', 'relationships', 'timeline', 'states', 'metrics'],
+    can_compose_with: ['metric_lookup', 'draw-chart', 'chart-from-knowledge'],
+  },
+  'draw-chart': {
+    aliases: ['画图', '可视化', '走势图', '数据展示'],
+    handles_intents: ['visualize_data', 'compare_metrics', 'evaluate_performance'],
+    provides: ['data_chart', 'echarts.line', 'echarts.bar', 'echarts.pie', 'echarts.scatter', 'echarts.radar', 'echarts.heatmap'],
+    consumes: ['inline_data', 'metrics', 'categories'],
+    can_compose_with: ['chart-from-knowledge'],
+  },
+  'chart-from-knowledge': {
+    aliases: ['知识库画图', '从表格画', '基于数据画'],
+    handles_intents: ['visualize_data', 'compare_metrics'],
+    provides: ['data_chart', 'echarts.line', 'echarts.bar', 'echarts.pie'],
+    consumes: ['knowledge_data', 'metrics', 'categories'],
+    can_compose_with: ['draw-chart'],
+  },
+  'decision-trace': {
+    aliases: ['为什么没做', '当时怎么定', '谁拍板', '决策历史'],
+    handles_intents: ['trace_decision'],
+    provides: ['decision_trace'],
+    consumes: ['knowledge_data', 'decision_records'],
+    can_compose_with: ['chart-from-knowledge', 'draw-mermaid'],
+  },
 }
 
 // ─── SkillRouter ────────────────────────────────────────────────
@@ -107,29 +181,72 @@ export class SkillRouter {
   /**
    * 主路由入口：从用户输入路由到最合适的 skill。
    *
-   * Step 1: 意图提取 — 从用户消息中提取关键词（用 segmentit 分词，不调 LLM）
-   * Step 2: grep 召回 — 在 keywordMap 中匹配，输出候选 skill 列表
-   * Step 3: 冲突裁决 — 多命中时按 priority + hitCount 排序（不调 LLM）
-   * fallback: 0 命中时返回 null（不调 LLM，让普通对话流程处理）
-   *
-   * 极简版：纯本地 grep，不调 LLM。速度 < 1ms。
-   * 后续可在 Step 1 和 Step 3 增加轻量 LLM 调用提升准确率。
+   * Step 1: 本地意图归一化 — 输出 IntentFrame，不调 LLM
+   * Step 2: grep + capability 召回 — keyword/aliases + handles/provides
+   * Step 3: 确定性规划 — 单 skill / 组合 routePlan / 澄清 / 守卫
    */
   route(avatarId: string, userMessage: string): RouteResult {
     const t0 = Date.now()
+    const intentFrame = normalizeIntentLocal(userMessage)
     const log: RouteLog = {
       timestamp: new Date().toISOString(),
-      input: userMessage.slice(0, 200),
+      input: sanitizeForRouteLog(userMessage),
       keywordsExtracted: [],
+      intentFrame: {
+        entity: intentFrame.entity,
+        intents: intentFrame.intents,
+        artifact: intentFrame.artifact,
+        format: intentFrame.format,
+        metrics: intentFrame.metrics,
+        aliases: intentFrame.aliases,
+        confidence: intentFrame.confidence,
+        needsClarification: intentFrame.needsClarification,
+      },
       matchedSkills: [],
       fallbackTriggered: false,
       selectedSkill: null,
+      selectedSkills: [],
       durationMs: 0,
     }
 
-    if (this.index.skills.length === 0) {
+    if (intentFrame.guardrail) {
+      const routePlan: RoutePlan = {
+        mode: 'guardrail',
+        steps: [{
+          id: `guardrail-${intentFrame.guardrail.type.replace(/_/g, '-')}`,
+          kind: 'guardrail',
+          purpose: this.describeGuardrailPurpose(intentFrame.guardrail.type),
+        }],
+        reason: `命中 ${intentFrame.guardrail.type} 守卫，路由层本地返回固定边界响应，不进入工具循环/LLM provider`,
+        confidence: intentFrame.confidence,
+      }
+      log.selectedSkills = []
       log.durationMs = Date.now() - t0
-      return { selectedSkill: null, skillContent: null, log }
+      return {
+        selectedSkill: null,
+        selectedSkills: [],
+        skillContent: null,
+        skillContents: {},
+        intentFrame,
+        routePlan,
+        guardrailResponse: intentFrame.guardrail.response,
+        log,
+      }
+    }
+
+    if (this.index.skills.length === 0) {
+      const routePlan = this.buildNoSkillPlan(intentFrame, '当前分身没有可用 skill-index')
+      log.durationMs = Date.now() - t0
+      return {
+        selectedSkill: null,
+        selectedSkills: [],
+        skillContent: null,
+        skillContents: {},
+        intentFrame,
+        routePlan,
+        promptHint: this.buildPromptHint(intentFrame, routePlan),
+        log,
+      }
     }
 
     // Step 1: 意图提取 — segmentit 分词（复用 knowledge-retriever 的 tokenize）
@@ -160,33 +277,86 @@ export class SkillRouter {
       }
     }
 
-    // 构建候选列表并排序：先按 hitCount 降序，再按 priority 升序
-    const candidates: Array<{ name: string; hitCount: number; priority: number }> = []
-    for (const [name, hitCount] of hitMap) {
+    // 构建候选列表并排序：先按 capabilityScore + hitCount 降序，再按 priority 升序
+    const allNames = new Set<string>([...hitMap.keys()])
+    for (const skill of this.index.skills) {
+      const score = this.scoreCapability(skill, intentFrame)
+      if (score > 0) allNames.add(skill.name)
+    }
+
+    const candidates: Array<{ name: string; hitCount: number; priority: number; capabilityScore: number }> = []
+    for (const name of allNames) {
       const entry = this.index.skills.find(s => s.name === name)
       if (entry) {
-        candidates.push({ name, hitCount, priority: entry.priority })
+        candidates.push({
+          name,
+          hitCount: hitMap.get(name) || 0,
+          priority: entry.priority,
+          capabilityScore: this.scoreCapability(entry, intentFrame),
+        })
       }
     }
     candidates.sort((a, b) => {
-      if (b.hitCount !== a.hitCount) return b.hitCount - a.hitCount
+      const aTotal = a.hitCount + a.capabilityScore
+      const bTotal = b.hitCount + b.capabilityScore
+      if (bTotal !== aTotal) return bTotal - aTotal
       return a.priority - b.priority
     })
     log.matchedSkills = candidates.slice(0, 5)
 
+    if (intentFrame.needsClarification) {
+      const clarificationResponse = this.buildClarificationResponse(intentFrame)
+      const routePlan: RoutePlan = {
+        mode: 'clarify',
+        steps: [{
+          id: 'clarify-intent',
+          kind: 'clarify',
+          purpose: '模糊表现评估意图需要先缩小交付物或指标范围',
+        }],
+        reason: '用户给出实体但未给出具体交付物/指标，先本地澄清，避免误加载技能',
+        confidence: intentFrame.confidence,
+      }
+      log.durationMs = Date.now() - t0
+      return {
+        selectedSkill: null,
+        selectedSkills: [],
+        skillContent: null,
+        skillContents: {},
+        intentFrame,
+        routePlan,
+        clarificationResponse,
+        log,
+      }
+    }
+
     // Step 3: 决策
     if (candidates.length === 0) {
       // 0 命中：不触发任何 skill，走普通对话
+      const routePlan = this.buildNoSkillPlan(intentFrame, '没有技能关键词或能力声明命中')
       log.fallbackTriggered = true
       log.durationMs = Date.now() - t0
       console.log(`[SkillRouter] 0 命中，fallback（${log.durationMs}ms）`)
-      return { selectedSkill: null, skillContent: null, log }
+      return {
+        selectedSkill: null,
+        selectedSkills: [],
+        skillContent: null,
+        skillContents: {},
+        intentFrame,
+        routePlan,
+        promptHint: this.buildPromptHint(intentFrame, routePlan),
+        log,
+      }
     }
 
-    // 命中 ≥ 1：默认选 top-1，图表类按通用规则做二次裁决
-    let selected = candidates[0]
+    let routePlan = this.planRoute(intentFrame, candidates)
+    let plannedSkillNames = routePlan.steps
+      .filter((step): step is RouteStep & { skillName: string } => step.kind === 'skill' && typeof step.skillName === 'string')
+      .map(step => step.skillName)
+
+    // 命中 ≥ 1：默认选规划里的第一个 skill，图表类按通用规则做二次裁决
+    let selected = candidates.find(c => c.name === plannedSkillNames[0]) || candidates[0]
     const candidateNames = new Set(candidates.map(c => c.name))
-    if (candidateNames.has('chart-from-knowledge') && candidateNames.has('draw-chart')) {
+    if (routePlan.mode !== 'composite' && candidateNames.has('chart-from-knowledge') && candidateNames.has('draw-chart')) {
       const preferChartFromKnowledge = this.shouldPreferChartFromKnowledge(userMessage)
       if (preferChartFromKnowledge) {
         const chartFromKnowledgeCandidate = candidates.find(c => c.name === 'chart-from-knowledge')
@@ -195,16 +365,47 @@ export class SkillRouter {
         const drawChartCandidate = candidates.find(c => c.name === 'draw-chart')
         if (drawChartCandidate) selected = drawChartCandidate
       }
+      routePlan = {
+        ...routePlan,
+        steps: [{
+          id: 'draw-data-chart',
+          kind: 'skill',
+          skillName: selected.name,
+          purpose: selected.name === 'chart-from-knowledge' ? '先检索知识库数据再输出 ECharts 图表' : '基于已知数据输出 ECharts 图表',
+        }],
+        reason: `图表二次裁决选择 ${selected.name}`,
+      }
+      plannedSkillNames = routePlan.steps
+        .filter((step): step is RouteStep & { skillName: string } => step.kind === 'skill' && typeof step.skillName === 'string')
+        .map(step => step.skillName)
     }
+
+    const selectedSkills = plannedSkillNames.length > 0 ? plannedSkillNames : [selected.name]
     log.selectedSkill = selected.name
+    log.selectedSkills = selectedSkills
     log.durationMs = Date.now() - t0
 
     // Layer 3: 加载完整 SKILL.md
-    const skillEntry = this.index.skills.find(s => s.name === selected.name)!
-    const skillContent = this.loadSkillContent(avatarId, skillEntry)
+    const skillContents: Record<string, string> = {}
+    for (const skillName of selectedSkills) {
+      const skillEntry = this.index.skills.find(s => s.name === skillName)
+      if (!skillEntry) continue
+      const content = this.loadSkillContent(avatarId, skillEntry)
+      if (content) skillContents[skillName] = content
+    }
+    const skillContent = skillContents[selected.name] || null
 
     console.log(`[SkillRouter] → ${selected.name} (hits=${selected.hitCount.toFixed(1)}, priority=${selected.priority}, ${log.durationMs}ms)`)
-    return { selectedSkill: selected.name, skillContent, log }
+    return {
+      selectedSkill: selected.name,
+      selectedSkills,
+      skillContent,
+      skillContents,
+      intentFrame,
+      routePlan,
+      promptHint: this.buildPromptHint(intentFrame, routePlan),
+      log,
+    }
   }
 
   /**
@@ -215,6 +416,160 @@ export class SkillRouter {
   }
 
   // ─── 内部方法 ──────────────────────────────────────────────────
+
+  private scoreCapability(skill: SkillIndexEntry, frame: IntentFrame): number {
+    let score = 0
+    for (const intent of frame.intents) {
+      if (skill.handles_intents.includes(intent)) score += 2
+    }
+    if (frame.artifact && skill.provides.includes(frame.artifact)) score += 2
+    if (frame.format && skill.provides.includes(frame.format)) score += 1.5
+    for (const alias of frame.aliases) {
+      if (skill.aliases.some(a => a.toLowerCase() === alias.toLowerCase())) score += 1
+    }
+
+    if (frame.overlays.length > 0 && skill.handles_intents.includes('annotate_with_metrics')) score += 1
+    if (frame.metrics.length > 0 && skill.consumes.includes('metrics')) score += 0.5
+
+    // Name-based defaults protect older skill-index.yaml files that have not
+    // been migrated to the capability schema yet.
+    if (frame.artifact === 'structure_diagram' && skill.name === 'draw-mermaid') score += 2
+    if (frame.artifact === 'data_chart' && (skill.name === 'draw-chart' || skill.name === 'chart-from-knowledge')) score += 1.5
+    if (frame.intents.includes('trace_decision') && skill.name === 'decision-trace') score += 2
+
+    return score
+  }
+
+  private describeGuardrailPurpose(type: NonNullable<IntentFrame['guardrail']>['type']): string {
+    switch (type) {
+      case 'implementation_privacy':
+        return '拒答模型、SDK、系统提示词、数据流向、内部架构等实现边界问题'
+      case 'retrieval_boundary':
+        return '说明检索未命中边界，避免把本轮未命中说成知识库不存在'
+      case 'knowledge_pipeline_boundary':
+        return '拒绝在普通分身对话中推测知识导入、清洗、转写流程'
+    }
+  }
+
+  private planRoute(
+    frame: IntentFrame,
+    candidates: Array<{ name: string; hitCount: number; priority: number; capabilityScore: number }>
+  ): RoutePlan {
+    const candidateNames = new Set(candidates.map(c => c.name))
+
+    if (frame.artifact === 'structure_diagram' && frame.overlays.length > 0 && candidateNames.has('draw-mermaid')) {
+      return {
+        mode: 'composite',
+        steps: [
+          {
+            id: 'metric-lookup',
+            kind: 'capability',
+            capability: 'metric_lookup',
+            purpose: `从知识库检索 ${frame.entity ?? '目标对象'} 的 ${frame.metrics.join(', ') || '指标'}，只做取数/溯源，不输出 chart`,
+          },
+          {
+            id: 'draw-structure-overlay',
+            kind: 'skill',
+            skillName: 'draw-mermaid',
+            purpose: '绘制结构/拓扑图，并把已取证指标标注到对应节点 label',
+            dependsOn: ['metric-lookup'],
+          },
+        ],
+        reason: '结构图请求叠加指标标注，不能把 chart-from-knowledge 当作指标查询复用',
+        confidence: Math.max(frame.confidence, 0.86),
+      }
+    }
+
+    if (frame.artifact === 'structure_diagram' && candidateNames.has('draw-mermaid')) {
+      return {
+        mode: 'single_skill',
+        steps: [{
+          id: 'draw-structure',
+          kind: 'skill',
+          skillName: 'draw-mermaid',
+          purpose: '输出 Mermaid 结构图',
+        }],
+        reason: '归一化后产物为 structure_diagram',
+        confidence: Math.max(frame.confidence, 0.8),
+      }
+    }
+
+    if (frame.intents.includes('trace_decision') && candidateNames.has('decision-trace')) {
+      return {
+        mode: 'single_skill',
+        steps: [{
+          id: 'trace-decision',
+          kind: 'skill',
+          skillName: 'decision-trace',
+          purpose: '按决策回溯流程检索证据链',
+        }],
+        reason: '归一化后意图为 trace_decision',
+        confidence: Math.max(frame.confidence, 0.8),
+      }
+    }
+
+    if (frame.artifact === 'data_chart') {
+      const chartSkill = candidateNames.has('chart-from-knowledge') ? 'chart-from-knowledge' : 'draw-chart'
+      if (candidateNames.has(chartSkill)) {
+        return {
+          mode: 'single_skill',
+          steps: [{
+            id: 'draw-data-chart',
+            kind: 'skill',
+            skillName: chartSkill,
+            purpose: chartSkill === 'chart-from-knowledge' ? '先检索知识库数据再输出 ECharts 图表' : '基于已知数据输出 ECharts 图表',
+          }],
+          reason: '归一化后产物为 data_chart',
+          confidence: Math.max(frame.confidence, 0.78),
+        }
+      }
+    }
+
+    const top = candidates[0]
+    return {
+      mode: 'single_skill',
+      steps: [{
+        id: `load-${top.name}`,
+        kind: 'skill',
+        skillName: top.name,
+        purpose: '关键词/能力召回的最高分技能',
+      }],
+      reason: '按关键词命中与能力分选择最高分技能',
+      confidence: Math.max(frame.confidence, Math.min(0.75, top.hitCount + top.capabilityScore > 0 ? 0.7 : 0.4)),
+    }
+  }
+
+  private buildNoSkillPlan(frame: IntentFrame, reason: string): RoutePlan {
+    return {
+      mode: 'none',
+      steps: [],
+      reason,
+      confidence: frame.confidence,
+    }
+  }
+
+  private buildPromptHint(frame: IntentFrame, routePlan: RoutePlan): string | undefined {
+    if (routePlan.mode === 'none' && frame.intents.length === 0) return undefined
+    if (routePlan.mode === 'guardrail' || routePlan.mode === 'clarify') return undefined
+
+    const parts = [
+      '路由层本地意图归一化结果：',
+      `- intents: ${frame.intents.length ? frame.intents.join(', ') : '未明确'}`,
+      frame.entity ? `- entity: ${frame.entity}` : undefined,
+      frame.artifact ? `- artifact: ${frame.artifact}${frame.format ? ` (${frame.format})` : ''}` : undefined,
+      frame.metrics.length ? `- metrics: ${frame.metrics.join(', ')}` : undefined,
+      routePlan.mode === 'composite'
+        ? '- routePlan: 先做知识库指标取数/溯源，再把指标标注到结构图节点；不要为了指标标注加载或输出 ECharts chart。'
+        : `- routePlan: ${routePlan.reason}`,
+    ].filter(Boolean)
+
+    return parts.join('\n')
+  }
+
+  private buildClarificationResponse(frame: IntentFrame): string {
+    const entity = frame.entity ? `「${frame.entity}」` : '这个对象'
+    return `你想看 ${entity} 的哪一类表现？可以选：${frame.clarificationOptions.join(' / ')}。`
+  }
 
   private loadSkillContent(avatarId: string, entry: SkillIndexEntry): string | null {
     // source 分流：之前一律 path.join(avatarsPath, avatarId, entry.path)，
@@ -276,7 +631,7 @@ export class SkillRouter {
   private buildKeywordMap(): void {
     this.keywordMap = new Map()
     for (const skill of this.index.skills) {
-      for (const kw of skill.keywords) {
+      for (const kw of [...skill.keywords, ...skill.aliases]) {
         const lower = kw.toLowerCase()
         const existing = this.keywordMap.get(lower) || []
         if (!existing.includes(skill.name)) {
@@ -319,7 +674,8 @@ export class SkillRouter {
     const result: SkillIndex = { version: '1.0', skills: [] }
     const lines = raw.split('\n')
     let currentSkill: Partial<SkillIndexEntry> | null = null
-    let inKeywords = false
+    let activeListField: keyof CapabilityFields | 'keywords' | null = null
+    const listFields = new Set<string>(['keywords', 'aliases', 'handles_intents', 'provides', 'consumes', 'can_compose_with'])
 
     for (const line of lines) {
       const trimmed = line.replace(/#.*$/, '').trimEnd() // 去注释
@@ -340,8 +696,8 @@ export class SkillRouter {
         if (currentSkill?.name) {
           result.skills.push(this.finalizeSkillEntry(currentSkill))
         }
-        currentSkill = { name: trimmed.trim().replace('- name:', '').trim(), keywords: [] }
-        inKeywords = false
+        currentSkill = { name: this.cleanScalar(trimmed.trim().replace('- name:', '').trim()), keywords: [] }
+        activeListField = null
         continue
       }
 
@@ -349,34 +705,37 @@ export class SkillRouter {
 
       const kv = trimmed.trim()
 
-      // keywords 列表
-      if (kv.startsWith('keywords:')) {
-        inKeywords = true
-        // 检查是否内联数组 [a, b, c]
-        const inline = kv.replace('keywords:', '').trim()
+      const listField = this.getListField(kv, listFields)
+      if (listField) {
+        activeListField = listField
+        const inline = kv.replace(`${listField}:`, '').trim()
         if (inline.startsWith('[')) {
-          currentSkill.keywords = inline.replace(/\[|\]/g, '').split(',').map(s => s.trim())
-          inKeywords = false
+          currentSkill[listField] = this.parseInlineList(inline) as never
+          activeListField = null
+        } else {
+          currentSkill[listField] = (currentSkill[listField] || []) as never
         }
         continue
       }
 
-      if (inKeywords && kv.startsWith('-')) {
-        currentSkill.keywords!.push(kv.replace(/^-\s*/, '').trim())
+      if (activeListField && kv.startsWith('-')) {
+        const list = (currentSkill[activeListField] || []) as string[]
+        list.push(this.cleanScalar(kv.replace(/^-\s*/, '').trim()))
+        currentSkill[activeListField] = list as never
         continue
       }
 
-      // 非 keywords 的 - 开头行（新 skill）→ 结束 keywords
-      if (kv.startsWith('-') && !inKeywords) continue
-      inKeywords = false
+      // 非已识别列表的 - 开头行 → 忽略，避免误读未知嵌套结构
+      if (kv.startsWith('-') && !activeListField) continue
+      activeListField = null
 
       // 其他字段
-      if (kv.startsWith('path:')) currentSkill.path = kv.replace('path:', '').trim()
-      else if (kv.startsWith('domain:')) currentSkill.domain = kv.replace('domain:', '').trim()
-      else if (kv.startsWith('when:')) currentSkill.when = kv.replace('when:', '').trim()
+      if (kv.startsWith('path:')) currentSkill.path = this.cleanScalar(kv.replace('path:', '').trim())
+      else if (kv.startsWith('domain:')) currentSkill.domain = this.cleanScalar(kv.replace('domain:', '').trim())
+      else if (kv.startsWith('when:')) currentSkill.when = this.cleanScalar(kv.replace('when:', '').trim())
       else if (kv.startsWith('priority:')) currentSkill.priority = parseInt(kv.replace('priority:', '').trim(), 10) || 1
-      else if (kv.startsWith('source:')) currentSkill.source = kv.replace('source:', '').trim() as SkillIndexEntry['source']
-      else if (kv.startsWith('origin:')) currentSkill.origin = kv.replace('origin:', '').trim()
+      else if (kv.startsWith('source:')) currentSkill.source = this.cleanScalar(kv.replace('source:', '').trim()) as SkillIndexEntry['source']
+      else if (kv.startsWith('origin:')) currentSkill.origin = this.cleanScalar(kv.replace('origin:', '').trim())
     }
 
     // 最后一个 skill
@@ -388,15 +747,44 @@ export class SkillRouter {
   }
 
   private finalizeSkillEntry(partial: Partial<SkillIndexEntry>): SkillIndexEntry {
+    const defaults = DEFAULT_SKILL_CAPABILITIES[partial.name || ''] || {}
     return {
       name: partial.name || '',
       path: partial.path || `skills/${partial.name}.md`,
       domain: partial.domain || '',
       keywords: partial.keywords || [],
+      aliases: this.mergeList(defaults.aliases, partial.aliases),
+      handles_intents: this.mergeList(defaults.handles_intents, partial.handles_intents),
+      provides: this.mergeList(defaults.provides, partial.provides),
+      consumes: this.mergeList(defaults.consumes, partial.consumes),
+      can_compose_with: this.mergeList(defaults.can_compose_with, partial.can_compose_with),
       when: partial.when || '',
       priority: partial.priority ?? 1,
       source: partial.source,
       origin: partial.origin,
     }
+  }
+
+  private getListField(kv: string, listFields: Set<string>): keyof CapabilityFields | 'keywords' | null {
+    const field = kv.split(':', 1)[0]
+    if (!listFields.has(field)) return null
+    return field as keyof CapabilityFields | 'keywords'
+  }
+
+  private parseInlineList(inline: string): string[] {
+    return inline
+      .replace(/^\[/, '')
+      .replace(/\]$/, '')
+      .split(',')
+      .map(s => this.cleanScalar(s.trim()))
+      .filter(Boolean)
+  }
+
+  private cleanScalar(value: string): string {
+    return value.replace(/^['"]|['"]$/g, '').trim()
+  }
+
+  private mergeList(a?: string[], b?: string[]): string[] {
+    return [...new Set([...(a || []), ...(b || [])].filter(Boolean))]
   }
 }

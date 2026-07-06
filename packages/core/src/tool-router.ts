@@ -23,6 +23,14 @@ import {
 } from './memory/episode-store'
 import { appendStandingOrder } from './memory/standing-orders'
 import { listDailySummaries, readDailySummary } from './memory/daily-summary'
+import {
+  applyBoundedMemoryOp,
+  formatMemoryUsageHeader,
+  readBoundedMemoryFile,
+  resolveMemoryCharBudget,
+  writeBoundedMemoryFileAtomic,
+  type BoundedMemoryOp,
+} from './memory/bounded-store'
 import { buildPalaceContextCard } from './palace/context-card'
 import {
   PALACE_COMMITMENT_DIRECTIONS,
@@ -65,7 +73,7 @@ import type {
   PalaceSedimentTarget,
 } from './palace/types'
 import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
-import { rerankChunksWithDiversity } from './rag-rerank'
+import { rerankChunksWithDiversity } from './knowledge-rerank'
 import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
 import { fetchWithTimeout, HttpError } from './utils/http'
 import { WikiCompiler } from './wiki-compiler'
@@ -1315,6 +1323,8 @@ export class ToolRouter {
           result = await this.addEpisodeNoteTool(avatarId, args); break
         case 'add_standing_order':
           result = this.addStandingOrderTool(avatarId, args, conversationId); break
+        case 'memory_update':
+          result = this.memoryUpdateTool(avatarId, args); break
         case 'list_daily_summaries':
           result = this.listDailySummariesTool(avatarId, args); break
         case 'read_daily_summary':
@@ -2587,6 +2597,66 @@ ${content}` }
   }
 
   /**
+   * memory_update：有界长期记忆原子编辑（A4 · Hermes Agent 借鉴）。
+   *
+   * store="memory" → memory/MEMORY.md（分身运行笔记）
+   * store="user"   → memory/USER.md（用户画像）
+   * op="add" / "replace" / "remove"（replace/remove 需 id）
+   *
+   * 设计原则：
+   *   - **预算即遗忘**：全文件字符预算（resolveMemoryCharBudget，默认 5000），
+   *     超预算的 add/replace 被拒绝并回显现有条目清单，迫使 LLM 先删/合并
+   *   - **遗忘留痕**：remove/replace 的被删原文回显在工具结果里，
+   *     整个操作是可见的工具调用记录（合 Soul 溯源基因）
+   *   - **legacy 不可编辑**：条目标记之前的自由格式内容结构上不受任何 op 影响
+   *   - **冻结快照**：写入只落盘，下次装配 system prompt 才生效（保 prefix cache）
+   */
+  private memoryUpdateTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const storeName = args.store === 'user' ? 'user' : args.store === 'memory' ? 'memory' : null
+    if (!storeName) return { content: '', error: 'store 必须是 "memory"（MEMORY.md）或 "user"（USER.md）' }
+    const opName = typeof args.op === 'string' ? args.op : ''
+    if (opName !== 'add' && opName !== 'replace' && opName !== 'remove') {
+      return { content: '', error: 'op 必须是 "add" / "replace" / "remove" 之一' }
+    }
+    const id = typeof args.id === 'string' ? args.id.trim() : ''
+    const content = typeof args.content === 'string' ? args.content : ''
+    let op: BoundedMemoryOp
+    if (opName === 'add') {
+      op = { type: 'add', content }
+    } else if (opName === 'replace') {
+      if (!id) return { content: '', error: 'replace 需要 id（取自记忆条目标记 <!-- mem:<id> ... -->）' }
+      op = { type: 'replace', id, content }
+    } else {
+      if (!id) return { content: '', error: 'remove 需要 id（取自记忆条目标记 <!-- mem:<id> ... -->）' }
+      op = { type: 'remove', id }
+    }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const fileName = storeName === 'user' ? 'USER.md' : 'MEMORY.md'
+      const filePath = path.join(this.avatarsPath, avatarId, 'memory', fileName)
+      const budget = resolveMemoryCharBudget(this.avatarsPath, avatarId)
+      const doc = readBoundedMemoryFile(filePath)
+      const res = applyBoundedMemoryOp(doc, op, budget)
+      if (!res.ok) {
+        return { content: '', error: `[memory_update] ${res.error}` }
+      }
+      writeBoundedMemoryFileAtomic(filePath, res.doc)
+      const usageText = formatMemoryUsageHeader(res.usage.chars, res.usage.budget)
+      const lines = [
+        `[memory_update] ${storeName === 'user' ? 'USER.md' : 'MEMORY.md'} ${opName} 成功（条目 id=${res.entryId}）。当前用量 ${usageText}。写入已落盘，下次会话装配 system prompt 时生效。`,
+      ]
+      if (res.forgotten !== undefined) {
+        // 遗忘留痕：被删除/覆盖的原文回显，让每次遗忘都是可见记录
+        lines.push(`被${opName === 'remove' ? '删除' : '覆盖'}的原内容（留痕）：${res.forgotten}`)
+      }
+      return { content: lines.join('\n') }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
    * list_daily_summaries：列出已生成的 daily summary 日期（OpenHuman 借鉴）。
    * 时间维度对偶 recall_conversation：后者按 query 召回 episode，前者按日期定位。
    *
@@ -3370,13 +3440,23 @@ ${content}` }
     const rg = this.ripgrepScan(roots, pattern, { maxPerFile, maxTotal })
     const { matches, truncated } = rg ?? this.nodeGrepScan(roots, regex, { maxPerFile, maxTotal })
 
+    // A1 溯源闭集：每条命中携带行级来源锚点，与 search_knowledge / query_excel 的
+    // [来源: ...] 下发口径对齐，verifier 后置断言据此累积"本轮已下发 anchor 集合"。
+    // file 已含 relPrefix；projects/<pid>/knowledge/ 前缀 parseSourceAnchor 不识别，
+    // 暂不发锚点（TODO：project 知识域锚点格式另行定义，属知识索引结构工作项）。
+    const anchoredMatches = matches.map((m) => (
+      m.file.startsWith('knowledge/')
+        ? { ...m, anchor: `[来源: ${m.file}#L${m.line}]` }
+        : m
+    ))
+
     return { content: JSON.stringify({
       pattern,
       scope: scopeRaw || undefined,
       engine: rg ? 'ripgrep' : 'node',
-      count: matches.length,
+      count: anchoredMatches.length,
       truncated,
-      matches,
+      matches: anchoredMatches,
       hint: truncated ? '已达硬上限，请缩窄 pattern 或加 scope' : undefined,
     }, null, 2) }
   }
@@ -5970,6 +6050,12 @@ ${content}` }
   private loadSkill(avatarId: string, args: Record<string, unknown>): ToolCallResult {
     const skillId = args.skill_id as string
     if (!skillId) return { content: '', error: '缺少 skill_id 参数' }
+    // B1（agentskills.io 对齐）：目录型技能引用二次读取。
+    // skill_id 形如 "<技能名>/references/<文件名>" 时走引用读取路径——
+    // 复用 skill_id 传相对路径（不加新参数），与 SKILL.md 正文里的引用写法一致。
+    if (skillId.includes('/') || skillId.includes('\\')) {
+      return this.loadSkillReference(avatarId, skillId)
+    }
     try {
       assertSafeSegment(skillId, 'skill_id')
     } catch (e) {
@@ -5985,7 +6071,8 @@ ${content}` }
       for (const p of localCandidates) {
         if (fs.existsSync(p)) {
           const content = fs.readFileSync(p, 'utf-8')
-          return { content: `## 技能：${skillId}\n\n${content}` }
+          const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
+          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
         }
       }
     } else {
@@ -6004,7 +6091,8 @@ ${content}` }
       for (const p of sharedCandidates) {
         if (fs.existsSync(p)) {
           const content = fs.readFileSync(p, 'utf-8')
-          return { content: `## 技能：${skillId}\n\n${content}` }
+          const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
+          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
         }
       }
     }
@@ -6024,11 +6112,139 @@ ${content}` }
         const rel = path.relative(communityRoot, absPath)
         if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absPath)) {
           const content = fs.readFileSync(absPath, 'utf-8')
-          return { content: `## 技能：${skillId}\n\n${content}` }
+          const extras = path.basename(absPath) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(absPath), skillId) : ''
+          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
         }
       }
     }
     return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
+  }
+
+  /** B1 目录型技能允许二次读取的子目录白名单（agentskills.io spec 的三个标准子目录） */
+  private static readonly SKILL_RESOURCE_SUBDIRS = ['references', 'scripts', 'assets'] as const
+
+  /**
+   * B1 目录型技能资源清单：列出技能目录下 references/ scripts/ assets/ 的一层文件，
+   * 附在 SKILL.md 正文之后，引导模型用 load_skill("<技能名>/references/<文件名>")
+   * 二次读取（load_skill 的 schema 不加新参数，复用 skill_id 传相对路径）。
+   */
+  private listSkillDirResources(skillDir: string, skillId: string): string {
+    const lines: string[] = []
+    for (const sub of ToolRouter.SKILL_RESOURCE_SUBDIRS) {
+      const dir = path.join(skillDir, sub)
+      try {
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isFile()) lines.push(`- ${skillId}/${sub}/${entry.name}`)
+        }
+      } catch { /* 单个子目录读失败不阻塞技能正文 */ }
+    }
+    if (lines.length === 0) return ''
+    return '\n\n---\n\n本技能为目录型技能，以下配套文件可按需二次读取（把下列路径原样作为 load_skill 的 skill_id 传入；引用限一层深）：\n' + lines.join('\n')
+  }
+
+  /**
+   * B1：目录型技能引用二次读取。
+   *
+   * skill_id 形如 "<技能名>/references/<文件名>"（scripts/ assets/ 同理），
+   * 恰好三段——引用限一层深（references/ 下不再嵌套），更深直接拒绝。
+   *
+   * 安全边界（缺一不可）：
+   *   - 技能名段 / 文件名段各自过 assertSafeSegment（挡 .. 与路径分隔符）
+   *   - 子目录段白名单（references/scripts/assets），不允许读技能目录里任意文件
+   *   - resolveUnderRoot 守护：解析结果必须落在该技能目录内，逃逸即拒绝
+   *   - realpath 复查：技能目录内的符号链接指向目录外时同样按逃逸拒绝
+   *   - 技能启用状态与 loadSkill 主路径同一套强制（禁用 / 未引用均拒绝）
+   */
+  private loadSkillReference(avatarId: string, ref: string): ToolCallResult {
+    const segments = ref.split('/')
+    if (segments.length !== 3 || segments.some(s => !s.trim())) {
+      return { content: '', error: `技能引用路径必须形如 "<技能名>/references/<文件名>"（引用限一层深，references/ 下不再嵌套）: ${ref}` }
+    }
+    const [skillId, subdir, fileName] = segments
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+      assertSafeSegment(fileName, '引用文件名')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!(ToolRouter.SKILL_RESOURCE_SUBDIRS as readonly string[]).includes(subdir)) {
+      return { content: '', error: `技能引用只允许 ${ToolRouter.SKILL_RESOURCE_SUBDIRS.join('/')} 子目录，收到: ${subdir}` }
+    }
+    const skillDir = this.resolveEnabledSkillDir(avatarId, skillId)
+    if (!skillDir) {
+      return { content: '', error: `技能不存在、未启用或不是目录型技能：${skillId}（引用二次读取只对含 SKILL.md 的目录型技能开放）` }
+    }
+    let absPath: string
+    try {
+      // 路径守护①：解析结果必须落在技能目录内（统一走 resolveUnderRoot，禁止自实现）
+      absPath = resolveUnderRoot(skillDir, path.join(subdir, fileName))
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!fs.existsSync(absPath)) {
+      return { content: '', error: `引用文件不存在：${ref}` }
+    }
+    try {
+      // 路径守护②：realpath 复查——技能目录里的符号链接若指向目录外，同样按逃逸拒绝
+      const realDir = fs.realpathSync(skillDir)
+      const realFile = fs.realpathSync(absPath)
+      resolveUnderRoot(realDir, path.relative(realDir, realFile))
+      if (fs.statSync(realFile).isDirectory()) {
+        return { content: '', error: `引用路径是目录不是文件：${ref}` }
+      }
+      const content = fs.readFileSync(realFile, 'utf-8')
+      return { content: `## 技能引用：${ref}\n\n${content}` }
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /**
+   * B1：解析技能对应的目录型技能根目录（…/skills/<skillId>/，须含 SKILL.md）。
+   * 启用状态强制与 loadSkill 主路径同一套：
+   *   - local 被 .config.json 禁用 → 整体拒绝（与主路径一致，不落到 shared）
+   *   - shared/community → 必须在 skill-index.yaml 显式引用
+   * 只识别目录型技能；单文件 .md 技能没有 references/，返回 null。
+   */
+  private resolveEnabledSkillDir(avatarId: string, skillId: string): string | null {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+    } catch {
+      return null
+    }
+    const disabled = this.readDisabledSkillIds(avatarId)
+    if (disabled.has(skillId)) return null
+    // 1) local
+    const localDir = path.join(this.avatarsPath, avatarId, 'skills', skillId)
+    if (fs.existsSync(path.join(localDir, 'SKILL.md'))) return localDir
+    // 2) shared：必须在 skill-index.yaml 里 source: shared 引用
+    const refs = this.readEnabledSkillRefsFromIndex(avatarId)
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    if (refs.shared.has(skillId)) {
+      const sharedDir = path.join(sharedRoot, skillId)
+      if (fs.existsSync(path.join(sharedDir, 'SKILL.md'))) return sharedDir
+    }
+    // 3) community：按 yaml 声明 path 定位（避免同名跨 pack 串包），SKILL.md 所在目录即技能根
+    const declaredPath = refs.community.get(skillId)
+    if (declaredPath) {
+      const communityRoot = path.resolve(this.avatarsPath, '..', 'shared', 'skills', 'community')
+      const yamlDir = path.join(this.avatarsPath, avatarId, 'skills')
+      const candidates = [
+        path.resolve(this.avatarsPath, '..', declaredPath),  // canonical: repo-root 相对
+        path.resolve(yamlDir, declaredPath),                 // legacy: yaml-relative
+      ]
+      for (const absPath of candidates) {
+        const rel = path.relative(communityRoot, absPath)
+        if (rel.startsWith('..') || path.isAbsolute(rel)) continue
+        if (path.basename(absPath) === 'SKILL.md' && fs.existsSync(absPath)) {
+          return path.dirname(absPath)
+        }
+        // 声明 path 也可能直接写技能目录本身（目录型条目的另一种写法）
+        if (fs.existsSync(path.join(absPath, 'SKILL.md'))) return absPath
+      }
+    }
+    return null
   }
 
   /** 读 avatars/<id>/skills/.config.json 的 disabledSkills 列表 */

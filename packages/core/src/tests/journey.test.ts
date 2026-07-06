@@ -463,7 +463,7 @@ describe('完整用户旅程集成测试', () => {
     log('ok', `systemPrompt 已输出至: ${outputPath}`)
   })
 
-  // ─── Step 6: 知识检索（模拟工具调用前的 RAG 查询）────────────────────────
+  // ─── Step 6: 知识检索（模拟工具查询）────────────────────────────────────
 
   it('Step 6 - 知识检索（KnowledgeRetriever）', () => {
     log('step', 'Step 6: 知识检索')

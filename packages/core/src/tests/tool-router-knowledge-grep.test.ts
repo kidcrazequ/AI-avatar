@@ -59,6 +59,24 @@ test('knowledge_grep 命中分身 knowledge/ 下 .md 文件', async () => {
   }
 })
 
+// A1 溯源闭集：grep 命中必须携带行级来源锚点，否则 grep 检索到的内容
+// 无法进入"本轮已下发 anchor 集合"，回答引用它会被 verifier 误报集合外违规。
+test('knowledge_grep 命中条目携带行级 [来源: ...] 锚点（A1 溯源闭集）', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  try {
+    fs.writeFileSync(path.join(knowledgePath, 'a.md'), '第一行\n上海电价峰谷价差 0.83 元/kWh', 'utf-8')
+
+    const r = await router.execute(AVATAR_ID, { name: 'knowledge_grep', arguments: { pattern: '峰谷' } })
+    assert.equal(r.error, undefined, `不应有错误: ${r.error ?? ''}`)
+    const out = parseJsonContent<{ matches: Array<{ file: string; line: number; anchor?: string }> }>(r.content)
+    assert.equal(out.matches.length, 1)
+    assert.equal(out.matches[0].anchor, '[来源: knowledge/a.md#L2]')
+  } finally {
+    cleanup()
+  }
+})
+
 test('knowledge_grep 跳过二进制文件（仅扫 .md/.txt/.json/.yaml）', async () => {
   const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
   const router = new ToolRouter(avatarsPath)

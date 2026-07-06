@@ -239,7 +239,7 @@ export function splitIntoChapters(text: string): Chapter[] {
  *   - LLM 要么反复尝试输出超长 markdown table 撑爆 max_tokens
  *   - 要么服务端慢吐几十分钟直到客户端超时 / 服务端 terminate
  *   - 即使成功也经常把 `□OK □NG` 这种 checkbox 扔掉
- * 这类章节直接跳过 LLM，保留原文按 markdown 代码块输出（RAG 上 BM25
+ * 这类章节直接跳过 LLM，保留原文按 markdown 代码块输出（知识检索上 BM25
  * 完整命中，向量检索也覆盖，不影响召回质量）。
  *
  * 判定规则：

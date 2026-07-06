@@ -419,24 +419,50 @@ export class CommunitySkillManager {
       return skills
     }
 
-    const files = fs.readdirSync(sourceDir).filter(f => f.endsWith('.md'))
-    for (const file of files) {
-      const skillName = file.replace(/\.md$/, '')
+    const entries = fs.readdirSync(sourceDir, { withFileTypes: true })
+
+    // 单文件技能：skills/*.md
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+      const skillName = entry.name.replace(/\.md$/, '')
       if (source.skills && source.skills.length > 0 && !source.skills.includes(skillName)) {
         continue
       }
-      const srcFile = path.join(sourceDir, file)
-      const destFile = path.join(destDir, 'skills', file)
+      const srcFile = path.join(sourceDir, entry.name)
+      const destFile = path.join(destDir, 'skills', entry.name)
       fs.copyFileSync(srcFile, destFile)
       skills.push(this.extractSkillInfo(destFile))
+    }
+
+    // B1 目录型技能（agentskills.io 标准）：含 SKILL.md 的子目录整目录零转换拷入
+    // （SKILL.md + references/ 等），按一个技能列出：name=目录名，frontmatter 从 SKILL.md 读
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const skillName = entry.name
+      if (!fs.existsSync(path.join(sourceDir, skillName, 'SKILL.md'))) continue
+      if (source.skills && source.skills.length > 0 && !source.skills.includes(skillName)) {
+        continue
+      }
+      const destSkillDir = path.join(destDir, 'skills', skillName)
+      // 第三方仓库不可信：.git 与 symlink 一律不落盘（与 skills-sh-manager.copyDir 同口径，
+      // symlink 可指向宿主任意文件，落盘即逃逸）
+      fs.cpSync(path.join(sourceDir, skillName), destSkillDir, {
+        recursive: true,
+        filter: (src) => path.basename(src) !== '.git' && !fs.lstatSync(src).isSymbolicLink(),
+      })
+      skills.push(this.extractSkillInfo(path.join(destSkillDir, 'SKILL.md'), skillName))
     }
 
     return skills
   }
 
-  private extractSkillInfo(filePath: string): CommunitySkillInfo {
+  /**
+   * 提取技能信息。dirSkillName 非空表示目录型技能（<name>/SKILL.md）：
+   * name 用目录名而非文件名（否则全叫 SKILL），file 记 <name>/SKILL.md 相对路径。
+   */
+  private extractSkillInfo(filePath: string, dirSkillName?: string): CommunitySkillInfo {
     const content = fs.readFileSync(filePath, 'utf-8')
-    const name = path.basename(filePath, '.md')
+    const name = dirSkillName ?? path.basename(filePath, '.md')
     const fm = extractFrontmatter(content)
     let description = fm.description || ''
     const domain = fm.domain || ''
@@ -446,7 +472,8 @@ export class CommunitySkillManager {
       description = firstLine?.trim().slice(0, 80) || name
     }
 
-    return { name, file: path.basename(filePath), description, domain }
+    const file = dirSkillName ? `${dirSkillName}/SKILL.md` : path.basename(filePath)
+    return { name, file, description, domain }
   }
 
   private findSkillFile(packName: string, skillName: string): string | null {

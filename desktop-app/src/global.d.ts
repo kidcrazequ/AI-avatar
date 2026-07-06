@@ -1382,6 +1382,14 @@ interface ElectronAPI {
   createSkill: (avatarId: string, skillId: string, content: string) => Promise<Skill>
   deleteSkill: (avatarId: string, skillId: string) => Promise<void>
   generateSkillDraft: (description: string) => Promise<{ draft: string; suggestedId: string }>
+  // 工作流技能沉淀（对话 → 草稿 → 晋升；草稿区与 skills/ 隔离，晋升是显式动作）
+  distillWorkflowSkillDraft: (input: { avatarId: string; conversationId: string; title?: string }) => Promise<{
+    draft: { suggestedId: string; filename: string; title: string; content: string }
+  }>
+  listSkillDrafts: (avatarId: string) => Promise<Array<{ filename: string; title: string; createdAt: number; content: string }>>
+  /** errors 非空 = 校验失败未晋升（技能文件与 index 均未写入） */
+  promoteSkillDraft: (input: { avatarId: string; filename: string; skillId?: string }) => Promise<{ skillPath: string; indexUpdated: boolean; errors: string[] }>
+  deleteSkillDraft: (input: { avatarId: string; filename: string }) => Promise<void>
   /** 列出 shared/skills/*.md，标注是否已在当前分身 skill-index.yaml 中引用 */
   getAvailableSharedSkills: (avatarId: string) => Promise<Array<{
     name: string

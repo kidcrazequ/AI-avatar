@@ -535,6 +535,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createSkill: (avatarId: string, skillId: string, content: string) => ipcRenderer.invoke('create-skill', avatarId, skillId, content),
   deleteSkill: (avatarId: string, skillId: string) => ipcRenderer.invoke('delete-skill', avatarId, skillId),
   generateSkillDraft: (description: string) => ipcRenderer.invoke('generate-skill-draft', description),
+  // 工作流技能沉淀（对话 → 草稿 → 晋升）
+  distillWorkflowSkillDraft: (input: { avatarId: string; conversationId: string; title?: string }) =>
+    ipcRenderer.invoke('skill-draft:distill', input),
+  listSkillDrafts: (avatarId: string) => ipcRenderer.invoke('skill-draft:list', avatarId),
+  promoteSkillDraft: (input: { avatarId: string; filename: string; skillId?: string }) =>
+    ipcRenderer.invoke('skill-draft:promote', input),
+  deleteSkillDraft: (input: { avatarId: string; filename: string }) =>
+    ipcRenderer.invoke('skill-draft:delete', input),
   // 公共技能浏览 + 一键启用（shared/skills/*.md ↔ skill-index.yaml）
   getAvailableSharedSkills: (avatarId: string) => ipcRenderer.invoke('get-available-shared-skills', avatarId),
   toggleSharedSkill: (avatarId: string, skillName: string, enable: boolean) => ipcRenderer.invoke('toggle-shared-skill', avatarId, skillName, enable),

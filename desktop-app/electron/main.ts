@@ -4502,6 +4502,144 @@ wrapHandler('generate-skill-draft', async (_, description: string) => {
   return { draft, suggestedId }
 })
 
+// ─── 工作流技能沉淀（对话 → 草稿 → 晋升，一键工作流）──────────────────────────
+// 草稿区协议（skill-draft.ts 设计红线）：drafts/skills/ 与 skills/ 严格隔离，
+// 蒸馏只落草稿、绝不启用技能、绝不改 skill-index.yaml；晋升是显式动作且写前
+// 按 validate-skills 同款规则校验。
+
+const workflowSkillDraftRoot = (avatarId: string): string =>
+  path.join(avatarsPath, avatarId, 'drafts', 'skills')
+
+wrapHandler('skill-draft:distill', async (_, input: { avatarId: string; conversationId: string; title?: string }) => {
+  assertSafeSegment(input.avatarId, '分身ID')
+  // conversationId 会原样进草稿 frontmatter 与日志——拦掉换行/空字符，防 log injection 与 frontmatter 截断
+  if (typeof input.conversationId !== 'string' || !input.conversationId.trim() || /[\r\n\0]/.test(input.conversationId)) {
+    throw new Error('conversationId 非法')
+  }
+  // 跨分身防护（IDOR）：会话必须真的属于该分身，否则可把其他分身的私密对话蒸进本分身技能
+  const owner = getMemoryReviewStore().conversationAvatarId(input.conversationId)
+  if (owner !== input.avatarId) {
+    throw new Error(`会话不属于该分身，拒绝沉淀（conv=${input.conversationId}）`)
+  }
+  const transcript = getMemoryReviewStore().getTranscriptSince(
+    input.conversationId, 0, AgentRuntime.WORKFLOW_DISTILL_MAX_MESSAGES,
+  )
+  if (transcript.length === 0) {
+    throw new Error('会话还没有可沉淀的对话内容')
+  }
+  const apiKey = getDb().getSetting('chat_api_key') ?? ''
+  const baseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  if (!apiKey) {
+    throw new Error('未配置 chat_api_key，请先在设置里填入 LLM API Key')
+  }
+  const callLLM = createLLMFn(apiKey, baseUrl, chatModel)
+  const { system, user } = AgentRuntime.buildWorkflowDistillPrompt(
+    transcript.map(m => ({ role: m.role, content: m.content })),
+    { title: input.title },
+  )
+  const responseText = await callLLM(system, user, 8192)
+  const parsed = AgentRuntime.parseWorkflowDistillResponse(responseText)
+  if (!parsed.ok || !parsed.skill) {
+    // fail-loud：结构不合格不落盘，把问题原样报给用户（重试即重新蒸馏）
+    throw new Error(`蒸馏输出不合格，未生成草稿：${parsed.errors.join('；')}`)
+  }
+  const draftFile = AgentRuntime.buildWorkflowSkillDraftFile({
+    avatarId: input.avatarId,
+    conversationId: input.conversationId,
+    skill: parsed.skill,
+  })
+  assertSafeSegment(draftFile.filename, '技能草稿文件名')
+  const draftRoot = workflowSkillDraftRoot(input.avatarId)
+  fs.mkdirSync(draftRoot, { recursive: true })
+  const absPath = resolveUnderRoot(draftRoot, draftFile.filename)
+  fs.writeFileSync(absPath, draftFile.content, 'utf-8')
+  if (logger) logger.logEvent('info', 'workflow-skill-distill', `avatar=${input.avatarId} conv=${input.conversationId} file=${draftFile.filename} placeholders=${parsed.skill.placeholderCount}`)
+  // 不回传绝对路径（最小暴露）：渲染层只需要 filename 定位草稿
+  return {
+    draft: {
+      suggestedId: draftFile.suggestedId,
+      filename: draftFile.filename,
+      title: draftFile.title,
+      content: draftFile.content,
+    },
+  }
+})
+
+// list 每次全文读入的同步 fs 上限：草稿由用户手动蒸馏产生，正常远小于此；
+// 超限只读最新 N 份的正文（其余仅元数据），防长期积攒后线性阻塞主进程
+const SKILL_DRAFT_LIST_CONTENT_CAP = 100
+
+wrapHandler('skill-draft:list', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  const draftRoot = workflowSkillDraftRoot(avatarId)
+  if (!fs.existsSync(draftRoot)) return []
+  const metas = fs.readdirSync(draftRoot)
+    .filter(f => f.endsWith('.md'))
+    .map(filename => {
+      const abs = resolveUnderRoot(draftRoot, filename)
+      return { filename, abs, createdAt: fs.statSync(abs).mtimeMs }
+    })
+    .sort((a, b) => b.createdAt - a.createdAt)
+  if (metas.length > SKILL_DRAFT_LIST_CONTENT_CAP && logger) {
+    logger.logEvent('warn', 'skill-draft-list-capped', `avatar=${avatarId} drafts=${metas.length} 仅前 ${SKILL_DRAFT_LIST_CONTENT_CAP} 份带正文`)
+  }
+  return metas.map((m, i) => {
+    const content = i < SKILL_DRAFT_LIST_CONTENT_CAP ? fs.readFileSync(m.abs, 'utf-8') : ''
+    const titleMatch = content.match(/^#\s+(.+)$/m)
+    return {
+      filename: m.filename,
+      title: titleMatch ? titleMatch[1].trim() : m.filename.replace(/\.md$/, ''),
+      createdAt: m.createdAt,
+      content,
+    }
+  })
+})
+
+wrapHandler('skill-draft:promote', (_, input: { avatarId: string; filename: string; skillId?: string }) => {
+  assertSafeSegment(input.avatarId, '分身ID')
+  assertSafeSegment(input.filename, '草稿文件名')
+  const draftPath = resolveUnderRoot(workflowSkillDraftRoot(input.avatarId), input.filename)
+  if (!fs.existsSync(draftPath)) {
+    throw new Error(`草稿不存在: ${input.filename}`)
+  }
+  const draftContent = fs.readFileSync(draftPath, 'utf-8')
+  // 同名冲突拦截范围 = local + shared（community 经 shared 引用间接覆盖）
+  const existingSkillIds = [
+    ...skillManager.getSkills(input.avatarId).map(s => s.id),
+    ...skillManager.getAvailableSharedSkills(input.avatarId).map(s => s.name),
+  ]
+  const res = AgentRuntime.validateWorkflowSkillPromotion({
+    skillId: input.skillId,
+    draftContent,
+    existingSkillIds,
+  })
+  if (res.errors.length > 0 || !res.skillId || !res.skillMarkdown) {
+    return { skillPath: '', indexUpdated: false, errors: res.errors }
+  }
+  const created = skillManager.createSkill(input.avatarId, res.skillId, res.skillMarkdown)
+  let indexUpdated = false
+  try {
+    indexUpdated = skillManager.addLocalSkillToIndex(input.avatarId, res.skillId, { description: res.description })
+  } catch (err) {
+    // 补偿：index 写入失败时回滚刚落盘的技能文件，避免"文件已存在但 index 未收录"
+    // 的孤儿态（重试同 ID 会被 createSkill 的已存在检查挡住，用户无法自愈）
+    try { fs.unlinkSync(created.filePath) } catch { /* 回滚失败保留现场，原错误照抛 */ }
+    throw err
+  }
+  fs.unlinkSync(draftPath)
+  if (logger) logger.logEvent('info', 'workflow-skill-promote', `avatar=${input.avatarId} skill=${res.skillId} indexUpdated=${indexUpdated} draft=${input.filename}`)
+  return { skillPath: created.filePath, indexUpdated, errors: [] }
+})
+
+wrapHandler('skill-draft:delete', (_, input: { avatarId: string; filename: string }) => {
+  assertSafeSegment(input.avatarId, '分身ID')
+  assertSafeSegment(input.filename, '草稿文件名')
+  const draftPath = resolveUnderRoot(workflowSkillDraftRoot(input.avatarId), input.filename)
+  if (fs.existsSync(draftPath)) fs.unlinkSync(draftPath)
+  if (logger) logger.logEvent('info', 'workflow-skill-draft-delete', `avatar=${input.avatarId} file=${input.filename}`)
+})
+
 // ─── 社区技能管理 ─────────────────────────────────────────────────────────────
 wrapHandler('community:list-sources', () => {
   return communitySkillManager.listSources()

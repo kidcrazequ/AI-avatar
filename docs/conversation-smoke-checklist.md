@@ -14,10 +14,10 @@ npm run test:conversation-smoke
 
 - 输出 `[conversation-route-smoke] PASS`
 - 典型问题会被分流到预期策略：
-  - `no-rag`
+  - `skip-tools`
   - `cache-only`
   - `excel-first`
-  - `full-rag`
+  - `knowledge-tools`
 - 输出 JSON 摘要中，能看到：
   - `contextStrategy`
   - `toolProfile`
@@ -53,8 +53,8 @@ npm run test:qa-gate
 
 确认：
 
-- 不应走重 RAG
-- `contextStrategy` 应趋向 `no-rag`
+- 不应走重工具检索
+- `contextStrategy` 应趋向 `skip-tools`
 
 ### 场景 2：图表追问
 
@@ -72,7 +72,7 @@ npm run test:qa-gate
 确认：
 
 - 优先命中 `excel-first`
-- 不要先走一大圈泛化 RAG
+- 不要先走一大圈泛化知识检索
 
 ### 场景 4：跨文件综合问题
 
@@ -80,8 +80,8 @@ npm run test:qa-gate
 
 确认：
 
-- 命中 `full-rag`
-- 不要误走 `no-rag`
+- 命中 `knowledge-tools`
+- 不要误走 `skip-tools`
 
 ### 场景 5：长历史对话
 

@@ -57,3 +57,34 @@ shared_skills:
       - （数据须来自用户提供或 knowledge）
     when: 多数字制图且已取证（先 load_skill）
     priority: 2
+
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    source: shared
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1

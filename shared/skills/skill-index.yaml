@@ -33,6 +33,68 @@ version: "1.0"
 
 skills:
   # ═══════════════════════════════════════
+  # 互联网内容获取
+  # ═══════════════════════════════════════
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 决策回溯
+  # ═══════════════════════════════════════
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 评估
+      - 变更点
+      - 评审
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    aliases: [为什么没做, 当时怎么定, 谁拍板, 决策历史]
+    handles_intents: [trace_decision]
+    provides: [decision_trace]
+    consumes: [knowledge_data, decision_records]
+    can_compose_with: [chart-from-knowledge, draw-mermaid]
+    priority: 1
+
+  # ═══════════════════════════════════════
   # 数据可视化
   # ═══════════════════════════════════════
   - name: draw-chart
@@ -70,6 +132,11 @@ skills:
       - 同比
       - 环比
     when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
+    aliases: [画图, 可视化, 走势图, 数据展示]
+    handles_intents: [visualize_data, compare_metrics, evaluate_performance]
+    provides: [data_chart, echarts.line, echarts.bar, echarts.pie, echarts.scatter, echarts.radar, echarts.heatmap]
+    consumes: [inline_data, metrics, categories]
+    can_compose_with: [chart-from-knowledge]
     priority: 1
 
   - name: chart-from-knowledge
@@ -83,6 +150,11 @@ skills:
       - Excel画图
       - 表格可视化
     when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
+    aliases: [知识库画图, 从表格画, 基于数据画]
+    handles_intents: [visualize_data, compare_metrics]
+    provides: [data_chart, echarts.line, echarts.bar, echarts.pie]
+    consumes: [knowledge_data, metrics, categories]
+    can_compose_with: [draw-chart]
     priority: 2
 
   # ═══════════════════════════════════════
@@ -120,6 +192,11 @@ skills:
       - 状态流转
       - 数据模型
     when: 用户需要结构化可视化（甘特图/流程图/时序图/思维导图/看板/状态机/ER图等），输出 mermaid 语法
+    aliases: [X 光透视, X光透视, 透视, 扒开看, 拆开看, 内部结构, 结构展开, 拓扑, 部件关系]
+    handles_intents: [expose_internal_relation, draw_structure, map_process, plan_timeline, annotate_with_metrics]
+    provides: [structure_diagram, mermaid.flowchart, mermaid.sequence, mermaid.gantt, mermaid.state, mermaid.er, mermaid.class, mermaid.mindmap]
+    consumes: [entities, relationships, timeline, states, metrics]
+    can_compose_with: [metric_lookup, draw-chart, chart-from-knowledge]
     priority: 1
 
   # ═══════════════════════════════════════

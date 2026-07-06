@@ -74,7 +74,7 @@
 
 ### 0.2 一个必须更正的文档陈述
 
-`desktop-app/CLAUDE.md` 写"知识检索 = BM25 pre-message + agentic 双轨"——**已过时**。`chatStore.ts:3952-3958` 显示 pre-message RAG 已在 Phase 1（2026-05-13）删除，`ragEnhanced=false`；检索**只剩** agentic 的 `search_knowledge` 工具路径（BM25+vector 在 tool-router 侧）。→ 建议同步更新 `CLAUDE.md` 与全局记忆 `soul-rag-architecture-direction`（那条把"去 pre-message RAG"记为 backlog，实际已落地）。
+`desktop-app/CLAUDE.md` 写"知识检索 = BM25 pre-message + agentic 双轨"——**已过时**。当前主聊天链路不做 pre-message 知识注入；检索**只剩** agentic 的 `search_knowledge` / `knowledge_grep` / `query_excel` 工具路径（BM25+vector 在 tool-router 侧）。→ 建议同步更新 `CLAUDE.md` 与全局记忆中的旧知识检索方向记录。
 
 ### 0.3 agent-runtime 治理层是"三分"的
 

@@ -355,6 +355,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMemoryStats: (avatarId: string) => ipcRenderer.invoke('get-memory-stats', avatarId),
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) =>
     ipcRenderer.invoke('consolidate-memory', avatarId, content, apiKey, baseUrl),
+  // A4：N 轮一次后台记忆复盘（回复送达后 fire-and-forget，未达轮数快速返回）
+  runMemoryReview: (avatarId: string, conversationId: string, apiKey: string, baseUrl: string) =>
+    ipcRenderer.invoke('run-memory-review', avatarId, conversationId, apiKey, baseUrl),
 
   // v17 Phase 2a：对话情景记忆
   extractConversationEpisode: (avatarId: string, conversationId: string, apiKey: string, baseUrl: string) =>
@@ -565,14 +568,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => { ipcRenderer.removeListener('skills-sh:install-progress', handler) }
   },
 
-  // RAG 检索阶段进度（用于 UI 显示 "正在检索…/正在分析关联组件…/正在拼装上下文…"），
-  // 避免长 LLM 调用时用户看到彩虹伞以为应用挂死。返回 unsubscribe 函数。
-  onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => {
-    const handler = (_: unknown, data: { avatarId: string; phase: string; detail?: string }) => callback(data)
-    ipcRenderer.on('rag-progress', handler)
-    return () => { ipcRenderer.removeListener('rag-progress', handler) }
-  },
-
   // 工具调用（GAP4）+ #7 trustTier（Proxy 走 proxy，灰名单主进程拒绝）
   executeToolCall: (
     avatarId: string,
@@ -590,11 +585,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) =>
     ipcRenderer.invoke('search-knowledge-chunks', avatarId, query, topN),
 
-  // 知识索引构建 + RAG 检索
+  // 知识索引构建
   buildKnowledgeIndex: (avatarId: string, apiKey: string, baseUrl: string) =>
     ipcRenderer.invoke('build-knowledge-index', avatarId, apiKey, baseUrl),
-  ragRetrieve: (avatarId: string, question: string, apiKey: string, baseUrl: string) =>
-    ipcRenderer.invoke('rag-retrieve', avatarId, question, apiKey, baseUrl),
 
   // 模板管理
   getTemplate: (templateName: string) => ipcRenderer.invoke('get-template', templateName),

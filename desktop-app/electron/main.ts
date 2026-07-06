@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, retrieveAndBuildPrompt, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, isGreyZoneSessionAllowed, rememberGreyZoneSessionAllow, clearGreyZoneSessionMemory, type GreyZoneSessionMemory, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, isGreyZoneSessionAllowed, rememberGreyZoneSessionAllow, clearGreyZoneSessionMemory, type GreyZoneSessionMemory, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -59,6 +59,9 @@ import { CommunitySkillManager } from './community-skill-manager'
 import { SkillsShManager } from './skills-sh-manager'
 import { registerSoulProxyIpcHandlers, startSoulProxyServer, stopSoulProxyServer } from './proxy-server'
 import { setConversationToolMode, getConversationToolMode } from './conversation-tool-mode-registry'
+import { MemoryReviewStore } from './db-memory-review'
+import { SessionSearchStore, runSessionSearchTool } from './db-session-search'
+import { runMemoryReviewOnce } from './memory-review'
 import { DoubaoAsrSession } from './asr-session'
 import {
   getPromptCacheStats,
@@ -160,6 +163,26 @@ function getEmbedStore(): EmbedStore {
     embedStore = new EmbedStore(getDb().getRawDb())
   }
   return embedStore
+}
+/**
+ * A4 记忆复盘游标存储（v22）。lazy 创建（依赖 db），与 ScheduleStore 同模式。
+ */
+let memoryReviewStore: MemoryReviewStore | null = null
+function getMemoryReviewStore(): MemoryReviewStore {
+  if (!memoryReviewStore) {
+    memoryReviewStore = new MemoryReviewStore(getDb().getRawDb())
+  }
+  return memoryReviewStore
+}
+/**
+ * A4 session_search 只读查询（复用 v3 messages_fts，零建索引成本）。
+ */
+let sessionSearchStore: SessionSearchStore | null = null
+function getSessionSearchStore(): SessionSearchStore {
+  if (!sessionSearchStore) {
+    sessionSearchStore = new SessionSearchStore(getDb().getRawDb())
+  }
+  return sessionSearchStore
 }
 /**
  * Web Embed widget HTTP 服务器单例（#15 Web Embed widget · 子任务 2）。
@@ -407,7 +430,7 @@ function resolveWorkspaceContext(
  */
 /** 含敏感参数（apiKey）的 channel，活动日志只记 avatarId、不记其余参数 */
 const SENSITIVE_CHANNELS = new Set([
-  'consolidate-memory', 'build-knowledge-index', 'rag-retrieve',
+  'consolidate-memory', 'build-knowledge-index',
   'compile-wiki', 'lint-knowledge', 'detect-evolution', 'enhance-knowledge-files',
 ])
 
@@ -3519,6 +3542,54 @@ wrapHandler('consolidate-memory', async (_, avatarId: string, content: string, a
 })
 
 /**
+ * run-memory-review（A4 · Hermes 借鉴）：N 轮一次的后台记忆复盘。
+ *
+ * chatStore 在回复送达后 fire-and-forget 调用（工程铁律：永不阻塞回复路径）。
+ * 未达 memory_review_turns（默认 10 用户轮）时快速返回不调 LLM；
+ * 模型可用 memory_review_model 路由便宜档，缺省回落 chat_model。
+ * 写入经 bounded-store 原子操作落盘（预算强制 + 遗忘留痕），
+ * 只落盘不触发 prompt 重载——冻结快照语义，下个 session 生效。
+ */
+wrapHandler('run-memory-review', async (
+  _,
+  avatarId: string,
+  conversationId: string,
+  apiKey: string,
+  baseUrl: string,
+): Promise<{ ok: boolean; reason?: string; applied?: number; rejected?: number; nothingToSave?: boolean }> => {
+  assertSafeSegment(avatarId, '分身ID')
+  assertSafeSegment(conversationId, 'conversationId')
+  const turnsRaw = parseInt(getDb().getSetting('memory_review_turns') ?? '', 10)
+  const reviewTurns = Number.isFinite(turnsRaw) && turnsRaw > 0 ? Math.min(100, turnsRaw) : 10
+  const model = getDb().getSetting('memory_review_model') || getDb().getSetting('chat_model') || 'deepseek-chat'
+  const callLLM = createLLMFn(apiKey, baseUrl, model)
+  return runMemoryReviewOnce({
+    avatarsPath,
+    avatarId,
+    conversationId,
+    reviewTurns,
+    store: getMemoryReviewStore(),
+    callLLM,
+    log: (level, event, message) => {
+      if (logger) logger.logEvent(level, event, message)
+    },
+    recordEvent: (payload) => {
+      if (!jsonlAppender) return
+      void jsonlAppender.appendMemoryUpdateEvent(conversationId, {
+        type: 'memory_update',
+        conversationId,
+        avatarId,
+        updateCount: payload.updateCount,
+        summaryPreview: payload.summaryPreview,
+        totalByteSize: payload.totalByteSize,
+        consolidated: false,
+        ts: Date.now(),
+      })
+    },
+  })
+})
+
+/**
  * v17 Phase 2a：对话情景记忆 IPC（extract / list / read / delete）。
  *
  * 抽取流程：拿 DB 里 user/assistant 消息（不含 tool）→ 调注入的 LLM 抽出 episode →
@@ -4599,6 +4670,20 @@ wrapHandler(
     }
   }
 
+  // ─── session_search（A4 · Hermes 借鉴）: 会话历史 FTS5 三模式检索 ────────
+  // 需要 DB 能力所以在 main.ts 直接处理（与 read_tool_result 同模式，不进 ToolRouter）。
+  // 只读 + 带 LIMIT 的毫秒级查询，零 LLM 成本；当前会话从 search 结果中排除。
+  if (name === 'session_search') {
+    try {
+      const content = runSessionSearchTool(getSessionSearchStore(), avatarId, conversationId, args)
+      return { content }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (logger) logger.logEvent('warn', 'session-search-failed', msg)
+      return { content: '', error: `session_search 执行失败: ${msg}` }
+    }
+  }
+
   // ─── read_tool_result: 读取 ToolResultSpool 落盘的工具结果文件 ──────────
   // spool 路径在 userData/tool-results/<conv>/<tool>-<ts>.txt，不在 workspace 下，
   // 用 read_lines 会被路径安全策略拒绝。本工具专门处理 spool 路径，仅允许 spool root 下。
@@ -5318,7 +5403,7 @@ wrapHandler('search-knowledge-chunks', (_, avatarId: string, query: string, topN
   return retriever.searchChunks(query, topN ?? 5)
 })
 
-// ─── 知识索引与 RAG 检索 ────────────────────────────────────────────────────
+// ─── 知识索引 ────────────────────────────────────────────────────────────────
 
 /**
  * build-knowledge-index: 为指定分身的知识库构建检索索引（上下文摘要 + 向量嵌入）。
@@ -5345,75 +5430,6 @@ wrapHandler('build-knowledge-index', async (_, avatarId: string, apiKey: string,
   toolRouter.invalidateRetriever(avatarId)
 
   return { contextCount: contexts.size, embeddingCount: embeddings.size }
-})
-
-/**
- * rag-retrieve: 对用户问题执行程序化 RAG（多跳检索 + 5 规则 prompt 构造）。
- * 返回增强后的 user 消息文本。
- */
-wrapHandler('rag-retrieve', async (_, avatarId: string, question: string, apiKey: string, baseUrl: string) => {
-  assertSafeSegment(avatarId, '分身ID')
-  const retriever = toolRouter.getRetriever(avatarId)
-
-  const callLLM = createLLMFn(apiKey, baseUrl, 'qwen-turbo')  // 实体提取用 turbo 即可，plus 单次 ~177s 太慢
-  const callEmbedding = createEmbeddingFn(apiKey, baseUrl)
-
-  // Phase 2: 可选注入 wiki/concepts/ 百科内容（设置开关控制，默认关闭）
-  let wikiChunks: Array<{ file: string; heading: string; content: string; score: number }> | undefined
-  try {
-    const wikiInject = getDb().getSetting('wiki_inject_rag')
-    if (wikiInject === 'true') {
-      const wikiConceptsPath = path.join(avatarsPath, avatarId, 'wiki', 'concepts')
-      if (fs.existsSync(wikiConceptsPath)) {
-        const wikiRetriever = new KnowledgeRetriever(wikiConceptsPath)
-        wikiChunks = wikiRetriever.searchChunks(question, 3)
-      }
-    }
-  } catch (wikiErr) {
-    // wiki 注入失败不影响正常 RAG
-    void wikiErr
-  }
-
-  // ─── Skill 路由（Layer 1 + Layer 2）──────────────────────────────
-  // 在 RAG 检索之前先用 grep 路由选 skill，把选中 skill 的完整 SKILL.md
-  // 注入到 RAG 结果里。LLM 一次性看到 RAG context + 技能指令，不需要
-  // 额外一轮 load_skill 工具调用，省一次 LLM 往返。
-  skillRouter.loadIndex(avatarId)
-  const routeResult = skillRouter.route(avatarId, question)
-
-  const onProgress = (phase: string, detail?: string): void => {
-    try {
-      mainWindow?.webContents.send('rag-progress', { avatarId, phase, detail })
-    } catch (sendErr) {
-      void sendErr
-    }
-  }
-
-  // Skill 路由命中时单独推一条事件，让前端 ToolCallTimeline 能展示「★ 加载技能 X」这一步。
-  // 注意：'skill-loaded' 不在 RAGProgressPhase 枚举里，是渲染端约定的伪 phase；
-  // 这里直接绕过 retrieveAndBuildPrompt 的 onProgress 类型限制，单独 send。
-  if (routeResult.selectedSkill) {
-    try {
-      mainWindow?.webContents.send('rag-progress', {
-        avatarId,
-        phase: 'skill-loaded',
-        detail: `加载技能：${routeResult.selectedSkill}`,
-      })
-    } catch (sendErr) {
-      void sendErr
-    }
-  }
-
-  let result = await retrieveAndBuildPrompt(retriever, question, { callLLM, callEmbedding, onProgress }, undefined, wikiChunks)
-
-  // 如果路由命中了 skill，把 SKILL.md 内容注入到 RAG 结果前面
-  // LLM 会看到 "技能指令 + RAG 参考 + 用户问题" 一次性完成，不需要 load_skill 工具
-  if (routeResult.skillContent) {
-    result = `[系统提示] 根据你的问题，自动加载了技能「${routeResult.selectedSkill}」的完整定义。\n请严格按照以下技能指令执行。\n\n---\n\n${routeResult.skillContent}\n\n---\n\n${result}`
-  }
-
-  toolRouter.saveRetrieverTokens(avatarId)
-  return result
 })
 
 // ─── 图表答案持久化 cache（chartConsistencyMode 同问同答） ───────────────────
@@ -5871,8 +5887,8 @@ async function batchImportFiles(
       const fmtMs = 0
 
       // 写入文件（与单文件导入一致：大文件标 rag_only，小文件直接进 system prompt）
-      const RAG_ONLY_THRESHOLD = 50_000  // 50KB 以上标 rag_only
-      const isLargeFile = finalBody.length > RAG_ONLY_THRESHOLD
+      const PROMPT_EXCLUDED_THRESHOLD = 50_000  // 50KB 以上不塞入 system prompt
+      const isLargeFile = finalBody.length > PROMPT_EXCLUDED_THRESHOLD
       const systemMeta: Record<string, unknown> = {}
       if (isLargeFile) systemMeta.prompt_excluded = true
       systemMeta.source = sourceTag

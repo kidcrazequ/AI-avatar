@@ -5,7 +5,7 @@ import { buildActivePath } from '@soul/core'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 
 /** 当前数据库 schema 版本，每次有结构变更时递增 */
-export const CURRENT_SCHEMA_VERSION = 21
+export const CURRENT_SCHEMA_VERSION = 22
 
 /** 提示词模板 */
 export interface PromptTemplate {
@@ -678,6 +678,20 @@ export class DatabaseManager {
       )
     `)
     this.db.exec(`CREATE INDEX IF NOT EXISTS idx_projects_avatar ON projects(avatar_id)`)
+
+    // v22 记忆复盘游标表（A4 · Hermes 借鉴）：每会话记录"复盘到哪条消息"，
+    // 后台复盘按 user 轮计数达到 memory_review_turns（默认 10）才触发。
+    // 只存游标不存正文——记忆正文在 memory/MEMORY.md、USER.md（文件系统）。
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_review_state (
+        conversation_id TEXT PRIMARY KEY,
+        avatar_id TEXT NOT NULL,
+        last_reviewed_message_created_at INTEGER NOT NULL DEFAULT 0,
+        reviewed_at INTEGER NOT NULL DEFAULT 0,
+        review_count INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      )
+    `)
   }
 
   /** 增量迁移：从 fromVersion 迁移到 CURRENT_SCHEMA_VERSION */
@@ -1206,6 +1220,27 @@ export class DatabaseManager {
           ) WHERE leaf_message_id IS NULL
         `)
         version = 21
+      })()
+    }
+
+    if (version < 22) {
+      // v21 → v22：新增 memory_review_state 表（A4 记忆系统改造 · Hermes 借鉴）。
+      // 每会话一行游标：last_reviewed_message_created_at 之后的 user 消息数
+      // 达到 memory_review_turns（默认 10）时，回复送达后异步触发一次记忆复盘。
+      // 纯新增表，零回填、零行为变化；session_search 复用既有 messages_fts（v3），
+      // 不在迁移里做任何 FTS 批量重建（工程铁律：不阻塞启动/IPC 关键路径）。
+      this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS memory_review_state (
+            conversation_id TEXT PRIMARY KEY,
+            avatar_id TEXT NOT NULL,
+            last_reviewed_message_created_at INTEGER NOT NULL DEFAULT 0,
+            reviewed_at INTEGER NOT NULL DEFAULT 0,
+            review_count INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+          )
+        `)
+        version = 22
       })()
     }
 

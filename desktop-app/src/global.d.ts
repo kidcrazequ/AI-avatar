@@ -1131,6 +1131,21 @@ interface ElectronAPI {
   consolidateMemory: (avatarId: string, content: string, apiKey: string, baseUrl: string) => Promise<string>
 
   /**
+   * A4（Hermes 借鉴）：触发一次 N 轮记忆后台复盘。
+   *
+   * 回复送达后由 chatStore fire-and-forget 调用；主进程判断距上次复盘的
+   * 用户轮数是否已达 memory_review_turns（默认 10），未达时快速返回不调 LLM。
+   * 复盘产出经有界 store 原子操作写 MEMORY.md / USER.md（预算强制 + 遗忘留痕），
+   * 只落盘不重载 prompt——冻结快照语义，下个 session 生效。
+   */
+  runMemoryReview: (
+    avatarId: string,
+    conversationId: string,
+    apiKey: string,
+    baseUrl: string,
+  ) => Promise<{ ok: boolean; reason?: string; applied?: number; rejected?: number; nothingToSave?: boolean }>
+
+  /**
    * v17 Phase 2a：触发一次对话情景记忆抽取。
    *
    * 主进程读 DB 拿 transcript，调注入的 LLM 生成 episode，写到
@@ -1408,9 +1423,6 @@ interface ElectronAPI {
   /** 订阅安装/更新进度（克隆/定位/复制/完成/错误），返回取消订阅函数 */
   onSkillsShInstallProgress: (callback: (p: SkillsShInstallProgress) => void) => (() => void)
 
-  // RAG 检索阶段进度
-  onRagProgress: (callback: (data: { avatarId: string; phase: string; detail?: string }) => void) => () => void
-
   // 工具调用（GAP4）+ #7 Permission
   executeToolCall: (
     avatarId: string,
@@ -1424,9 +1436,8 @@ interface ElectronAPI {
   // 知识检索（GAP1）
   searchKnowledgeChunks: (avatarId: string, query: string, topN?: number) => Promise<Array<{ file: string; heading: string; content: string; score: number }>>
 
-  // 知识索引构建 + RAG 检索
+  // 知识索引构建
   buildKnowledgeIndex: (avatarId: string, apiKey: string, baseUrl: string) => Promise<{ contextCount: number; embeddingCount: number }>
-  ragRetrieve: (avatarId: string, question: string, apiKey: string, baseUrl: string) => Promise<string>
 
   // 知识百科（Wiki 融合层）
   compileWiki: (avatarId: string, apiKey: string, baseUrl: string) => Promise<{ entityCount: number; conceptPageCount: number }>

@@ -11,7 +11,7 @@
 
 import type { LLMCallFn, EmbeddingCallFn } from '@soul/core'
 
-/** 索引构建/RAG 等后台 API 调用的超时时间（5 分钟） */
+/** 索引构建等后台 API 调用的超时时间（5 分钟） */
 export const BACKEND_API_TIMEOUT_MS = 300_000
 
 /**
@@ -81,7 +81,7 @@ export function createEmbeddingFn(apiKey: string, baseUrl: string): EmbeddingCal
 }
 
 /**
- * 创建 LLMCallFn 适配器，用于索引构建和 RAG 中的 LLM 调用。
+ * 创建 LLMCallFn 适配器，用于索引构建等后台 LLM 调用。
  *
  * @param apiKey  API 密钥
  * @param baseUrl API 基础 URL

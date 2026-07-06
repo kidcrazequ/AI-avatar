@@ -80,3 +80,13 @@ export {
   type CompressionAbTarget,
   type CompressionAbOptions,
 } from './compression-ab'
+export {
+  runSkillAbEval,
+  buildSkillAbTasks,
+  composeWithSkillPrompt,
+  violationPatternScorer,
+  expectedBehaviorScorer,
+  type SkillAbInput,
+  type SkillAbTarget,
+  type SkillAbOptions,
+} from './skill-ab'

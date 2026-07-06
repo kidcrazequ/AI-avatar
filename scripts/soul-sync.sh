@@ -138,10 +138,20 @@ sync_source() {
             for scan_f in "$scan_src_dir"/*.md; do
                 [[ -f "$scan_f" ]] && scan_files+=("$scan_f")
             done
+            # B1 目录型技能（SKILL.md 标准）：整个技能目录交给扫描器
+            # （soul-scan.py 对目录递归收 *.md，覆盖 SKILL.md + references/**）
+            local scan_d
+            for scan_d in "$scan_src_dir"/*/; do
+                [[ -f "${scan_d}SKILL.md" ]] && scan_files+=("${scan_d%/}")
+            done
         else
             local scan_name
             for scan_name in $scan_skill_list; do
-                [[ -f "$scan_src_dir/${scan_name}.md" ]] && scan_files+=("$scan_src_dir/${scan_name}.md")
+                if [[ -f "$scan_src_dir/${scan_name}.md" ]]; then
+                    scan_files+=("$scan_src_dir/${scan_name}.md")
+                elif [[ -f "$scan_src_dir/${scan_name}/SKILL.md" ]]; then
+                    scan_files+=("$scan_src_dir/${scan_name}")
+                fi
             done
         fi
     fi
@@ -194,9 +204,19 @@ sync_source() {
             # 全部安装
             mkdir -p "$target_dir/skills"
             cp "$src_dir"/*.md "$target_dir/skills/" 2>/dev/null || true
-            local count
+            # B1 零转换安装目录型技能：含 SKILL.md 的子目录整目录拷入
+            # （anthropics/skills 一目录一技能形态，不做任何格式转换）
+            local dir_skill
+            for dir_skill in "$src_dir"/*/; do
+                [[ -f "${dir_skill}SKILL.md" ]] || continue
+                cp -R "${dir_skill%/}" "$target_dir/skills/"
+            done
+            local count dir_count
             count=$(ls "$target_dir/skills/"*.md 2>/dev/null | wc -l | tr -d ' ')
-            log_ok "  安装 $count 个技能（全部）"
+            dir_count=$(ls "$target_dir/skills/"*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+            # 注：${dir_count} 必须带花括号——macOS bash 3.2 对 $var 紧跟全角字符会把
+            # 多字节字符误并进变量名（unbound variable）
+            log_ok "  安装 $((count + dir_count)) 个技能（全部，其中目录型 ${dir_count}）"
         else
             # 选择性安装
             mkdir -p "$target_dir/skills"
@@ -206,8 +226,12 @@ sync_source() {
                 if [[ -f "$skill_file" ]]; then
                     cp "$skill_file" "$target_dir/skills/"
                     installed=$((installed + 1))
+                elif [[ -f "$src_dir/${skill_name}/SKILL.md" ]]; then
+                    # B1 零转换安装目录型技能
+                    cp -R "$src_dir/${skill_name}" "$target_dir/skills/"
+                    installed=$((installed + 1))
                 else
-                    log_warn "  技能文件不存在: ${skill_name}.md"
+                    log_warn "  技能文件不存在: ${skill_name}.md（也无 ${skill_name}/SKILL.md）"
                 fi
             done
             log_ok "  安装 $installed 个技能（选择性）"
@@ -219,9 +243,9 @@ sync_source() {
         cp "$clone_dir/skill-manifest.yaml" "$target_dir/"
     fi
 
-    # 校验技能文件格式
+    # 校验技能文件格式（单文件 .md + 目录型 */SKILL.md）
     local valid=0 invalid=0
-    for md_file in "$target_dir/skills/"*.md; do
+    for md_file in "$target_dir/skills/"*.md "$target_dir/skills/"*/SKILL.md; do
         [[ -f "$md_file" ]] || continue
         if head -1 "$md_file" | grep -q "^---$"; then
             valid=$((valid + 1))
@@ -276,7 +300,7 @@ show_status() {
     for pkg_dir in "$COMMUNITY_DIR"/*/; do
         [[ -d "$pkg_dir/skills" ]] || continue
         local count
-        count=$(ls "$pkg_dir/skills/"*.md 2>/dev/null | wc -l | tr -d ' ')
+        count=$(ls "$pkg_dir/skills/"*.md "$pkg_dir/skills/"*/SKILL.md 2>/dev/null | wc -l | tr -d ' ')
         total_skills=$((total_skills + count))
     done
     log_info "共安装 $total_skills 个社区技能"

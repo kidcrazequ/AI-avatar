@@ -34,6 +34,16 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
+// 渲染层漏网异常兜底（2026-07-06）：未 await 的异步链路（如发送消息）抛错时
+// 只会变成 unhandled rejection，用户看到"点了没反应"。写进活动日志便于事后定位。
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason
+  window.electronAPI?.logEvent?.('error', 'renderer-unhandled-rejection', r instanceof Error ? `${r.message}\n${r.stack ?? ''}` : String(r))
+})
+window.addEventListener('error', (e) => {
+  window.electronAPI?.logEvent?.('error', 'renderer-uncaught-error', `${e.message} @ ${e.filename}:${e.lineno}`)
+})
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>

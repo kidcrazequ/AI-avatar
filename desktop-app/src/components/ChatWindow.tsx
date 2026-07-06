@@ -446,6 +446,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
   ) => {
+    // 发送链路观测点 #2：MessageInput.onSend 是否到达 ChatWindow
+    window.electronAPI.logEvent('info', 'ui-handle-send-message', `contentLen=${content.length} conv=${conversationId}`)
     if (content.trim() === '/test-self') {
       await handleTestSelf()
       return

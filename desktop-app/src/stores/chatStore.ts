@@ -3357,8 +3357,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     //   - 不清 toolCallTimeline（outer 的工具时间线对用户仍可见）
     // 配合 line ~3076 的 isHiddenRepair 后续守卫，整轮对 isLoading / 视图 transient 状态零影响。
     const _hiddenRepairEarly = options?.hiddenRepair === true
+    // 发送链路观测点 #3：store.sendMessage 是否到达（在任何守卫之前）
+    window.electronAPI.logEvent('info', 'store-sendmessage-entry', `conv=${conversationId} contentLen=${content.length} hiddenRepair=${_hiddenRepairEarly}`)
     const earlyBoundaryGuardrail = _hiddenRepairEarly ? undefined : normalizeIntentLocal(content).guardrail
     if (get().isLoading && !_hiddenRepairEarly) {
+      window.electronAPI.logEvent('warn', 'store-sendmessage-blocked', 'isLoading=true，本次发送被静默丢弃')
       await invokeProxyComplete({ ok: false, error: 'Soul 正有一条对话进行中（isLoading）' })
       return
     }

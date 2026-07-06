@@ -594,6 +594,13 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   }, [addImageFile, addDocumentFile])
 
   const handleSend = () => {
+    // 发送链路观测点 #1（2026-07-06）：三次"发送无任何反应"事故后加的入口埋点。
+    // 发送失败时活动日志可精确定位死在哪一跳，勿删。
+    window.electronAPI.logEvent(
+      'info',
+      'ui-send-attempt',
+      `inputLen=${input.length} disabled=${disabled} pendingRef=${pendingReferenceCount} pendingAtt=${pendingAttachmentCount} imgs=${pendingImages.length} docs=${pendingDocs.length}`,
+    )
     if ((!input.trim() && pendingImages.length === 0 && pendingDocs.length === 0) || disabled) return
     // 异步 @ 引用解析中：直接发送会让引用 chip 加入前消息已经飞出去 → 引用丢失。
     // 等 setPendingReferenceCount 回到 0（解析完成或失败回退）再让用户发送。
@@ -1105,6 +1112,8 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      // 发送链路观测点 #0：回车是否到达 + 是否处于输入法合成中
+      window.electronAPI.logEvent('info', 'ui-enter-send', `composing=${e.nativeEvent.isComposing}`)
       handleSend()
     }
   }

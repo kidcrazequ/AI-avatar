@@ -149,6 +149,10 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // v17 事件 viewer：调试 JSONL 事件流（记忆/模型/模式/子分身派发的真相）
   const [eventViewerOpen, setEventViewerOpen] = useState(false)
+  // 工作流技能沉淀（入口 1）：标题输入面板开关 + 防重复点击的 loading 锁
+  const [distillOpen, setDistillOpen] = useState(false)
+  const [distillTitle, setDistillTitle] = useState('')
+  const [isDistilling, setIsDistilling] = useState(false)
   const conversationIdRef = useRef(conversationId)
   // eslint-disable-next-line react-hooks/refs -- 让事件回调（emit 给 main 的 async path）能拿到最新 conversationId，render-期同步写比 effect 同步更新及时（effect 写会让 event 期间读到旧值）
   conversationIdRef.current = conversationId
@@ -545,6 +549,34 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     }
   }, [avatarId, showToast])
 
+  /**
+   * 入口 1·对话沉淀：把当前会话的工作流程蒸馏为一键工作流技能草稿。
+   * 蒸馏是 LLM 调用（秒级到十秒级），isDistilling 期间按钮禁用防重复点击；
+   * 成功后引导用户去「技能面板 → 草稿」tab 评审晋升（入口 2）。
+   */
+  const handleDistillWorkflowSkill = useCallback(async () => {
+    if (isDistilling) return
+    setIsDistilling(true)
+    try {
+      const title = distillTitle.trim()
+      await window.electronAPI.distillWorkflowSkillDraft({
+        avatarId,
+        conversationId,
+        ...(title ? { title } : {}),
+      })
+      showToast?.('草稿已生成，到技能面板·草稿页确认', 'success')
+      setDistillOpen(false)
+      setDistillTitle('')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      window.electronAPI.logEvent('error', 'distill-workflow-skill', msg)
+      // 面板保持打开，用户可直接重试（标题也保留）
+      showToast?.(`沉淀失败：${msg}`, 'error')
+    } finally {
+      setIsDistilling(false)
+    }
+  }, [avatarId, conversationId, distillTitle, isDistilling, showToast])
+
   if (!isInitialized || initializedConversationId !== conversationId) {
     return (
       <div className="flex items-center justify-center h-full bg-px-bg">
@@ -634,6 +666,20 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
             {exportStatus.msg}
           </span>
         )}
+        {/* 入口 1·对话沉淀：把本会话工作流程蒸馏为一键工作流技能草稿 */}
+        <button
+          onClick={() => setDistillOpen(o => !o)}
+          disabled={messages.length === 0}
+          title={messages.length === 0
+            ? '当前会话还没有消息，无法沉淀工作流技能'
+            : '把本次对话的工作流程沉淀为一键工作流技能草稿（生成后到技能面板·草稿页确认）'}
+          className="font-game text-[11px] text-px-text-dim hover:text-px-primary px-2 py-0.5
+            border border-transparent hover:border-px-primary/50 transition-none
+            disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-px-text-dim"
+          aria-label="沉淀为工作流技能"
+        >
+          ◆ 沉淀技能
+        </button>
         {/* v17 事件 viewer：查看会话 JSONL 事件流（调试用） */}
         <button
           onClick={() => setEventViewerOpen(true)}
@@ -670,6 +716,42 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           </button>
         ))}
       </div>
+
+      {/* 入口 1·沉淀面板：可选标题输入 + 生成草稿（蒸馏中禁用所有操作防重复提交） */}
+      {distillOpen && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-px-border-dim bg-px-elevated">
+          <span className="font-game text-[11px] text-px-text-dim tracking-wider flex-shrink-0">
+            沉淀为工作流技能
+          </span>
+          <input
+            type="text"
+            value={distillTitle}
+            onChange={(e) => setDistillTitle(e.target.value)}
+            onKeyDown={(e) => {
+              // IME 拼写中（中文标题）按 Enter 是确认候选词，不是提交
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) void handleDistillWorkflowSkill()
+            }}
+            placeholder="技能标题（可选，留空自动生成）"
+            disabled={isDistilling}
+            className="pixel-input flex-1 text-[12px] disabled:opacity-40"
+            aria-label="工作流技能标题"
+          />
+          <button
+            onClick={() => void handleDistillWorkflowSkill()}
+            disabled={isDistilling}
+            className="pixel-btn-primary text-[11px] px-3 py-1"
+          >
+            {isDistilling ? '沉淀中...' : '生成草稿'}
+          </button>
+          <button
+            onClick={() => { setDistillOpen(false); setDistillTitle('') }}
+            disabled={isDistilling}
+            className="pixel-btn-outline-muted text-[11px] px-3 py-1"
+          >
+            取消
+          </button>
+        </div>
+      )}
 
       {/* 消息列表 */}
       <div className="flex-1 min-h-0 overflow-hidden">

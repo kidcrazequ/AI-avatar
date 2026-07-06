@@ -25,6 +25,7 @@ import {
   isAttachmentExtensionAllowed,
 } from '@soul/core/browser'
 import type { AttachmentRef } from '../stores/chatStore'
+import { buildSkillRunPrompt } from '../stores/skill-run-prompt'
 import SlashCommandPalette, { SlashCommandItem } from './SlashCommandPalette'
 import ContextReferencePalette, { ContextNamespace, ContextEntry } from './ContextReferencePalette'
 import { AVAILABLE_NAMESPACES, listEntries, resolveEntryContent } from '../services/context-resolver'
@@ -726,6 +727,33 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
   }, [input])
 
   /**
+   * 「运行」动作（工作流技能·入口 3）：不插入 `/名字 `，而是直接以固定模板
+   * 发送执行指令。发送仍走 onSend（→ ChatWindow.handleSendMessage →
+   * chatStore.sendMessage 现有链路），不新造发送通道。
+   *
+   * 注意：运行消息独立发送，不携带输入框里已挂的附件/引用 chip（它们留给
+   * 用户的下一条消息）；输入框中触发面板的 `/xxx` 片段会被清掉，其余文本保留。
+   */
+  const handleSlashRun = useCallback((item: SlashCommandItem) => {
+    if (disabled) return
+    // 引用/附件解析在途时与 handleSend 同规则：拒绝发送，避免消息先飞出去
+    if (pendingReferenceCount > 0 || pendingAttachmentCount > 0) {
+      showHint('info', '引用/附件处理中，请稍候再运行技能…')
+      return
+    }
+    if (slashStartRef.current >= 0) {
+      const ta = textareaRef.current
+      const cursor = ta?.selectionStart ?? input.length
+      const before = input.slice(0, slashStartRef.current)
+      const after = input.slice(cursor)
+      setInput(before + after)
+    }
+    setSlashOpen(false)
+    slashStartRef.current = -1
+    onSend(buildSkillRunPrompt(item.name))
+  }, [disabled, input, onSend, pendingAttachmentCount, pendingReferenceCount, showHint])
+
+  /**
    * @ 引用 entries 加载请求序号——防止快速输入时旧 query 晚返回覆盖新候选。
    * 仿 GlobalSearchPalette 的 searchSeqRef 模式：每次发起请求 +1，返回时只接受
    * 序号 = 当前序号 的结果。
@@ -1047,6 +1075,13 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
         setSlashIndex(i => Math.max(i - 1, 0))
         return
       }
+      if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
+        // ⌘Enter / Ctrl+Enter：直接运行高亮技能（入口 3 的键盘快捷路径）
+        e.preventDefault()
+        const target = filteredSkills[slashIndex]
+        if (target) handleSlashRun(target)
+        return
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         const target = filteredSkills[slashIndex]
@@ -1207,6 +1242,7 @@ export default function MessageInput({ onSend, disabled, fillText, conversationI
               selectedIndex={slashIndex}
               onSelect={handleSlashSelect}
               onHoverIndex={setSlashIndex}
+              onRun={handleSlashRun}
             />
           </div>
         )}

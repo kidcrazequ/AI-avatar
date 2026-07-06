@@ -6,6 +6,7 @@ import PanelHeader from './shared/PanelHeader'
 import SharedSkillTab from './SharedSkillTab'
 import CommunitySkillTab from './CommunitySkillTab'
 import SkillMarketplaceTab from './SkillMarketplaceTab'
+import SkillDraftsTab from './SkillDraftsTab'
 
 interface Props {
   avatarId: string
@@ -64,7 +65,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
   const [isGenerating, setIsGenerating] = useState(false)
   // 删除确认 state
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'local' | 'shared' | 'community' | 'marketplace'>('local')
+  const [activeTab, setActiveTab] = useState<'local' | 'drafts' | 'shared' | 'community' | 'marketplace'>('local')
 
   const mountedRef = useRef(true)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; clearTimeout(saveMsgTimerRef.current) } }, [])
@@ -305,7 +306,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
 
       {/* Tab 切换栏 */}
       <div className="flex border-b-2 border-px-border bg-px-elevated">
-        {(['local', 'shared', 'community', 'marketplace'] as const).map((tab) => (
+        {(['local', 'drafts', 'shared', 'community', 'marketplace'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -316,7 +317,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
                 : 'border-transparent text-px-text-dim hover:text-px-text'
               }`}
           >
-            {tab === 'local' ? '本地技能' : tab === 'shared' ? '公共技能' : tab === 'community' ? '社区技能' : '技能市场'}
+            {tab === 'local' ? '本地技能' : tab === 'drafts' ? '草稿' : tab === 'shared' ? '公共技能' : tab === 'community' ? '社区技能' : '技能市场'}
           </button>
         ))}
       </div>
@@ -578,6 +579,13 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
           )}
         </div>
       </div>
+      )}
+      {/* 草稿 tab（工作流技能·入口 2）：晋升成功后刷新技能列表 + 通知上层 */}
+      {activeTab === 'drafts' && (
+        <SkillDraftsTab
+          avatarId={avatarId}
+          onPromoted={() => { void loadSkills(); onSkillsChanged?.() }}
+        />
       )}
       {activeTab === 'shared' && <SharedSkillTab avatarId={avatarId} />}
       {activeTab === 'community' && <CommunitySkillTab avatarId={avatarId} />}

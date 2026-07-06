@@ -1,6 +1,6 @@
 ---
 name: claude-save-standalone-html
-description: 导出离线可运行的单文件 HTML
+description: 当用户要求把制品保存为单文件 / 离线可打开的 HTML，说「存个 html」「发我网页文件」「不联网也能打开」「single file / standalone html」时使用。
 ---
 
 ## 技能说明

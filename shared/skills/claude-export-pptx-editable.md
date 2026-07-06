@@ -1,6 +1,6 @@
 ---
 name: claude-export-pptx-editable
-description: 导出可编辑 PPTX
+description: 当用户要求把 deck / 幻灯片 / 演示文稿导出为可编辑的 PPTX / PPT / PowerPoint，说「导出 pptx」「给我能改的 PPT」「要可编辑版本」时使用（文本与形状保持可编辑）。
 ---
 
 ## 技能说明

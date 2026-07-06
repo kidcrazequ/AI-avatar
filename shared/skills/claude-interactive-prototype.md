@@ -1,6 +1,6 @@
 ---
 name: claude-interactive-prototype
-description: 生成可交互原型页面并在预览窗口可操作
+description: 当用户要可点击 / 可操作的交互原型、prototype、demo 页面，说「做个能点的原型」「交互演示一下」「点一下能跳转」，或需要在预览窗口直接操作页面流转时使用。
 ---
 
 ## 技能说明

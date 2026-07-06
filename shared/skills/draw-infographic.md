@@ -1,6 +1,6 @@
 ---
 name: draw-infographic
-description: 用 @antv/infographic 私有 DSL 输出 ```infographic 代码块。**强制格式**：首行 `infographic <模板名>`，body 用**2 空格缩进 + 空格分隔 key value**（**不是 YAML 冒号、不是 JSON 花括号**）。SWOT 用 `compare-swot` 模板：`compares` 数组下 4 个 `- label 优势/劣势/机会/威胁`，每项下用 **`children` 数组**（每条 bullet 一个 `- label 内容`）；**严禁**用 `text` / `items` / `desc` 字段（这些会渲染出 4 个空白块）。覆盖列表/对比/SWOT/序列/思维导图/词云/金字塔等模板。详细规则与示例见正文。数据来源必须是知识库或用户提供，禁止编造。
+description: 当用户要叙事型 / 汇报型可视化——信息图、演示图、卡片、列表展示、SWOT、对比图 / 对比卡、流程卡、思维导图、金字塔、词云、阶梯图、时间线、组织架构 / 层级图、「给领导看的漂亮图」时使用，输出 ```infographic 代码块（@antv/infographic 私有 DSL，格式规则必须读正文，不是 YAML/JSON）。精确数据图表（柱/折/饼/趋势）用 draw-chart；流程 / 时序 / 关系图用 draw-mermaid。数据必须来自知识库或用户提供，禁止编造。
 ---
 
 # 信息图渲染技能 · draw-infographic

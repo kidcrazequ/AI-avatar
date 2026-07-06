@@ -1,6 +1,6 @@
 ---
 name: claude-animated-video
-description: 用 HTML/CSS/JS 产出时间轴动画制品（不导出视频文件）
+description: 当用户要「动画视频」、动画演示、动效、时间轴动画、分镜动画、片头动画、motion、keyframes，或说「做个会动的页面 / 会动的演示」时使用。产出可播放的 HTML 动画制品（当前桌面端不导出 mp4 等视频文件）。
 ---
 
 ## 技能说明

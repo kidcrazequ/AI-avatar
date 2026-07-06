@@ -1,6 +1,6 @@
 ---
 name: claude-wireframe
-description: 快速输出线框方案与布局草图
+description: 当用户处于早期结构探索阶段，要线框图 / wireframe / 布局草图 / storyboard / 低保真方案，说「先出几版结构」「不管视觉先看布局」「页面怎么排」时使用。
 ---
 
 ## 技能说明

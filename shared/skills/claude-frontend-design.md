@@ -1,6 +1,6 @@
 ---
 name: claude-frontend-design
-description: 在缺少品牌规范时给出前端视觉方向
+description: 当用户没有现成品牌规范 / 设计系统就要开始页面或前端设计，问「用什么风格」「配色怎么选」「帮我定视觉方向」，或提到美术风格、aesthetic、design tokens、前端视觉时使用。
 ---
 
 ## 技能说明

@@ -1,6 +1,6 @@
 ---
 name: claude-save-pdf
-description: 导出打印友好的 PDF
+description: 当用户要求把当前制品导出 / 保存为 PDF，用于打印、汇报、归档、发送给他人，说「存成 pdf」「导出 pdf」「给我打印版」时使用。
 ---
 
 ## 技能说明

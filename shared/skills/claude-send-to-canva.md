@@ -1,6 +1,6 @@
 ---
 name: claude-send-to-canva
-description: Send to Canva 半自动导入流程
+description: 当用户要求把制品发送 / 导入 / 上传到 Canva，说「send to canva」「放进 Canva 改」「导到 Canva」时使用。桌面端无 Canva 直连 API，走导出后手动上传的半自动流程。
 ---
 
 ## 技能说明

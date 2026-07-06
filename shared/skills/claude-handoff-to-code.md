@@ -1,6 +1,6 @@
 ---
 name: claude-handoff-to-code
-description: 产出开发交付包（给 Claude Code/前端开发）
+description: 当用户要求把设计结果交给开发 / 前端 / Claude Code 落地实现，提到「交接」「handoff」「开发交付」「给开发的文档」「切图交付」时使用，产出开发可直接使用的交付包。
 ---
 
 ## 技能说明

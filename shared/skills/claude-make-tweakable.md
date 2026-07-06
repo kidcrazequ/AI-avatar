@@ -1,6 +1,6 @@
 ---
 name: claude-make-tweakable
-description: 在设计制品中加入可调参数（Tweaks）
+description: 当用户希望在设计制品里实时调整参数——调颜色、调间距、调字号、换文案、开关模块，说「加个可调的控件」「tweak 一下」「想快速对比几个版本」时使用。
 ---
 
 ## 技能说明

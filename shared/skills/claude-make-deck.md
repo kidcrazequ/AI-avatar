@@ -1,6 +1,6 @@
 ---
 name: claude-make-deck
-description: 生成 HTML 幻灯片并支持后续导出
+description: 当用户要做 deck / 幻灯片 / 演示文稿 / slides / PPT / 汇报材料，说「做个 deck」「出一版汇报页」「帮我做演示」时使用。先产出 HTML 版演示，后续可导出 PPTX / PDF。
 ---
 
 ## 技能说明

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Modal from './shared/Modal'
 import PanelHeader from './shared/PanelHeader'
+import { pickDefaultPalaceTab, isPalaceFirstRun, deriveCommitmentDraft, type PalaceTabId } from './palace-panel-logic'
 
 interface Props {
   avatarId: string
   onClose: () => void
 }
 
-type PalaceTab = 'rooms' | 'commitments' | 'inbox' | 'docs' | 'profile'
+type PalaceTab = PalaceTabId
 
 const INBOX_KINDS: Array<{ value: PalaceInboxKindDTO; label: string }> = [
   { value: 'fact', label: '事实' },
@@ -28,10 +29,11 @@ const TARGETS: Array<{ value: PalaceSedimentTargetDTO; label: string }> = [
   { value: 'reports', label: '汇报' },
   { value: 'decisions', label: '决策' },
   { value: 'achievements', label: '成果' },
-  { value: 'wiki', label: '知识' },
+  { value: 'wiki', label: '职场百科' },
   { value: 'commitments', label: '承诺' },
   { value: 'rooms', label: '路线卡' },
-  { value: 'inbox', label: '收件箱' },
+  // 'inbox' 不再叫「收件箱」——对用户就是「稍后再定」（先进待确认队列，之后再归档）
+  { value: 'inbox', label: '稍后再定' },
 ]
 
 const TARGET_LABEL = Object.fromEntries(TARGETS.map(t => [t.value, t.label])) as Record<PalaceSedimentTargetDTO, string>
@@ -69,22 +71,20 @@ const INBOX_STATUS_LABEL: Record<PalaceInboxStatusDTO, string> = {
 }
 
 export default function PalacePanel({ avatarId, onClose }: Props) {
-  const [tab, setTab] = useState<PalaceTab>('commitments')
+  // 初始给 'rooms' 只是兜底占位（首屏还在 LOADING）；首次加载成功后按数据一次性定智能默认 tab
+  const [tab, setTab] = useState<PalaceTab>('rooms')
   const [overview, setOverview] = useState<PalaceOverviewDTO | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [statusMsg, setStatusMsg] = useState('')
   const [showResolvedInbox, setShowResolvedInbox] = useState(false)
   const [showClosedCommitments, setShowClosedCommitments] = useState(false)
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftContent, setDraftContent] = useState('')
-  const [draftKind, setDraftKind] = useState<PalaceInboxKindDTO>('fact')
-  const [draftTarget, setDraftTarget] = useState<PalaceSedimentTargetDTO>('wiki')
-  const [draftSource, setDraftSource] = useState('manual')
   const [editingRoom, setEditingRoom] = useState<PalaceRoomDTO | 'new' | null>(null)
   const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const loadSeqRef = useRef(0)
   const mountedRef = useRef(true)
+  /** 智能默认 tab 只在首次加载后应用一次，之后尊重用户的手动切换 */
+  const autoTabAppliedRef = useRef(false)
 
   useEffect(() => {
     mountedRef.current = true
@@ -110,11 +110,17 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
       const next = await window.electronAPI.palace.getOverview(avatarId)
       if (loadSeqRef.current !== seq || !mountedRef.current) return
       setOverview(next)
+      if (!autoTabAppliedRef.current) {
+        autoTabAppliedRef.current = true
+        const pending = next.inbox.filter(item => item.status === 'pending').length
+        const open = next.commitments.filter(item => item.status !== 'done' && item.status !== 'dropped').length
+        setTab(pickDefaultPalaceTab(pending, open))
+      }
     } catch (error) {
       if (loadSeqRef.current !== seq || !mountedRef.current) return
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-panel-load', msg)
-      showStatus('LOAD FAILED')
+      showStatus('加载失败')
     } finally {
       if (loadSeqRef.current === seq && mountedRef.current) setIsLoading(false)
     }
@@ -151,12 +157,12 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
         ? (window.prompt('阻塞原因（可空）', '') ?? undefined)
         : undefined
       await window.electronAPI.palace.updateCommitment(avatarId, id, { status, appendNote })
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-commitment-update', msg)
-      showStatus('FAILED')
+      showStatus('失败')
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
@@ -166,12 +172,12 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
     setIsSaving(true)
     try {
       await window.electronAPI.palace.addCommitment(avatarId, input)
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-commitment-add', msg)
-      showStatus('FAILED')
+      showStatus('失败')
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
@@ -181,41 +187,42 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
     setIsSaving(true)
     try {
       await window.electronAPI.palace.updateInboxItem(avatarId, id, { status })
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-inbox-update', msg)
-      showStatus('FAILED')
+      showStatus('失败')
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
   }
 
-  const handleAddInbox = async () => {
-    const title = draftTitle.trim()
-    const content = draftContent.trim()
+  const handleAddInbox = async (input: { title: string; content: string; kind: PalaceInboxKindDTO; target: PalaceSedimentTargetDTO }) => {
+    const title = input.title.trim()
+    const content = input.content.trim()
     if (!title || !content) {
       showStatus('标题或正文为空')
-      return
+      return false
     }
     setIsSaving(true)
     try {
       await window.electronAPI.palace.addInboxItem(avatarId, {
         title,
         content,
-        kind: draftKind,
-        target: draftTarget,
-        source: draftSource.trim() || 'manual',
+        kind: input.kind,
+        target: input.target,
+        // 来源字段已从表单移除：手动添加的一律记 manual，展示层映射为「手动添加」
+        source: 'manual',
       })
-      setDraftTitle('')
-      setDraftContent('')
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
+      return true
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-inbox-add', msg)
-      showStatus('FAILED')
+      showStatus('失败')
+      return false
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
@@ -226,12 +233,12 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
     try {
       await window.electronAPI.palace.writeRoom(avatarId, input)
       setEditingRoom(null)
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-room-write', msg)
-      showStatus(msg.includes('id') ? 'BAD ID' : 'FAILED')
+      showStatus(msg.includes('id') ? '名称不合法' : '失败')
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
@@ -243,20 +250,27 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
     try {
       await window.electronAPI.palace.deleteRoom(avatarId, roomId)
       if (editingRoom !== 'new' && editingRoom?.id === roomId) setEditingRoom(null)
-      showStatus('SAVED')
+      showStatus('已保存')
       await loadOverview()
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       window.electronAPI.logEvent('error', 'palace-room-delete', msg)
-      showStatus('FAILED')
+      showStatus('失败')
     } finally {
       if (mountedRef.current) setIsSaving(false)
     }
   }
 
   const subtitle = overview
-    ? `${overview.rooms.length} routes · ${openCommitments.length} open · ${pendingInbox.length} pending`
+    ? `${overview.rooms.length} 张路线卡 · ${openCommitments.length} 条进行中 · ${pendingInbox.length} 条待确认`
     : avatarId
+
+  const isFirstRun = overview !== null && isPalaceFirstRun({
+    commitmentCount: overview.commitments.length,
+    pendingInboxCount: pendingInbox.length,
+    profile: overview.profile,
+    company: overview.company,
+  })
 
   return (
     <Modal isOpen={true} onClose={onClose} size="xl">
@@ -267,12 +281,12 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
         actions={(
           <>
             {statusMsg && (
-              <span className={`font-game text-[11px] ${statusMsg.includes('SAVE') ? 'text-px-success' : statusMsg.includes('FAIL') ? 'text-px-danger' : 'text-px-primary'}`}>
+              <span className={`font-game text-[11px] ${statusMsg === '已保存' ? 'text-px-success' : statusMsg.includes('失败') || statusMsg === '名称不合法' ? 'text-px-danger' : 'text-px-primary'}`}>
                 {statusMsg}
               </span>
             )}
             <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={() => window.electronAPI.palace.reveal(avatarId)}>
-              Finder
+              打开文件夹
             </button>
             <button type="button" className="pixel-btn-outline-light py-1 text-[11px]" disabled={isLoading} onClick={() => void loadOverview()}>
               {isLoading ? '...' : '刷新'}
@@ -285,16 +299,34 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
         <div className="flex items-center gap-1 px-3 py-2 bg-px-elevated border-b-2 border-px-border">
           <TabButton active={tab === 'rooms'} onClick={() => setTab('rooms')}>路线</TabButton>
           <TabButton active={tab === 'commitments'} onClick={() => setTab('commitments')}>承诺</TabButton>
-          <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>待归档</TabButton>
+          <TabButton active={tab === 'inbox'} onClick={() => setTab('inbox')}>待确认</TabButton>
           <TabButton active={tab === 'docs'} onClick={() => setTab('docs')}>资料</TabButton>
-          <TabButton active={tab === 'profile'} onClick={() => setTab('profile')}>我与公司</TabButton>
         </div>
 
         <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-px-bg border-b border-px-border-dim">
           <Metric label="路线卡" value={overview?.rooms.length ?? 0} />
           <Metric label="未关闭承诺" value={openCommitments.length} tone={openCommitments.some(c => c.urgency === 'overdue') ? 'danger' : 'primary'} />
-          <Metric label="待归档" value={pendingInbox.length} tone={pendingInbox.length > 0 ? 'warning' : 'primary'} />
+          <Metric label="待确认" value={pendingInbox.length} tone={pendingInbox.length > 0 ? 'warning' : 'primary'} />
         </div>
+
+        {isFirstRun && (
+          <div className="mx-4 mt-3 border-2 border-px-primary/60 bg-px-primary/5 px-4 py-3">
+            <p className="font-game text-[12px] text-px-primary tracking-wider">三步用起来</p>
+            <ol className="mt-2 space-y-1 text-[13px] text-px-text-sec leading-relaxed">
+              <li>
+                ① 先填
+                <button type="button" className="text-px-primary hover:underline mx-1" onClick={() => setTab('docs')}>「资料」</button>
+                里的「我与公司」两份底稿
+              </li>
+              <li>
+                ② 到
+                <button type="button" className="text-px-primary hover:underline mx-1" onClick={() => setTab('rooms')}>「路线」</button>
+                看一张示例路线卡，点「编辑」照着改
+              </li>
+              <li>③ 回对话说"帮我写本周周报"，试跑一次</li>
+            </ol>
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4">
           {!overview && isLoading ? (
@@ -330,25 +362,16 @@ export default function PalacePanel({ avatarId, onClose }: Props) {
               showResolved={showResolvedInbox}
               onToggleResolved={() => setShowResolvedInbox(v => !v)}
               onUpdateStatus={(id, status) => void handleInboxStatus(id, status)}
+              onAdd={handleAddInbox}
               disabled={isSaving}
-              draft={{
-                title: draftTitle,
-                content: draftContent,
-                kind: draftKind,
-                target: draftTarget,
-                source: draftSource,
-                setTitle: setDraftTitle,
-                setContent: setDraftContent,
-                setKind: setDraftKind,
-                setTarget: setDraftTarget,
-                setSource: setDraftSource,
-                submit: () => void handleAddInbox(),
-              }}
             />
-          ) : tab === 'docs' ? (
-            <DocsTab avatarId={avatarId} />
           ) : (
-            <ProfileTab profile={overview?.profile ?? ''} company={overview?.company ?? ''} />
+            <DocsTab
+              avatarId={avatarId}
+              profile={overview?.profile ?? ''}
+              company={overview?.company ?? ''}
+              onProfileSaved={loadOverview}
+            />
           )}
         </div>
       </div>
@@ -400,6 +423,9 @@ function RoomsTab({
           <p className="text-[12px] text-px-text-dim mt-1 leading-relaxed">
             最快上手：点下面任意示例卡的「编辑」照着改。想从头建，点右边按钮。
           </p>
+          <p className="text-[12px] text-px-text-dim mt-1 leading-relaxed">
+            配好后，直接在对话里说"帮我写本周周报"，分身会自动用上对应路线卡（对话里能看到"匹配记忆宫殿路线"的调用记录）。
+          </p>
         </div>
         <button type="button" className="pixel-btn-primary py-1 text-[12px] shrink-0" onClick={onNew}>+ 新建路线卡</button>
       </div>
@@ -412,7 +438,7 @@ function RoomsTab({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="font-game text-[13px] text-px-text truncate">{room.name}</h3>
-                  <p className="font-mono text-[11px] text-px-text-dim mt-1">{room.id} · priority {room.priority}</p>
+                  <p className="font-mono text-[11px] text-px-text-dim mt-1">{room.id}</p>
                 </div>
                 <span className={`font-game text-[10px] border px-2 py-1 ${room.enabled ? 'border-px-success text-px-success' : 'border-px-border text-px-text-dim'}`}>
                   {room.enabled ? 'ON' : 'OFF'}
@@ -429,7 +455,7 @@ function RoomsTab({
                 </div>
               )}
               <div className="mt-3 font-mono text-[11px] text-px-text-dim truncate">
-                输出：{room.outputLocation || 'inbox/'} · 归档：{room.sedimentTargets.join(' / ') || 'inbox'}
+                输出：{room.outputLocation || 'inbox/'} · 归档：{room.sedimentTargets.map(t => TARGET_LABEL[t] ?? t).join(' / ') || '稍后再定'}
               </div>
               <div className="mt-3 flex gap-2">
                 <button type="button" className="pixel-btn-outline-light py-1 text-[11px]" onClick={() => onEdit(room)}>编辑</button>
@@ -550,7 +576,7 @@ function RoomEditor({
           <Field label="建议口径" hint="给分身定对外措辞 / 语气基调">
             <textarea value={toneGuidance} onChange={e => setToneGuidance(e.target.value)} className={areaCls} placeholder="例：结论先行，只给数字和风险" />
           </Field>
-          <Field label="任务做完后把新发现归到哪些文件夹" hint="默认进收件箱等你确认；不确定就别动">
+          <Field label="任务做完后把新发现归到哪些文件夹" hint="默认先进「待确认」等你确认；不确定就别动">
             <div className="flex flex-wrap gap-1">
               {ROOM_TARGET_VALUES.map(value => (
                 <button
@@ -559,7 +585,7 @@ function RoomEditor({
                   onClick={() => toggleTarget(value)}
                   className={`font-mono text-[11px] border px-2 py-0.5 ${sedimentTargets.includes(value) ? 'border-px-primary text-px-primary bg-px-primary/10' : 'border-px-border-dim text-px-text-dim'}`}
                 >
-                  {TARGET_LABEL[value]}<span className="opacity-50 ml-1">{value}</span>
+                  {TARGET_LABEL[value]}
                 </button>
               ))}
             </div>
@@ -661,51 +687,65 @@ function CommitmentsTab({
   onAdd: (input: { title: string; promise: string; counterparty?: string; direction?: PalaceCommitmentDirectionDTO; dueAt?: string }) => void
   disabled: boolean
 }) {
-  const [title, setTitle] = useState('')
-  const [promise, setPromise] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [text, setText] = useState('')
   const [counterparty, setCounterparty] = useState('')
   const [direction, setDirection] = useState<PalaceCommitmentDirectionDTO>('i_owe_them')
   const [dueAt, setDueAt] = useState('')
 
   const submit = () => {
-    if (!title.trim()) { window.alert('给承诺起个短标题，如「周五前交测算」'); return }
-    if (!promise.trim()) { window.alert('写一下承诺内容：谁交付什么'); return }
+    const draft = deriveCommitmentDraft(text)
+    if (!draft) { window.alert('写一句承诺内容：谁在什么时候交付什么，如「我周五前给王总交测算」'); return }
     onAdd({
-      title: title.trim(),
-      promise: promise.trim(),
+      title: draft.title,
+      promise: draft.promise,
       counterparty: counterparty.trim() || undefined,
       direction,
-      dueAt: dueAt.trim() || undefined,
+      dueAt: dueAt || undefined,
     })
-    setTitle(''); setPromise(''); setCounterparty(''); setDueAt(''); setDirection('i_owe_them')
+    setText(''); setCounterparty(''); setDueAt(''); setDirection('i_owe_them'); setShowForm(false)
   }
 
   return (
     <div className="space-y-3">
-      <section className="border-2 border-px-border bg-px-bg p-3 space-y-2">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="短标题，如「周五前交测算」" />
-          <input value={counterparty} onChange={e => setCounterparty(e.target.value)} className={inputCls} placeholder="对方（可空），如「王总」" />
-        </div>
-        <input value={promise} onChange={e => setPromise(e.target.value)} className={inputCls} placeholder="承诺内容：谁交付什么、验收口径" />
-        <ChipSelect label="方向" value={direction} options={DIRECTIONS} onChange={setDirection} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-end">
-          <Field label="截止日（可空）" hint="格式 2026-06-20">
-            <input value={dueAt} onChange={e => setDueAt(e.target.value)} className={inputCls} placeholder="2026-06-20" />
-          </Field>
-          <div className="flex justify-end">
-            <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={submit}>新增承诺</button>
-          </div>
-        </div>
-      </section>
+      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
+        <p className="text-[13px] text-px-text-sec leading-relaxed">
+          <span className="font-game text-[11px] text-px-primary mr-1">承诺</span>
+          = 让分身帮你盯"我答应了谁什么、谁答应了我什么、什么时候到期"。
+        </p>
+        <p className="text-[12px] text-px-text-dim mt-1 leading-relaxed">
+          在对话里说"记一下：我周五前给王总交测算"，分身会自动写进来等你确认；也可以在下面手动加。
+        </p>
+      </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        {!showForm ? (
+          <button type="button" className="pixel-btn-primary py-1 text-[12px]" onClick={() => setShowForm(true)}>+ 新增承诺</button>
+        ) : <span />}
         <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onToggleClosed}>
           {showClosed ? '隐藏关闭项' : '显示关闭项'}
         </button>
       </div>
+
+      {showForm && (
+        <section className="border-2 border-px-border bg-px-bg p-3 space-y-2">
+          <input value={text} onChange={e => setText(e.target.value)} className={inputCls} placeholder="谁在什么时候交付什么，如「我周五前给王总交测算」（标题自动取首句）" />
+          <input value={counterparty} onChange={e => setCounterparty(e.target.value)} className={inputCls} placeholder="对方（可空），如「王总」" />
+          <ChipSelect label="方向" value={direction} options={DIRECTIONS} onChange={setDirection} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 items-end">
+            <Field label="截止日（可空）">
+              <input type="date" value={dueAt} onChange={e => setDueAt(e.target.value)} className={inputCls} />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={disabled} className="pixel-btn-outline-muted py-1 text-[11px]" onClick={() => setShowForm(false)}>取消</button>
+              <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={submit}>保存承诺</button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {commitments.length === 0 ? (
-        <EmptyState label="暂无承诺，用上面的表单加一条" />
+        <EmptyState label={'还没有在追踪的承诺。试试在对话里对分身说"记一下：周五前给王总交测算"。'} />
       ) : commitments.map(item => (
         <section key={item.id} className="border-2 border-px-border bg-px-elevated p-4">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
@@ -740,48 +780,64 @@ function InboxTab({
   showResolved,
   onToggleResolved,
   onUpdateStatus,
+  onAdd,
   disabled,
-  draft,
 }: {
   items: PalaceInboxItemDTO[]
   showResolved: boolean
   onToggleResolved: () => void
   onUpdateStatus: (id: string, status: PalaceInboxStatusDTO) => void
+  onAdd: (input: { title: string; content: string; kind: PalaceInboxKindDTO; target: PalaceSedimentTargetDTO }) => Promise<boolean>
   disabled: boolean
-  draft: {
-    title: string
-    content: string
-    kind: PalaceInboxKindDTO
-    target: PalaceSedimentTargetDTO
-    source: string
-    setTitle: (v: string) => void
-    setContent: (v: string) => void
-    setKind: (v: PalaceInboxKindDTO) => void
-    setTarget: (v: PalaceSedimentTargetDTO) => void
-    setSource: (v: string) => void
-    submit: () => void
-  }
 }) {
+  const [title, setTitle] = useState('')
+  const [content, setContent] = useState('')
+  const [kind, setKind] = useState<PalaceInboxKindDTO>('other')
+  const [target, setTarget] = useState<PalaceSedimentTargetDTO>('inbox')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
+  const submit = async () => {
+    const ok = await onAdd({ title, content, kind, target })
+    if (ok) {
+      setTitle(''); setContent(''); setKind('other'); setTarget('inbox'); setShowAdvanced(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
+      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
+        <p className="text-[13px] text-px-text-sec leading-relaxed">
+          <span className="font-game text-[11px] text-px-primary mr-1">待确认</span>
+          分身每做完一件正经任务，会把新发现（事实/人物/项目/可复用写法）放到这里，你点"接受"才正式记住。
+        </p>
+      </div>
+
       <section className="border-2 border-px-border bg-px-bg p-3 space-y-2">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-          <input value={draft.title} onChange={e => draft.setTitle(e.target.value)} className={inputCls} placeholder="标题，如「项目进入报价阶段」" />
-          <input value={draft.source} onChange={e => draft.setSource(e.target.value)} className={inputCls} placeholder="来源（可空），如某会议纪要" />
-        </div>
-        <ChipSelect label="类型" value={draft.kind} options={INBOX_KINDS} onChange={draft.setKind} />
-        <ChipSelect label="归档到哪个文件夹" value={draft.target} options={TARGETS} onChange={draft.setTarget} />
-        <textarea value={draft.content} onChange={e => draft.setContent(e.target.value)} className="w-full min-h-[76px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[13px] text-px-text" placeholder="正文：要记住什么、为什么值得归档" />
+        <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="标题，如「项目进入报价阶段」" />
+        <textarea value={content} onChange={e => setContent(e.target.value)} className="w-full min-h-[76px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[13px] text-px-text" placeholder="正文：要记住什么、为什么值得记" />
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(v => !v)}
+          className="w-full text-left font-game text-[11px] text-px-text-dim border-2 border-px-border-dim px-3 py-2"
+        >
+          {showAdvanced ? '▾' : '▸'} 高级（类型 / 归档目标，默认「其他 / 稍后再定」）
+        </button>
+        {showAdvanced && (
+          <div className="space-y-2 border-l-2 border-px-border-dim pl-3">
+            <ChipSelect label="类型" value={kind} options={INBOX_KINDS} onChange={setKind} />
+            <ChipSelect label="归档到哪个文件夹" value={target} options={TARGETS} onChange={setTarget} />
+          </div>
+        )}
         <div className="flex justify-between items-center gap-2">
           <button type="button" className="pixel-btn-outline-muted py-1 text-[11px]" onClick={onToggleResolved}>
             {showResolved ? '隐藏已处理' : '显示已处理'}
           </button>
-          <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={draft.submit}>手动加一条</button>
+          <button type="button" disabled={disabled} className="pixel-btn-primary py-1 text-[12px]" onClick={() => void submit()}>记一条</button>
         </div>
       </section>
 
       {items.length === 0 ? (
-        <EmptyState label="暂无待归档项" />
+        <EmptyState label="现在还没有，做完第一个任务就会出现。" />
       ) : items.map(item => (
         <section key={item.id} className="border-2 border-px-border bg-px-elevated p-4">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
@@ -794,7 +850,7 @@ function InboxTab({
               </div>
               <p className="text-[13px] text-px-text-sec mt-2 leading-relaxed whitespace-pre-wrap">{item.content}</p>
               <div className="font-mono text-[11px] text-px-text-dim mt-2">
-                {item.source ?? 'manual'} · {item.updatedAt}
+                {item.source && item.source !== 'manual' ? item.source : '手动添加'} · {item.updatedAt}
               </div>
             </div>
             {item.status === 'pending' && (
@@ -818,10 +874,26 @@ const DOC_DIRS: Array<{ value: PalaceDocDirDTO; label: string }> = [
   { value: 'reports', label: '汇报' },
   { value: 'decisions', label: '决策' },
   { value: 'achievements', label: '成果' },
-  { value: 'wiki', label: '知识' },
+  { value: 'wiki', label: '职场百科' },
 ]
 
-function DocsTab({ avatarId }: { avatarId: string }) {
+/** 资料 tab 置顶固定的两份底稿（原「我与公司」tab 并入这里） */
+const PROFILE_DOCS: Array<{ key: 'profile' | 'company'; label: string; file: string }> = [
+  { key: 'profile', label: '职业画像', file: 'profile.md' },
+  { key: 'company', label: '公司情况', file: 'company.md' },
+]
+
+function DocsTab({
+  avatarId,
+  profile,
+  company,
+  onProfileSaved,
+}: {
+  avatarId: string
+  profile: string
+  company: string
+  onProfileSaved: () => Promise<void> | void
+}) {
   const [dir, setDir] = useState<PalaceDocDirDTO>('people')
   const [files, setFiles] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -830,6 +902,34 @@ function DocsTab({ avatarId }: { avatarId: string }) {
   const [content, setContent] = useState('')
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
+  /** 正在编辑的置顶底稿（profile / company）；与目录文件编辑互斥 */
+  const [profileEditing, setProfileEditing] = useState<'profile' | 'company' | null>(null)
+  const [profileDraft, setProfileDraft] = useState('')
+
+  const openProfileDoc = (key: 'profile' | 'company') => {
+    setProfileDraft(key === 'profile' ? profile : company)
+    setProfileEditing(key)
+    setOpenFile(null)
+  }
+
+  const saveProfileDoc = async () => {
+    if (!profileEditing) return
+    // 前置长度检查（防御纵深）：上限与 core PALACE_PROFILE_MAX_CHARS 一致，超限不发 IPC
+    if (profileDraft.length > 50 * 1024) {
+      window.alert('内容超过 51200 字符上限，请拆分或精简后再保存')
+      return
+    }
+    setSaving(true)
+    try {
+      await window.electronAPI.writePalaceProfile(avatarId, profileEditing, profileDraft)
+      setProfileEditing(null)
+      await onProfileSaved()
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const loadFiles = useCallback(async () => {
     setLoading(true)
@@ -887,13 +987,40 @@ function DocsTab({ avatarId }: { avatarId: string }) {
     }
   }
 
+  if (profileEditing !== null) {
+    const doc = PROFILE_DOCS.find(d => d.key === profileEditing)
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-[12px] text-px-primary truncate">{doc?.file}（{doc?.label}）</span>
+          <div className="flex gap-2 shrink-0">
+            <button type="button" disabled={saving} className="pixel-btn-outline-muted py-1 text-[11px]" onClick={() => setProfileEditing(null)}>取消</button>
+            <button type="button" disabled={saving} className="pixel-btn-primary py-1 text-[12px]" onClick={() => void saveProfileDoc()}>保存</button>
+          </div>
+        </div>
+        <textarea value={profileDraft} onChange={e => setProfileDraft(e.target.value)} className="w-full min-h-[360px] px-2 py-1 bg-px-surface border border-px-border font-mono text-[12px] text-px-text leading-relaxed" placeholder="用 Markdown 写。写清楚你是谁、当前重点、风格偏好，分身做任务时先读这份。" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
       <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
         <p className="text-[13px] text-px-text-sec leading-relaxed">
-          这里管你的<span className="text-px-primary">分类资料</span>：人物画像、项目、会议纪要、周报、决策、成果、知识。分身做任务时按需读这些。
+          分身做任何职场任务都先读<span className="text-px-primary">「我与公司」</span>这两份打底。直接在这里编辑；也可以在对话里让分身帮你起草，再粘贴到这里保存（分身不能直接改这两份档案）。
         </p>
-        <p className="text-[12px] text-px-text-dim mt-1">也可以让分身在对话里帮你写；这页是手动看 / 建 / 改 / 删。</p>
+        <p className="text-[12px] text-px-text-dim mt-1">这里的内容分身每次对话开头都会读到——请不要粘贴不信任来源的文本。</p>
+        <p className="text-[12px] text-px-text-dim mt-1">下面的分类资料（人物 / 项目 / 会议 / 汇报 / 决策 / 成果 / 职场百科）分身做任务时按需读。</p>
+        <p className="text-[12px] text-px-text-dim mt-1">职场 = 处境台账；专业事实正本在「知识库」，可复用方法在「技能」。</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        {PROFILE_DOCS.map(doc => (
+          <div key={doc.key} className="flex items-center justify-between gap-3 border-2 border-px-primary/60 bg-px-elevated px-3 py-2">
+            <span className="font-game text-[12px] text-px-text truncate">{doc.label} · {doc.file}</span>
+            <button type="button" className="pixel-btn-outline-light py-1 text-[11px] shrink-0" onClick={() => openProfileDoc(doc.key)}>编辑</button>
+          </div>
+        ))}
       </div>
 
       <ChipSelect label="选目录" value={dir} options={DOC_DIRS} onChange={(d) => { setDir(d); setOpenFile(null) }} />
@@ -938,32 +1065,6 @@ function DocsTab({ avatarId }: { avatarId: string }) {
         </div>
       )}
     </div>
-  )
-}
-
-function ProfileTab({ profile, company }: { profile: string; company: string }) {
-  return (
-    <div className="space-y-3">
-      <div className="border-2 border-px-border-dim bg-px-bg px-4 py-3">
-        <p className="text-[13px] text-px-text-sec leading-relaxed">
-          这里是你的<span className="text-px-primary">职业画像</span>（profile）和<span className="text-px-primary">公司情况</span>（company），分身做任何职场任务都先读这两份打底。
-        </p>
-        <p className="text-[12px] text-px-text-dim mt-1">只有这两份是正常的——其它资料（人物 / 项目 / 会议…）分门别类放在各自文件夹里，不在这页。</p>
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        <TextBlock title="职业画像 · profile.md" text={profile} />
-        <TextBlock title="公司情况 · company.md" text={company} />
-      </div>
-    </div>
-  )
-}
-
-function TextBlock({ title, text }: { title: string; text: string }) {
-  return (
-    <section className="border-2 border-px-border bg-px-elevated p-4 min-w-0">
-      <h3 className="font-game text-[13px] text-px-primary mb-3">{title}</h3>
-      <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-px-text-sec max-h-[520px] overflow-auto">{text || '暂无内容'}</pre>
-    </section>
   )
 }
 

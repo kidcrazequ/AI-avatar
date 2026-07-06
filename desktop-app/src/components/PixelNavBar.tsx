@@ -13,6 +13,8 @@ interface NavItem {
   onClick: () => void
   active: boolean
   badge?: number | null
+  /** 悬停提示：一句话说明这个入口是干什么的 */
+  title?: string
 }
 
 interface PixelNavBarProps {
@@ -75,6 +77,7 @@ export default function PixelNavBar({ items }: PixelNavBarProps) {
                   key={item.key}
                   type="button"
                   role="menuitem"
+                  title={item.title}
                   className={`pixel-nav-menu-item ${item.active ? 'pixel-nav-menu-item--active' : ''}`}
                   onClick={() => {
                     item.onClick()
@@ -104,6 +107,7 @@ function NavTab({ item }: { item: NavItem }) {
       onClick={item.onClick}
       className={`pixel-nav-tab ${item.active ? 'pixel-nav-tab--active' : ''}`}
       aria-label={item.label}
+      title={item.title}
     >
       {item.active && (
         <span className="pixel-nav-cursor" aria-hidden="true">►</span>

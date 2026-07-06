@@ -574,6 +574,7 @@ export default function SkillsPanel({ avatarId, onClose, onSkillsChanged }: Prop
                   <span className="text-px-primary font-game text-[12px]">S</span>
                 </div>
                 <p className="font-game text-[12px] text-px-text-dim tracking-wider">选择一个技能</p>
+                <p className="text-[11px] text-px-text-dim mt-3 max-w-[320px] leading-relaxed">技能 = 可复用方法；专业事实正本在「知识库」，处境台账在「职场」。</p>
               </div>
             </div>
           )}

@@ -159,6 +159,8 @@ function App() {
   const [knownProjectIds, setKnownProjectIds] = useState<string[]>(['default'])
   const [activeAvatarName, setActiveAvatarName] = useState<string>('')
   const [avatarList, setAvatarList] = useState<Avatar[]>([])
+  /** 「职场」导航角标：当前分身的 palace 待确认（pending inbox）条数 */
+  const [palacePendingCount, setPalacePendingCount] = useState(0)
   const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error'; onClick?: () => void } | null>(null)
   const [updateInfo, setUpdateInfo] = useState<{ latestVersion: string; downloadUrl: string; releaseNotes?: string } | null>(null)
 
@@ -223,6 +225,40 @@ function App() {
     clearTimeout(toastTimerRef.current)
     toastTimerRef.current = setTimeout(() => setToast(null), 2500)
   }, [])
+
+  /**
+   * 刷新「职场」导航角标（palace pending 数）。
+   * 只在三个时机拉取：分身切换、职场面板关闭、分身写入承诺/待确认成功（soul-palace-write 事件）——不轮询。
+   * 后端接口未就绪或读取失败时静默清零，不打扰主流程。
+   */
+  const refreshPalaceBadge = useCallback(async () => {
+    let count = 0
+    try {
+      if (activeAvatarId) {
+        const n = await window.electronAPI.getPalacePendingCount(activeAvatarId)
+        if (Number.isFinite(n)) count = n
+      }
+    } catch {
+      // 接口未就绪或读取失败 → 角标清零，不打扰主流程
+    }
+    setPalacePendingCount(count)
+  }, [activeAvatarId])
+
+  // 分身切换时刷新职场角标
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 未选分身分支无 await，setState 同步跑；数据分支在 await 后
+    void refreshPalaceBadge()
+  }, [refreshPalaceBadge])
+
+  // chatStore 里分身通过工具写入承诺/待确认成功后派发（与 conversation-title-changed 同模式）
+  useEffect(() => {
+    const handler = () => {
+      showToast('已加入职场·待确认')
+      void refreshPalaceBadge()
+    }
+    window.addEventListener('soul-palace-write', handler)
+    return () => window.removeEventListener('soul-palace-write', handler)
+  }, [showToast, refreshPalaceBadge])
 
   /**
    * 显示可点击的 Toast（Phase 4 新增）。
@@ -664,12 +700,12 @@ function App() {
     { label: '技能', icon: '★', key: 'skills', onClick: () => setActivePanel('skills'), active: showSkillsPanel },
     { label: '知识库', icon: '◆', key: 'docs', onClick: () => setActivePanel('knowledge'), active: showKnowledgePanel },
     { label: '记忆', icon: '◇', key: 'mem', onClick: () => setActivePanel('memory'), active: showMemoryPanel },
-    { label: '职场', icon: '▦', key: 'palace', onClick: () => setActivePanel('palace'), active: showPalacePanel },
+    { label: '职场', icon: '▦', key: 'palace', onClick: () => setActivePanel('palace'), active: showPalacePanel, badge: palacePendingCount, title: '分身的工作台账：路线卡·承诺·待确认' },
     { label: '人生', icon: '❀', key: 'life', onClick: () => setActivePanel('life'), active: showLifePanel },
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
-    { label: '办公室', icon: '▣', key: 'office', onClick: () => setActivePanel('office'), active: showOfficePanel },
+    { label: '办公室', icon: '▣', key: 'office', onClick: () => setActivePanel('office'), active: showOfficePanel, title: '全部分身总览：一屏查看状态并切换分身' },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
@@ -993,7 +1029,11 @@ function App() {
       {showPalacePanel && activeAvatarId && (
         <PalacePanel
           avatarId={activeAvatarId}
-          onClose={() => setActivePanel(null)}
+          onClose={() => {
+            setActivePanel(null)
+            // 面板里可能刚接受/拒绝过待确认项，关闭时刷新导航角标
+            void refreshPalaceBadge()
+          }}
         />
       )}
 

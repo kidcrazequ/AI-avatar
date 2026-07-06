@@ -5243,6 +5243,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // "N 失败" 汇总也跳过这条。两层语义分离，互不影响。
           const wasSkipped = resultText.startsWith('工具执行已跳过')
           if (toolOk && wasSkipped) toolOk = false
+          // 分身写入职场承诺/待确认成功 → 通知 App 层弹 toast + 刷新「职场」导航角标
+          // （store 不直接持有 App 引用，走 window 事件，与 conversation-title-changed 同模式）
+          if (toolOk && (tc.function.name === 'add_palace_commitment' || tc.function.name === 'add_palace_inbox_item')) {
+            window.dispatchEvent(new CustomEvent('soul-palace-write', { detail: { tool: tc.function.name } }))
+          }
           const truncatedResult = truncateToolResultForContext(tc.function.name, resultText)
           if (truncatedResult.truncated) {
             logPerf(

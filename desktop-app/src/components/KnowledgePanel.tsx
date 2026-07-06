@@ -1391,6 +1391,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
                   </svg>
                 </div>
                 <p className="font-game text-[12px] text-px-text-dim tracking-wider">选择一个文件</p>
+                <p className="text-[11px] text-px-text-dim mt-3 max-w-[320px] leading-relaxed">知识库 = 专业事实正本；处境台账在「职场」，可复用方法在「技能」。</p>
               </div>
             </div>
           )}

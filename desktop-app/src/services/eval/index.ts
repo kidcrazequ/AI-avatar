@@ -69,3 +69,14 @@ export {
   type CostBreakdown,
   type AggregateRow,
 } from '../llm-providers/cost-tracker'
+export {
+  runCompressionAbEval,
+  buildCompressionAbTasks,
+  makeCompressionSolver,
+  defaultCompressionAbSamples,
+  loadBearingNumbersScorer,
+  sourceAnchorKeepScorer,
+  type CompressionAbInput,
+  type CompressionAbTarget,
+  type CompressionAbOptions,
+} from './compression-ab'

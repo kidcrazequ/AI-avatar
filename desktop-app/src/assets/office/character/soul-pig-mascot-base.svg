@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 520" role="img" aria-labelledby="title desc">
+  <title id="title">Soul pig mascot base pose</title>
+  <desc id="desc">Transparent base pose for the Soul pig-headed office mascot.</desc>
+  <defs>
+    <style>
+      .ink { fill: #050505; }
+      .snout { fill: #f39aaf; }
+      .eye { fill: #fff; }
+      .pupil { fill: #050505; }
+      .scarf { fill: #ef1c08; }
+    </style>
+  </defs>
+
+  <path class="ink" d="M202 185
+    C250 182 288 210 307 256
+    L333 320
+    C347 354 333 389 302 407
+    L219 456
+    L167 402
+    L191 356
+    L150 322
+    L94 392
+    L29 350
+    L122 240
+    C143 209 169 190 202 185 Z" />
+  <rect class="ink" x="18" y="327" width="134" height="58" rx="16" transform="rotate(-34 85 356)" />
+  <rect class="ink" x="236" y="352" width="72" height="134" rx="16" transform="rotate(16 272 419)" />
+  <rect class="ink" x="123" y="376" width="72" height="148" rx="16" transform="rotate(-11 159 450)" />
+
+  <g transform="translate(152 88) scale(.92)">
+    <path class="ink" d="M83 36
+      C88 20 103 8 119 11
+      C136 14 146 29 142 50
+      C164 50 183 63 191 83
+      C200 107 194 138 174 155
+      C159 168 139 173 110 173
+      L85 173
+      C65 173 51 161 47 143
+      L44 128
+      C40 111 31 102 16 101
+      C7 100 1 94 1 86
+      L1 66
+      C1 57 8 51 18 51
+      L56 49
+      C65 48 73 43 78 36
+      C84 24 93 15 105 11
+      C95 20 87 28 83 36 Z" />
+    <ellipse class="snout" cx="22" cy="77" rx="29" ry="18" />
+    <ellipse class="pupil" cx="12" cy="77" rx="4" ry="4" opacity=".72" />
+    <ellipse class="pupil" cx="32" cy="77" rx="4" ry="4" opacity=".72" />
+    <ellipse class="eye" cx="101" cy="87" rx="19" ry="32" />
+    <ellipse class="eye" cx="146" cy="88" rx="20" ry="31" />
+    <ellipse class="pupil" cx="108" cy="89" rx="9" ry="16" />
+    <path d="M137 84 C146 73 160 73 168 84" fill="none" stroke="#050505" stroke-width="9" stroke-linecap="round" />
+  </g>
+
+  <rect class="scarf" x="142" y="196" width="272" height="72" rx="3" />
+  <rect class="scarf" x="249" y="257" width="80" height="154" rx="3" />
+</svg>

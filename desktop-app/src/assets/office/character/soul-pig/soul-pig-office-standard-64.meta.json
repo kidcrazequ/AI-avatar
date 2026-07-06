@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "name": "soul-pig-office-standard-64",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "columns": 4,
+  "rows": 12,
+  "sheet": "soul-pig-office-standard-64.png",
+  "actions": {
+    "idle_front": {
+      "kind": "idle",
+      "row": 0,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--idle_front"
+    },
+    "walk_se": {
+      "kind": "walk",
+      "row": 1,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--walk_se"
+    },
+    "walk_sw": {
+      "kind": "walk",
+      "row": 2,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--walk_sw"
+    },
+    "walk_ne": {
+      "kind": "walk",
+      "row": 3,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--walk_ne"
+    },
+    "walk_nw": {
+      "kind": "walk",
+      "row": 4,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--walk_nw"
+    },
+    "sit_work": {
+      "kind": "sit_work",
+      "row": 5,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--sit_work"
+    },
+    "stand_drink": {
+      "kind": "drink",
+      "row": 6,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--stand_drink"
+    },
+    "sit_sofa": {
+      "kind": "sit_sofa",
+      "row": 7,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--sit_sofa"
+    },
+    "sit_rest": {
+      "kind": "sit_rest",
+      "row": 8,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--sit_rest"
+    },
+    "sit_meeting": {
+      "kind": "meeting",
+      "row": 9,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--sit_meeting"
+    },
+    "stand_research": {
+      "kind": "research",
+      "row": 10,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--stand_research"
+    },
+    "stand_file": {
+      "kind": "file",
+      "row": 11,
+      "frames": 4,
+      "anchorX": 32,
+      "anchorY": 60,
+      "frameClass": "office-game-sprite--stand_file"
+    }
+  }
+}

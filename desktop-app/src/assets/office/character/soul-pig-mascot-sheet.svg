@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Soul pig mascot shape sheet</title>
+  <desc id="desc">A side-profile pig-headed black mascot with blocky scarf body language for Soul office agents.</desc>
+  <defs>
+    <style>
+      .ink { fill: #050505; }
+      .snout { fill: #f39aaf; }
+      .eye { fill: #fff; }
+      .pupil { fill: #050505; }
+      .red { fill: #ef1c08; }
+      .blue { fill: #1299f0; }
+      .purple { fill: #7331ff; }
+      .frame { fill: #f8f8f8; stroke: #ededed; stroke-width: 2; }
+    </style>
+
+    <g id="pig-head">
+      <path class="ink" d="M83 36
+        C88 20 103 8 119 11
+        C136 14 146 29 142 50
+        C164 50 183 63 191 83
+        C200 107 194 138 174 155
+        C159 168 139 173 110 173
+        L85 173
+        C65 173 51 161 47 143
+        L44 128
+        C40 111 31 102 16 101
+        C7 100 1 94 1 86
+        L1 66
+        C1 57 8 51 18 51
+        L56 49
+        C65 48 73 43 78 36
+        C84 24 93 15 105 11
+        C95 20 87 28 83 36 Z" />
+      <ellipse class="snout" cx="22" cy="77" rx="29" ry="18" />
+      <ellipse class="pupil" cx="12" cy="77" rx="4" ry="4" opacity=".72" />
+      <ellipse class="pupil" cx="32" cy="77" rx="4" ry="4" opacity=".72" />
+      <ellipse class="eye" cx="101" cy="87" rx="19" ry="32" />
+      <ellipse class="eye" cx="146" cy="88" rx="20" ry="31" />
+      <ellipse class="pupil" cx="108" cy="89" rx="9" ry="16" />
+      <path d="M137 84 C146 73 160 73 168 84" fill="none" stroke="#050505" stroke-width="9" stroke-linecap="round" />
+    </g>
+
+    <g id="body-stand">
+      <path class="ink" d="M118 142
+        C146 140 168 156 179 183
+        L194 220
+        C202 240 194 260 176 270
+        L128 298
+        L98 266
+        L112 240
+        L88 220
+        L56 260
+        L18 236
+        L72 172
+        C84 154 99 144 118 142 Z" />
+      <rect class="ink" x="10" y="223" width="78" height="34" rx="10" transform="rotate(-34 49 240)" />
+      <rect class="ink" x="136" y="238" width="42" height="78" rx="10" transform="rotate(16 157 277)" />
+      <rect class="ink" x="70" y="252" width="42" height="86" rx="10" transform="rotate(-11 91 295)" />
+    </g>
+
+    <g id="body-run">
+      <path class="ink" d="M112 145
+        C137 142 158 156 169 180
+        L184 214
+        C191 231 184 249 168 258
+        L133 278
+        L99 258
+        L116 231
+        L88 216
+        L54 250
+        L23 221
+        L77 169
+        C88 157 99 149 112 145 Z" />
+      <rect class="ink" x="8" y="229" width="92" height="38" rx="11" transform="rotate(-39 54 248)" />
+      <rect class="ink" x="122" y="244" width="108" height="42" rx="11" transform="rotate(35 176 265)" />
+      <rect class="ink" x="66" y="269" width="98" height="42" rx="11" transform="rotate(-16 115 290)" />
+      <rect class="ink" x="150" y="156" width="42" height="86" rx="12" transform="rotate(-17 171 199)" />
+    </g>
+
+    <g id="body-seat">
+      <path class="ink" d="M110 144
+        C137 143 163 160 174 187
+        L184 211
+        C192 231 184 250 166 260
+        L128 282
+        L82 260
+        L62 216
+        L72 174
+        C81 158 94 148 110 144 Z" />
+      <path class="ink" d="M58 234 L136 234 C160 234 178 252 178 274 L178 288 L52 288 C35 288 22 274 22 258 C22 245 35 234 58 234 Z" />
+      <rect class="ink" x="120" y="272" width="46" height="92" rx="11" transform="rotate(-18 143 318)" />
+      <rect class="ink" x="36" y="192" width="35" height="76" rx="10" transform="rotate(-18 54 230)" />
+    </g>
+  </defs>
+
+  <rect width="1200" height="760" fill="#fff" />
+  <rect class="frame" x="54" y="54" width="610" height="652" rx="30" />
+  <rect class="frame" x="706" y="54" width="440" height="196" rx="28" />
+  <rect class="frame" x="706" y="282" width="205" height="424" rx="28" />
+  <rect class="frame" x="941" y="282" width="205" height="424" rx="28" />
+
+  <g transform="translate(172 184) scale(1.72)">
+    <use href="#body-stand" />
+    <use href="#pig-head" transform="translate(18 0) scale(.73)" />
+    <rect class="red" x="56" y="148" width="176" height="43" rx="2" />
+    <rect class="red" x="125" y="184" width="52" height="92" rx="2" />
+  </g>
+
+  <g transform="translate(812 78) scale(1.42)">
+    <use href="#pig-head" />
+  </g>
+
+  <g transform="translate(730 398) scale(.84)">
+    <use href="#body-run" />
+    <use href="#pig-head" transform="translate(17 0) scale(.72)" />
+    <rect class="blue" x="58" y="148" width="160" height="39" rx="2" transform="rotate(-6 138 168)" />
+    <rect class="blue" x="124" y="178" width="45" height="78" rx="2" transform="rotate(-6 146 217)" />
+  </g>
+
+  <g transform="translate(968 398) scale(.84)">
+    <use href="#body-seat" />
+    <use href="#pig-head" transform="translate(17 0) scale(.72)" />
+    <rect class="purple" x="54" y="148" width="154" height="38" rx="2" />
+    <rect class="purple" x="118" y="178" width="44" height="58" rx="2" />
+  </g>
+</svg>

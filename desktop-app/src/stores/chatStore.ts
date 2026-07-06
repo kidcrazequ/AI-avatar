@@ -3696,7 +3696,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 退回到 chatModel 仅为类型兜底（hasImages 但 visionModel 未传时）；真正使用前
     // missingVisionForImages 已把这种情况判为缺 key 而早退，不会拿 chatModel 发图片。
     const hasImages = Boolean(images && images.length > 0)
-    const activeModel: ModelConfig = hasImages ? (visionModel ?? chatModel) : chatModel
+    let activeModel: ModelConfig = hasImages ? (visionModel ?? chatModel) : chatModel
+    // 自愈（2026-07-06）：cloud 模式下 store 里 apiKey 为空 ≠ 用户没配——开发期 HMR 重置
+    // store、loadModelConfigs 未跑完的竞态，都会让内存配置丢而 DB 设置里仍有值。
+    // 误报「请先在设置中配置 API Key」前先从设置重读一次；读到就回填 store 并继续本次发送。
+    // 只治 cloud chat slot：local slot 有 'ollama' 兜底、vision 缺 key 有针对性提示，均不在此处理。
+    if (!activeModel.apiKey && !hasImages && chatModelMode !== 'local') {
+      try {
+        const [healedKey, healedUrl, healedName] = await Promise.all([
+          window.electronAPI.getSetting('chat_api_key'),
+          window.electronAPI.getSetting('chat_base_url'),
+          window.electronAPI.getSetting('chat_model'),
+        ])
+        if (healedKey) {
+          activeModel = {
+            apiKey: healedKey,
+            baseUrl: healedUrl || activeModel.baseUrl,
+            model: healedName || activeModel.model,
+          }
+          set({ chatModel: activeModel })
+          window.electronAPI.logEvent('warn', 'chat-model-config-self-healed', 'store 内 chat apiKey 为空但设置中存在，已重读回填')
+        }
+      } catch { /* 重读失败维持原状，走下方 missingApiKey 早退 */ }
+    }
     // 图片消息但 vision slot 没配 key：即使 chatModel 有 key 也不能退回，给针对性错误。
     const missingVisionForImages = hasImages && !visionModel?.apiKey
 

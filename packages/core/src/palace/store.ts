@@ -431,11 +431,25 @@ export async function readPalaceProfile(avatarsRoot: string, avatarId: string): 
   return (await readTextSafe(getPalaceProfilePath(avatarsRoot, avatarId))) ?? ''
 }
 
+/**
+ * profile/company 单文件字符上限。校验放在函数内而非只在 IPC 层——
+ * 这两个函数是 @soul/core 公开导出，未来任何调用方（CLI/批量导入）都受同一道闸，
+ * 防 profile 无界增长（注入侧虽有 600 字截断，磁盘侧仍会膨胀）。
+ */
+export const PALACE_PROFILE_MAX_CHARS = 50 * 1024
+
+function assertProfileContentWithinCap(content: string, label: string): void {
+  if (content.length > PALACE_PROFILE_MAX_CHARS) {
+    throw new Error(`${label}超过 ${PALACE_PROFILE_MAX_CHARS} 字符上限，请拆分或精简后再保存`)
+  }
+}
+
 export async function writePalaceProfile(
   avatarsRoot: string,
   avatarId: string,
   content: string,
 ): Promise<void> {
+  assertProfileContentWithinCap(content, '职业画像')
   await ensurePalaceWorkspace(avatarsRoot, avatarId)
   await atomicWrite(getPalaceProfilePath(avatarsRoot, avatarId), content)
 }
@@ -449,6 +463,7 @@ export async function writePalaceCompany(
   avatarId: string,
   content: string,
 ): Promise<void> {
+  assertProfileContentWithinCap(content, '公司情况')
   await ensurePalaceWorkspace(avatarsRoot, avatarId)
   await atomicWrite(getPalaceCompanyPath(avatarsRoot, avatarId), content)
 }
@@ -545,6 +560,20 @@ export async function listPalaceInboxItems(
 ): Promise<PalaceInboxItemView[]> {
   const document = await readPalaceInbox(avatarsRoot, avatarId)
   return filterPalaceInboxItems(document, filter)
+}
+
+/**
+ * 轻量统计 inbox 中 pending 条目数：只读 inbox/items.json 一个文件，
+ * 不初始化工作区、不渲染镜像、不重建索引。给导航角标中频调用，毫秒级返回。
+ * 文件不存在（palace 未启用/未回填）返回 0。
+ */
+export async function countPalacePendingInboxItems(
+  avatarsRoot: string,
+  avatarId: string,
+): Promise<number> {
+  const doc = await readJsonSafe<PalaceInboxDocument>(getPalaceInboxPath(avatarsRoot, avatarId))
+  if (!doc || !Array.isArray(doc.items)) return 0
+  return doc.items.reduce((n, item) => n + (item?.status === 'pending' ? 1 : 0), 0)
 }
 
 export async function addPalaceInboxItem(

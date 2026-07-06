@@ -330,6 +330,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('palace:delete-dir-file', avatarId, dir, name),
     reveal: (avatarId: string) => ipcRenderer.invoke('palace:reveal', avatarId),
   },
+  // 「职场」可用性（契约定名，勿改）：档案写入 + 导航角标 pending 数
+  writePalaceProfile: (avatarId: string, target: 'profile' | 'company', content: string) =>
+    ipcRenderer.invoke('palace:write-profile', avatarId, target, content),
+  getPalacePendingCount: (avatarId: string) =>
+    ipcRenderer.invoke('palace:pending-count', avatarId),
   // GAP7: 知识文件 CRUD（之前缺失）
   createKnowledgeFile: (avatarId: string, relativePath: string, content?: string) => ipcRenderer.invoke('create-knowledge-file', avatarId, relativePath, content),
   deleteKnowledgeFile: (avatarId: string, relativePath: string) => ipcRenderer.invoke('delete-knowledge-file', avatarId, relativePath),

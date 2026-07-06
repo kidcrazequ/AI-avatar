@@ -655,6 +655,7 @@ export {
   emptyPalaceInboxDocument,
   buildDefaultPalaceProfile,
   buildDefaultPalaceCompany,
+  PALACE_PROFILE_MAX_CHARS,
   ensurePalaceWorkspace,
   readPalaceManifest,
   writePalaceManifest,
@@ -670,6 +671,7 @@ export {
   readPalaceInbox,
   writePalaceInbox,
   listPalaceInboxItems,
+  countPalacePendingInboxItems,
   addPalaceInboxItem,
   updatePalaceInboxItemEntry,
   writePalaceRoom,
@@ -688,6 +690,16 @@ export {
 export type {
   PalaceContextExtras,
 } from './palace/store'
+export {
+  PALACE_PROFILE_SUMMARY_MAX_CHARS,
+  PALACE_DUE_REMINDER_MAX_ITEMS,
+  hasSubstantivePalaceProfile,
+  buildPalacePromptInjection,
+  loadPalacePromptInjection,
+} from './palace/prompt-injection'
+export type {
+  PalacePromptInjectionInput,
+} from './palace/prompt-injection'
 
 // soul-pack（Letta .af 借鉴）：分身可移植打包，单 JSON 文件含所有文本 inline +
 // 二进制 sha256 ref + 外部技能引用。跨用户分发 / 备份回滚 / 版本管理。

@@ -10,8 +10,10 @@ import path from 'node:path'
 
 import {
   PALACE_DIRECTORIES,
+  PALACE_PROFILE_MAX_CHARS,
   PALACE_SCHEMA_VERSION,
   buildDefaultPalaceManifest,
+  countPalacePendingInboxItems,
   deletePalaceRoom,
   ensurePalaceWorkspace,
   getPalaceCommitmentsPath,
@@ -99,6 +101,16 @@ describe('palace-store', () => {
 
     assert.equal(await readPalaceProfile(avatarsRoot, AVATAR_ID), '# 自定义 Profile\n')
     assert.equal(await readPalaceCompany(avatarsRoot, AVATAR_ID), '# 自定义 Company\n')
+  })
+
+  it('writePalaceProfile/Company 超过字符上限拒绝写入（闸口在 core 而非只在 IPC 层）', async () => {
+    // WHY: 这两个函数是 @soul/core 公开导出，绕开 electron IPC 的调用方也必须受限，
+    // 否则 profile 无界增长（注入侧 600 字截断只救 prompt，救不了磁盘）
+    const oversized = 'a'.repeat(PALACE_PROFILE_MAX_CHARS + 1)
+    await assert.rejects(() => writePalaceProfile(avatarsRoot, AVATAR_ID, oversized), /上限/)
+    await assert.rejects(() => writePalaceCompany(avatarsRoot, AVATAR_ID, oversized), /上限/)
+    // 恰好等于上限可写
+    await writePalaceProfile(avatarsRoot, AVATAR_ID, 'a'.repeat(PALACE_PROFILE_MAX_CHARS))
   })
 
   it('manifest 可写可读', async () => {
@@ -195,5 +207,26 @@ describe('palace-store', () => {
       () => writePalaceRoom(avatarsRoot, AVATAR_ID, makeDefaultPalaceRoom('../bad', 'bad')),
       /非法路线卡ID/,
     )
+  })
+
+  // 导航角标依赖这个计数保持轻量且准确：未启用 palace 的分身必须得 0（而非报错），
+  // 已解决（accepted/rejected）的沉淀不得再顶角标。
+  it('countPalacePendingInboxItems: 缺文件得 0，只数 pending', async () => {
+    assert.equal(await countPalacePendingInboxItems(avatarsRoot, AVATAR_ID), 0)
+
+    const mk = (id: string, status: 'pending' | 'accepted' | 'rejected') => ({
+      id,
+      kind: 'fact' as const,
+      title: `条目 ${id}`,
+      content: '内容',
+      status,
+      createdAt: '2026-06-17T00:00:00.000Z',
+      updatedAt: '2026-06-17T00:00:00.000Z',
+    })
+    await writePalaceInbox(avatarsRoot, AVATAR_ID, {
+      schemaVersion: PALACE_SCHEMA_VERSION,
+      items: [mk('i1', 'pending'), mk('i2', 'accepted'), mk('i3', 'pending'), mk('i4', 'rejected')],
+    })
+    assert.equal(await countPalacePendingInboxItems(avatarsRoot, AVATAR_ID), 2)
   })
 })

@@ -1040,6 +1040,10 @@ interface ElectronAPI {
     deleteDirFile: (avatarId: string, dir: PalaceDocDirDTO, name: string) => Promise<void>
     reveal: (avatarId: string) => Promise<void>
   }
+  /** 「职场」档案写入：target 字面量白名单 profile|company；content 超过 50KB（51200 字符）报错 */
+  writePalaceProfile: (avatarId: string, target: 'profile' | 'company', content: string) => Promise<void>
+  /** 「职场」导航角标：palace inbox 中 pending 条目数。轻量只读 items.json，毫秒级 */
+  getPalacePendingCount: (avatarId: string) => Promise<number>
   // v18 Letta .af 借鉴：soul-pack 可移植打包格式
   // 主进程主导文件对话框：renderer 不传任何路径，避免任意文件读写。
   // import 流：preview → token → import；token 5 分钟过期 + 一次性消费。

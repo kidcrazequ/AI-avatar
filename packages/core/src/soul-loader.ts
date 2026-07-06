@@ -18,6 +18,7 @@ import {
   computeWallClockRecencyFactor,
 } from './memory/salience'
 import { readStandingOrders } from './memory/standing-orders'
+import { loadPalacePromptInjection } from './palace/prompt-injection'
 import { formatMemoryUsageHeader, resolveMemoryCharBudget } from './memory/bounded-store'
 
 export interface AvatarConfig {
@@ -426,6 +427,15 @@ export class SoulLoader {
       stableParts.push('\n\n---\n\n')
       stableParts.push(standingOrdersContent.trim())
       stableParts.push('\n\n> 上述 standing orders 是用户在过往对话中明确表达的长期工作流约定，必须始终遵守。如认为某条规则与当前任务冲突，先按规则执行 + 用 [UNCERTAIN] 提示用户，而不是自行忽略。')
+    }
+
+    // Palace 确定性注入：职业画像摘要 + 逾期/今日到期承诺（与上方「任务后沉淀
+    // 盘问」同属 palace 注入体系）。session 装配时算一次并进 stableParts，维持
+    // 前缀缓存（冻结快照同语义）；palace 不存在或两段皆空时严格零注入。
+    const palaceInjection = loadPalacePromptInjection(this.avatarsPath, avatarId)
+    if (palaceInjection) {
+      stableParts.push('\n\n---\n\n')
+      stableParts.push(palaceInjection)
     }
 
     const dynamicParts: string[] = []

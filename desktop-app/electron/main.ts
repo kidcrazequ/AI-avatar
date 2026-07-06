@@ -19,7 +19,7 @@ import path from 'path'
 import fs from 'fs'
 import os from 'os'
 import crypto from 'crypto'
-import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, isGreyZoneSessionAllowed, rememberGreyZoneSessionAllow, clearGreyZoneSessionMemory, type GreyZoneSessionMemory, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
+import { AgentRuntime, SoulLoader, KnowledgeManager, AvatarManager, SkillManager, SkillRouter, ToolRouter, KnowledgeRetriever, TemplateLoader, buildKnowledgeIndex, saveIndex, loadIndex, WikiCompiler, consolidateMemory, getCombinedMemoryInjectionStats, parseStructuredMemoryDocumentJson, serializeStructuredMemoryDocument, assertStructuredMemoryDocumentPayload, formatStructuredMemoryEntriesForPrompt, STRUCTURED_MEMORY_FILENAME, assertSafeSegment, resolveUnderRoot, resolveAvatarWorkspaceSessionRoot, localDateString, formatDocument, fetchWithTimeout, cleanPdfFullText, stripDocxToc, mergeVisionIntoText, detectFabricatedNumbers, callVisionOcr, loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, CHART_CACHE_REL_PATH, McpClientManager, validateMcpServerConfig, parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock, readLifeManifest, readLifeTimeline, readLifeEpisode, readLifeConsolidated, readLifeProgress, deleteLifeEpisode, updateLifeManifest, resetGeneratedLife, generateLife, writeLifeManifest, advanceLife, advanceAllAvatars, DEFAULT_AVATAR_PROJECT_ID, evaluatePackUpdate, buildMcpServerSettingsSnippet, buildConversationHtml, extractRenderableBlocks, evaluateConversationModeToolPolicy, evaluateProxyTrustGreyDenial, shouldConfirmGreyZoneOnDesktop, isGreyZoneSessionAllowed, rememberGreyZoneSessionAllow, clearGreyZoneSessionMemory, type GreyZoneSessionMemory, type AdvanceAllAvatarsResult, type LifeLLMConfig, type LifeUserParams, type LifeProgress, type LifeManifest, type LifeManifestUpdate, type WikiAnswer, type LLMCallFn, type ChartCacheEntry, type ConversationModeForTools, type ToolCallTrustTier, type SubAgentTask, type SubAgentDispatchContext, writeConversationEpisode, readConversationEpisode, listConversationEpisodes, deleteConversationEpisode, shouldExtractEpisode, extractConversationEpisode, applyEpisodeAlgorithmicForgetting, loadTriggers, matchTriggers, buildTriggerInjection, appendStandingOrder, readStandingOrders, countStandingOrders, ensurePalaceWorkspace, listPalaceRooms, readPalaceProfile, readPalaceCompany, writePalaceProfile, writePalaceCompany, listPalaceCommitmentViews, addPalaceCommitment, updatePalaceCommitmentEntry, listPalaceInboxItems, countPalacePendingInboxItems, addPalaceInboxItem, updatePalaceInboxItemEntry, upsertPalaceRoom, deletePalaceRoom, regeneratePalaceIndex, assertSafePalaceId, listPalaceDirectoryFiles, readPalaceDirectoryFile, writePalaceDirectoryFile, deletePalaceDirectoryFile, type PalaceRoomInput, applyDailySummaryAllDates, exportSoulPack, importSoulPack, readInstalledPackState, serializeSoulPack, parseSoulPack, type ExportSoulPackOptions, type ImportSoulPackOptions } from '@soul/core'
 import { DatabaseManager, CURRENT_SCHEMA_VERSION, type McpServerRow, type SubAgentTaskRow } from './database'
 import { ConversationJsonlAppender } from './conversation-jsonl-appender'
 import { readConversationEvents } from './conversation-event-reader'
@@ -3182,6 +3182,18 @@ wrapHandler('palace:get-overview', async (_, avatarId: string) => {
   }
 })
 
+// 「职场」档案编辑：target 用字面量白名单（不接受任何路径成分）。
+// 限长校验已下沉到 core 的 writePalaceProfile/writePalaceCompany（单一闸口）。
+wrapHandler('palace:write-profile', async (_, avatarId: string, target: string, content: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  if (target !== 'profile' && target !== 'company') {
+    throw new Error(`palace:write-profile 非法 target: ${String(target)}（仅接受 profile | company）`)
+  }
+  if (typeof content !== 'string') throw new Error('palace:write-profile content 必须是字符串')
+  if (target === 'profile') await writePalaceProfile(avatarsPath, avatarId, content)
+  else await writePalaceCompany(avatarsPath, avatarId, content)
+})
+
 wrapHandler('palace:add-commitment', async (
   _,
   avatarId: string,
@@ -3229,6 +3241,13 @@ wrapHandler('palace:update-inbox-item', async (
 ) => {
   assertSafeSegment(avatarId, '分身ID')
   return updatePalaceInboxItemEntry(avatarsPath, avatarId, id, patch as never)
+})
+
+// 「职场」导航角标：pending 沉淀条数。轻量只读 inbox/items.json，
+// 不走 get-overview 全量读取（分身切换/面板关闭时中频调用，必须毫秒级）。
+wrapHandler('palace:pending-count', (_, avatarId: string) => {
+  assertSafeSegment(avatarId, '分身ID')
+  return countPalacePendingInboxItems(avatarsPath, avatarId)
 })
 
 wrapHandler('palace:write-room', async (_, avatarId: string, input: PalaceRoomInput) => {

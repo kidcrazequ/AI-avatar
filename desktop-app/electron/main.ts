@@ -36,6 +36,7 @@ import {
   makeTempExtractDir,
   cleanupTempDir,
 } from './folder-importer'
+import { writeSoulPackZip, readSoulPackZip, isZipFile } from './soul-pack-zip'
 import { ScheduledTester } from './scheduled-tester'
 import { CronScheduler, type CronTaskType } from './cron-scheduler'
 import { Logger, redactSensitiveArgs } from './logger'
@@ -2994,8 +2995,10 @@ wrapHandler('knowledge:list-excel-files', (_, avatarId: string) => {
 
 interface SoulPackPathToken {
   filePath: string
-  /** preview 时文件内容的 sha256——import 前复核，文件被替换则拒绝（5 分钟 TTL 内的 TOCTOU 防护） */
+  /** preview 时文件指纹的 sha256——import 前复核，文件被替换则拒绝（5 分钟 TTL 内的 TOCTOU 防护）。zip 绑文件字节 sha，json 绑内容 sha */
   sha256: string
+  /** 该包是自包含 zip（.soulpack.zip）还是单 JSON（.soul.json）——import 走不同解析路径 */
+  isZip: boolean
   expiresAt: number
 }
 const soulPackPathTokens = new Map<string, SoulPackPathToken>()
@@ -3005,53 +3008,74 @@ function sha256OfSoulPack(content: string): string {
   return crypto.createHash('sha256').update(content, 'utf-8').digest('hex')
 }
 
-function issueSoulPackPathToken(filePath: string, sha256: string): string {
+function issueSoulPackPathToken(filePath: string, sha256: string, isZip: boolean): string {
   // 顺手清扫已过期 entry：preview 后放弃导入的 token 不会被 consume，防 Map 无界增长
   const now = Date.now()
   for (const [k, v] of soulPackPathTokens) {
     if (v.expiresAt < now) soulPackPathTokens.delete(k)
   }
   const token = crypto.randomBytes(16).toString('hex')
-  soulPackPathTokens.set(token, { filePath, sha256, expiresAt: now + SOUL_PACK_TOKEN_TTL_MS })
+  soulPackPathTokens.set(token, { filePath, sha256, isZip, expiresAt: now + SOUL_PACK_TOKEN_TTL_MS })
   return token
 }
 
-/** 消费 token：找到 → 删除并返回 {filePath, sha256}；缺失或过期 → null */
-function consumeSoulPackPathToken(token: string): { filePath: string; sha256: string } | null {
+/** 消费 token：找到 → 删除并返回 {filePath, sha256, isZip}；缺失或过期 → null */
+function consumeSoulPackPathToken(token: string): { filePath: string; sha256: string; isZip: boolean } | null {
   if (typeof token !== 'string' || token.length === 0) return null
   const entry = soulPackPathTokens.get(token)
   if (!entry) return null
   soulPackPathTokens.delete(token)
   if (entry.expiresAt < Date.now()) return null
-  return { filePath: entry.filePath, sha256: entry.sha256 }
+  return { filePath: entry.filePath, sha256: entry.sha256, isZip: entry.isZip }
 }
 
-wrapHandler('soul-pack:export-to-file', async (_, avatarId: string, options?: ExportSoulPackOptions) => {
+wrapHandler('soul-pack:export-to-file', async (_, avatarId: string, options?: ExportSoulPackOptions, format?: 'json' | 'zip') => {
   assertSafeSegment(avatarId, '分身ID')
   const win = mainWindow ?? BrowserWindow.getFocusedWindow()
   if (!win) {
     return { ok: false as const, canceled: true, error: '无活动窗口' }
   }
-  const defaultName = `${avatarId}.soul.json`
+  // zip：自包含无损包（含二进制 blob）；json：仅内联文本（二进制降级为 hash ref，跨机不可用）
+  const asZip = format === 'zip'
+  const defaultName = asZip ? `${avatarId}.soulpack.zip` : `${avatarId}.soul.json`
   const saveResult = await dialog.showSaveDialog(win, {
     title: '导出分身包',
     defaultPath: defaultName,
-    filters: [{ name: 'Soul Pack (JSON)', extensions: ['json'] }],
+    filters: asZip
+      ? [{ name: 'Soul Pack（自包含 zip·含附件）', extensions: ['zip'] }]
+      : [{ name: 'Soul Pack (JSON)', extensions: ['json'] }],
   })
   if (saveResult.canceled || !saveResult.filePath) {
     return { ok: false as const, canceled: true }
   }
   const outputFilePath = saveResult.filePath
+  fs.mkdirSync(path.dirname(outputFilePath), { recursive: true })
+  if (asZip) {
+    const { pack, blobCount, blobsMissing, size } = await writeSoulPackZip(avatarsPath, avatarId, options ?? {}, outputFilePath)
+    return {
+      ok: true as const,
+      format: 'zip' as const,
+      outputFilePath,
+      size,
+      filesCount: pack.files.length,
+      binaryRefsCount: pack.binary_refs.length,
+      blobCount,
+      blobsMissing,
+      memoryIncluded: pack.memory_included,
+    }
+  }
   const pack = exportSoulPack(avatarsPath, avatarId, options ?? {})
   const json = serializeSoulPack(pack)
-  fs.mkdirSync(path.dirname(outputFilePath), { recursive: true })
   fs.writeFileSync(outputFilePath, json, 'utf-8')
   return {
     ok: true as const,
+    format: 'json' as const,
     outputFilePath,
     size: Buffer.byteLength(json, 'utf-8'),
     filesCount: pack.files.length,
     binaryRefsCount: pack.binary_refs.length,
+    blobCount: 0,
+    blobsMissing: [] as string[],
     memoryIncluded: pack.memory_included,
   }
 })
@@ -3068,18 +3092,32 @@ wrapHandler('soul-pack:preview', async () => {
   }
   const openResult = await dialog.showOpenDialog(win, {
     title: '选择分身包',
-    filters: [{ name: 'Soul Pack (JSON)', extensions: ['json'] }],
+    filters: [{ name: 'Soul Pack（.soulpack.zip / .soul.json）', extensions: ['zip', 'json'] }],
     properties: ['openFile'],
   })
   if (openResult.canceled || openResult.filePaths.length === 0) {
     return { ok: false as const, canceled: true }
   }
   const inputFilePath = openResult.filePaths[0]
-  const json = await fs.promises.readFile(inputFilePath, 'utf-8')
-  const pack = parseSoulPack(json)
-  // token 绑定 preview 当时的内容指纹：TTL 内文件被替换时 import 复核会失败，
-  // 确保用户确认的摘要与实际导入内容一致（防 TOCTOU）。
-  const token = issueSoulPackPathToken(inputFilePath, sha256OfSoulPack(json))
+
+  // 按魔数判定 zip / json（扩展名不可靠）：zip 走自包含解析 + 惰性 blob，json 维持原路径
+  const isZip = isZipFile(inputFilePath)
+  let pack: ReturnType<typeof parseSoulPack>
+  let tokenSha: string
+  let blobsPresent = 0
+  if (isZip) {
+    const read = readSoulPackZip(inputFilePath)
+    pack = read.pack
+    tokenSha = read.fileSha256
+    blobsPresent = read.blobsPresent
+  } else {
+    const json = await fs.promises.readFile(inputFilePath, 'utf-8')
+    pack = parseSoulPack(json)
+    tokenSha = sha256OfSoulPack(json)
+  }
+  // token 绑定 preview 当时的内容指纹（zip 绑文件字节 sha，json 绑内容 sha）：TTL 内文件被
+  // 替换时 import 复核会失败，确保用户确认的摘要与实际导入内容一致（防 TOCTOU）。
+  const token = issueSoulPackPathToken(inputFilePath, tokenSha, isZip)
   // 包默认 id（pack.name）在本机是否已存在 + 已装包版本，供渲染层提供「覆盖更新 / 完全重置」选择
   let targetExists = false
   let installedPackVersion: string | undefined
@@ -3095,6 +3133,9 @@ wrapHandler('soul-pack:preview', async () => {
   return {
     ok: true as const,
     token,
+    isZip,
+    /** zip 内 blobs/ 实际条目数；< binaryRefsCount 说明包不完整（部分二进制缺字节） */
+    blobsPresent,
     targetExists,
     installedPackVersion,
     name: pack.name,
@@ -3119,15 +3160,25 @@ wrapHandler('soul-pack:import-from-file', async (_, token: string, options?: Imp
   if (!consumed) {
     throw new Error('soul-pack 路径 token 无效或已过期，请重新选择文件')
   }
-  // 包文件最大可达数百 MB：读文件走异步 I/O，避免在 IPC 关键路径上长时间锁事件循环
-  // （parse + 写入循环仍是同步的；超大包的彻底方案是下沉 worker，见 oom-diagnose 约束）
-  const json = await fs.promises.readFile(consumed.filePath, 'utf-8')
-  // 复核内容指纹：preview 之后文件被替换（TTL 内 TOCTOU）则拒绝，避免确认内容与导入内容不一致。
-  if (sha256OfSoulPack(json) !== consumed.sha256) {
-    throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
+  // 包文件最大可达数百 MB：读文件/解 zip 都在 IPC 关键路径上同步，超大包的彻底方案是下沉
+  // worker（见 oom-diagnose 约束）；此处按体积上限 + 惰性 blob 控制峰值内存。
+  let result: ReturnType<typeof importSoulPack>
+  if (consumed.isZip) {
+    // 自包含 zip：读 pack.json + 提供惰性 readBlob，交 core 逐个 sha256 校验后无损写盘
+    const read = readSoulPackZip(consumed.filePath)
+    // 复核文件字节指纹：preview 之后被替换（TTL 内 TOCTOU）则拒绝
+    if (read.fileSha256 !== consumed.sha256) {
+      throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
+    }
+    result = importSoulPack(avatarsPath, read.pack, { ...(options ?? {}), readBlob: read.readBlob })
+  } else {
+    // 单 JSON：读文件走异步 I/O，避免长时间锁事件循环 + 复核内容指纹
+    const json = await fs.promises.readFile(consumed.filePath, 'utf-8')
+    if (sha256OfSoulPack(json) !== consumed.sha256) {
+      throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
+    }
+    result = importSoulPack(avatarsPath, parseSoulPack(json), options ?? {})
   }
-  const pack = parseSoulPack(json)
-  const result = importSoulPack(avatarsPath, pack, options ?? {})
   // 知识/人设已变化：失效该分身全部进程内缓存（与 delete-avatar 同一套），
   // 否则已缓存的 KnowledgeRetriever 会继续用旧 BM25 索引直到重启
   knowledgeManagers.delete(result.avatarId)

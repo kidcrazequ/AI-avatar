@@ -280,8 +280,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // v18 Letta .af 借鉴：soul-pack 可移植打包
   // export/preview 走主进程的 showSaveDialog / showOpenDialog——渲染层不传路径，
   // 完全不持有文件系统句柄。import 需要先 preview 拿一次性 token 才能用。
-  soulPackExportToFile: (avatarId: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }) =>
-    ipcRenderer.invoke('soul-pack:export-to-file', avatarId, options),
+  soulPackExportToFile: (avatarId: string, options?: { includeMemory?: boolean; includeLife?: boolean; includeWiki?: boolean; displayName?: string; description?: string; domain?: string; createdBy?: string }, format?: 'json' | 'zip') =>
+    ipcRenderer.invoke('soul-pack:export-to-file', avatarId, options, format),
   soulPackImportFromFile: (token: string, options?: { targetAvatarId?: string; force?: boolean; restoreMemory?: boolean; mode?: 'replace' | 'update' }) =>
     ipcRenderer.invoke('soul-pack:import-from-file', token, options),
   soulPackPreview: () =>

@@ -1058,8 +1058,23 @@ interface ElectronAPI {
       domain?: string
       createdBy?: string
     },
+    /** 'zip' = 自包含无损包（pack.json + blobs/，含二进制附件）；'json'（默认）= 仅内联文本 */
+    format?: 'json' | 'zip',
   ) => Promise<
-    | { ok: true; outputFilePath: string; size: number; filesCount: number; binaryRefsCount: number; memoryIncluded: boolean }
+    | {
+      ok: true
+      /** 实际写出的格式 */
+      format: 'json' | 'zip'
+      outputFilePath: string
+      size: number
+      filesCount: number
+      binaryRefsCount: number
+      /** zip：写入 blobs/ 的二进制条目数；json 恒为 0 */
+      blobCount: number
+      /** zip：声明了 binary_ref 但源文件缺失、未打进包的路径 */
+      blobsMissing: string[]
+      memoryIncluded: boolean
+    }
     | { ok: false; canceled: true; error?: string }
   >
   soulPackImportFromFile: (
@@ -1079,6 +1094,9 @@ interface ElectronAPI {
     filesRemoved: string[]
     /** update 模式：受保护跳过、未从包写入的路径 */
     filesSkipped: string[]
+    /** zip 包：从 blobs/ 校验（sha256）通过并写盘的二进制文件 */
+    binaryRefsWritten: Array<{ path: string; sha256: string; size: number; mime?: string }>
+    /** 包内无字节（json 包，或 zip 缺该 blob）、需手动补齐的二进制 ref */
     binaryRefsMissing: Array<{ path: string; sha256: string; size: number; mime?: string }>
     externalSkillsRequired: {
       shared: string[]
@@ -1092,6 +1110,10 @@ interface ElectronAPI {
       ok: true
       /** 一次性 path token，调 soulPackImportFromFile 时传回——同一 token 只能用一次 */
       token: string
+      /** 是否自包含 zip 包（.soulpack.zip）；false 为单 JSON（.soul.json） */
+      isZip: boolean
+      /** zip 内 blobs/ 实际条目数；< binaryRefsCount 说明包不完整（部分二进制缺字节）。json 恒为 0 */
+      blobsPresent: number
       /** 包默认 id（name）在本机是否已存在——存在时渲染层应提供「覆盖更新/完全重置」选择 */
       targetExists: boolean
       /** 本机已装同名包的版本（来自上次导入写入的包清单；无清单时 undefined） */

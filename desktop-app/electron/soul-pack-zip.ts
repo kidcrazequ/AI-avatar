@@ -9,18 +9,21 @@
  * binary_ref、不携带字节——导出后在别人机器上不可用。zip 把 manifest 和 blobs 装在一起，
  * 实现无损、自包含的跨机分发。
  *
- * 内存策略（主进程 V8 堆 ~4GB 硬限，见 oom 记忆）：
+ * 内存 / 阻塞策略（主进程 V8 堆 ~4GB 硬限，见 oom 记忆）：
  *   - 打包用 archiver **流式写盘**，大分身（几百 MB 扫描件）不会把整包堆进主进程堆。
- *   - 解包用 adm-zip 读入 zip 后**惰性**逐个取 blob（一次一个 getData），交 core importSoulPack
- *     逐个 sha256 校验后落盘。超大包的彻底方案是下沉 worker（与 import-from-file 注释一致）。
+ *   - 解包用 adm-zip（同步读入）读 pack.json + **惰性**逐个取 blob（一次一个 getData），
+ *     交 core importSoulPack 逐个 sha256 校验后落盘。为控制交互路径上的同步阻塞：
+ *       · 专用体积上限 SOULPACK_ZIP_MAX_BYTES（1GB）比 folder-importer 的后台导入上限更保守；
+ *       · **不再对整包重复计算文件字节 sha**——TOCTOU 复核直接用 pack.manifest_sha256
+ *         （parseSoulPack 已自校验；blob 另由 core 逐个 sha256 校验），省掉一次 GB 级哈希。
+ *     超大包的彻底方案仍是下沉 worker / 流式解包（与 import-from-file 注释一致）。
  *
- * 安全：解包前 stat 体积上限 + 累加解压后大小防 zip 炸弹；readBlob 只按 manifest 声明的
- * 相对路径取条目（toPosixPath 归一，不接受调用方传 ../），最终落盘路径由 importSoulPack
- * 再做穿越校验（isSafeRelativePath）。
+ * 安全：解包前 stat 体积上限 + 累加解压后大小防 zip 炸弹；readBlob 自带 `..` / 绝对路径拒绝
+ * （纵深防御，不依赖调用方 preflight 顺序），最终落盘路径再由 core importSoulPack 的
+ * isSafeRelativePath 校验。
  */
 import fs from 'fs'
 import path from 'path'
-import crypto from 'crypto'
 import {
   exportSoulPack,
   serializeSoulPack,
@@ -32,7 +35,13 @@ import {
   type SoulPack,
   type ExportSoulPackOptions,
 } from '@soul/core'
-import { ARCHIVE_MAX_BYTES, ARCHIVE_MAX_INFLATED_BYTES } from './folder-importer'
+
+/**
+ * zip 分身包专用体积上限：比 folder-importer 的 2GB/4GB 更保守——这是「弹窗确认后立即同步
+ * 读」的交互路径，不能久卡主进程。超大分身请改用 .soulpack.json 或拆分知识库。
+ */
+const SOULPACK_ZIP_MAX_BYTES = 1024 * 1024 * 1024 // 1GB（压缩后）
+const SOULPACK_ZIP_MAX_INFLATED_BYTES = 2 * 1024 * 1024 * 1024 // 2GB（解压后）
 
 /**
  * 读文件前 4 字节判 zip 魔数（PK\x03\x04）。.soulpack.zip 可能被改名，扩展名不可靠，
@@ -112,32 +121,35 @@ export async function writeSoulPackZip(
 
 export interface ReadSoulPackZipResult {
   pack: SoulPack
-  /** 按 manifest 声明的相对路径惰性取 blob 字节；不存在返回 null（交 importSoulPack 判缺失） */
+  /** 按 manifest 声明的相对路径惰性取 blob 字节；越界 / 不存在返回 null（交 importSoulPack 判缺失） */
   readBlob: (relPath: string) => Buffer | null
   /** blobs/ 下实际存在的条目数（可与 pack.binary_refs.length 比对是否缺 blob） */
   blobsPresent: number
-  /** 整个 zip 文件字节的 sha256（token 绑定 / TOCTOU 复核用） */
-  fileSha256: string
+}
+
+/** 纵深防御：拒绝 `..` 段 / 绝对（前导 /）路径，不依赖调用方 preflight 顺序 */
+function isBlobRelPathSafe(posixRel: string): boolean {
+  if (!posixRel || posixRel.startsWith('/')) return false
+  return !posixRel.split('/').some((seg) => seg === '..' || seg === '')
 }
 
 /**
  * 读取 .soulpack.zip：校验体积 → 读 pack.json → 提供惰性 readBlob。
  * 不解压到临时目录：blob 由 readBlob 从内存 zip 惰性取，交 importSoulPack 逐个校验后写盘。
+ * TOCTOU 复核由调用方用 pack.manifest_sha256 完成（不在此重复整包哈希）。
  *
  * 失败抛 Error：过大 / 疑似 zip 炸弹 / 缺 pack.json / manifest 校验失败。
  */
 export function readSoulPackZip(zipPath: string): ReadSoulPackZipResult {
   const stat = fs.statSync(zipPath)
   if (!stat.isFile()) throw new Error(`分身包路径不是文件: ${zipPath}`)
-  if (stat.size > ARCHIVE_MAX_BYTES) {
-    throw new Error(`zip 分身包过大 (${stat.size} > ${ARCHIVE_MAX_BYTES})，请拆分后导入`)
+  if (stat.size > SOULPACK_ZIP_MAX_BYTES) {
+    throw new Error(`zip 分身包过大 (${stat.size} > ${SOULPACK_ZIP_MAX_BYTES})，请改用 .soulpack.json 或拆分后导入`)
   }
-  const fileBuf = fs.readFileSync(zipPath)
-  const fileSha256 = crypto.createHash('sha256').update(fileBuf).digest('hex')
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const AdmZip = require('adm-zip')
-  const zip = new AdmZip(fileBuf)
+  const zip = new AdmZip(zipPath)
   const entries = zip.getEntries() as Array<{
     entryName: string
     isDirectory: boolean
@@ -149,9 +161,9 @@ export function readSoulPackZip(zipPath: string): ReadSoulPackZipResult {
   let blobsPresent = 0
   for (const e of entries) {
     inflated += e.header.size || 0
-    if (inflated > ARCHIVE_MAX_INFLATED_BYTES) {
+    if (inflated > SOULPACK_ZIP_MAX_INFLATED_BYTES) {
       throw new Error(
-        `zip 分身包解压后总大小超过 ${ARCHIVE_MAX_INFLATED_BYTES} 字节，疑似 zip 炸弹，已拒绝`,
+        `zip 分身包解压后总大小超过 ${SOULPACK_ZIP_MAX_INFLATED_BYTES} 字节，疑似 zip 炸弹，已拒绝`,
       )
     }
     if (!e.isDirectory && e.entryName.startsWith(`${SOUL_PACK_BLOB_DIR}/`)) blobsPresent++
@@ -165,11 +177,12 @@ export function readSoulPackZip(zipPath: string): ReadSoulPackZipResult {
   const pack = parseSoulPack(json)
 
   const readBlob = (relPath: string): Buffer | null => {
-    const entryName = `${SOUL_PACK_BLOB_DIR}/${toPosixPath(relPath)}`
-    const e = zip.getEntry(entryName)
+    const posixRel = toPosixPath(relPath)
+    if (!isBlobRelPathSafe(posixRel)) return null
+    const e = zip.getEntry(`${SOUL_PACK_BLOB_DIR}/${posixRel}`)
     if (!e || e.isDirectory) return null
     return e.getData() as Buffer
   }
 
-  return { pack, readBlob, blobsPresent, fileSha256 }
+  return { pack, readBlob, blobsPresent }
 }

@@ -4,7 +4,8 @@
  * 覆盖：
  *   - isZipFile 按魔数判定 zip / json（扩展名无关）
  *   - writeSoulPackZip → readSoulPackZip → importSoulPack：二进制字节完整无损还原
- *   - blobsPresent / blobCount / fileSha256 正确
+ *   - blobsPresent / blobCount / manifest_sha256 正确
+ *   - readBlob 纵深防御拒绝 .. / 绝对路径
  *   - readBlob 只按声明路径取，未知路径返回 null
  *   - readSoulPackZip 拒绝缺 pack.json 的普通 zip
  */
@@ -74,7 +75,7 @@ describe('soul-pack-zip / round-trip 无损', () => {
 
       const r = readSoulPackZip(zipPath)
       assert.equal(r.blobsPresent, 1)
-      assert.equal(r.fileSha256.length, 64)
+      assert.equal(r.pack.manifest_sha256.length, 64)
       assert.equal(r.pack.binary_refs.length, 1)
       // readBlob 取到与原文件一致的字节
       const blob = r.readBlob('knowledge/data.xlsx')
@@ -94,6 +95,26 @@ describe('soul-pack-zip / round-trip 无损', () => {
       cleanup()
       fs.rmSync(outDir, { recursive: true, force: true })
       fs.rmSync(importRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('readBlob 纵深防御：拒绝 .. / 绝对路径（返回 null），正常路径仍可取', async () => {
+    const { avatarsRoot, avatarId, binaryBytes, cleanup } = setupAvatar()
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-zip-slip-'))
+    try {
+      const zipPath = path.join(outDir, 'a.soulpack.zip')
+      await writeSoulPackZip(avatarsRoot, avatarId, {}, zipPath)
+      const r = readSoulPackZip(zipPath)
+      // 越界路径一律 null，不依赖 core preflight 的调用顺序
+      assert.equal(r.readBlob('../evil'), null)
+      assert.equal(r.readBlob('/etc/passwd'), null)
+      assert.equal(r.readBlob('knowledge/../../escape'), null)
+      assert.equal(r.readBlob(''), null)
+      // 正常声明路径仍可取到原字节
+      assert.deepEqual([...(r.readBlob('knowledge/data.xlsx') as Buffer)], [...binaryBytes])
+    } finally {
+      cleanup()
+      fs.rmSync(outDir, { recursive: true, force: true })
     }
   })
 

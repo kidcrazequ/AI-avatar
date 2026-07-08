@@ -3036,6 +3036,9 @@ wrapHandler('soul-pack:export-to-file', async (_, avatarId: string, options?: Ex
     return { ok: false as const, canceled: true, error: '无活动窗口' }
   }
   // zip：自包含无损包（含二进制 blob）；json：仅内联文本（二进制降级为 hash ref，跨机不可用）
+  if (format !== undefined && format !== 'json' && format !== 'zip') {
+    throw new Error(`未知导出格式: ${String(format)}`)
+  }
   const asZip = format === 'zip'
   const defaultName = asZip ? `${avatarId}.soulpack.zip` : `${avatarId}.soul.json`
   const saveResult = await dialog.showSaveDialog(win, {
@@ -3108,7 +3111,9 @@ wrapHandler('soul-pack:preview', async () => {
   if (isZip) {
     const read = readSoulPackZip(inputFilePath)
     pack = read.pack
-    tokenSha = read.fileSha256
+    // TOCTOU 复核绑 manifest_sha256（parseSoulPack 已自校验，blob 另由 core 逐个 sha256 校验）——
+    // 避免对整包（可达 GB 级）重复计算文件字节哈希、久卡主进程
+    tokenSha = read.pack.manifest_sha256
     blobsPresent = read.blobsPresent
   } else {
     const json = await fs.promises.readFile(inputFilePath, 'utf-8')
@@ -3166,8 +3171,8 @@ wrapHandler('soul-pack:import-from-file', async (_, token: string, options?: Imp
   if (consumed.isZip) {
     // 自包含 zip：读 pack.json + 提供惰性 readBlob，交 core 逐个 sha256 校验后无损写盘
     const read = readSoulPackZip(consumed.filePath)
-    // 复核文件字节指纹：preview 之后被替换（TTL 内 TOCTOU）则拒绝
-    if (read.fileSha256 !== consumed.sha256) {
+    // 复核 manifest 指纹：preview 之后被替换（TTL 内 TOCTOU）则拒绝；blob 篡改由 core 逐个 sha256 拦截
+    if (read.pack.manifest_sha256 !== consumed.sha256) {
       throw new Error('soul-pack 文件在确认后已被修改，请重新预览后再导入')
     }
     result = importSoulPack(avatarsPath, read.pack, { ...(options ?? {}), readBlob: read.readBlob })

@@ -1,8 +1,9 @@
 /**
- * @file ExportAvatarPackModal.tsx — 把当前分身导出为可分享的分身包（.soulpack.json）
+ * @file ExportAvatarPackModal.tsx — 把当前分身导出为可分享的分身包（.soulpack.zip 无损 / .soulpack.json）
  *
- * 复用已就绪的后端 soulPackExportToFile（主进程弹原生保存框 → 写 .soulpack.json）。
- * 别人拿到该文件用「导入分身包」即可安装。后端零改动。
+ * 复用后端 soulPackExportToFile（主进程弹原生保存框写文件）。format='zip' 时产出自包含
+ * .soulpack.zip（含二进制附件，无损）；'json' 时产出单 .soulpack.json（仅文本）。
+ * 别人拿到该文件用「导入分身包」即可安装。
  *
  * 默认偏隐私保守：不含记忆 / 不含人生数据（这些是个人私有），含 wiki（属专业能力）。
  */
@@ -28,6 +29,8 @@ export default function ExportAvatarPackModal({ avatarId, avatarName, onClose, s
   const [createdBy, setCreatedBy] = useState('')
   const [phase, setPhase] = useState<'config' | 'exporting' | 'done'>('config')
   const [result, setResult] = useState<ExportOk | null>(null)
+  // 默认 zip：自包含无损（含二进制附件），跨机分发对方即完整可用
+  const [format, setFormat] = useState<'zip' | 'json'>('zip')
 
   const handleExport = async () => {
     setPhase('exporting')
@@ -39,7 +42,7 @@ export default function ExportAvatarPackModal({ avatarId, avatarName, onClose, s
         displayName: displayName.trim() || undefined,
         description: description.trim() || undefined,
         createdBy: createdBy.trim() || undefined,
-      })
+      }, format)
       if (!res.ok) {
         if (!res.canceled) showToast?.(`导出失败：${res.error ?? '未知错误'}`, 'error')
         setPhase('config') // 取消/失败：回到配置页
@@ -59,14 +62,36 @@ export default function ExportAvatarPackModal({ avatarId, avatarName, onClose, s
     <Modal isOpen onClose={onClose} size="lg">
       <PanelHeader
         title="导出分身包"
-        subtitle={`把「${avatarName}」打包成 .soulpack.json，分享给别人`}
+        subtitle={`把「${avatarName}」打包成分身包，分享给别人`}
         onClose={onClose}
       />
 
       <div className="flex-1 overflow-y-auto p-6 bg-px-bg">
         {phase !== 'done' ? (
           <div className="max-w-2xl mx-auto">
-            <div className="border-2 border-px-border bg-px-surface/70 p-5 space-y-4">
+            <div className="border-2 border-px-border bg-px-surface/70 p-5 space-y-3">
+              <div className="font-game text-[12px] text-px-text-dim tracking-wider">打包格式</div>
+              <label className="flex items-start gap-3 font-game text-[12px] text-px-text cursor-pointer">
+                <input type="radio" name="export-format" className="mt-0.5" checked={format === 'zip'} onChange={() => setFormat('zip')} />
+                <span>
+                  自包含 zip（.soulpack.zip · 推荐）
+                  <span className="block text-[11px] text-px-text-dim mt-1 leading-relaxed">
+                    含 Excel/PDF/图片/扫描件等二进制附件，无损自包含，对方导入即完整可用
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 font-game text-[12px] text-px-text cursor-pointer">
+                <input type="radio" name="export-format" className="mt-0.5" checked={format === 'json'} onChange={() => setFormat('json')} />
+                <span>
+                  单 JSON（.soulpack.json）
+                  <span className="block text-[11px] text-px-text-dim mt-1 leading-relaxed">
+                    仅文本，体积小、便于 git diff；二进制附件降级为引用，对方需另行获取
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <div className="mt-5 border-2 border-px-border bg-px-surface/70 p-5 space-y-4">
               <div className="font-game text-[12px] text-px-text-dim tracking-wider">打包内容</div>
               <label className="flex items-center gap-3 font-game text-[12px] text-px-text cursor-pointer">
                 <input type="checkbox" checked={includeWiki} onChange={(e) => setIncludeWiki(e.target.checked)} />
@@ -112,7 +137,7 @@ export default function ExportAvatarPackModal({ avatarId, avatarName, onClose, s
             <div className="mt-5 flex justify-end gap-3">
               <button type="button" onClick={onClose} className="pixel-btn-outline-muted px-4 py-2 text-[11px]">取消</button>
               <button type="button" disabled={phase === 'exporting'} onClick={handleExport} className="pixel-btn-primary px-5 py-2 text-[11px] disabled:opacity-50">
-                {phase === 'exporting' ? '导出中...' : '导出为文件'}
+                {phase === 'exporting' ? '导出中...' : (format === 'zip' ? '导出为 zip' : '导出为 JSON')}
               </button>
             </div>
           </div>
@@ -124,11 +149,20 @@ export default function ExportAvatarPackModal({ avatarId, avatarName, onClose, s
                 文件：<span className="text-px-primary">{result.outputFilePath}</span>
               </div>
               <div className="font-game text-[11px] text-px-text-dim mt-2">
-                {(result.size / 1024).toFixed(1)} KB · {result.filesCount} 个文件 · {result.binaryRefsCount} 个二进制资源
+                {result.format === 'zip' ? `${(result.size / 1024 / 1024).toFixed(2)} MB` : `${(result.size / 1024).toFixed(1)} KB`}
+                {' · '}{result.filesCount} 个文件
+                {' · '}{result.format === 'zip'
+                  ? `${result.blobCount}/${result.binaryRefsCount} 个二进制附件（无损）`
+                  : `${result.binaryRefsCount} 个二进制资源（仅引用）`}
                 {result.memoryIncluded ? ' · 含记忆' : ''}
               </div>
+              {result.format === 'zip' && result.blobsMissing.length > 0 && (
+                <div className="font-game text-[11px] text-px-warning mt-2 leading-relaxed">
+                  ⚠ {result.blobsMissing.length} 个二进制资源的源文件缺失，未打进包（其余附件已无损携带）。
+                </div>
+              )}
               <p className="font-game text-[11px] text-px-text-dim mt-4 leading-relaxed">
-                把这个 .soulpack.json 发给对方，对方用「导入分身包」即可安装。
+                把这个 {result.format === 'zip' ? '.soulpack.zip' : '.soulpack.json'} 发给对方，对方用「导入分身包」即可安装。
               </p>
             </div>
             <div className="mt-5 flex justify-end">

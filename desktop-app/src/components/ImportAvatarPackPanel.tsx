@@ -1,5 +1,5 @@
 /**
- * @file ImportAvatarPackPanel.tsx — 导入/安装外部分身包（.soulpack.json）
+ * @file ImportAvatarPackPanel.tsx — 导入/安装外部分身包（.soulpack.zip 无损 / .soulpack.json）
  *
  * 后端链路：soulPackPreview（弹原生文件框 → 摘要 + targetExists + 一次性 token）→
  * soulPackImportFromFile（核验 token/指纹 → 落地到 avatars/）。
@@ -97,7 +97,7 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
     <Modal isOpen onClose={onClose} size="lg">
       <PanelHeader
         title="导入分身包"
-        subtitle="安装别人做好的分身（.soulpack.json）到本机"
+        subtitle="安装别人做好的分身（.soulpack.zip / .soulpack.json）到本机"
         onClose={onClose}
       />
 
@@ -108,14 +108,15 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
             <div className="border-2 border-dashed border-px-border bg-px-surface/70 px-8 py-12">
               <div className="font-game text-[14px] text-px-text">选择一个分身包文件</div>
               <p className="font-game text-[12px] text-px-text-dim mt-3 leading-relaxed">
-                分身包是 <span className="text-px-primary">.soulpack.json</span> 文件，包含对方分身的人设、技能、
+                分身包是 <span className="text-px-primary">.soulpack.zip</span>（自包含·含 Excel/PDF/图片等附件，无损）
+                或 <span className="text-px-primary">.soulpack.json</span>（仅文本）文件，包含对方分身的人设、技能、
                 知识与（可选）记忆。导入后会成为你本机的一个新分身。
               </p>
               {error && (
                 <p className="font-game text-[11px] text-px-danger mt-4 leading-relaxed break-words">{error}</p>
               )}
               <button type="button" onClick={handlePickFile} className="pixel-btn-primary px-5 py-3 mt-6">
-                选择 .soulpack.json 文件
+                选择分身包文件（.zip / .json）
               </button>
             </div>
           </div>
@@ -135,9 +136,14 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
                     {preview.created_by ? ` · by ${preview.created_by}` : ''}
                   </div>
                 </div>
-                <span className="font-game text-[10px] text-px-text-dim border border-px-border-dim px-2 py-1 whitespace-nowrap">
-                  schema v{preview.schema_version}
-                </span>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className={`font-game text-[10px] px-2 py-1 whitespace-nowrap border ${preview.isZip ? 'text-px-primary border-px-primary/60' : 'text-px-text-dim border-px-border-dim'}`}>
+                    {preview.isZip ? '自包含 zip · 含附件' : '单 JSON · 仅文本'}
+                  </span>
+                  <span className="font-game text-[10px] text-px-text-dim border border-px-border-dim px-2 py-1 whitespace-nowrap">
+                    schema v{preview.schema_version}
+                  </span>
+                </div>
               </div>
               {preview.description && (
                 <p className="font-game text-[12px] text-px-text-sec mt-4 leading-relaxed">{preview.description}</p>
@@ -145,7 +151,9 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
 
               <div className="mt-5 pt-4 border-t border-px-border-dim/70 grid grid-cols-2 gap-x-6 gap-y-2 font-game text-[11px]">
                 <div className="text-px-text-dim">文件数<span className="text-px-text ml-2">{preview.filesCount}</span></div>
-                <div className="text-px-text-dim">二进制资源<span className="text-px-text ml-2">{preview.binaryRefsCount}</span></div>
+                <div className="text-px-text-dim">二进制资源<span className="text-px-text ml-2">
+                  {preview.isZip ? `${preview.blobsPresent}/${preview.binaryRefsCount}（含附件）` : `${preview.binaryRefsCount}（仅引用）`}
+                </span></div>
                 <div className="text-px-text-dim">含记忆<span className="text-px-text ml-2">{preview.memoryIncluded ? '是' : '否'}</span></div>
                 <div className="text-px-text-dim">
                   外部技能依赖
@@ -154,6 +162,11 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
                   </span>
                 </div>
               </div>
+              {preview.isZip && preview.blobsPresent < preview.binaryRefsCount && (
+                <div className="mt-3 font-game text-[11px] text-px-warning leading-relaxed">
+                  ⚠ zip 包内仅含 {preview.blobsPresent}/{preview.binaryRefsCount} 个二进制附件，缺失的资源导入后需手动补齐。
+                </div>
+              )}
             </div>
 
             {/* 选项 */}
@@ -180,7 +193,8 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
                     <span>
                       完全重置
                       <span className="block text-[11px] text-px-danger/90 mt-1 leading-relaxed">
-                        清空整个分身目录后按包重写：本机记忆与导入后新增的数据会被删除，原始二进制资料无法从包恢复
+                        清空整个分身目录后按包重写：本机记忆与导入后新增的数据会被删除
+                        {preview.isZip ? '（二进制附件会从 zip 包无损恢复）' : '，原始二进制资料无法从包恢复'}
                       </span>
                     </span>
                   </label>
@@ -243,6 +257,14 @@ export default function ImportAvatarPackPanel({ onClose, onImported, onOpenAvata
                   <ul className="font-game text-[11px] text-px-text-dim leading-relaxed list-disc pl-5 space-y-1">
                     {result.warnings.map((w, i) => <li key={i}>{w}</li>)}
                   </ul>
+                </div>
+              )}
+
+              {result.binaryRefsWritten.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-px-border-dim/70">
+                  <div className="font-game text-[10px] text-px-primary tracking-wider">
+                    已从 zip 包校验并无损还原 {result.binaryRefsWritten.length} 个二进制资源（Excel/PDF/图片等）
+                  </div>
                 </div>
               )}
 

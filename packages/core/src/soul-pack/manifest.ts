@@ -31,6 +31,15 @@ export const INLINE_EXTENSIONS: ReadonlySet<string> = new Set([
   '.md', '.yaml', '.yml', '.json', '.txt', '.csv', '.html', '.css', '.svg',
 ])
 
+/**
+ * 自包含 zip 分身包（.soulpack.zip）的容器布局常量。
+ * zip 里 manifest 走 pack.json（即 serializeSoulPack 的输出），二进制 blob 放 blobs/<相对路径>；
+ * import 端逐个按 binary_ref.sha256 校验后写盘，实现无损还原。
+ * 供 electron 打包/解包层引用，作为格式单一事实源。
+ */
+export const SOUL_PACK_MANIFEST_FILENAME = 'pack.json'
+export const SOUL_PACK_BLOB_DIR = 'blobs'
+
 /** Inline 文本文件 entry */
 export interface SoulPackFile {
   /** 相对 avatar 根目录的 POSIX 路径（导出导入两端统一用 /） */

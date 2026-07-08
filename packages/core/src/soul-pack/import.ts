@@ -18,6 +18,7 @@
 import fs from 'fs'
 import path from 'path'
 import { assertSafeSegment } from '../utils/path-security'
+import { sha256Hex } from './manifest'
 import type { SoulPack, SoulPackBinaryRef, SoulPackSkillsRef } from './manifest'
 
 export interface ImportSoulPackOptions {
@@ -38,6 +39,14 @@ export interface ImportSoulPackOptions {
    *     用户本地新增的文件）
    */
   mode?: 'replace' | 'update'
+  /**
+   * 可选：二进制 blob 字节读取器。自包含 zip 分身包（.soulpack.zip）导入时，由 electron
+   * 从解压目录 `blobs/<relPath>` 注入。传入时 importSoulPack 会**逐个校验 binary_ref 的
+   * sha256 并写盘**，实现无损还原（Excel/PDF/图片/扫描件）；不传时维持原行为
+   * （binary_refs 仅在 result.binaryRefsMissing 报告，需手动补齐）。
+   * 返回 null 表示该 blob 不在包内（视为缺失，计入 binaryRefsMissing 并 warn，不抛错）。
+   */
+  readBlob?: (relPath: string) => Buffer | null
 }
 
 export interface ImportSoulPackResult {
@@ -51,7 +60,9 @@ export interface ImportSoulPackResult {
   filesRemoved: string[]
   /** update 模式：受保护跳过、未从包写入的路径 */
   filesSkipped: string[]
-  /** 二进制 ref：pack 里没有内容，导入端需手动补 */
+  /** 从包内 blobs 校验（sha256）通过并写盘的二进制文件（仅 readBlob 提供时可能非空） */
+  binaryRefsWritten: SoulPackBinaryRef[]
+  /** 二进制 ref：包内无字节（未提供 readBlob，或该 blob 缺失），导入端需手动补 */
   binaryRefsMissing: SoulPackBinaryRef[]
   /** 需要 import 端环境提供的外部 skills */
   externalSkillsRequired: SoulPackSkillsRef
@@ -80,7 +91,9 @@ export function importSoulPack(
   // 完整 preflight：在任何破坏性操作之前把所有「可静态校验」的非法输入全部拦掉。
   // 否则 force=true 覆盖模式下，一个 manifest/hash 合法但含 ../ 路径的包会先 rmSync 删掉
   // 原分身、再在写入循环报错 → 原分身数据丢失。必须先校验、再删除、再写入。
-  preflightImport(pack)
+  // readBlob 提供时，preflight 一并把「已存在的 blob」sha256 验完，杜绝篡改/损坏的 blob
+  // 在 rmSync 之后才被发现。
+  preflightImport(pack, options.readBlob)
 
   const mode = options.mode ?? 'replace'
   const targetRoot = path.join(avatarsPath, targetId)
@@ -126,6 +139,35 @@ export function importSoulPack(
     fs.writeFileSync(fullPath, f.content, 'utf-8')
     filesWritten.push(f.path)
   }
+
+  // 二进制 blob 写盘：仅当调用方注入 readBlob（自包含 zip 分身包）。逐个校验 sha256 后落盘，
+  // 实现无损还原；readBlob 缺 blob（返回 null）则计入 binaryRefsMissing，不抛错。
+  const binaryRefsWritten: SoulPackBinaryRef[] = []
+  const binaryRefsMissing: SoulPackBinaryRef[] = []
+  for (const ref of pack.binary_refs) {
+    if (!isSafeRelativePath(ref.path)) {
+      throw new Error(`非法 binary ref path（可能路径穿越）: ${ref.path}`)
+    }
+    if (mode === 'update' && isProtectedOnUpdate(ref.path, targetRoot)) {
+      filesSkipped.push(ref.path)
+      continue
+    }
+    const buf = options.readBlob ? options.readBlob(ref.path) : null
+    if (buf === null) {
+      binaryRefsMissing.push(ref)
+      continue
+    }
+    // 二次防御（preflight 已验）：解压目录可能在 preflight 与写入之间被并发改写（TOCTOU）
+    if (sha256Hex(buf) !== ref.sha256) {
+      throw new Error(`soul-pack blob sha256 校验失败（可能被篡改或损坏）: ${ref.path}`)
+    }
+    const fullPath = path.join(targetRoot, ref.path)
+    fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+    fs.writeFileSync(fullPath, buf)
+    filesWritten.push(ref.path)
+    binaryRefsWritten.push(ref)
+  }
+
   if (filesSkipped.length > 0) {
     warnings.push(
       `update 模式跳过 ${filesSkipped.length} 个受保护路径（memory/、life/、avatar.config.json、_index、_raw），本机数据保持不变。`,
@@ -136,7 +178,10 @@ export function importSoulPack(
   // 只删上次确认由包写入的路径——用户本地新增的文件不在清单里，永远不会被碰。
   const filesRemoved: string[] = []
   if (mode === 'update' && previousState) {
-    const newPaths = new Set(pack.files.map((f) => f.path))
+    const newPaths = new Set([
+      ...pack.files.map((f) => f.path),
+      ...pack.binary_refs.map((r) => r.path),
+    ])
     for (const oldPath of previousState.files) {
       if (newPaths.has(oldPath)) continue
       // 清单可能被手工篡改：删除前重新做路径校验 + 保护路径校验
@@ -172,10 +217,14 @@ export function importSoulPack(
     )
   }
 
-  // 二进制 ref 提示
-  if (pack.binary_refs.length > 0) {
+  // 二进制文件提示：区分「已随包无损还原」与「仍缺字节需手动补齐」
+  if (binaryRefsWritten.length > 0) {
+    warnings.push(`已从包内 blobs 校验并无损还原 ${binaryRefsWritten.length} 个二进制文件。`)
+  }
+  if (binaryRefsMissing.length > 0) {
     warnings.push(
-      `pack 含 ${pack.binary_refs.length} 个二进制文件 ref（pack 不内联二进制内容）` +
+      `pack 含 ${binaryRefsMissing.length} 个二进制文件缺少字节` +
+      `（.soulpack.json 不内联二进制；改用 .soulpack.zip 可无损携带）` +
       `；导入端需手动把同 sha256 的文件放到对应路径才能完整工作。详见 binaryRefsMissing。`,
     )
   }
@@ -201,7 +250,8 @@ export function importSoulPack(
     filesWritten,
     filesRemoved,
     filesSkipped,
-    binaryRefsMissing: pack.binary_refs,
+    binaryRefsWritten,
+    binaryRefsMissing,
     externalSkillsRequired: pack.external_skills,
     memoryRestored,
     warnings,
@@ -216,7 +266,7 @@ export interface SoulPackInstallState {
   pack_name: string
   pack_version: string
   manifest_sha256?: string
-  /** 上次导入时包内 inline 文件的相对路径列表 */
+  /** 上次导入时包内文件的相对路径列表（inline 文本 + 二进制 ref），供 update 识别旧包文件 */
   files: string[]
 }
 
@@ -248,7 +298,7 @@ function writePackState(targetRoot: string, pack: SoulPack): void {
     pack_name: pack.name,
     pack_version: pack.pack_version,
     manifest_sha256: pack.manifest_sha256,
-    files: pack.files.map((f) => f.path),
+    files: [...pack.files.map((f) => f.path), ...pack.binary_refs.map((r) => r.path)],
   }
   fs.writeFileSync(path.join(targetRoot, PACK_STATE_FILE), JSON.stringify(state, null, 2), 'utf-8')
 }
@@ -280,12 +330,15 @@ const MAX_PACK_INLINE_BYTES = 500 * 1024 * 1024 // 500MB inline 文本总量
  * 只覆盖 throw 类问题（file path 穿越、数量/大小上限）；memory 里非法的 episode/daily 条目
  * 由 restoreMemory 跳过+warn（不 throw），不会造成"删除后失败"，故不在此拦截。
  */
-function preflightImport(pack: SoulPack): void {
+function preflightImport(pack: SoulPack, readBlob?: (relPath: string) => Buffer | null): void {
   if (!Array.isArray(pack.files)) {
     throw new Error('soul-pack 非法：files 不是数组')
   }
-  if (pack.files.length > MAX_PACK_FILES) {
-    throw new Error(`soul-pack 文件数 ${pack.files.length} 超过上限 ${MAX_PACK_FILES}`)
+  if (!Array.isArray(pack.binary_refs)) {
+    throw new Error('soul-pack 非法：binary_refs 不是数组')
+  }
+  if (pack.files.length + pack.binary_refs.length > MAX_PACK_FILES) {
+    throw new Error(`soul-pack 文件数（inline + binary）超过上限 ${MAX_PACK_FILES}`)
   }
   let totalBytes = 0
   for (const f of pack.files) {
@@ -295,6 +348,20 @@ function preflightImport(pack: SoulPack): void {
     totalBytes += Buffer.byteLength(typeof f.content === 'string' ? f.content : '', 'utf-8')
     if (totalBytes > MAX_PACK_INLINE_BYTES) {
       throw new Error(`soul-pack inline 内容总大小超过上限 ${MAX_PACK_INLINE_BYTES} 字节`)
+    }
+  }
+  for (const ref of pack.binary_refs) {
+    // 防 zip-slip：binary_ref.path 也可能含 ../ / 绝对路径，必须在破坏性操作前拦下
+    if (!isSafeRelativePath(ref.path)) {
+      throw new Error(`非法 binary ref path（可能路径穿越）: ${ref.path}`)
+    }
+    // 提供 blob 读取器时，在 rmSync 之前把「已存在的 blob」sha256 验完——
+    // 一旦某个 blob 与 manifest 声明的 sha256 不符（篡改/损坏），立刻抛，绝不先删原分身。
+    if (readBlob) {
+      const buf = readBlob(ref.path)
+      if (buf !== null && sha256Hex(buf) !== ref.sha256) {
+        throw new Error(`soul-pack blob sha256 校验失败（可能被篡改或损坏）: ${ref.path}`)
+      }
     }
   }
 }

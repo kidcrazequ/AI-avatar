@@ -8,6 +8,8 @@ export {
   SOUL_PACK_SCHEMA_VERSION,
   INLINE_MAX_BYTES,
   INLINE_EXTENSIONS,
+  SOUL_PACK_MANIFEST_FILENAME,
+  SOUL_PACK_BLOB_DIR,
   sha256Hex,
   computeManifestSha256,
   serializeSoulPack,

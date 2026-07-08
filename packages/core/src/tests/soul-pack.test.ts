@@ -454,7 +454,7 @@ describe('soul-pack / import 行为', () => {
         const result = importSoulPack(importRoot, parsed, { targetAvatarId: 'imported' })
         assert.equal(result.binaryRefsMissing.length, 1)
         assert.equal(result.binaryRefsMissing[0].path, 'knowledge/data.xlsx')
-        assert.ok(result.warnings.some(w => w.includes('二进制文件 ref')))
+        assert.ok(result.warnings.some(w => w.includes('二进制文件缺少字节')))
         assert.ok(result.warnings.some(w => w.includes('外部技能')))
       } finally {
         fs.rmSync(importRoot, { recursive: true, force: true })
@@ -605,6 +605,133 @@ describe('soul-pack / update 模式（覆盖更新）', () => {
       assert.equal(result.warnings.some(w => w.includes('包清单')), false)
     } finally {
       env.cleanup()
+    }
+  })
+})
+
+describe('soul-pack / 自包含 zip 无损导入（readBlob）', () => {
+  /** 模拟 electron 从解压目录 blobs/<rel> 读字节：直接从源 avatar 目录同名路径读 */
+  function blobReaderFrom(srcAvatarDir: string) {
+    return (rel: string): Buffer | null => {
+      const p = path.join(srcAvatarDir, rel)
+      return fs.existsSync(p) ? fs.readFileSync(p) : null
+    }
+  }
+
+  it('readBlob 提供时：binary blob 校验 sha256 并写盘（binaryRefsWritten），无 missing', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withBinary: true })
+    try {
+      const srcDir = path.join(avatarsRoot, avatarId)
+      const pack = parseSoulPack(serializeSoulPack(exportSoulPack(avatarsRoot, avatarId)))
+      assert.equal(pack.binary_refs.length, 1)
+
+      const importRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-pack-zip-'))
+      try {
+        const result = importSoulPack(importRoot, pack, {
+          targetAvatarId: 'imported',
+          readBlob: blobReaderFrom(srcDir),
+        })
+        assert.equal(result.binaryRefsWritten.length, 1)
+        assert.equal(result.binaryRefsWritten[0].path, 'knowledge/data.xlsx')
+        assert.equal(result.binaryRefsMissing.length, 0)
+        assert.ok(result.filesWritten.includes('knowledge/data.xlsx'))
+        // 字节完整还原
+        const written = fs.readFileSync(path.join(importRoot, 'imported', 'knowledge', 'data.xlsx'))
+        assert.deepEqual([...written], [0x50, 0x4b, 0x03, 0x04])
+        // 不再提示「需手动补齐」，而是提示「已无损还原」
+        assert.equal(result.warnings.some(w => w.includes('需手动')), false)
+        assert.ok(result.warnings.some(w => w.includes('无损还原')))
+      } finally {
+        fs.rmSync(importRoot, { recursive: true, force: true })
+      }
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('readBlob 对某 ref 返回 null（包内缺 blob）时计入 binaryRefsMissing，不写盘也不抛错', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withBinary: true })
+    try {
+      const pack = parseSoulPack(serializeSoulPack(exportSoulPack(avatarsRoot, avatarId)))
+      const importRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-pack-zip-miss-'))
+      try {
+        const result = importSoulPack(importRoot, pack, {
+          targetAvatarId: 'imported',
+          readBlob: () => null,
+        })
+        assert.equal(result.binaryRefsWritten.length, 0)
+        assert.equal(result.binaryRefsMissing.length, 1)
+        assert.equal(fs.existsSync(path.join(importRoot, 'imported', 'knowledge', 'data.xlsx')), false)
+        assert.ok(result.warnings.some(w => w.includes('二进制文件缺少字节')))
+      } finally {
+        fs.rmSync(importRoot, { recursive: true, force: true })
+      }
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('blob 字节与 manifest sha256 不符时抛错，且 force 覆盖不删原分身（preflight 先于 rmSync）', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withBinary: true })
+    try {
+      const pack = parseSoulPack(serializeSoulPack(exportSoulPack(avatarsRoot, avatarId)))
+      const survivor = path.join(avatarsRoot, avatarId, 'skills', 'my-skill.md')
+      assert.ok(fs.existsSync(survivor), '前置：原分身文件应存在')
+      // 目标 = 原分身自身 + force 覆盖；readBlob 返回被篡改的字节
+      assert.throws(
+        () => importSoulPack(avatarsRoot, pack, { force: true, readBlob: () => Buffer.from([0xde, 0xad, 0xbe, 0xef]) }),
+        /blob sha256 校验失败/,
+      )
+      assert.ok(fs.existsSync(survivor), '校验先于删除：原分身应保留')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('binary_ref path 含 .. 时拒绝（防 zip-slip），force 覆盖不删原分身', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar()
+    try {
+      const base = {
+        schema_version: SOUL_PACK_SCHEMA_VERSION,
+        name: avatarId,
+        display_name: avatarId,
+        description: '',
+        created_at: new Date().toISOString(),
+        pack_version: '1.0.0',
+        files: [] as SoulPack['files'],
+        binary_refs: [{ path: '../evil.bin', sha256: sha256Hex(Buffer.from([1])), size: 1 }],
+        external_skills: { shared: [], community: [] },
+        memory_included: false,
+      }
+      const pack = { ...base, manifest_sha256: computeManifestSha256(base) } as SoulPack
+      const survivor = path.join(avatarsRoot, avatarId, 'soul.md')
+      assert.throws(
+        () => importSoulPack(avatarsRoot, pack, { force: true, readBlob: () => Buffer.from([1]) }),
+        /路径穿越/,
+      )
+      assert.ok(fs.existsSync(survivor), '原分身应保留（preflight 拦截先于 rmSync）')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('端到端：export → zip 无损 → import 后 .soulpack.zip 携带的二进制与原文件字节一致', () => {
+    const { avatarsRoot, avatarId, cleanup } = setupAvatar({ withBinary: true })
+    try {
+      const srcDir = path.join(avatarsRoot, avatarId)
+      const originalBytes = fs.readFileSync(path.join(srcDir, 'knowledge', 'data.xlsx'))
+      const pack = parseSoulPack(serializeSoulPack(exportSoulPack(avatarsRoot, avatarId)))
+
+      const importRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soul-pack-zip-e2e-'))
+      try {
+        importSoulPack(importRoot, pack, { targetAvatarId: 'imported', readBlob: blobReaderFrom(srcDir) })
+        const roundtripped = fs.readFileSync(path.join(importRoot, 'imported', 'knowledge', 'data.xlsx'))
+        assert.deepEqual([...roundtripped], [...originalBytes])
+      } finally {
+        fs.rmSync(importRoot, { recursive: true, force: true })
+      }
+    } finally {
+      cleanup()
     }
   })
 })

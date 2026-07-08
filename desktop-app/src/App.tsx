@@ -705,7 +705,7 @@ function App() {
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
-    { label: '办公室', icon: '▣', key: 'office', onClick: () => setActivePanel('office'), active: showOfficePanel, title: '全部分身总览：一屏查看状态并切换分身' },
+    { label: '首页', icon: '⌂', key: 'home', onClick: () => setActiveAvatarId(''), active: false, title: '返回首页 · 切换分身 · 导入分身包' },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
 
@@ -741,12 +741,6 @@ function App() {
               className="pixel-btn-primary px-5 py-3"
             >
               [+] 新建分身
-            </button>
-            <button
-              onClick={() => setActivePanel('office')}
-              className="pixel-btn-outline-muted px-5 py-3"
-            >
-              办公室
             </button>
             <button
               onClick={() => setActivePanel('expertPacks')}

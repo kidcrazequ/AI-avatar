@@ -7,7 +7,8 @@
  *   - blobsPresent / blobCount / manifest_sha256 正确
  *   - readBlob 纵深防御拒绝 .. / 绝对路径
  *   - readBlob 只按声明路径取，未知路径返回 null
- *   - readSoulPackZip 拒绝缺 pack.json 的普通 zip
+ *   - 兼容「单顶层分身目录」普通 zip，并过滤 Mac / 运行期 / 备份杂项
+ *   - 旧式 zip 路径穿越、多顶层目录和缺必备文件时拒绝
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -118,7 +119,7 @@ describe('soul-pack-zip / round-trip 无损', () => {
     }
   })
 
-  it('readSoulPackZip 对缺 pack.json 的普通 zip 抛错', () => {
+  it('readSoulPackZip 对缺 pack.json 且不是分身目录的普通 zip 抛错', () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-zip-bad-'))
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -128,6 +129,121 @@ describe('soul-pack-zip / round-trip 无损', () => {
       const p = path.join(outDir, 'not-a-pack.zip')
       zip.writeZip(p)
       assert.throws(() => readSoulPackZip(p), /pack\.json|有效/)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('soul-pack-zip / 旧式分身目录 zip 兼容', () => {
+  it('单顶层分身目录可预览并无损导入，同时跳过杂项与备份', () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-legacy-out-'))
+    const importRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-legacy-import-'))
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AdmZip = require('adm-zip')
+      const zip = new AdmZip()
+      const root = 'legacy-electrical-expert'
+      const binaryBytes = Buffer.from(Array.from({ length: 2048 }, (_, i) => (i * 7) % 256))
+      zip.addFile(`${root}/soul.md`, Buffer.from('# Legacy Electrical Expert\n', 'utf-8'))
+      zip.addFile(`${root}/AGENTS.md`, Buffer.from('# Rules\n', 'utf-8'))
+      zip.addFile(
+        `${root}/expert-pack.json`,
+        Buffer.from(JSON.stringify({
+          id: root,
+          name: '旧式电气工程师',
+          description: '用于兼容导入测试',
+          domain: '电气工程',
+          version: '2.3.4',
+          author: 'Kian',
+        }), 'utf-8'),
+      )
+      zip.addFile(`${root}/knowledge/topic.md`, Buffer.from('# Topic\n', 'utf-8'))
+      zip.addFile(`${root}/knowledge/drawing.pdf`, binaryBytes)
+      zip.addFile(`${root}/memory/MEMORY.md`, Buffer.from('# Memory\nimportant\n', 'utf-8'))
+      zip.addFile(`${root}/life/progress.json`, Buffer.from('{"level":2}', 'utf-8'))
+      // 以下都应在旧式 zip 转换时被跳过。
+      zip.addFile(`${root}/workspaces/default/private.txt`, Buffer.from('private', 'utf-8'))
+      zip.addFile(`${root}/knowledge.backup-20260610/stale.md`, Buffer.from('stale', 'utf-8'))
+      zip.addFile(`${root}/knowledge/_index/hashes.json`, Buffer.from('{}', 'utf-8'))
+      zip.addFile(`${root}/.DS_Store`, Buffer.from('mac', 'utf-8'))
+      zip.addFile(`__MACOSX/${root}/._soul.md`, Buffer.from('fork', 'utf-8'))
+      const zipPath = path.join(outDir, 'legacy-avatar.zip')
+      zip.writeZip(zipPath)
+
+      const read = readSoulPackZip(zipPath)
+      assert.equal(read.pack.name, root)
+      assert.equal(read.pack.display_name, '旧式电气工程师')
+      assert.equal(read.pack.description, '用于兼容导入测试')
+      assert.equal(read.pack.domain, '电气工程')
+      assert.equal(read.pack.pack_version, '2.3.4')
+      assert.equal(read.pack.created_by, 'Kian')
+      assert.equal(read.pack.memory_included, true)
+      assert.equal(read.blobsPresent, 1)
+      assert.ok(read.pack.binary_refs.some((ref) => ref.path === 'knowledge/drawing.pdf'))
+      const packedPaths = [
+        ...read.pack.files.map((file) => file.path),
+        ...read.pack.binary_refs.map((ref) => ref.path),
+      ]
+      assert.ok(packedPaths.includes('soul.md'))
+      assert.ok(packedPaths.includes('knowledge/topic.md'))
+      assert.ok(packedPaths.includes('life/progress.json'))
+      assert.equal(packedPaths.some((p) => p.startsWith('workspaces/')), false)
+      assert.equal(packedPaths.some((p) => p.startsWith('knowledge.backup-')), false)
+      assert.equal(packedPaths.some((p) => p.includes('/_index/')), false)
+      assert.equal(packedPaths.some((p) => p.startsWith('.')), false)
+
+      const result = importSoulPack(importRoot, read.pack, { readBlob: read.readBlob })
+      assert.equal(result.avatarId, root)
+      assert.equal(result.memoryRestored, true)
+      assert.deepEqual(
+        [...fs.readFileSync(path.join(importRoot, root, 'knowledge', 'drawing.pdf'))],
+        [...binaryBytes],
+      )
+      assert.match(fs.readFileSync(path.join(importRoot, root, 'memory', 'MEMORY.md'), 'utf-8'), /important/)
+      assert.equal(fs.existsSync(path.join(importRoot, root, 'life', 'progress.json')), true)
+      assert.equal(fs.existsSync(path.join(importRoot, root, 'workspaces')), false)
+      assert.equal(fs.existsSync(path.join(importRoot, root, 'knowledge.backup-20260610')), false)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+      fs.rmSync(importRoot, { recursive: true, force: true })
+    }
+  })
+
+  it('拒绝路径穿越 entry，即使它位于合法分身顶层目录中', () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-legacy-slip-'))
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AdmZip = require('adm-zip')
+      const zip = new AdmZip()
+      zip.addFile('legacy-avatar/soul.md', Buffer.from('# Soul\n'))
+      zip.addFile('legacy-avatar/AGENTS.md', Buffer.from('# Rules\n'))
+      zip.addFile('safe.txt', Buffer.from('evil'))
+      // adm-zip addFile 会主动归一化 ../，因此直接改 entryName 构造攻击样本。
+      const malicious = zip.getEntries().find((entry: { entryName: string }) => entry.entryName === 'safe.txt')
+      assert.ok(malicious)
+      malicious.entryName = 'legacy-avatar/../escaped.txt'
+      const zipPath = path.join(outDir, 'slip.zip')
+      zip.writeZip(zipPath)
+      assert.throws(() => readSoulPackZip(zipPath), /路径穿越|非法路径/)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('拒绝同时包含多个顶层分身目录的 zip', () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'soulpack-legacy-multi-'))
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AdmZip = require('adm-zip')
+      const zip = new AdmZip()
+      zip.addFile('avatar-a/soul.md', Buffer.from('# A\n'))
+      zip.addFile('avatar-a/AGENTS.md', Buffer.from('# Rules A\n'))
+      zip.addFile('avatar-b/soul.md', Buffer.from('# B\n'))
+      zip.addFile('avatar-b/AGENTS.md', Buffer.from('# Rules B\n'))
+      const zipPath = path.join(outDir, 'multi.zip')
+      zip.writeZip(zipPath)
+      assert.throws(() => readSoulPackZip(zipPath), /只有一个顶层分身目录/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

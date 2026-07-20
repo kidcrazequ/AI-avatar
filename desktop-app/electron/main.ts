@@ -44,6 +44,7 @@ import { ToolResultSpool, readSpoolLineRange, DEFAULT_SPOOL_MAX_BODY_BYTES, DEFA
 import { AttachmentStore, MAX_ATTACHMENT_FILE_BYTES } from './attachment-store'
 import { createEmbeddingFn, createLLMFn } from './llm-factory'
 import { DeepReadManager, type DeepReadStartParams } from './deep-read-manager'
+import { WigoloSidecar } from './wigolo-sidecar'
 import { SKILL_GEN_SYSTEM_PROMPT, buildSkillGenUserPrompt } from './skill-generator-prompt'
 import { WorkspaceManager } from './workspace/WorkspaceManager'
 import { PreviewManager } from './preview/PreviewManager'
@@ -831,6 +832,14 @@ function initManagers() {
       }
     },
     getSetting: (key: string) => getDb().getSetting(key),
+    // wigolo 边车桥：cn_web_search 首次调用时懒启动本机搜索边车；
+    // 不可用时以 ok=false + detail 诚实降级（见 tool-router.cnWebSearch）
+    wigoloBridge: {
+      ensureReady: async () => {
+        const st = await getWigoloSidecar().ensureReady()
+        return { ok: st.state === 'ready', baseUrl: st.baseUrl, detail: st.detail }
+      },
+    },
     mcpManager,
     // 决策 A1：注入文档渲染器，让 generate_document 工具能在主进程渲染 PDF/DOCX。
     // ToolRouter 与渲染器都在主进程，直接同进程函数调用，无 IPC 开销。
@@ -1016,6 +1025,20 @@ app.on('window-all-closed', () => {
   }
 })
 
+// ─── wigolo 搜索边车（cn_web_search 用，docs/wigolo-cn-search-plan.md） ──────
+// 懒启动单例：首次 cn_web_search 调用才 ensureReady；app 退出时 stop 只回收自有进程。
+let wigoloSidecar: WigoloSidecar | null = null
+function getWigoloSidecar(): WigoloSidecar {
+  if (!wigoloSidecar) {
+    wigoloSidecar = new WigoloSidecar({
+      logger: (tag, msg) => { if (logger) logger.activity(tag, msg) },
+      // 慢网默认走 HF 镜像下载模型；用户已自行设置 HF_ENDPOINT 时尊重用户配置
+      env: process.env.HF_ENDPOINT ? {} : { HF_ENDPOINT: 'https://hf-mirror.com' },
+    })
+  }
+  return wigoloSidecar
+}
+
 app.on('before-quit', () => {
   if (backupIntervalId) {
     clearInterval(backupIntervalId)
@@ -1034,6 +1057,12 @@ app.on('before-quit', () => {
   if (mcpManager) {
     mcpManager.closeAll().catch((err) => {
       console.warn('[Main] mcpManager.closeAll() failed:', err instanceof Error ? err.message : String(err))
+    })
+  }
+  // 停掉自己拉起的 wigolo 搜索边车（复用的外部 daemon 不动）
+  if (wigoloSidecar) {
+    wigoloSidecar.stop().catch((err) => {
+      console.warn('[Main] wigoloSidecar.stop() failed:', err instanceof Error ? err.message : String(err))
     })
   }
   if (db) {

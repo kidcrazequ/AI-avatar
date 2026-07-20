@@ -2191,6 +2191,44 @@ IR 语法（markdown + 扩展）：
     /**
      * web_fetch: 抓取单个 URL 内容（HTML→Markdown / 纯文本 / JSON / 原始）。
      * 与 web_search 互补：先搜索得到 URL 列表 → 用 web_fetch 抓全文。
+  {
+    /**
+     * cn_web_search: 通过本机 wigolo 边车搜索（多引擎融合，免 API key）。
+     * 与 web_search（Tavily）分工：中文/国内站点走这里，英文/国际走 Tavily。
+     * 边车由主进程懒启动；未安装/启动失败时返回明确错误（诚实降级，不伪装空结果）。
+     */
+    type: 'function',
+    function: {
+      name: 'cn_web_search',
+      description: [
+        '通过本机 wigolo 搜索边车检索网页（多引擎融合 + 本地缓存，免 API key、$0/查询）。',
+        '',
+        '何时使用：',
+        '- 查询词或目标内容以中文为主（含国内政策、行情、技术社区内容）',
+        '- 目标站点在国内（CSDN、必应中国等国内引擎已接入）',
+        '- 希望结果带字节级溯源（citation_id / source_span）便于标注来源',
+        '',
+        '何时不用：',
+        '- 英文/国际内容 → 用 web_search（Tavily）',
+        '- 知识库已有答案 → 用 search_knowledge / read_knowledge_file',
+        '- 单个已知 URL → 用 web_fetch 抓全文',
+        '',
+        '降级约定：',
+        '- 边车未安装/启动失败会返回明确错误（含修复指引），此时可改用 web_search 兜底',
+        '- 返回中的 failed_engines 表示部分引擎失败，结果仍可用但召回变薄',
+        '',
+        '返回 JSON：query / result_count / results[]（title/url/excerpt/citation_id/source_span/score）/ engines_used / hint。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '搜索关键词（必填，≤ 400 字符）' },
+          max_results: { type: 'number', description: '返回结果数；默认 5，上限 10' },
+        },
+        required: ['query'],
+      },
+    },
+  },
      * 无需 API Key（直接走 fetch），但有 SSRF 防护（屏蔽内网 IP / localhost）。
      */
     type: 'function',
@@ -4580,7 +4618,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 关闭时从所有分支的 tools 数组里剔除，连 LLM 都看不到这两个工具——
      * 配合 tool-router 的 webSearch / webFetch 入口闸门双层保护。
      */
-    const NETWORK_TOOL_NAMES = new Set(['web_search', 'web_fetch'])
+    const NETWORK_TOOL_NAMES = new Set(['web_search', 'cn_web_search', 'web_fetch'])
     const webSearchEnabledRaw = await window.electronAPI.getSetting('web_search_enabled')
     const webSearchEnabled = webSearchEnabledRaw === 'true'
     let tools: LLMTool[]

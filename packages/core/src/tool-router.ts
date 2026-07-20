@@ -354,6 +354,20 @@ const WEB_SEARCH_HARD_MAX = 10
 /** 单条结果 content 截断长度（避免单页摘要太长撑爆 context） */
 const WEB_SEARCH_CONTENT_MAX_CHARS = 800
 
+// ─── cn_web_search 常量（wigolo 本地边车） ──────────────────────────────────
+// wigolo 是本机运行的多引擎搜索边车（docs/wigolo-cn-search-plan.md）：
+// 免 API key、$0/查询，结果带 citation_id + source_span 字节级溯源。
+// 与 web_search（Tavily）并存：中文/国内站点走 cn_web_search，国际内容走 Tavily。
+
+/** cn_web_search 单次请求超时（30 秒；wigolo 多引擎扇出在本机融合，冷启动首查偏慢） */
+const CN_WEB_SEARCH_TIMEOUT_MS = 30 * 1000
+/** cn_web_search 默认结果数 */
+const CN_WEB_SEARCH_DEFAULT_MAX = 5
+/** cn_web_search 结果数硬上限（防止 LLM 索取过多导致 context 爆） */
+const CN_WEB_SEARCH_HARD_MAX = 10
+/** 单条结果 excerpt 截断长度（同 web_search 的 content 纪律） */
+const CN_WEB_SEARCH_EXCERPT_MAX_CHARS = 800
+
 // ─── web_fetch 常量 ────────────────────────────────────────────────────────
 // web_fetch 用于深入抓取单个 URL 的完整内容（与 web_search 互补：先搜后抓）。
 // 关键安全控制：
@@ -736,6 +750,15 @@ export interface SubAgentDispatchContext {
  */
 export type SubAgentTaskSink = (task: SubAgentTask, ctx: SubAgentDispatchContext) => void
 
+/**
+ * wigolo 本地搜索边车桥接口（cn_web_search 依赖注入）。
+ * 实现方（desktop-app/electron/main.ts）适配 WigoloSidecar.ensureReady 的状态对象。
+ */
+export interface WigoloBridge {
+  /** 懒启动或复用本机 wigolo daemon；约定不 throw，失败以 ok=false + detail 返回 */
+  ensureReady(): Promise<{ ok: boolean; baseUrl?: string; detail?: string }>
+}
+
 export class ToolRouter {
   private avatarsPath: string
   private designSystemsPath: string
@@ -795,6 +818,18 @@ export class ToolRouter {
    * 返回 undefined 表示用户未配置该项。
    */
   private getSetting?: (key: string) => string | undefined
+
+  /**
+   * 可选注入：wigolo 本地搜索边车桥（cn_web_search 用）。
+   *
+   * ToolRouter 不直接依赖 Electron 的边车生命周期模块（保持环境无关），
+   * 由 main.ts 注入一个适配器。ensureReady 约定**不 throw**：边车未安装 /
+   * 启动失败一律以 ok=false + detail 返回，cn_web_search 把 detail 如实
+   * 透给 LLM（诚实降级，不伪装成空结果）。
+   *
+   * 不注入时 cn_web_search 返回部署配置错误提示。
+   */
+  private wigoloBridge?: WigoloBridge
 
   /**
    * 可选注入：MCP 客户端管理器。
@@ -863,6 +898,7 @@ export class ToolRouter {
       loadAvatarSystemPrompt?: (avatarId: string) => string | undefined
       listAvailableAvatars?: () => string[]
       getSetting?: (key: string) => string | undefined
+      wigoloBridge?: WigoloBridge
       mcpManager?: McpClientManager
       documentRenderers?: DocumentRendererHook
       resolveConversationProjectId?: (conversationId: string) => string
@@ -874,6 +910,7 @@ export class ToolRouter {
     this.loadAvatarSystemPrompt = options?.loadAvatarSystemPrompt
     this.listAvailableAvatars = options?.listAvailableAvatars
     this.getSetting = options?.getSetting
+    this.wigoloBridge = options?.wigoloBridge
     this.mcpManager = options?.mcpManager
     this.documentRenderers = options?.documentRenderers
     this.resolveConversationProjectId = options?.resolveConversationProjectId
@@ -1389,6 +1426,8 @@ export class ToolRouter {
           result = this.killShell(args); break
         case 'web_search':
           result = await this.webSearch(args); break
+        case 'cn_web_search':
+          result = await this.cnWebSearch(args); break
         case 'web_fetch':
           result = await this.webFetch(args); break
         case 'read_user_file':
@@ -5125,6 +5164,113 @@ ${content}` }
       }
       const msg = err instanceof Error ? err.message : String(err)
       return { content: '', error: `web_search 请求失败: ${msg}` }
+    }
+  }
+
+  /**
+   * cn_web_search: 通过本机 wigolo 边车搜索（中文/国内站点优先）。
+   *
+   * 与 web_search（Tavily）的分工：中文内容、国内站点走此工具（免 key、$0、
+   * 结果带 citation_id + source_span 字节级溯源、本地缓存可离线重查）；
+   * 英文/国际内容走 web_search。
+   *
+   * 诚实降级纪律（docs/wigolo-cn-search-plan.md）：
+   *   - 边车未安装/启动失败 → 把 bridge 返回的 detail 原样透给 LLM，并提示可改用 web_search
+   *   - wigolo 自身的引擎失败列表（failed_engines 等）随结果透传，不隐藏
+   */
+  private async cnWebSearch(args: Record<string, unknown>): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return { content: '', error: '缺少 query 参数（搜索关键词）' }
+    if (query.length > 400) {
+      return { content: '', error: 'query 过长（>400 字符），请精简关键词' }
+    }
+
+    if (!this.getSetting) {
+      return { content: '', error: 'cn_web_search 未注入设置读取器（这是部署配置问题，请联系开发）' }
+    }
+    // 与 web_search 共用联网总开关（防御性闸门，同 webSearch 的兜底逻辑）
+    if (this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
+    }
+    if (!this.wigoloBridge) {
+      return { content: '', error: 'cn_web_search 未注入 wigolo 边车桥（这是部署配置问题，请联系开发）' }
+    }
+
+    const ready = await this.wigoloBridge.ensureReady()
+    if (!ready.ok || !ready.baseUrl) {
+      return {
+        content: '',
+        error: `wigolo 边车不可用：${ready.detail ?? '未知原因'}。本轮可改用 web_search（Tavily）联网，或基于知识库回答并说明缺口。`,
+      }
+    }
+
+    const maxResults = Math.min(
+      CN_WEB_SEARCH_HARD_MAX,
+      typeof args.max_results === 'number' && Number.isFinite(args.max_results) && args.max_results > 0
+        ? Math.floor(args.max_results)
+        : CN_WEB_SEARCH_DEFAULT_MAX,
+    )
+
+    try {
+      const response = await fetchWithTimeout(`${ready.baseUrl}/v1/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, max_results: maxResults }),
+        timeoutMs: CN_WEB_SEARCH_TIMEOUT_MS,
+      })
+
+      const data = await response.json() as {
+        results?: Array<{
+          title?: string
+          url?: string
+          excerpt?: string
+          citation_id?: string
+          source_span?: { start: number; end: number }
+          evidence_score?: { final?: number }
+          engine?: string
+        }>
+        engines_used?: string[]
+        failed_engines?: unknown
+        freshness_signal?: unknown
+      }
+
+      const results = (data.results ?? []).slice(0, maxResults).map((r) => ({
+        title: r.title ?? '',
+        url: r.url ?? '',
+        // 同 web_search：截断单条摘要防 context 爆；citation/span 保留供溯源引用
+        excerpt: (r.excerpt ?? '').length > CN_WEB_SEARCH_EXCERPT_MAX_CHARS
+          ? (r.excerpt ?? '').slice(0, CN_WEB_SEARCH_EXCERPT_MAX_CHARS) + '...[已截断]'
+          : (r.excerpt ?? ''),
+        ...(r.citation_id ? { citation_id: r.citation_id } : {}),
+        ...(r.source_span ? { source_span: r.source_span } : {}),
+        ...(typeof r.evidence_score?.final === 'number'
+          ? { score: Math.round(r.evidence_score.final * 1000) / 1000 }
+          : {}),
+      }))
+
+      const payload = {
+        query,
+        result_count: results.length,
+        results,
+        // wigolo 的引擎遥测如实透传（哪些引擎参与、哪些失败），不伪装成全量成功
+        ...(Array.isArray(data.engines_used) && data.engines_used.length > 0 ? { engines_used: data.engines_used } : {}),
+        ...(data.failed_engines ? { failed_engines: data.failed_engines } : {}),
+        ...(data.freshness_signal ? { freshness_signal: data.freshness_signal } : {}),
+        hint: results.length === 0
+          ? '搜索无结果。建议换更宽泛的关键词；若 failed_engines 显示引擎大量失败，可能是网络受限，可改用 web_search。'
+          : '结果带 citation_id / source_span（字节级溯源），引用数字或结论时请标注来源 URL。深入某条用 web_fetch 抓全文。',
+      }
+
+      return { content: JSON.stringify(payload, null, 2) }
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return { content: '', error: `wigolo 边车响应异常 (${err.status}): ${err.message}。可用 web_search 兜底。` }
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return { content: '', error: `cn_web_search 请求失败: ${msg}。可用 web_search 兜底。` }
     }
   }
 

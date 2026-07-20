@@ -273,6 +273,7 @@ export class SoulLoader {
       // 联网工具仅在"联网功能"开启时才进入工具描述（同时 chatStore 也会过滤 tools 数组，双层保护）
       ...(webEnabled ? [
         '- **web_search(query, max_results?, search_depth?, topic?, include_answer?)**: 通过 Tavily 搜索外网（专为 LLM 设计，content 字段已去 HTML）。用于实时信息、最新政策 / 价格 / 新闻、知识库未覆盖的行业资料 / 竞品。需要用户在「设置 → 工具集成」配置 Tavily API Key；未配置时会返回明确错误，可提示用户去填。',
+        '- **cn_web_search(query, max_results?)**: 通过本机 wigolo 边车搜索（免 API key）。**中文内容、国内站点优先用此工具**；结果带 citation_id / source_span 字节级溯源，引用时标注来源 URL。边车不可用时会返回明确错误，此时可改用 web_search 兜底。英文/国际内容直接用 web_search。',
         '- **web_fetch(url, format?, max_chars?)**: 抓取指定 URL 的全文（HTML→Markdown / 文本 / JSON）。与 web_search 互补：先用 web_search 找到候选 URL，再用 web_fetch 抓全文细读；用户直接给出 URL 时也走此工具。若启用了 lazy-store（默认关，env `SOUL_TOOL_LAZY_RETRIEVAL=on`），长输出（≥ 4000 字符）的 body 会被替换为 `body_lazy_ref`，正文用 `read_tool_ref` 取。',
         '- **read_tool_ref(call_id, offset?, limit?)**: 当 web_fetch 返回里出现 `body_lazy_ref: { call_id, char_count, ... }` 时调此工具取真正的 body 正文。单次最多 8000 字符，需要更多用 offset 分页。元数据（url/status/char_count）已在 prompt 可见，仅需正文时才调用。',
       ] : []),

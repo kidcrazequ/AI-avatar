@@ -1,0 +1,7 @@
+{
+  "name": "wigolo-plugin-bing-cn",
+  "version": "1.0.0",
+  "description": "wigolo 搜索引擎插件：必应中国（cn.bing.com）HTML 解析",
+  "type": "module",
+  "main": "index.mjs"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "wigolo-plugin-csdn",
+  "version": "1.0.0",
+  "description": "wigolo 搜索引擎插件：CSDN 公开搜索接口（so.csdn.net）",
+  "type": "module",
+  "main": "index.mjs"
+}

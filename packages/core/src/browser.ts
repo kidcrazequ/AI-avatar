@@ -320,3 +320,16 @@ export type {
 
 // ─── 上下文溢出识别（渲染进程 send 路径压缩重试用，纯函数） ──────────────────
 export { isContextOverflowError } from './context-overflow'
+
+// ─── 执行轨迹聚合（TracesPanel / Dashboard 工作台账，纯函数） ────────────────
+export {
+  aggregateTraceTurns,
+  aggregateWorkStats,
+} from './trace-log'
+export type {
+  TraceTimelineEntry,
+  TraceMessageInput,
+  TraceTurn,
+  ToolUsage,
+  AvatarWorkStats,
+} from './trace-log'

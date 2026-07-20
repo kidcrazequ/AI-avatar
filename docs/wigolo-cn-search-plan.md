@@ -1,6 +1,6 @@
 # 方案：Soul 桌面端接入 wigolo（新增 cn_web_search 工具）
 
-> 状态：待确认（2026-07-20 起草）。确认后按子任务逐个执行。
+> 状态：**已实施**（2026-07-20，commit def1ba9 / 4d1adca / 8ceb098）。实施决定与遗留见文末。
 
 ## 目标
 
@@ -43,7 +43,15 @@
 - **插件反爬维护是长期成本**：bing-cn/zhihu 一期风险低；百度/搜狗二期需专门评估
 - **AGPL 边界**：不改 wigolo 源码 + 本地个人使用 = 无义务；若将来对外分发 Soul，插件目录建议单独 AGPL 开源，Soul 主体因进程边界不受影响
 
-## 待拍板
+## 实施决定（2026-07-20）
 
-1. 工具名 `cn_web_search` 是否 OK（备选：`wigolo_search` / `web_search_cn`）
-2. 一期第二个插件选知乎还是 CSDN
+1. 工具名定为 `cn_web_search`（用户确认执行时未提异议）
+2. **第二插件由知乎改为 CSDN**：实测知乎 search_v3 API 无登录态返回空结果（`{"HitLabels":null}`）；CSDN `so.csdn.net/api/v3/search` 公开可用
+3. **子任务 5 简化**：未做按分身 `avatar.config.json` 启用——cn_web_search 已有双层闸门（`web_search_enabled` 全局开关 + 边车未安装时诚实降级），按分身粒度的收益低于其复杂度；HF 镜像已在 main.ts 边车 env 注入；代理透传依赖边车继承 process.env
+4. **必应风控实录**：本机 IP 下 bing 间歇返回 Turnstile 验证墙（插件抛诊断错）或"罐头结果页"（结构完整但内容无关、插件层无确定性判据，交 wigolo 融合层稀释；smoke.mjs 有查询词 token 兜底检测）
+
+## 遗留（待用户环境就绪后一次性完成）
+
+- 本机未安装 wigolo：`npx wigolo init --no-warmup`，慢网挂代理跑 `wigolo warmup --all`（~1.5GB，支持续传）
+- 插件安装：`cp -r scripts/wigolo-plugins/{bing-cn,csdn} ~/.wigolo/plugins/` 后 `wigolo plugin validate`
+- 端到端真机验证：设置里开启联网 → 分身对话调 `cn_web_search`（此前一切失败路径均已有单测钉死）

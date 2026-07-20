@@ -4,6 +4,9 @@
 
 ### 新增
 
+- **cn_web_search 国内联网检索（wigolo 边车）** — 新增本机 wigolo 搜索边车接入：免 API key、结果带 citation_id / source_span 字节级溯源与引擎遥测透传，中文/国内站点与 Tavily `web_search` 分工并存；主进程懒启动边车（未安装时诚实降级并给安装指引），随附必应中国 + CSDN 两个 wigolo 引擎插件（`scripts/wigolo-plugins/`）。方案见 `docs/wigolo-cn-search-plan.md`。
+
+- **可审计的深度知识提炼** — 精读升级为“整书理解 → 五视角候选池 → V1/V2/V3 三重校验 → RIA++ 知识单元 → 关系图”流水线，保留验证通过、淘汰记录和 `PIPELINE_STATE.md`，支持书级产物断点复用；明确只生成 Soul 知识，不生成或安装 Skill。
 - **自包含 ZIP 分身包** — 导入 / 导出面板支持 `.soulpack.zip`，将人设、技能、知识、可选记忆与 Excel / PDF / 图片等二进制附件一并无损分发；原 `.soul.json` 文本包继续兼容。
 - **普通分身目录 ZIP 兼容导入** — 可直接导入「完整分身目录压缩包」，自动识别单顶层分身、转换为标准 Soul Pack，并过滤 `__MACOSX`、`workspaces/`、`_index/` 和 `knowledge.backup-*` 等杂项。
 

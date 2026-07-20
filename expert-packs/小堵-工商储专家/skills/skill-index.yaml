@@ -90,6 +90,42 @@ local_skills:
     when: 用户问"为什么 X 没做 Y / 为什么没用 Z / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
     priority: 0
 
+  - name: roi-consult
+    path: skills/roi-consult.md
+    source: local
+    domain: 收益测算
+    sop: skills/roi-consult.sop.yaml
+    keywords:
+      - 收益测算
+      - 回本
+      - 回本周期
+      - 多久回本
+      - IRR
+      - 内部收益率
+      - 投资回报
+      - ROI
+      - 投资测算
+      - 收益模型
+      - 收益拆解
+      - 峰谷套利
+      - 峰谷价差
+      - 尖峰电价
+      - 分时电价
+      - 需量电费
+      - 经济性
+      - 经济性分析
+      - 静态回收期
+      - 划不划算
+      - 值不值
+      - 一年能赚多少
+      - 年收益
+      - 测算一下
+      - 算个收益
+      - 装机容量
+      - 日循环
+    when: 用户要求测算工商储项目收益（回本周期/IRR/峰谷套利/经济性），需按 roi-consult.sop.yaml 状态机逐节点收集参数、查可溯源电价政策、调 calculate_roi 后输出带来源报告
+    priority: 0
+
 # ═══════════════════════════════════════
 # 本地覆写技能（基于公共版本的领域增强）
 # ═══════════════════════════════════════

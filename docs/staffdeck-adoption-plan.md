@@ -1,7 +1,9 @@
 # 方案：借鉴 StaffDeck 的四个选定点
 
-> 状态：待确认（2026-07-20 起草）。来源调研：OpenBMB/StaffDeck（AGPL-3.0，**只借思路与形态，不拷代码**）。
+> 状态：**W1/W2/W4/W5 已实施**（2026-07-20），W3 经盘点判定绝大部分已存在故收缩。
+> 来源调研：OpenBMB/StaffDeck（AGPL-3.0，**只借思路与形态，不拷代码**）。
 > 选定范围：架构点 1（状态机技能图）、架构点 3（概念卡导航索引）、页面点 2（分身工作台账）、页面点 3（补缺页面）。
+> 实施记录与遗留见文末「实施小结」。
 
 ## 范围裁剪说明（先看）
 
@@ -46,17 +48,21 @@
 
 **待拍板**：工作记录 tab v1 就用"统计摘要"这个定义是否 OK（StaffDeck 的 WorkRecord 更像任务台账，Soul 无任务系统，强行对齐会引入占位概念）。
 
+> **2026-07-20 实施侦查补记**：侧栏已有独立的「记忆」（MemoryPanel）与「定时」（SchedulesPanel）面板，
+> Dashboard 的记忆/定时两个 tab 与之功能重叠——保留 tab 但定位为**只读台账摘要**（管理仍在原面板），
+> 净新增能力是「工作记录统计」（trace-log 基座）与「会话日志」两个 tab。侧栏文案避让已有「职场」
+> （PalacePanel 自称"工作台账"），新面板入口拟用「台账」。
+
 ## W3 定时任务
 
-**目标**：分身可配置定时任务；触发时后台跑一轮会话，产出以**草稿卡片**进入聊天等用户处理（借鉴 ScheduledDraftCard 形态，契合"宁拒答不占位"——产物是待确认草稿，不是自动执行）。
+> **2026-07-20 实施侦查修正：本工作流绝大部分已存在，原拆分作废。**
+> 现状：`CronScheduler`（croner）+ `db-schedules.ts`（`schedules`/`schedule_runs` 表、
+> 触发幂等、"conversation_id=null 时每次触发新建对话"语义）+ 完整 IPC
+> （`schedule:list/get/create/update` 等）+ 独立 `SchedulesPanel.tsx` UI + 侧栏「定时」入口。
+> 方案起草时未做够开工盘点（教训记入 §统一约束）。
 
-- [ ] W3.1 调度器：Electron 主进程，任务持久化（DB/JSON）+ 应用启动恢复 + 到点触发 → `desktop-app/electron/scheduled-tasks.ts`（新，约 200 行）
-- [ ] W3.2 触发执行：复用现有发送链路以目标分身跑一轮（后台会话，ask 模式禁写工具）
-- [ ] W3.3 草稿卡：结果写入该分身主会话为 draft 消息类型，UI 渲染卡片（采纳/丢弃）→ chatStore + MessageBubble 各约 60 行
-- [ ] W3.4 任务编辑 UI：Dashboard 定时任务 tab 内联表单（名称/分身/提示词/cron 简化为 每天|每周|间隔）
-- [ ] W3.5 测试：调度恢复、到点触发、draft 落库
-
-**风险**：仅应用运行时触发（Electron 不常驻则不跑）——v1 在 UI 明示此限制，不做系统级常驻。
+- [x] W3 收缩为：W2 的「定时任务」tab 消费现有 `scheduleList`/`scheduleUpdate` 做轻量台账视图（列表 + 启停开关 + 引导去完整面板）
+- [ ] 草稿卡 UX（触发产物以待确认卡片形态进聊天）：待验证现有 schedule 触发产物形态后再评估是否有缺口，不预建
 
 ## W4 概念卡导航索引（架构 3）
 
@@ -91,6 +97,38 @@
 - 全程不拷 StaffDeck 代码（AGPL 传染）；schema 字段命名也重新设计
 - 每个工作流内部仍按"每子任务只加载所需文件、完成即 commit"节奏
 - W4/W5 动 packages/core：先读后写，改动处保持现有中文注释风格
+
+## 实施小结（2026-07-20）
+
+### 落地 commit
+
+| commit | 内容 |
+|---|---|
+| `3d35728` | W1 基座：trace-log 聚合纯函数层（4 测试） |
+| `8ee9423` | W1：TracesPanel + 侧栏「轨迹」入口 |
+| `17d2bfa` | W2：DashboardPanel 四 tab + 侧栏「台账」入口 |
+| `faaa9f8` | W5 内核：sop-schema / sop-runner + 小堵 roi-consult 试点（24 测试） |
+| `7b4a01a` | W4 全部 + W5 集成：knowledge-cards 编译器（26 测试）、knowledge_navigate、sop_report（5 集成测试） |
+
+门禁：core tsc 0 错、desktop typecheck 0 错、eslint 0 警告、simulation 199/199、新增单测 59 条全绿 0 跳过。
+
+### 与原方案的偏差（均为实施侦查后的有意决定）
+
+1. **W3 大幅收缩**：起草时未盘点，实际 `CronScheduler` + `db-schedules` + 完整 IPC + `SchedulesPanel` 已存在。W3 降级为 W2 的一个只读 tab。**教训**：方案阶段必须先做代码盘点再写子任务。
+2. **W5.3 落点改变**：原方案写"skill-router 集成"，但侦查发现 `SkillRouter` 在 main.ts 只 `new` 从未调用（**死代码**）；技能实际经 `SkillManager.getSkillsSummary` 注入 + `load_skill` 按需加载。故 SOP 挂在 `load_skill` + 新增 `sop_report` 工具。
+3. **W5.4 收缩为内存态**：SOP 会话状态存 ToolRouter 进程内 Map，应用重启丢失。DB 持久化需迁移，成本高于当前验证价值；`SopState` 已是纯 JSON，将来加持久化无需改状态机。
+4. **汇报通道改为工具驱动**：原设想 LLM 在回复文本里输出 `<sop_state>` 标记，改为调 `sop_report` 工具（结构化、可校验、不污染回复正文）。text 通道仍保留在 runner 里可用。
+5. **W2 记忆/定时 tab 定位为只读摘要**：侧栏已有 MemoryPanel / SchedulesPanel，避免双份管理入口。
+6. **W4.5（KnowledgePanel 展示文档卡）未做**：属可选项，且会动到用户正在改的 KnowledgePanel.tsx。
+
+### 遗留与已知限制（fail-loud）
+
+- **概念卡索引需手动构建**：`npx tsx scripts/build-knowledge-cards.ts avatars/<分身目录>`。小凯实测 1998 文档 / 37409 节 / 3.7s，索引 13.7MB（已加 mtime 缓存）；未接入 UI 一键构建，也未在知识库变更时自动重建。
+- **23 个文档触发章节上限截断**（共丢 3118 节，上限 100 节/文档）。首次构建输出有完整清单；**增量构建时 droppedSections 为空**（复用文档不重解析），运维不要据此认为截断消失了。
+- **概念卡 keywords 含编号数字噪音**（`## 1. 封面` 会切出 `1`）。按契约"空白/标点切词"实现，未擅自加数字过滤——要改需拍板。
+- **summaryHint 会带本地路径**：部分语料 H1 后首段是 `> 来源原件：/Users/...`，属语料质量问题非编译器缺陷。
+- **SOP 中断策略未强制**：`card.interruption`（pause/exit）已解析但 runner 不感知会话话题，用户岔开话题时不会自动暂停/退出流程。
+- **均未做端到端真机验证**：TracesPanel / DashboardPanel / 两个新工具都只过了单测与静态门禁，没在运行中的应用里点过。
 
 ## 待拍板汇总
 

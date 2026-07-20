@@ -78,6 +78,9 @@ import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowl
 import { fetchWithTimeout, HttpError } from './utils/http'
 import { WikiCompiler } from './wiki-compiler'
 import { buildDefaultCompressConfig, compressToolResult, type CompressConfig } from './tool-result-compressor'
+import { loadCardsIndex, cardsIndexPath, type KnowledgeCardsIndex, type DocumentCard, type SectionCard } from './knowledge-cards'
+import { parseSopCard, type SopCard } from './sop-schema'
+import { SopRunner, type SopState } from './sop-runner'
 import {
   buildDefaultLazyStoreConfig,
   maybeStoreLazyRef,
@@ -792,6 +795,22 @@ export class ToolRouter {
   /** 显式引用图缓存（knowledge/*.md -> linked files） */
   private linkGraphCache = new Map<string, LinkGraph>()
   /**
+   * 概念卡索引缓存（knowledge_navigate 用），按 index.json 的 mtime+size 失效。
+   * 大库索引可达十几 MB（小凯 1998 文档 / 37409 节 ≈ 13.7MB），每次工具调用都
+   * 全量 JSON.parse 会明显拖慢并抬高主进程内存峰值——只在文件变化时重读。
+   */
+  private cardsIndexCache = new Map<string, { index: KnowledgeCardsIndex; mtimeMs: number; size: number }>()
+  /**
+   * 进行中的 SOP 流程状态（W5.3/W5.4）。key = `${avatarId}::${conversationId}::${skill}`。
+   *
+   * v1 是**进程内存态**：应用重启后进行中的流程丢失，下次 load_skill 会重新从起点开始。
+   * 没做 DB 持久化是有意收缩——SopState 已是纯 JSON（round-trip 安全），
+   * 等真实使用验证了流程价值再决定是否付迁移成本。
+   */
+  private sopStates = new Map<string, SopState>()
+  /** SOP 卡片解析缓存，key = sop.yaml 绝对路径，按 mtime 失效 */
+  private sopCardCache = new Map<string, { card: SopCard; mtimeMs: number }>()
+  /**
    * 后台 shell 任务注册表。
    * key = task_id，value = BackgroundShellRecord。
    * 自动 evict：超过 BG_SHELL_MAX_ENTRIES 或已结束超过 BG_SHELL_RETAIN_MS 的旧记录会被清理。
@@ -1346,6 +1365,8 @@ export class ToolRouter {
           result = this.knowledgeGrep(avatarId, args); break
         case 'knowledge_glob':
           result = this.knowledgeGlob(avatarId, args); break
+        case 'knowledge_navigate':
+          result = this.knowledgeNavigate(avatarId, args); break
         case 'list_wiki_concepts':
           result = await this.listWikiConcepts(avatarId, args); break
         case 'read_wiki_concept':
@@ -1399,7 +1420,9 @@ export class ToolRouter {
         case 'calculate_roi':
           result = this.calculateRoi(args); break
         case 'load_skill':
-          result = this.loadSkill(avatarId, args); break
+          result = this.loadSkill(avatarId, args, conversationId); break
+        case 'sop_report':
+          result = this.sopReport(avatarId, conversationId, args); break
         case 'delegate_task':
         case 'task':
           // task 是 delegate_task 的升级别名（九层重构 2026-04-30），保留 delegate_task 兼容旧 skill
@@ -3368,6 +3391,126 @@ ${content}` }
     }).join('\n\n---\n\n')
     const header = formatCoverageHeader(coverage)
     return { content: `${header}\n\n${body}` }
+  }
+
+  /**
+   * 概念卡索引读取（带 mtime+size 失效缓存）。
+   * 重建索引（build-knowledge-cards）后 index.json 变化会自动失效，无需重启应用。
+   */
+  private loadCardsIndexCached(knowledgePath: string): KnowledgeCardsIndex | null {
+    const indexPath = cardsIndexPath(knowledgePath)
+    let stat: fs.Stats
+    try {
+      stat = fs.statSync(indexPath)
+    } catch {
+      this.cardsIndexCache.delete(knowledgePath)
+      return null
+    }
+    const cached = this.cardsIndexCache.get(knowledgePath)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.index
+    }
+    const index = loadCardsIndex(knowledgePath)
+    if (index) {
+      this.cardsIndexCache.set(knowledgePath, { index, mtimeMs: stat.mtimeMs, size: stat.size })
+    } else {
+      this.cardsIndexCache.delete(knowledgePath)
+    }
+    return index
+  }
+
+  /**
+   * knowledge_navigate: 概念卡两级导航（先定位、再钻取）。
+   *
+   * 借鉴 StaffDeck 的文档结构感知检索（docs/staffdeck-adoption-plan.md W4）：
+   * 大库里 BM25 一把梭容易召回碎片，先让模型看"有哪些文档 / 文档里有哪些章节"，
+   * 再按行区间精读，引用天然落到章节粒度（服务数据溯源纪律）。
+   *
+   * 两级：
+   *   - 不传 doc：列文档卡（可用 query 过滤 title/keywords/summaryHint）
+   *   - 传 doc：列该文档的章节卡（含 startLine-endLine，供 read_knowledge_file 精读）
+   *
+   * 索引缺失时**明确报错并给构建命令**，绝不静默退回 BM25 冒充导航结果。
+   */
+  private knowledgeNavigate(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const docArg = typeof args.doc === 'string' ? args.doc.trim() : ''
+    const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : ''
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) && args.limit > 0
+      ? Math.min(50, Math.floor(args.limit))
+      : 20
+
+    const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+    const index = this.loadCardsIndexCached(knowledgePath)
+    if (!index) {
+      return {
+        content: '',
+        error: '概念卡索引不存在或已损坏（knowledge/_cards/index.json）。'
+          + '请先在终端构建：`npx tsx scripts/build-knowledge-cards.ts avatars/<分身目录>`。'
+          + '在此之前请改用 search_knowledge / knowledge_grep 检索，不要把本次导航当作"知识库为空"。',
+      }
+    }
+
+    // 二级：某个文档的章节卡
+    if (docArg) {
+      const sections: SectionCard[] | undefined = index.sections[docArg]
+      if (!sections) {
+        const near = index.documents
+          .filter((d) => d.path.includes(docArg) || d.title.includes(docArg))
+          .slice(0, 5)
+          .map((d) => d.path)
+        return {
+          content: '',
+          error: `概念卡索引中没有文档 "${docArg}"。`
+            + (near.length > 0 ? `路径相近的候选：${near.join(' / ')}` : '先不带 doc 参数调用本工具查看文档清单。'),
+        }
+      }
+      const picked = (query
+        ? sections.filter((s) =>
+          s.headingPath.join(' ').toLowerCase().includes(query)
+          || s.keywords.some((k) => k.toLowerCase().includes(query)))
+        : sections
+      ).slice(0, limit)
+      return {
+        content: JSON.stringify({
+          doc: docArg,
+          section_count: sections.length,
+          returned: picked.length,
+          sections: picked.map((s) => ({
+            heading: s.headingPath.join(' / '),
+            lines: `${s.startLine}-${s.endLine}`,
+            chars: s.charCount,
+          })),
+          hint: '用 read_knowledge_file 读该文档并聚焦上面的行区间；引用时把 章节标题 + 行区间 一并写进来源标注。',
+        }, null, 2),
+      }
+    }
+
+    // 一级：文档卡
+    const docs: DocumentCard[] = query
+      ? index.documents.filter((d) =>
+        d.title.toLowerCase().includes(query)
+        || d.path.toLowerCase().includes(query)
+        || d.summaryHint.toLowerCase().includes(query)
+        || d.keywords.some((k) => k.toLowerCase().includes(query)))
+      : index.documents
+    const picked = docs.slice(0, limit)
+    return {
+      content: JSON.stringify({
+        document_count: index.documents.length,
+        matched: docs.length,
+        returned: picked.length,
+        documents: picked.map((d) => ({
+          path: d.path,
+          title: d.title,
+          summary_hint: d.summaryHint,
+          sections: d.sectionCount,
+          chars: d.charCount,
+        })),
+        hint: picked.length === 0
+          ? '没有文档匹配该 query。换更宽的词，或不带 query 看全部文档清单。'
+          : '拿 documents[i].path 再调一次 knowledge_navigate(doc="<path>") 查看章节，再按行区间精读。',
+      }, null, 2),
+    }
   }
 
   private listKnowledgeFiles(avatarId: string): ToolCallResult {
@@ -6193,7 +6336,7 @@ ${content}` }
    * 之前直接按 local/shared/community 路径全盘扫描，被禁用 / 未启用 / 同名跨 pack
    * 的技能只要猜到 ID 就能加载，绕过 UI 启用状态。
    */
-  private loadSkill(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+  private loadSkill(avatarId: string, args: Record<string, unknown>, conversationId?: string): ToolCallResult {
     const skillId = args.skill_id as string
     if (!skillId) return { content: '', error: '缺少 skill_id 参数' }
     // B1（agentskills.io 对齐）：目录型技能引用二次读取。
@@ -6218,7 +6361,8 @@ ${content}` }
         if (fs.existsSync(p)) {
           const content = fs.readFileSync(p, 'utf-8')
           const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
-          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
+          const sop = this.decorateSkillWithSop(avatarId, conversationId, skillId, p)
+          return { content: `## 技能：${skillId}\n\n${content}${extras}${sop}` }
         }
       }
     } else {
@@ -6238,7 +6382,8 @@ ${content}` }
         if (fs.existsSync(p)) {
           const content = fs.readFileSync(p, 'utf-8')
           const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
-          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
+          const sop = this.decorateSkillWithSop(avatarId, conversationId, skillId, p)
+          return { content: `## 技能：${skillId}\n\n${content}${extras}${sop}` }
         }
       }
     }
@@ -6262,6 +6407,148 @@ ${content}` }
           return { content: `## 技能：${skillId}\n\n${content}${extras}` }
         }
       }
+  // ─── SOP 状态机集成（W5.3/W5.4，见 docs/staffdeck-adoption-plan.md） ────────
+  // 双轨：技能目录里有同名 `<skill>.sop.yaml` 才进流程模式，否则完全走原散文链路。
+
+  /** SOP 会话状态 key；无 conversationId 时不启用流程（无法隔离并发会话） */
+  private sopKey(avatarId: string, conversationId: string, skill: string): string {
+    return `${avatarId}::${conversationId}::${skill}`
+  }
+
+  /** 读取并缓存 sop.yaml；解析失败返回 errors 供 fail-loud 提示（不静默降级成普通技能） */
+  private loadSopCard(sopPath: string): { card?: SopCard; errors?: string[] } {
+    let mtimeMs: number
+    try {
+      mtimeMs = fs.statSync(sopPath).mtimeMs
+    } catch {
+      return {}
+    }
+    const cached = this.sopCardCache.get(sopPath)
+    if (cached && cached.mtimeMs === mtimeMs) return { card: cached.card }
+    const parsed = parseSopCard(fs.readFileSync(sopPath, 'utf-8'))
+    if (!parsed.ok) return { errors: parsed.errors }
+    this.sopCardCache.set(sopPath, { card: parsed.card, mtimeMs })
+    return { card: parsed.card }
+  }
+
+  /**
+   * load_skill 返回前的 SOP 装配：技能同目录有 `<skillId>.sop.yaml` 时开一条流程，
+   * 把首个节点的 turn prompt 追加在 SKILL.md 正文之后。
+   * 返回空串 = 该技能不是流程型（绝大多数技能），调用方原样返回正文。
+   */
+  private decorateSkillWithSop(
+    avatarId: string,
+    conversationId: string | undefined,
+    skillId: string,
+    skillFilePath: string,
+  ): string {
+    const sopPath = path.join(path.dirname(skillFilePath), `${skillId}.sop.yaml`)
+    if (!fs.existsSync(sopPath)) return ''
+    const { card, errors } = this.loadSopCard(sopPath)
+    if (!card) {
+      // 有 sop.yaml 但解析失败：明确告知，不假装这是普通技能（否则流程纪律静默消失）
+      return `\n\n---\n\n⚠️ 本技能带 SOP 流程定义（${skillId}.sop.yaml），但解析失败，`
+        + `本轮按普通技能执行。请修复后重试：\n- ${(errors ?? ['未知错误']).join('\n- ')}\n`
+    }
+    if (!conversationId) {
+      return `\n\n---\n\n⚠️ 本技能有 SOP 流程，但当前调用缺少会话上下文，无法维护流程状态，按普通技能执行。\n`
+    }
+    const runner = new SopRunner(card)
+    const key = this.sopKey(avatarId, conversationId, card.skill)
+    // 已在流程中（用户重复 load_skill）→ 沿用现有状态，不重置已收集的槽位
+    const state = this.sopStates.get(key) ?? runner.initialState(Date.now())
+    this.sopStates.set(key, state)
+    return `\n\n---\n\n## 流程模式已启用（SOP: ${card.skill}）\n\n`
+      + `${runner.buildTurnPrompt(state, { reportChannel: 'tool' })}\n`
+  }
+
+  /**
+   * sop_report: LLM 汇报本轮 SOP 进展，由状态机硬校验后推进。
+   *
+   * 纪律全在 SopRunner.applyTurn：槽位未齐不许转移、非法转移拒绝、非终点不许完成。
+   * 本工具只负责取状态、应用、回写、把下一节点指令与 warnings 交回模型。
+   */
+  private sopReport(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    const skill = typeof args.skill === 'string' ? args.skill.trim() : ''
+    if (!skill) return { content: '', error: '缺少 skill 参数（正在执行的 SOP 技能名）' }
+    if (!conversationId) {
+      return { content: '', error: 'sop_report 需要会话上下文（当前调用缺失，无法定位流程状态）' }
+    }
+    const key = this.sopKey(avatarId, conversationId, skill)
+    const state = this.sopStates.get(key)
+    if (!state) {
+      return {
+        content: '',
+        error: `没有正在进行的 SOP 流程「${skill}」。请先调用 load_skill("${skill}") 开启流程；`
+          + '若该技能没有 sop.yaml，则它不是流程型技能，不要调用 sop_report。',
+      }
+    }
+    // 技能与卡片重新解析一次（走缓存）：状态里只存 skill 名，card 从磁盘恢复
+    const sopPath = this.findSopPathForSkill(avatarId, skill)
+    if (!sopPath) {
+      this.sopStates.delete(key)
+      return { content: '', error: `SOP 定义文件已不存在（${skill}.sop.yaml），流程已终止。` }
+    }
+    const { card, errors } = this.loadSopCard(sopPath)
+    if (!card) {
+      return { content: '', error: `SOP 定义解析失败：${(errors ?? []).join('；')}` }
+    }
+    const runner = new SopRunner(card)
+    const report = {
+      filled: args.filled && typeof args.filled === 'object' && !Array.isArray(args.filled)
+        ? Object.fromEntries(
+          Object.entries(args.filled as Record<string, unknown>)
+            .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+            .map(([k, v]) => [k, String(v)]),
+        )
+        : undefined,
+      next: typeof args.next === 'string' ? args.next : undefined,
+      done: args.done === true,
+    }
+    const result = runner.applyTurn(state, report, Date.now())
+    this.sopStates.set(key, result.state)
+    if (result.finished) {
+      this.sopStates.delete(key)
+      return {
+        content: JSON.stringify({
+          skill,
+          finished: true,
+          collected: result.state.filled,
+          path: result.state.history,
+          ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          hint: '流程已完成。基于 collected 里的信息给出最终交付，引用知识库数据时标注来源。',
+        }, null, 2),
+      }
+    }
+    return {
+      content: JSON.stringify({
+        skill,
+        transitioned: result.transitioned,
+        current_node: result.state.nodeId,
+        ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+        next_instruction: runner.buildTurnPrompt(result.state, { reportChannel: 'tool' }),
+      }, null, 2),
+    }
+  }
+
+  /** 按 local → shared 顺序找技能的 sop.yaml（community 技能不支持 SOP，避免跨包状态混淆） */
+  private findSopPathForSkill(avatarId: string, skillId: string): string | null {
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+    } catch {
+      return null
+    }
+    const candidates = [
+      path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.sop.yaml`),
+      path.join(this.avatarsPath, '..', 'shared', 'skills', `${skillId}.sop.yaml`),
+    ]
+    return candidates.find((p) => fs.existsSync(p)) ?? null
+  }
+
     }
     return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
   }

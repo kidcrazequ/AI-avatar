@@ -1788,6 +1788,80 @@ IR 语法（markdown + 扩展）：
     /**
      * task: 委派子任务给独立子代理（升级自 delegate_task）。
      *
+  {
+    /**
+     * sop_report: 汇报 SOP 流程进展（仅流程型技能，W5.3）。
+     * 只有 load_skill 返回里出现「流程模式已启用」时才调用；状态机会硬校验转移合法性。
+     */
+    type: 'function',
+    function: {
+      name: 'sop_report',
+      description: [
+        '汇报当前 SOP 流程本轮进展并推进到下一节点。',
+        '',
+        '何时使用：',
+        '- 仅当 load_skill 的返回里出现「流程模式已启用（SOP: xxx）」时',
+        '- 每轮结束都要调用一次：报告本轮收集到的信息、是否转移、是否完成',
+        '',
+        '何时不用：',
+        '- 普通（非流程型）技能——它们没有 SOP 定义，调用会报错',
+        '',
+        '纪律（由状态机强制，违反会被拒绝并返回 warning）：',
+        '- 当前节点要求的信息没收集齐时，不能转移到下一节点',
+        '- next 只能填当前节点允许的转移目标',
+        '- 只有到达终点节点才能 done=true',
+        '',
+        '返回 JSON：current_node / transitioned / warnings? / next_instruction（下一轮该做什么）。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          skill: { type: 'string', description: '正在执行的流程技能名（load_skill 返回里的 SOP 名）' },
+          filled: {
+            type: 'object',
+            description: '本轮收集到的信息，键为槽位名（如 {"装机容量": "215kWh"}）',
+            additionalProperties: { type: 'string' },
+          },
+          next: { type: 'string', description: '要转移到的节点 id；不转移则省略' },
+          done: { type: 'boolean', description: '流程是否已完成（仅终点节点可为 true）' },
+        },
+        required: ['skill'],
+      },
+    },
+  },
+  {
+    /**
+     * knowledge_navigate: 概念卡两级导航（W4.2）。
+     * 大库先定位后钻取，引用天然落到章节 + 行区间粒度。
+     */
+    type: 'function',
+    function: {
+      name: 'knowledge_navigate',
+      description: [
+        '按文档结构导航知识库：先看有哪些文档，再看文档里有哪些章节及行区间。',
+        '',
+        '何时使用：',
+        '- 大知识库里不确定信息在哪，需要先定位再精读',
+        '- 需要把引用精确到「文档 + 章节 + 行区间」（数据溯源要求）',
+        '',
+        '两级用法：',
+        '- 不传 doc：列文档清单（可用 query 过滤）',
+        '- 传 doc：列该文档的章节与行区间，再用 read_knowledge_file 精读对应部分',
+        '',
+        '何时不用：',
+        '- 已知确切关键词 → search_knowledge / knowledge_grep 更直接',
+        '- 索引未构建时会明确报错并给构建命令（此时改用 search_knowledge，不要当作知识库为空）',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        properties: {
+          doc: { type: 'string', description: '文档路径（来自一级返回的 documents[i].path）；省略则列文档清单' },
+          query: { type: 'string', description: '过滤词（一级过滤标题/关键词/摘要，二级过滤章节标题）' },
+          limit: { type: 'number', description: '返回条数；默认 20，上限 50' },
+        },
+      },
+    },
+  },
      * 升级要点：
      *   - 重命名为 task，与 Cursor / Claude Code 工具命名对齐
      *   - 子代理拥有独立对话上下文，不会污染主会话

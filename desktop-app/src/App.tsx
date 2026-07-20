@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 import KnowledgePanel from './components/KnowledgePanel'
 import TracesPanel from './components/TracesPanel'
+import DashboardPanel from './components/DashboardPanel'
 import SettingsPanel from './components/SettingsPanel'
 import AvatarSelector from './components/AvatarSelector'
 import CreateAvatarWizard from './components/CreateAvatarWizard'
@@ -134,9 +135,10 @@ function App() {
   /** Project 管理面板 */
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | 'office' | 'traces' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | 'office' | 'traces' | 'dashboard' | null
   >(null)
   const showTracesPanel = activePanel === 'traces'
+  const showDashboardPanel = activePanel === 'dashboard'
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
   const showCreateWizard = activePanel === 'createWizard'
@@ -708,6 +710,7 @@ function App() {
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
     { label: '轨迹', icon: '≣', key: 'traces', onClick: () => setActivePanel('traces'), active: showTracesPanel, title: '执行轨迹：每轮工具 / 检索 / 技能调用明细与耗时' },
+    { label: '台账', icon: '▤', key: 'dashboard', onClick: () => setActivePanel('dashboard'), active: showDashboardPanel, title: '分身台账：记忆 · 会话日志 · 定时任务 · 工作统计' },
     { label: '首页', icon: '⌂', key: 'home', onClick: () => setActiveAvatarId(''), active: false, title: '返回首页 · 切换分身 · 导入分身包' },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
@@ -934,6 +937,13 @@ function App() {
 
       {showTracesPanel && activeAvatarId && (
         <TracesPanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
+        />
+      )}
+
+      {showDashboardPanel && activeAvatarId && (
+        <DashboardPanel
           avatarId={activeAvatarId}
           onClose={() => setActivePanel(null)}
         />

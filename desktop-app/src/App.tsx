@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatWindow from './components/ChatWindow'
 import KnowledgePanel from './components/KnowledgePanel'
+import TracesPanel from './components/TracesPanel'
 import SettingsPanel from './components/SettingsPanel'
 import AvatarSelector from './components/AvatarSelector'
 import CreateAvatarWizard from './components/CreateAvatarWizard'
@@ -133,8 +134,9 @@ function App() {
   /** Project 管理面板 */
   const [projectManagerOpen, setProjectManagerOpen] = useState(false)
   const [activePanel, setActivePanel] = useState<
-    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | 'office' | null
+    'knowledge' | 'settings' | 'createWizard' | 'expertPacks' | 'importPack' | 'test' | 'skills' | 'memory' | 'palace' | 'life' | 'userProfile' | 'soulEditor' | 'promptTemplate' | 'schedules' | 'batchRegression' | 'office' | 'traces' | null
   >(null)
+  const showTracesPanel = activePanel === 'traces'
   const showKnowledgePanel = activePanel === 'knowledge'
   const showSettingsPanel = activePanel === 'settings'
   const showCreateWizard = activePanel === 'createWizard'
@@ -705,6 +707,7 @@ function App() {
     { label: '画像', icon: '●', key: 'user', onClick: () => setActivePanel('userProfile'), active: showUserProfilePanel },
     { label: '话术', icon: '□', key: 'tpl', onClick: () => setActivePanel('promptTemplate'), active: showPromptTemplatePanel },
     { label: '定时', icon: '◐', key: 'sched', onClick: () => setActivePanel('schedules'), active: showSchedulesPanel },
+    { label: '轨迹', icon: '≣', key: 'traces', onClick: () => setActivePanel('traces'), active: showTracesPanel, title: '执行轨迹：每轮工具 / 检索 / 技能调用明细与耗时' },
     { label: '首页', icon: '⌂', key: 'home', onClick: () => setActiveAvatarId(''), active: false, title: '返回首页 · 切换分身 · 导入分身包' },
     { label: '设置', icon: '✦', key: 'set', onClick: () => setActivePanel('settings'), active: showSettingsPanel },
   ]
@@ -927,6 +930,13 @@ function App() {
             </div>
           )}
         </Sidebar>
+      )}
+
+      {showTracesPanel && activeAvatarId && (
+        <TracesPanel
+          avatarId={activeAvatarId}
+          onClose={() => setActivePanel(null)}
+        />
       )}
 
       {showKnowledgePanel && activeAvatarId && (

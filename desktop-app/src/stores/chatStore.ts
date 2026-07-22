@@ -5504,10 +5504,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // "N 失败" 汇总也跳过这条。两层语义分离，互不影响。
           const wasSkipped = resultText.startsWith('工具执行已跳过')
           if (toolOk && wasSkipped) toolOk = false
-          // 分身写入职场承诺/待确认成功 → 通知 App 层弹 toast + 刷新「职场」导航角标
-          // （store 不直接持有 App 引用，走 window 事件，与 conversation-title-changed 同模式）
-          if (toolOk && (tc.function.name === 'add_palace_commitment' || tc.function.name === 'add_palace_inbox_item')) {
-            window.dispatchEvent(new CustomEvent('soul-palace-write', { detail: { tool: tc.function.name } }))
+          // 分身写入职场成功 → 通知 App 层刷新「职场」角标；reloadPrompt=写入影响冻结的
+          // systemPrompt 注入（画像/承诺），App 会重载分身配置让本会话下条消息即生效（破冻结快照）。
+          // 路线卡走每消息召回读盘、inbox 只进角标，均不需 reloadPrompt。
+          {
+            const isPalaceWrite =
+              tc.function.name === 'write_palace_profile' ||
+              tc.function.name === 'add_palace_commitment' ||
+              tc.function.name === 'update_palace_commitment' ||
+              tc.function.name === 'add_palace_inbox_item' ||
+              tc.function.name === 'update_palace_inbox_item'
+            if (toolOk && isPalaceWrite) {
+              const reloadPrompt =
+                tc.function.name === 'write_palace_profile' ||
+                tc.function.name === 'add_palace_commitment' ||
+                tc.function.name === 'update_palace_commitment'
+              window.dispatchEvent(new CustomEvent('soul-palace-write', { detail: { tool: tc.function.name, reloadPrompt } }))
+            }
           }
           const truncatedResult = truncateToolResultForContext(tc.function.name, resultText)
           if (truncatedResult.truncated) {

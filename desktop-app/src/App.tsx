@@ -254,15 +254,8 @@ function App() {
     void refreshPalaceBadge()
   }, [refreshPalaceBadge])
 
-  // chatStore 里分身通过工具写入承诺/待确认成功后派发（与 conversation-title-changed 同模式）
-  useEffect(() => {
-    const handler = () => {
-      showToast('已加入职场·待确认')
-      void refreshPalaceBadge()
-    }
-    window.addEventListener('soul-palace-write', handler)
-    return () => window.removeEventListener('soul-palace-write', handler)
-  }, [showToast, refreshPalaceBadge])
+  // soul-palace-write 监听移到 loadAvatarConfig 定义之后（见下方）——handler 需重载分身配置，
+  // 在此处引用 loadAvatarConfig 会命中 const TDZ。
 
   /**
    * 显示可点击的 Toast（Phase 4 新增）。
@@ -307,6 +300,24 @@ function App() {
       window.electronAPI.logEvent('error', 'load-avatar-config-error', err instanceof Error ? err.message : String(err))
     }
   }, [setSystemPrompt])
+
+  // 分身通过工具写入职场成功后（chatStore 派发 soul-palace-write）：刷新角标；若写入影响冻结的
+  // systemPrompt 注入（画像/承诺，detail.reloadPrompt），重载分身配置——破冻结快照，本会话下条
+  // 消息即生效，不必等新会话。loadAvatar 会用最新记忆/palace 重建 systemPrompt（与知识保存后同路径）。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tool?: string; reloadPrompt?: boolean }>).detail
+      void refreshPalaceBadge()
+      if (detail?.reloadPrompt && activeAvatarId) {
+        void loadAvatarConfig(activeAvatarId, activeProjectId)
+        showToast('职场记忆已更新（本会话生效）')
+      } else {
+        showToast('已加入职场·待确认')
+      }
+    }
+    window.addEventListener('soul-palace-write', handler)
+    return () => window.removeEventListener('soul-palace-write', handler)
+  }, [showToast, refreshPalaceBadge, loadAvatarConfig, activeAvatarId, activeProjectId])
 
   const loadModelConfigs = useCallback(async () => {
     const [

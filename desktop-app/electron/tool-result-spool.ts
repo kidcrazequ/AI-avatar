@@ -5,13 +5,13 @@
  *      持续累积到 LLM context 会撑爆 prefill 预算（DeepSeek 64K 上限）。
  *
  * 方案：超过 SPOOL_THRESHOLD 的结果自动落盘到
- *      <userDataDir>/tool-results/<conversationId>/<toolName>-<ts>.txt，
- *      返回给 LLM 的 content 改为「头部摘要 + 尾部摘要 + 完整路径提示」，
- *      LLM 后续可用 read_file 拉取全文（按需取片段）。
+ *      <userDataDir>/tool-results/<conversationId>/<toolName>-<sha256>.txt，
+ *      返回给 LLM 的 content 改为「头部摘要 + 尾部摘要 + 会话内稳定 ref」，
+ *      LLM 后续统一用 read_tool_result 拉取全文（按需取片段）。
  *
  * 设计要点：
- *   - 阈值默认 12000 字符，可通过构造参数覆盖（测试用）
- *   - 落盘路径含 conversationId 子目录，便于按对话清理
+ *   - 阈值默认 6000 字符，与渲染层单结果预算对齐，消除不可恢复截断区间
+ *   - 内容哈希去重；ref 按 conversationId 隔离，不向模型暴露绝对路径
  *   - 启动时清理 7 天前的目录，防止磁盘膨胀
  *   - assertSafeSegment 防路径穿越（来自渲染进程的 conversationId / toolName）
  *   - 同步写入 + 同步 mkdir，符合 Electron 主进程惯例（不阻塞渲染）
@@ -22,10 +22,11 @@
 
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { assertSafeSegment } from '@soul/core'
 
 /** 默认阈值：超过此长度才落盘（字符数） */
-const DEFAULT_SPOOL_THRESHOLD = 12_000
+const DEFAULT_SPOOL_THRESHOLD = 6_000
 /** 头部保留字符数（让 LLM 看到结构开头） */
 const DEFAULT_HEAD_CHARS = 3000
 /** 尾部保留字符数（让 LLM 看到 totals/汇总行） */
@@ -34,7 +35,7 @@ const DEFAULT_TAIL_CHARS = 1000
 const DEFAULT_RETENTION_DAYS = 7
 
 export interface SpoolOptions {
-  /** 落盘阈值（字符）。<=0 表示禁用 spool。默认 12000 */
+  /** 落盘阈值（字符）。<=0 表示禁用 spool。默认 6000 */
   threshold?: number
   /** 头部保留字符数 */
   headChars?: number
@@ -49,6 +50,8 @@ export interface SpoolResult {
   content: string
   /** 落盘后的绝对路径（spilled=false 时为 undefined） */
   path?: string
+  /** 暴露给模型的会话内稳定引用；不泄露用户目录绝对路径 */
+  ref?: string
   /** 原始内容字符数（便于审计） */
   originalLength: number
 }
@@ -77,7 +80,7 @@ export class ToolResultSpool {
    *   - 长度 ≤ threshold → 原样返回，不落盘
    *   - 长度 > threshold → 写文件 + content 改为「头 + [...spilled...] + 尾 + 路径提示」
    *
-   * 失败兜底：写文件异常时退回到原内容截断（不阻断主链路）。
+   * 失败兜底：写文件异常时原样返回（fail-open，不制造不可恢复截断）。
    */
   spool(conversationId: string, toolName: string, content: string): SpoolResult {
     const originalLength = content.length
@@ -89,8 +92,14 @@ export class ToolResultSpool {
       const safeName = this.sanitizeToolName(toolName)
       const dir = path.join(this.rootDir, conversationId)
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      const file = path.join(dir, `${safeName}-${Date.now()}.txt`)
-      fs.writeFileSync(file, content, 'utf-8')
+      const hash = crypto.createHash('sha256').update(content, 'utf8').digest('hex')
+      const file = path.join(dir, `${safeName}-${hash}.txt`)
+      const ref = `tool-result:${safeName}:${hash}`
+      if (!fs.existsSync(file)) fs.writeFileSync(file, content, 'utf-8')
+      else {
+        const now = new Date()
+        fs.utimesSync(file, now, now)
+      }
 
       const head = content.slice(0, this.headChars)
       const tail = content.slice(-this.tailChars)
@@ -101,27 +110,82 @@ export class ToolResultSpool {
         '',
         tail,
         '',
-        `[系统提示] 工具 ${toolName} 返回过长，完整内容已落盘到：`,
-        `  ${file}`,
+        `[系统提示] 工具 ${toolName} 返回过长，完整原文已安全保存（会话内引用）：`,
+        `  ${ref}`,
         ``,
-        `如需查看中段或完整结构，调用 \`read_tool_result\` 工具：`,
-        `  read_tool_result(path="${file}")`,
-        ``,
-        `⚠️ **工具名警示**：`,
-        `- 正确：\`read_tool_result\`（**result**，读 spool 文件）`,
-        `- 错误：\`read_tool_ref\`（**ref**，只用于 web_fetch lazy_ref，本场景无效）`,
-        `- 错误：\`read_lines\` / \`read_file\`（路径不在工作区，会被路径穿越守卫拒绝）`,
-        `两个工具名几乎一样但功能完全不同，注意尾部是 result 不是 ref。`,
+        `如需查看中段或完整结构，调用统一取回工具：`,
+        `  read_tool_result(ref="${ref}")`,
         ``,
         `否则请基于以上头/尾摘要直接收敛回答，不要调任何工具读这个 spool 文件——头/尾摘要 + reasoning 通常已经够答题。`,
       ].join('\n')
 
-      return { spilled: true, content: summary, path: file, originalLength }
+      return { spilled: true, content: summary, path: file, ref, originalLength }
     } catch (err) {
-      // 落盘失败的兜底：返回头部截断 + 错误提示，绝不抛主链路
-      const fallback = content.slice(0, this.headChars + this.tailChars)
-      const note = `\n\n[系统提示] 工具结果过长（${originalLength} 字符）但落盘失败：${err instanceof Error ? err.message : String(err)}。已截断为头部 ${fallback.length} 字符。`
-      return { spilled: false, content: fallback + note, originalLength }
+      console.warn('[ToolResultSpool] 落盘失败，已原样返回:', err instanceof Error ? err.message : String(err))
+      return { spilled: false, content, originalLength }
+    }
+  }
+
+  /** 把模型可见的稳定 ref 解析为当前会话内文件；跨会话引用必然失败。 */
+  resolveRef(conversationId: string, ref: string): string | null {
+    try {
+      assertSafeSegment(conversationId, '会话ID')
+      const match = ref.match(/^tool-result:([a-zA-Z0-9_-]{1,64}):([a-f0-9]{64})$/)
+      if (!match) return null
+      const file = path.join(this.rootDir, conversationId, `${match[1]}-${match[2]}.txt`)
+      return fs.existsSync(file) && fs.statSync(file).isFile() ? file : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 记录取回事件并生成会话级反馈报告。只做审计建议，不自动修改生产压缩策略。
+   * 同一工具累计取回 ≥2 次时提示保持直通或提高可见预算。
+   */
+  recordRetrieval(
+    conversationId: string,
+    ref: string,
+    detail: { start: number; end: number; truncated: boolean },
+  ): void {
+    try {
+      assertSafeSegment(conversationId, '会话ID')
+      const dir = path.join(this.rootDir, conversationId)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const tool = ref.match(/^tool-result:([a-zA-Z0-9_-]{1,64}):/)?.[1]
+        ?? path.basename(ref).replace(/-[a-f0-9]{64}\.txt$/, '').replace(/-\d{10,}\.txt$/, '')
+        ?? 'unknown'
+      const event = { at: new Date().toISOString(), tool, ref, ...detail }
+      const eventsPath = path.join(dir, '.retrieval-events.jsonl')
+      fs.appendFileSync(eventsPath, JSON.stringify(event) + '\n', 'utf-8')
+
+      const counts = new Map<string, number>()
+      const raw = fs.readFileSync(eventsPath, 'utf-8').slice(-1_000_000)
+      for (const line of raw.split('\n')) {
+        if (!line.trim()) continue
+        try {
+          const parsed = JSON.parse(line) as { tool?: string }
+          if (parsed.tool) counts.set(parsed.tool, (counts.get(parsed.tool) ?? 0) + 1)
+        } catch {
+          // 单条损坏不影响其余审计
+        }
+      }
+      const rows = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([name, count]) => `| ${name} | ${count} | ${count >= 2 ? '高频取回：建议保持直通或提高可见预算' : '继续观察'} |`)
+      const report = [
+        '# 工具结果取回反馈',
+        '',
+        '> 只提供审计建议，不会自动修改压缩策略。',
+        '',
+        '| 工具 | 取回次数 | 建议 |',
+        '| --- | ---: | --- |',
+        ...rows,
+        '',
+      ].join('\n')
+      fs.writeFileSync(path.join(dir, 'RETRIEVAL_FEEDBACK.md'), report, 'utf-8')
+    } catch (err) {
+      console.warn('[ToolResultSpool] 记录取回反馈失败:', err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -182,6 +246,7 @@ export class ToolResultSpool {
       const dir = path.join(this.rootDir, conversationId)
       if (!fs.existsSync(dir)) return []
       return fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.txt'))
         .map((f) => {
           const fp = path.join(dir, f)
           const stat = fs.statSync(fp)
@@ -211,13 +276,13 @@ export class ToolResultSpool {
   }
 }
 
-/** read_tool_result 单次返回体字节硬上限（含超长单行防护） */
-export const DEFAULT_SPOOL_MAX_BODY_BYTES = 1_000_000
+/** read_tool_result 单次返回体字节硬上限；与单结果上下文预算对齐，鼓励分页取回。 */
+export const DEFAULT_SPOOL_MAX_BODY_BYTES = 6_000
 /** read_tool_result 单次最多返回行数减一（4000 行上限，含起始行） */
 export const DEFAULT_SPOOL_HARD_LINE_CAP = 3999
 
 export interface SpoolLineRangeOptions {
-  /** 返回体字节硬上限，默认 1MB */
+  /** 返回体字节硬上限，默认 6000 字节 */
   maxBodyBytes?: number
   /** 起始行之后最多再返回多少行（4000 行上限），默认 3999 */
   hardLineCap?: number
@@ -241,7 +306,7 @@ export interface SpoolLineRangeResult {
  *
  * - 逐 chunk 扫描换行字节：区间外的行只数行号、不缓存内容；
  * - 区间内的行收集内容，但「已提交字节 + 当前行字节」一旦触及 maxBodyBytes 立即在行中截断并停止，
- *   因此即便整个文件是一行超大 minified JSON，也只会把前 ~1MB 读进内存，不会整体加载；
+ *   因此即便整个文件是一行超大 minified JSON，也只会把前 6000 字节读进内存，不会整体加载；
  * - 行号超过 startLine + hardLineCap 时停止（4000 行硬上限）。
  *
  * 为什么不用 readline：readline 以「整行」为最小单位触发 line 事件，单行超大时会先把整行

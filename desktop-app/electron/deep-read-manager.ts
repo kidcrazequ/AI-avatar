@@ -24,6 +24,7 @@ import {
   runDeepRead,
   sanitizeFileSegment,
   splitBookIntoChapters,
+  DEEP_READ_LLM_FILES,
   DEEP_READ_SYNTHESIS_FILES,
   type BookChapter,
   type DeepReadContentType,
@@ -65,7 +66,7 @@ export interface DeepReadStatus {
   /** 终态错误（取消时为「精读已取消」） */
   error: string | null
   /** 终态结果摘要 */
-  result: { products: number; failedChapters: string[]; skippedChapters: number; totalChapters: number } | null
+  result: { products: number; failedChapters: string[]; skippedChapters: number; totalChapters: number; verifiedUnits: number; rejectedUnits: number } | null
 }
 
 interface PreparedDeepRead {
@@ -151,14 +152,17 @@ export class DeepReadManager {
     const pendingChapters = existingCount === 0
       ? chapters
       : chapters.filter(ch => !fs.existsSync(path.join(knowledgePath, outputDir, chapterFileName(ch, chapters.length))))
+    const pendingBookCalls = DEEP_READ_LLM_FILES.filter(fileName =>
+      !fs.existsSync(path.join(knowledgePath, outputDir, fileName)),
+    ).length
     const estimates = {
       study: {
-        technical: estimateDeepRead(pendingChapters, 'study', 'technical'),
-        text: estimateDeepRead(pendingChapters, 'study', 'text'),
+        technical: estimateDeepRead(pendingChapters, 'study', 'technical', pendingBookCalls),
+        text: estimateDeepRead(pendingChapters, 'study', 'text', pendingBookCalls),
       },
       reference: {
-        technical: estimateDeepRead(pendingChapters, 'reference', 'technical'),
-        text: estimateDeepRead(pendingChapters, 'reference', 'text'),
+        technical: estimateDeepRead(pendingChapters, 'reference', 'technical', pendingBookCalls),
+        text: estimateDeepRead(pendingChapters, 'reference', 'text', pendingBookCalls),
       },
     }
 
@@ -214,6 +218,8 @@ export class DeepReadManager {
           failedChapters: result.failedChapters.map(f => f.title),
           skippedChapters: result.skippedChapters,
           totalChapters: result.totalChapters,
+          verifiedUnits: result.verifiedUnits,
+          rejectedUnits: result.rejectedUnits,
         }
         this.deps.logActivity('deep-read', `avatar=${avatarId} 完成：${result.products.length} 个产物，${result.failedChapters.length} 章失败`)
       } catch (err) {
@@ -280,10 +286,18 @@ export class DeepReadManager {
       }
     }
     const existingPaths = new Set(priorChapterNotes.map(n => n.relativePath))
-    // 综合件也纳入存在性探测：纯续跑（零新增章节）时 core 据此跳过重付综合 LLM 调用
+    // 书级产物也纳入存在性探测并装载内容：纯续跑时下游可复用，而不是只知道“文件存在”。
+    const priorProducts: Array<{ relativePath: string; content: string }> = []
     for (const fileName of DEEP_READ_SYNTHESIS_FILES) {
       const rel = `${prepared.outputDir}/${fileName}`
-      if (fs.existsSync(path.join(knowledgePath, rel))) existingPaths.add(rel)
+      const abs = path.join(knowledgePath, rel)
+      if (!fs.existsSync(abs)) continue
+      try {
+        priorProducts.push({ relativePath: rel, content: fs.readFileSync(abs, 'utf-8') })
+        existingPaths.add(rel)
+      } catch {
+        // 读失败视作不存在，本轮重新生成
+      }
     }
 
     const result = await runDeepRead(prepared.chapters, {
@@ -296,6 +310,7 @@ export class DeepReadManager {
       abortSignal,
       shouldSkip: (rel: string) => existingPaths.has(rel),
       priorChapterNotes,
+      priorProducts,
       onProgress: progress => {
         // 闭包持有本次任务的 status 对象：取消后残留的旧任务不会污染新任务的状态
         status.progress = progress
@@ -389,4 +404,3 @@ export class DeepReadManager {
     return text
   }
 }
-

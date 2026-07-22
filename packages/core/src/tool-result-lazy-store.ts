@@ -3,7 +3,7 @@
  *
  * 灵感来源：Tencent/TencentDB-Agent-Memory 的 symbolic short-term memory（WideSearch 实测 token -61%）。
  * 思路：长工具输出（如 web_fetch 30KB+ HTML→MD）落盘到会话目录 tool-refs/，
- *      prompt 里只留 `body_lazy_ref` 标记 + 元数据；LLM 想看正文调 `read_tool_ref`。
+ *      prompt 里只留 `body_lazy_ref` 标记 + 元数据；LLM 想看正文统一调 `read_tool_result`。
  *
  * v1 范围（保守）：
  *   - 只对 `web_fetch` 启用（其他工具风险高，比如 search_knowledge 的章节如果 lazy 化，
@@ -158,7 +158,7 @@ function processWebFetchLazy(
     body_lazy_ref: {
       call_id: callId,
       char_count: body.length,
-      hint: `正文已离线存储以节省 token。使用 read_tool_ref(call_id="${callId}", offset?, limit?) 取正文，单次最多 ${READ_TOOL_REF_HARD_LIMIT} 字符。`,
+      hint: `正文已离线存储以节省 token。使用 read_tool_result(call_id="${callId}", offset?, limit?) 取正文，单次最多 ${READ_TOOL_REF_HARD_LIMIT} 字符。旧 read_tool_ref 仅作兼容。`,
       source_url: url,
     },
   }

@@ -101,6 +101,8 @@ export async function compactContextIfSafe(input: {
   messages: LLMMessage[]
   minTailMessages: number
   minMiddleMessages: number
+  /** 告诉模型如何恢复被摘要中段；完整历史仍由持久层持有。 */
+  recoveryHint?: string
   summarize: (mid: readonly LLMMessage[]) => Promise<string>
 }): Promise<CompactionOutcome> {
   const plan = planContextCompaction(input.messages, {
@@ -117,7 +119,7 @@ export async function compactContextIfSafe(input: {
 
   const summaryMsg: LLMMessage = {
     role: 'assistant',
-    content: `【已压缩历史摘要（完整对话仍在会话记录中，未改动）】\n${summary.trim()}`,
+    content: `【已压缩历史摘要（完整对话仍在会话记录中，未改动）】\n${summary.trim()}${input.recoveryHint ? `\n\n${input.recoveryHint}` : ''}`,
   }
   const newMessages = [
     ...input.messages.slice(0, plan.headEnd),

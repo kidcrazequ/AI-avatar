@@ -3,11 +3,11 @@
  *
  * 验证点：
  *   1. 小于阈值的内容原样返回，不落盘
- *   2. 超过阈值时落盘到 conversationId 子目录，content 改为头/尾摘要 + 路径提示
+ *   2. 超过阈值时落盘到 conversationId 子目录，content 改为头/尾摘要 + 稳定 ref
  *   3. 写文件后路径可读、内容完整
  *   4. cleanup() 删除超过 retention 的旧文件，并清理空目录
  *   5. 工具名含特殊字符（路径穿越尝试）被清洗为安全 segment
- *   6. 非法 conversationId（如 ../） 走兜底分支返回截断内容、不抛错
+ *   6. 非法 conversationId（如 ../） fail-open 返回原文、不抛错
  *   7. listForConversation 按 mtime 倒序返回
  *
  * @author zhi.qu
@@ -43,7 +43,7 @@ test('ToolResultSpool: 小内容原样返回，不落盘', () => {
   assert.equal(out.originalLength, 'short content'.length)
 })
 
-test('ToolResultSpool: 超阈值内容落盘 + 头尾摘要 + 路径提示', () => {
+test('ToolResultSpool: 超阈值内容落盘 + 头尾摘要 + 稳定 ref', () => {
   const userData = makeTempUserData()
   const spool = new ToolResultSpool(userData, {
     threshold: 100,
@@ -55,6 +55,7 @@ test('ToolResultSpool: 超阈值内容落盘 + 头尾摘要 + 路径提示', () 
 
   assert.equal(out.spilled, true, '应触发落盘')
   assert.ok(out.path, '应返回路径')
+  assert.ok(out.ref?.startsWith('tool-result:search_knowledge:'), '应返回稳定 ref')
   assert.equal(out.originalLength, original.length)
   assert.ok(fs.existsSync(out.path!), '落盘文件应存在')
 
@@ -62,12 +63,14 @@ test('ToolResultSpool: 超阈值内容落盘 + 头尾摘要 + 路径提示', () 
   const onDisk = fs.readFileSync(out.path!, 'utf-8')
   assert.equal(onDisk, original)
 
-  // 摘要应包含头部、尾部、路径提示
+  // 摘要应包含头部、尾部、ref；绝对路径不暴露给模型
   assert.ok(out.content.startsWith('A'.repeat(30)), '应以头部 30 个 A 开头')
   assert.ok(out.content.includes('中段已省略'), '应包含中段省略提示')
   assert.ok(out.content.includes('B'.repeat(20)), '应包含尾部 20 个 B')
-  assert.ok(out.content.includes(out.path!), '应包含完整路径')
-  assert.ok(out.content.includes('read_file'), '应提示用 read_file 拉取全文')
+  assert.ok(out.content.includes(`read_tool_result(ref="${out.ref}")`), '应提示统一取回调用')
+  assert.ok(!out.content.includes(out.path!), '模型可见摘要不应泄露绝对路径')
+  assert.equal(spool.resolveRef('conv-2', out.ref!), out.path)
+  assert.equal(spool.resolveRef('other-conv', out.ref!), null, 'ref 必须按会话隔离')
 })
 
 test('ToolResultSpool: threshold=0 禁用落盘', () => {
@@ -77,6 +80,13 @@ test('ToolResultSpool: threshold=0 禁用落盘', () => {
   const out = spool.spool('conv-3', 't', big)
   assert.equal(out.spilled, false)
   assert.equal(out.content.length, 50_000)
+})
+
+test('ToolResultSpool: 默认从 6000 字符开始保存，消除不可恢复截断区间', () => {
+  const userData = makeTempUserData()
+  const spool = new ToolResultSpool(userData)
+  assert.equal(spool.spool('conv-threshold', 'tool', 'x'.repeat(6000)).spilled, false)
+  assert.equal(spool.spool('conv-threshold', 'tool', 'x'.repeat(6001)).spilled, true)
 })
 
 test('ToolResultSpool: 落盘文件按 conversationId 分目录', () => {
@@ -97,9 +107,9 @@ test('ToolResultSpool: 非法 conversationId（路径穿越）走兜底分支', 
   const userData = makeTempUserData()
   const spool = new ToolResultSpool(userData, { threshold: 10 })
   const out = spool.spool('../evil', 'tool', 'this is a long enough content to spool')
-  // 落盘失败但不抛错；返回截断内容 + 错误提示
+  // 落盘失败但不抛错；fail-open 原样返回
   assert.equal(out.spilled, false)
-  assert.ok(out.content.includes('落盘失败') || out.content.length > 0)
+  assert.equal(out.content, 'this is a long enough content to spool')
   // evil 目录绝不应在 root 之外被创建
   assert.equal(fs.existsSync(path.join(userData, 'evil')), false)
 })
@@ -113,6 +123,32 @@ test('ToolResultSpool: 工具名含特殊字符会被清洗', () => {
   const fname = path.basename(out.path!)
   assert.ok(!fname.includes('/') && !fname.includes('..') && !fname.includes(' '),
     `期望清洗后的文件名，实际：${fname}`)
+})
+
+test('ToolResultSpool: 同会话同工具同内容按 hash 去重', () => {
+  const userData = makeTempUserData()
+  const spool = new ToolResultSpool(userData, { threshold: 10 })
+  const content = 'same long content for deterministic dedupe'
+  const first = spool.spool('conv-dedupe', 'tool1', content)
+  const second = spool.spool('conv-dedupe', 'tool1', content)
+  assert.equal(first.ref, second.ref)
+  assert.equal(first.path, second.path)
+  assert.equal(fs.readdirSync(path.join(spool.getRootDir(), 'conv-dedupe')).length, 1)
+})
+
+test('ToolResultSpool: 重复取回生成保守策略反馈，不自动改策略', () => {
+  const userData = makeTempUserData()
+  const spool = new ToolResultSpool(userData, { threshold: 10 })
+  const stored = spool.spool('conv-feedback', 'custom_tool', 'long enough content for feedback')
+  spool.recordRetrieval('conv-feedback', stored.ref!, { start: 1, end: 10, truncated: true })
+  spool.recordRetrieval('conv-feedback', stored.ref!, { start: 11, end: 20, truncated: false })
+  const report = fs.readFileSync(
+    path.join(spool.getRootDir(), 'conv-feedback', 'RETRIEVAL_FEEDBACK.md'),
+    'utf-8',
+  )
+  assert.ok(report.includes('| custom_tool | 2 |'))
+  assert.ok(report.includes('高频取回'))
+  assert.ok(report.includes('不会自动修改压缩策略'))
 })
 
 test('ToolResultSpool.cleanup: 删除超过 retentionDays 的文件', () => {

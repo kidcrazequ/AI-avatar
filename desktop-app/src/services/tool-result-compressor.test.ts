@@ -17,6 +17,7 @@ import type { LLMMessage } from './llm-service'
 import {
   compressToolResult,
   markSupersededToolResults,
+  routeToolResult,
   COMPRESSED_MARKER_PREFIX,
   SUPERSEDED_MARKER_PREFIX,
 } from './tool-result-compressor'
@@ -196,6 +197,32 @@ test('CCR marker：原文未落盘 → 如实写不可取回，不编造取回�
   const firstLine = r.content.split('\n')[0]
   assert.ok(firstLine.includes('未落盘'), '未落盘时应如实说明')
   assert.ok(!firstLine.includes('read_tool_result(path='), '不得编造取回路径')
+})
+
+test('ContentRouter：代码/RAG/密集数值直通，结构化 JSON 走无损候选', () => {
+  assert.strictEqual(routeToolResult('search_knowledge', TEXT_60).route, 'passthrough')
+  assert.strictEqual(routeToolResult('custom', '```ts\nconst exact = 1\n```').route, 'passthrough')
+  const numeric = Array.from({ length: 12 }, (_, i) => `${i} ${i + 1} ${i + 2} ${i + 3}`).join('\n')
+  assert.strictEqual(routeToolResult('custom', numeric).route, 'passthrough')
+  const uniform = Array.from({ length: 8 }, (_, i) => ({ id: i, status: 'ok' }))
+  assert.strictEqual(routeToolResult('github_list_repos', JSON.stringify(uniform)).route, 'lossless')
+  assert.strictEqual(routeToolResult('custom', '普通日志\n'.repeat(20)).route, 'reversible')
+})
+
+test('可恢复红线：有损压缩要求 ref；无 ref fail-open，有 ref 保留统一取回调用', () => {
+  const noRef = compressToolResult(TEXT_60, { maxChars: 800, requireRetrievableForLossy: true })
+  assert.strictEqual(noRef.compressed, false)
+
+  const ref = 'tool-result:custom:' + 'a'.repeat(64)
+  const withRef = `${TEXT_60}\nread_tool_result(ref="${ref}")`
+  const reversible = compressToolResult(withRef, { maxChars: 900, requireRetrievableForLossy: true })
+  assert.strictEqual(reversible.compressed, true)
+  assert.ok(reversible.content.includes(`read_tool_result(ref="${ref}")`))
+})
+
+test('live-zone：allowLossy=false 只允许无损 CSV，不截断普通文本', () => {
+  const text = compressToolResult(TEXT_60, { maxChars: 800, allowLossy: false })
+  assert.strictEqual(text.compressed, false)
 })
 
 // ─── 保守失败与兜底 ───────────────────────────────────────────────────────

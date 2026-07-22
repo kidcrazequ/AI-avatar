@@ -1315,8 +1315,8 @@ interface ElectronAPI {
   }
 
   /**
-   * 知识库精读（deep-read）：整本书/长文档逐章 LLM 蒸馏成结构化知识四件套
-   * （索引 + 逐章笔记 + 术语表 + 模式与决策 + 速查表），产物写入 knowledge/精读/<书名>/。
+   * 知识库精读（deep-read）：整书理解、五视角候选、三重校验后沉淀为 Soul 知识单元，
+   * 同时保留候选/淘汰审计与断点状态，产物写入 knowledge/精读/<书名>/。
    * 长任务编排同 life：fire-and-forget + 进度订阅 + 拉式状态。
    */
   deepRead: {
@@ -2277,9 +2277,9 @@ interface DeepReadEstimate {
   estMinutes: number
 }
 
-/** 'deep-read:progress' 推送的进度（chapters=逐章蒸馏，synthesis=综合四件套） */
+/** 'deep-read:progress' 推送的质量流水线进度 */
 interface DeepReadProgress {
-  stage: 'chapters' | 'synthesis' | 'done'
+  stage: 'chapters' | 'overview' | 'candidates' | 'verification' | 'knowledge' | 'synthesis' | 'done'
   current: number
   total: number
   label: string
@@ -2315,6 +2315,8 @@ interface DeepReadStatus {
     failedChapters: string[]
     skippedChapters: number
     totalChapters: number
+    verifiedUnits: number
+    rejectedUnits: number
   } | null
 }
 

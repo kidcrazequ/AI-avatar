@@ -161,3 +161,16 @@ test('renderMiddleForSummary: 标注角色与工具名，纯文本可读', () =>
   assert.ok(out.includes('命中 3 条'))
   assert.ok(out.includes('工具结果'))
 })
+
+test('compactContextIfSafe: 摘要带可执行的原文恢复指引', async () => {
+  const hint = 'session_search(mode="view", conversation_id="conv-1", offset=0, limit=50)'
+  const outcome = await compactContextIfSafe({
+    messages: CONVO,
+    minTailMessages: 2,
+    minMiddleMessages: 2,
+    recoveryHint: hint,
+    summarize: async () => '短摘要',
+  })
+  assert.strictEqual(outcome.compacted, true)
+  assert.ok(outcome.messages.some(m => typeof m.content === 'string' && m.content.includes(hint)))
+})

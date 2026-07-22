@@ -1,8 +1,10 @@
 /**
- * 知识库「精读」（deep-read）管线：把整本书/长文档逐章蒸馏成结构化知识四件套。
+ * 知识库「精读」（deep-read）管线：把整本书/长文档蒸馏成可追溯、经过验证的知识单元。
  *
- * 方法论移植自开源技能 book-to-skill（github.com/virgiliojr94/book-to-skill）：
+ * 方法论参考 book-to-skill 与 cangjie-skill，但只产出 Soul 原生知识，不生成/安装 Skill：
  *   - 提炼结构而非摘要：命名框架 / 原则 / 技法 / 反模式，不做章节复述
+ *   - Adler 整书理解 → 五视角候选池 → V1/V2/V3 三重校验 → RIA++ 知识单元
+ *   - candidates / rejected / PIPELINE_STATE 全程留痕，可审计、可续跑
  *   - 保留作者命名精度；密度优先；绝不复制原文长段
  *   - 编译时付费、运行时按需加载：产物按章节拆文件，配合 BM25 检索按需召回
  *
@@ -43,7 +45,7 @@ export interface BookChapter {
   pageEnd?: number
 }
 
-export type DeepReadStage = 'chapters' | 'synthesis' | 'done'
+export type DeepReadStage = 'chapters' | 'overview' | 'candidates' | 'verification' | 'knowledge' | 'synthesis' | 'done'
 
 export interface DeepReadProgress {
   stage: DeepReadStage
@@ -55,7 +57,20 @@ export interface DeepReadProgress {
   label: string
 }
 
-export type DeepReadProductKind = 'index' | 'chapter' | 'glossary' | 'patterns' | 'cheatsheet'
+export type DeepReadProductKind =
+  | 'state'
+  | 'index'
+  | 'chapter'
+  | 'overview'
+  | 'candidate'
+  | 'verification'
+  | 'verified'
+  | 'rejected'
+  | 'knowledge-units'
+  | 'relationships'
+  | 'glossary'
+  | 'patterns'
+  | 'cheatsheet'
 
 export interface DeepReadProduct {
   kind: DeepReadProductKind
@@ -86,6 +101,8 @@ export interface DeepReadOptions {
   shouldSkip?: (relativePath: string) => boolean
   /** 断点续跑时已存在的章节笔记内容（仅正文，供综合件摘取要点） */
   priorChapterNotes?: Array<{ relativePath: string; content: string }>
+  /** 断点续跑时已存在的书级产物。纯续跑会复用内容，避免重付 LLM。 */
+  priorProducts?: Array<{ relativePath: string; content: string }>
 }
 
 export interface DeepReadRunResult {
@@ -93,6 +110,8 @@ export interface DeepReadRunResult {
   failedChapters: Array<{ title: string; error: string }>
   skippedChapters: number
   totalChapters: number
+  verifiedUnits: number
+  rejectedUnits: number
 }
 
 export interface DeepReadEstimate {
@@ -113,7 +132,7 @@ const DEEP_READ_CONCURRENCY = 3
 /** 单章失败后的重试次数 */
 const CHAPTER_RETRY_TIMES = 1
 /** 综合件摘取每章笔记的最大字符数（控制综合调用的输入规模） */
-const DIGEST_CHARS_PER_CHAPTER = 800
+const DIGEST_CHARS_PER_CHAPTER = 1200
 /**
  * 综合调用 digest 输入总量上限（≈5 万 tokens，给模型上下文留余量）。
  * 章节数多到人均预算不足时按比例压缩每章摘取量，保证超长书的综合件不会确定性超限失败。
@@ -122,8 +141,40 @@ const MAX_DIGEST_TOTAL_CHARS = 80_000
 /** 每章摘取量的压缩下限（再低摘要就失去信息量了） */
 const MIN_DIGEST_CHARS_PER_CHAPTER = 200
 
-/** 综合件文件名（manager 断点续跑按它探测产物存在性） */
-export const DEEP_READ_SYNTHESIS_FILES = ['术语表.md', '模式与决策.md', '速查表.md'] as const
+/** 书级产物文件名（manager 断点续跑按它探测并装载内容） */
+export const DEEP_READ_SYNTHESIS_FILES = [
+  '00-整书理解.md',
+  '候选池/框架.md',
+  '候选池/原则.md',
+  '候选池/案例.md',
+  '候选池/反例.md',
+  '候选池/术语.md',
+  '三重校验.md',
+  '验证通过.md',
+  '淘汰记录.md',
+  '知识单元.md',
+  '关系图.md',
+  '术语表.md',
+  '模式与决策.md',
+  '速查表.md',
+  '00-索引.md',
+] as const
+
+/** 真正需要 LLM 的书级产物；其余验证拆分/术语兼容件由程序派生。 */
+export const DEEP_READ_LLM_FILES = [
+  '00-整书理解.md',
+  '候选池/框架.md',
+  '候选池/原则.md',
+  '候选池/案例.md',
+  '候选池/反例.md',
+  '候选池/术语.md',
+  '三重校验.md',
+  '知识单元.md',
+  '关系图.md',
+  '模式与决策.md',
+  '速查表.md',
+  '00-索引.md',
+] as const
 
 /** PDF 解析注入的页码标记（document-parser.ts parsePdf 的 `### 第 N 页`） */
 const PAGE_MARKER_REGEX = /^###\s*第\s*(\d+)\s*页\s*$/
@@ -280,8 +331,8 @@ function splitByParagraphs(content: string, maxChars: number): string[] {
 
 // ─── 成本预估 ────────────────────────────────────────────────────────────────
 
-/** 综合件数量：术语表 + 模式与决策 + 速查表 + 索引核心框架 */
-const SYNTHESIS_CALLS = 4
+/** 书级 LLM 任务：整书理解 + 五视角候选 + 校验 + 知识单元 + 关系 + 模式 + 速查 + 索引 */
+const SYNTHESIS_CALLS = 12
 
 /**
  * 预估一次精读的 LLM 开销（粗估，供 UI 确认）。
@@ -291,16 +342,18 @@ export function estimateDeepRead(
   chapters: BookChapter[],
   depth: DeepReadDepth,
   contentType: DeepReadContentType,
+  bookLevelCalls = SYNTHESIS_CALLS,
 ): DeepReadEstimate {
-  const llmCalls = chapters.length + SYNTHESIS_CALLS
+  const pendingBookCalls = Math.max(0, Math.min(SYNTHESIS_CALLS, Math.floor(bookLevelCalls)))
+  const llmCalls = chapters.length + pendingBookCalls
   const totalChars = chapters.reduce((sum, ch) => sum + ch.content.length, 0)
   const [lo, hi] = CHAPTER_TOKEN_BUDGET[contentType][depth]
   const budgetMid = Math.round((lo + hi) / 2)
   // 中英混排约 1.6 字符/token；每次调用另加 prompt 模板开销
   const digestChars = Math.min(MAX_DIGEST_TOTAL_CHARS, chapters.length * DIGEST_CHARS_PER_CHAPTER)
   const inputTokens = Math.ceil(totalChars / 1.6) + llmCalls * 700
-    + SYNTHESIS_CALLS * Math.ceil(digestChars / 1.6) // 4 个综合件各读一遍全书章节摘要
-  const outputTokens = chapters.length * budgetMid + 6500
+    + pendingBookCalls * Math.ceil(digestChars / 1.6)
+  const outputTokens = chapters.length * budgetMid + Math.ceil(18_000 * pendingBookCalls / SYNTHESIS_CALLS)
   const estMinutes = Math.max(1, Math.ceil((llmCalls / DEEP_READ_CONCURRENCY) * 0.7))
   return { llmCalls, inputTokens, outputTokens, estMinutes }
 }
@@ -371,15 +424,112 @@ ${chapter.content}
   return { userPrompt, maxTokens: Math.min(8192, Math.ceil(hi * 1.6)) }
 }
 
-const GLOSSARY_PROMPT = `基于以下各章精读笔记的要点摘录，汇编全书术语表。
-格式：每行 \`**术语** — 一句话定义（第N章）\`；按主题分组用 ## 小节；总量控制在 1500 tokens 内。
-只收录摘录中真实出现的术语，不要补充摘录之外的内容。`
+const BOOK_OVERVIEW_PROMPT = `请按 Adler 四步阅读法输出整书理解（不要写读后感）：
 
-const PATTERNS_PROMPT = `基于以下各章精读笔记的要点摘录，汇编全书的"模式与决策规则"。
-每个模式用 ### 小标题（保留作者命名），写明：**何时用** / **怎么做** / **权衡**。
-只收录摘录中真实出现的方法，总量控制在 2000 tokens 内。`
+## 结构
+全书试图回答的核心问题、论证骨架、各部分之间的依赖关系。
 
-const CHEATSHEET_PROMPT = `基于以下各章精读笔记的要点摘录，制作单页速查表。这是整套笔记最有区分度的一件：捕捉作者的"判断力"，不是名词列表。
+## 解释
+作者最关键的 3-8 个主张；每条标注支持它的章节或页码。
+
+## 批判
+未经证明的假设、时代/样本局限、最强反方论证，以及哪些结论不能外推。
+
+## 应用
+这本书适合解决什么问题、不适合解决什么问题；给出可观察的触发条件。
+
+必须覆盖输入中的每一章；证据不足时明确写“原文证据不足”，不得补常识。`
+
+interface CandidateJob {
+  idPrefix: string
+  title: string
+  fileName: string
+  prompt: string
+}
+
+const CANDIDATE_JOBS: CandidateJob[] = [
+  {
+    idPrefix: 'F',
+    title: '框架候选',
+    fileName: '候选池/框架.md',
+    prompt: '独立提取作者明确提出或反复使用的决策框架/思维模型。',
+  },
+  {
+    idPrefix: 'P',
+    title: '原则候选',
+    fileName: '候选池/原则.md',
+    prompt: '独立提取可执行原则、清单、规则和阈值，优先“当 X 时做 Y，因为 Z”。',
+  },
+  {
+    idPrefix: 'C',
+    title: '案例候选',
+    fileName: '候选池/案例.md',
+    prompt: '独立提取作者真正走过的完整案例，写清情境、动作、结果和它支持的方法。',
+  },
+  {
+    idPrefix: 'X',
+    title: '反例候选',
+    fileName: '候选池/反例.md',
+    prompt: '独立提取失败模式、反例与作者警告，写清失败条件和可观察信号。',
+  },
+  {
+    idPrefix: 'G',
+    title: '术语候选',
+    fileName: '候选池/术语.md',
+    prompt: '独立提取理解全书不可缺少的术语，保留作者命名并给出原文语境下定义。',
+  },
+]
+
+const CANDIDATE_FORMAT_PROMPT = `
+每个候选用以下固定格式，编号从 {{PREFIX}}1 开始且不可重复：
+
+### {{PREFIX}}N · 候选名称
+- **主张**：一句话说明可复用内容
+- **来源证据**：至少一个章节/页码 + 不超过 150 字的关键原文片段；没有原文片段就不要入选
+- **解释**：用自己的话说明机制，不复述原文
+- **适用场景**：可观察的触发条件
+- **边界**：什么时候不能用或证据不足
+
+只做候选提取，不评价是否最终通过；不得生成 Skill、SKILL.md、触发器或安装说明。`
+
+const TRIPLE_VERIFY_PROMPT = `对候选池逐项执行三重校验：
+- V1 跨上下文支持：至少两个独立章节/案例支持；若全书确实只有一个完整案例，必须降级说明
+- V2 预测/应用力：能否据此回答一个原文未直接回答的新问题，并写出该问题与推导
+- V3 独特性：是否具有作者特有的判据或机制，而不是任何人都会说的常识
+
+严格输出两个一级小节，候选编号必须原样保留：
+
+## 通过候选
+每项写：### 编号 · 名称；随后写 V1 / V2 / V3 的结论和证据、最终判断。
+
+## 淘汰候选
+每项写：### 编号 · 名称；随后写未通过项和淘汰理由。没有淘汰项也必须写“无”。
+
+证据不足时淘汰，禁止为了数量放宽标准；不得生成 Skill。`
+
+const KNOWLEDGE_UNITS_PROMPT = `把“通过候选”构造成 Soul 原生可复用知识单元。每个单元必须完整包含：
+
+### 编号 · 名称
+- **R·来源片段**：不超过 150 字，带章节/页码
+- **I·解释**：用自己的话写机制
+- **A1·既往应用**：书中案例；若没有，明确“原文未提供完整案例”
+- **A2·未来触发**：用户遇到什么可观察情境时应检索此单元，并说明与相邻单元的区别
+- **E·执行**：1-2-3 步骤、判据或检查清单
+- **B·边界**：不适用条件、作者盲点、证据强度
+
+不得缺段、不得扩写原文没有的事实、不得输出 Skill frontmatter 或安装说明。`
+
+const RELATIONSHIPS_PROMPT = `基于已验证知识单元建立关系图：
+1. 分别列出 depends-on（依赖）、contrasts-with（对立/区分）、composes-with（可组合）关系及理由；
+2. 输出 Mermaid flowchart，节点使用候选编号；
+3. 输出“相邻单元辨析”，明确相似单元各自在什么触发条件下使用。
+没有证据支持的关系不要连线。`
+
+const PATTERNS_PROMPT = `基于以下已通过三重校验的知识单元，汇编全书的“模式与决策规则”。
+每个模式用 ### 小标题（保留作者命名），写明：**何时用** / **怎么做** / **权衡** / **边界**。
+只收录已验证单元，总量控制在 2400 tokens 内。`
+
+const CHEATSHEET_PROMPT = `基于以下已通过三重校验的知识单元，制作单页速查表。这是整套笔记最有区分度的一件：捕捉作者的“判断力”，不是名词列表。
 按优先级收录：
 1. 判定规则——"当 X 时，做 Y，因为 Z"
 2. 决策树/分支选择（用嵌套列表或小表格）
@@ -387,15 +537,15 @@ const CHEATSHEET_PROMPT = `基于以下各章精读笔记的要点摘录，制�
 4. 阈值与默认值——作者明确给出的数字、比例、经验法则
 5. 信号与征兆——"看到 X，多半是问题 Y"
 禁止：纯"术语→定义"行（那是术语表）、成段散文（那是章节笔记）。每一行都要帮读者**做决定**。
-用紧凑表格和规则列表，总量控制在 1200 tokens 内。只用摘录中真实出现的内容。`
+用紧凑表格和规则列表，总量控制在 1200 tokens 内。只用已验证单元中的内容。`
 
-const INDEX_CORE_PROMPT = `基于以下各章精读笔记的要点摘录，输出两个部分（不要输出其他内容）：
+const INDEX_CORE_PROMPT = `基于以下已验证知识单元和关系图，输出两个部分（不要输出其他内容）：
 
 ## 核心框架
 全书最重要的命名框架与心智模型（保留作者命名），写成"当 Y 时用 X"/"优先 X 而非 Y，因为 Z"，约 600-800 tokens。
 
 ## 主题索引
-按主题字母/拼音排序，每行 \`- **主题** → 第N章[、第M章]\`，只列摘录中能定位到章的主题。`
+按主题字母/拼音排序，每行 \`- **主题** → 知识单元编号（来源章节）\`，只列能定位到原文的主题。`
 
 // ─── 产物组装 ────────────────────────────────────────────────────────────────
 
@@ -445,6 +595,32 @@ function extractSection(markdown: string, heading: string): string {
   const re = new RegExp(`^##\\s*${heading}\\s*$([\\s\\S]*?)(?=^##\\s|$(?![\\s\\S]))`, 'm')
   const m = markdown.match(re)
   return m ? m[1].trim() : ''
+}
+
+function countTitledEntries(markdown: string): number {
+  return [...markdown.matchAll(/^###\s+/gm)].length
+}
+
+/** 去掉既有产物的 frontmatter / 一级标题，供续跑时作为下游 prompt 输入。 */
+function productBody(markdown: string): string {
+  return markdown
+    .replace(/^---\n[\s\S]*?\n---\n+/, '')
+    .replace(/^#\s+[^\n]+\n+/, '')
+    .trim()
+}
+
+/** 每章都取样的整书输入：短章全取，长章保留首尾，避免只看前半本。 */
+function buildWholeBookExcerpt(chapters: BookChapter[]): string {
+  const perChapter = Math.max(120, Math.min(2400, Math.floor(MAX_DIGEST_TOTAL_CHARS / chapters.length)))
+  return chapters.map((ch) => {
+    const page = ch.pageStart === undefined
+      ? ''
+      : `（p.${ch.pageStart}${ch.pageEnd !== undefined && ch.pageEnd !== ch.pageStart ? `-${ch.pageEnd}` : ''}）`
+    if (ch.content.length <= perChapter) return `【第${ch.index + 1}章 ${ch.title}${page}】\n${ch.content}`
+    const head = Math.floor(perChapter * 0.65)
+    const tail = perChapter - head
+    return `【第${ch.index + 1}章 ${ch.title}${page}】\n${ch.content.slice(0, head)}\n[…章内中段省略…]\n${ch.content.slice(-tail)}`
+  }).join('\n\n')
 }
 
 // ─── abort 工具（与 life/grower.ts 同型；deep-reader 不依赖 life 模块） ──────
@@ -541,7 +717,7 @@ async function runDeepReadInner(
   signal: AbortSignal,
   onFatal: (err: unknown) => void,
 ): Promise<DeepReadRunResult> {
-  const totalTasks = chapters.length + SYNTHESIS_CALLS + 1 // +1 索引文件
+  const totalTasks = chapters.length + SYNTHESIS_CALLS
   let completedTasks = 0
   const report = (stage: DeepReadStage, label: string) => {
     opts.onProgress?.({ stage, current: completedTasks, total: totalTasks, label })
@@ -557,6 +733,34 @@ async function runDeepReadInner(
 
   // 断点续跑：先把已有笔记装进 digest 池
   const priorByPath = new Map((opts.priorChapterNotes ?? []).map(n => [n.relativePath, n.content]))
+  const priorProductsByPath = new Map((opts.priorProducts ?? []).map(n => [n.relativePath, n.content]))
+
+  const rememberProduct = (kind: DeepReadProductKind, relativePath: string) => {
+    if (!products.some(p => p.relativePath === relativePath)) products.push({ kind, relativePath })
+  }
+
+  const writePipelineState = async (stage: DeepReadStage, next: string): Promise<void> => {
+    const relativePath = `${opts.outputDir}/PIPELINE_STATE.md`
+    const generated = products.filter(p => p.kind !== 'state').map(p => `- [x] ${p.relativePath}`).join('\n')
+    const content = [
+      `# 《${opts.bookTitle}》精读流水线状态`,
+      '',
+      `- 当前阶段：${stage}`,
+      `- 下一步：${next}`,
+      `- 章节进度：${notes.size}/${chapters.length}`,
+      `- 失败章节：${failedChapters.length > 0 ? failedChapters.map(f => f.title).join('、') : '无'}`,
+      `- 更新时间：${localDateString()}`,
+      '',
+      '## 已完成产物',
+      '',
+      generated || '- [ ] 尚无',
+      '',
+      '> 本文件用于断点续跑和审计；最终产物是 Soul 知识文件，不生成或安装 Skill。',
+      '',
+    ].join('\n')
+    await opts.onProduct({ kind: 'state', relativePath, content })
+    rememberProduct('state', relativePath)
+  }
 
   // ── 阶段 1：逐章蒸馏（worker pool，与 formatDocument 同型） ──
   let cursor = 0
@@ -637,8 +841,9 @@ async function runDeepReadInner(
     )
   }
 
-  // ── 阶段 2：综合四件套（基于章节笔记摘要，成本正比于产出而非原书） ──
-  // 超长书按总量上限压缩每章摘取量，避免综合调用确定性超出模型上下文
+  await writePipelineState('chapters', '整书理解')
+
+  // ── 书级任务共用输入（每章都有代表，避免只看前半本） ──────────────────
   const perChapterDigest = Math.max(
     MIN_DIGEST_CHARS_PER_CHAPTER,
     Math.min(DIGEST_CHARS_PER_CHAPTER, Math.floor(MAX_DIGEST_TOTAL_CHARS / notes.size)),
@@ -648,70 +853,175 @@ async function runDeepReadInner(
     .map(([idx, n]) => digestChapterNote(`第${idx + 1}章 ${n.title}`, n.body, perChapterDigest))
     .join('\n\n')
 
-  const synthesisJobs: Array<{ kind: DeepReadProductKind; fileName: string; prompt: string; maxTokens: number; title: string }> = [
-    { kind: 'glossary', fileName: DEEP_READ_SYNTHESIS_FILES[0], prompt: GLOSSARY_PROMPT, maxTokens: 2500, title: '术语表' },
-    { kind: 'patterns', fileName: DEEP_READ_SYNTHESIS_FILES[1], prompt: PATTERNS_PROMPT, maxTokens: 3200, title: '模式与决策' },
-    { kind: 'cheatsheet', fileName: DEEP_READ_SYNTHESIS_FILES[2], prompt: CHEATSHEET_PROMPT, maxTokens: 2000, title: '速查表' },
-  ]
-
-  /** 每个综合件的结局：reused=纯续跑沿用磁盘已有文件，failed=本轮生成失败 */
-  const synthesisOutcome = new Map<DeepReadProductKind, 'generated' | 'reused' | 'failed'>()
-  for (const job of synthesisJobs) {
+  const runBookJob = async (job: {
+    stage: DeepReadStage
+    kind: DeepReadProductKind
+    fileName: string
+    title: string
+    prompt: string
+    input: string
+    maxTokens: number
+  }): Promise<string> => {
     const relativePath = `${opts.outputDir}/${job.fileName}`
-    // 纯续跑（本轮零新增笔记）且磁盘已有该综合件 → 内容不会变化，跳过重付 LLM
-    if (newNotes === 0 && opts.shouldSkip?.(relativePath)) {
-      synthesisOutcome.set(job.kind, 'reused')
+    const prior = priorProductsByPath.get(relativePath)
+    if (newNotes === 0 && opts.shouldSkip?.(relativePath) && prior) {
+      rememberProduct(job.kind, relativePath)
       completedTasks++
-      report('synthesis', `沿用已有：${job.title}`)
-      continue
+      report(job.stage, `沿用已有：${job.title}`)
+      return productBody(prior)
     }
     throwIfAborted(signal)
-    report('synthesis', `汇编中：${job.title}`)
-    try {
-      const raw = await callLLMWithAbort(
-        opts.callLLM,
-        DEEP_READ_SYSTEM_PROMPT,
-        `书名：《${opts.bookTitle}》\n\n${job.prompt}\n\n--- 各章笔记摘录 ---\n\n${digest}`,
-        job.maxTokens,
-        signal,
-      )
-      const body = cleanLlmOutput(raw).trim()
-      const content = buildDeepReadFrontmatter({ bookTitle: opts.bookTitle, rawFileRelPath: opts.rawFileRelPath })
-        + `# 《${opts.bookTitle}》${job.title}\n\n${body}\n`
-      try {
-        await opts.onProduct({ kind: job.kind, relativePath, content })
-      } catch (err) {
-        onFatal(err)
-        throw err
-      }
-      products.push({ kind: job.kind, relativePath })
-      synthesisOutcome.set(job.kind, 'generated')
-    } catch (err) {
-      if (isAbortError(err)) throw err
-      // 综合件失败不阻塞索引：索引里如实标注缺失
-      synthesisOutcome.set(job.kind, 'failed')
-      failedChapters.push({ title: job.title, error: err instanceof Error ? err.message : String(err) })
-    }
-    completedTasks++
-    report('synthesis', `完成：${job.title}`)
-  }
-
-  // ── 阶段 3：索引（核心框架 + 主题索引来自 LLM；章节表程序拼装） ──
-  throwIfAborted(signal)
-  report('synthesis', '生成索引')
-  let indexCore = ''
-  try {
-    indexCore = cleanLlmOutput(await callLLMWithAbort(
+    report(job.stage, `生成中：${job.title}`)
+    const raw = await callLLMWithAbort(
       opts.callLLM,
       DEEP_READ_SYSTEM_PROMPT,
-      `书名：《${opts.bookTitle}》\n\n${INDEX_CORE_PROMPT}\n\n--- 各章笔记摘录 ---\n\n${digest}`,
-      2500,
+      `书名：《${opts.bookTitle}》\n\n${job.prompt}\n\n--- 输入开始 ---\n\n${job.input}\n\n--- 输入结束 ---`,
+      job.maxTokens,
       signal,
-    )).trim()
-  } catch (err) {
-    if (isAbortError(err)) throw err
-    failedChapters.push({ title: '索引核心框架', error: err instanceof Error ? err.message : String(err) })
+    )
+    const body = cleanLlmOutput(raw).trim()
+    if (!body) throw new Error(`${job.title}生成了空内容，已停止以避免写入占位文件`)
+    const content = buildDeepReadFrontmatter({ bookTitle: opts.bookTitle, rawFileRelPath: opts.rawFileRelPath })
+      + `# 《${opts.bookTitle}》${job.title}\n\n${body}\n`
+    try {
+      await opts.onProduct({ kind: job.kind, relativePath, content })
+    } catch (err) {
+      onFatal(err)
+      throw err
+    }
+    rememberProduct(job.kind, relativePath)
+    completedTasks++
+    report(job.stage, `完成：${job.title}`)
+    return body
   }
+
+  const writeDerived = async (
+    kind: DeepReadProductKind,
+    fileName: string,
+    title: string,
+    body: string,
+  ): Promise<void> => {
+    const relativePath = `${opts.outputDir}/${fileName}`
+    const content = buildDeepReadFrontmatter({ bookTitle: opts.bookTitle, rawFileRelPath: opts.rawFileRelPath })
+      + `# 《${opts.bookTitle}》${title}\n\n${body.trim()}\n`
+    try {
+      await opts.onProduct({ kind, relativePath, content })
+    } catch (err) {
+      onFatal(err)
+      throw err
+    }
+    rememberProduct(kind, relativePath)
+  }
+
+  // ── 阶段 2：Adler 整书理解 ──────────────────────────────────────────────
+  const overview = await runBookJob({
+    stage: 'overview',
+    kind: 'overview',
+    fileName: '00-整书理解.md',
+    title: '整书理解',
+    prompt: BOOK_OVERVIEW_PROMPT,
+    input: buildWholeBookExcerpt(chapters),
+    maxTokens: 4200,
+  })
+  await writePipelineState('overview', '五视角候选提取')
+
+  // ── 阶段 3：五视角独立候选池 ────────────────────────────────────────────
+  const candidateBodies = await Promise.all(CANDIDATE_JOBS.map(async job => {
+    const format = CANDIDATE_FORMAT_PROMPT.replaceAll('{{PREFIX}}', job.idPrefix)
+    const body = await runBookJob({
+      stage: 'candidates',
+      kind: 'candidate',
+      fileName: job.fileName,
+      title: job.title,
+      prompt: `${job.prompt}\n${format}`,
+      input: `【整书理解】\n${overview}\n\n【各章笔记】\n${digest}`,
+      maxTokens: job.idPrefix === 'G' ? 2600 : 3600,
+    })
+    return { ...job, body }
+  }))
+  await writePipelineState('candidates', 'V1/V2/V3 三重校验')
+
+  const candidates = candidateBodies
+    .map(job => `# ${job.title}\n\n${job.body}`)
+    .join('\n\n')
+
+  // ── 阶段 4：三重校验 + 淘汰审计 ─────────────────────────────────────────
+  const verification = await runBookJob({
+    stage: 'verification',
+    kind: 'verification',
+    fileName: '三重校验.md',
+    title: '三重校验',
+    prompt: TRIPLE_VERIFY_PROMPT,
+    input: `【整书批判与边界】\n${overview}\n\n【候选池】\n${candidates}`,
+    maxTokens: 5200,
+  })
+  const verified = extractSection(verification, '通过候选')
+  const rejected = extractSection(verification, '淘汰候选')
+  if (!verified || !/^###\s+/m.test(verified)) {
+    throw new Error('三重校验未产出可识别的“通过候选”，已停止，避免把未经验证的内容沉淀为知识')
+  }
+  await writeDerived('verified', '验证通过.md', '验证通过的候选', verified)
+  await writeDerived('rejected', '淘汰记录.md', '淘汰记录', rejected || '无')
+  const verifiedUnits = countTitledEntries(verified)
+  const rejectedUnits = countTitledEntries(rejected)
+  await writePipelineState('verification', '构造可复用知识单元')
+
+  // ── 阶段 5：RIA++ 知识单元 + Zettelkasten 关系 ───────────────────────────
+  const knowledgeUnits = await runBookJob({
+    stage: 'knowledge',
+    kind: 'knowledge-units',
+    fileName: '知识单元.md',
+    title: '知识单元',
+    prompt: KNOWLEDGE_UNITS_PROMPT,
+    input: verified,
+    maxTokens: 6200,
+  })
+  const relationships = await runBookJob({
+    stage: 'knowledge',
+    kind: 'relationships',
+    fileName: '关系图.md',
+    title: '知识关系图',
+    prompt: RELATIONSHIPS_PROMPT,
+    input: knowledgeUnits,
+    maxTokens: 3600,
+  })
+  const glossaryCandidate = candidateBodies.find(job => job.idPrefix === 'G')?.body ?? ''
+  await writeDerived('glossary', '术语表.md', '术语表', glossaryCandidate)
+  await writePipelineState('knowledge', '生成模式、速查与索引')
+
+  // ── 阶段 6：兼容既有消费面的模式 / 速查产物 ─────────────────────────────
+  await Promise.all([
+    runBookJob({
+      stage: 'synthesis', kind: 'patterns', fileName: '模式与决策.md', title: '模式与决策',
+      prompt: PATTERNS_PROMPT, input: knowledgeUnits, maxTokens: 3600,
+    }),
+    runBookJob({
+      stage: 'synthesis', kind: 'cheatsheet', fileName: '速查表.md', title: '速查表',
+      prompt: CHEATSHEET_PROMPT, input: knowledgeUnits, maxTokens: 2200,
+    }),
+  ])
+
+  // ── 阶段 7：索引（LLM 只写核心框架；章节表和产物表程序拼装） ──────────────
+  throwIfAborted(signal)
+  report('synthesis', '生成索引')
+  const indexPath = `${opts.outputDir}/00-索引.md`
+  const priorIndex = priorProductsByPath.get(indexPath)
+  if (newNotes === 0 && opts.shouldSkip?.(indexPath) && priorIndex) {
+    rememberProduct('index', indexPath)
+    completedTasks++
+    report('synthesis', '沿用已有：索引')
+    await writePipelineState('done', '已完成')
+    report('done', '精读完成')
+    return { products, failedChapters, skippedChapters, totalChapters: chapters.length, verifiedUnits, rejectedUnits }
+  }
+  const indexCore = cleanLlmOutput(await callLLMWithAbort(
+    opts.callLLM,
+    DEEP_READ_SYSTEM_PROMPT,
+    `书名：《${opts.bookTitle}》\n\n${INDEX_CORE_PROMPT}\n\n--- 已验证知识与关系 ---\n\n${knowledgeUnits}\n\n${relationships}`,
+    2800,
+    signal,
+  )).trim()
+  if (!indexCore) throw new Error('索引核心生成了空内容，已停止写入索引')
   completedTasks++
 
   const chapterRows = chapters.map(ch => {
@@ -722,11 +1032,18 @@ async function runDeepReadInner(
     return `| ${ch.index + 1} | ${status} | ${pages} |`
   })
 
-  const supportRows = synthesisJobs
-    .map(job => synthesisOutcome.get(job.kind) === 'failed'
-      ? `- ${job.title}（生成失败，待续跑）`
-      : `- [${job.title}](${job.fileName})`)
-    .join('\n')
+  const supportRows = [
+    '- [整书理解](00-整书理解.md)',
+    '- [验证通过的候选](验证通过.md)',
+    '- [淘汰记录](淘汰记录.md)',
+    '- [知识单元](知识单元.md)',
+    '- [知识关系图](关系图.md)',
+    '- [术语表](术语表.md)',
+    '- [模式与决策](模式与决策.md)',
+    '- [速查表](速查表.md)',
+    '- [三重校验审计](三重校验.md)',
+    '- [候选池](候选池/框架.md)',
+  ].join('\n')
 
   const depthLabel = opts.depth === 'study' ? '精读（study）' : '速查（reference）'
   const typeLabel = opts.contentType === 'technical' ? '技术' : '文字'
@@ -737,7 +1054,9 @@ async function runDeepReadInner(
     + [
       `# 《${opts.bookTitle}》精读索引`,
       '',
-      `**深度**：${depthLabel} | **类型**：${typeLabel} | **章节**：${chapters.length}${failedChapters.length > 0 ? `（${failedChapters.length} 项失败待续跑）` : ''}${resumeNote}`,
+      `**深度**：${depthLabel} | **类型**：${typeLabel} | **章节**：${chapters.length}${failedChapters.length > 0 ? `（${failedChapters.length} 章失败待续跑）` : ''}${resumeNote}`,
+      '',
+      '**质量链**：整书理解 → 五视角候选 → V1/V2/V3 三重校验 → RIA++ 知识单元 → 关系图',
       '',
       indexCore || '> ⚠️ 核心框架汇编失败，请续跑精读补全。',
       '',
@@ -753,16 +1072,15 @@ async function runDeepReadInner(
       '',
     ].join('\n')
 
-  const indexPath = `${opts.outputDir}/00-索引.md`
   try {
     await opts.onProduct({ kind: 'index', relativePath: indexPath, content: indexContent })
   } catch (err) {
     onFatal(err)
     throw err
   }
-  products.push({ kind: 'index', relativePath: indexPath })
-  completedTasks++
+  rememberProduct('index', indexPath)
+  await writePipelineState('done', '已完成')
   report('done', '精读完成')
 
-  return { products, failedChapters, skippedChapters, totalChapters: chapters.length }
+  return { products, failedChapters, skippedChapters, totalChapters: chapters.length, verifiedUnits, rejectedUnits }
 }

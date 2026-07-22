@@ -27,6 +27,7 @@ import { costTracker, resolveTurnBudgetUsd } from '../services/llm-providers/cos
 import { compactContextIfSafe, renderMiddleForSummary } from '../services/context-compaction'
 import {
   compressToolResult,
+  routeToolResult,
   markSupersededToolResults,
   COMPRESSED_MARKER_PREFIX,
   SUPERSEDED_MARKER_PREFIX,
@@ -538,15 +539,18 @@ const AVATAR_TOOLS: LLMTool[] = [
     type: 'function',
     function: {
       name: 'read_tool_result',
-      description: '读取上一次工具返回值被 spool 落盘的完整内容（当工具结果 > 12000 字符时，ToolResultSpool 会把完整内容写入 ~/Library/Application Support/soul-desktop/tool-results/<convId>/<toolName>-<ts>.txt，并在工具消息里告知绝对路径）。仅接受 tool-results 目录下的绝对路径，read_lines 对此类路径会失败。',
+      description: '统一取回被安全离线保存的工具原文。优先使用工具结果提示中的 ref；web_fetch lazy 内容使用 call_id。path 仅用于兼容旧会话。支持分段读取，不要重新调用原工具。',
       parameters: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'spool 文件的完整绝对路径（必须以 .../soul-desktop/tool-results/ 开头）' },
+          ref: { type: 'string', description: '推荐：工具结果提示中的稳定引用，形如 tool-result:<tool>:<sha256>' },
+          call_id: { type: 'string', description: 'web_fetch 等 lazy 结果里的 call_id，形如 tool-<12hex>' },
+          path: { type: 'string', description: '旧会话兼容：tool-results 下绝对路径' },
           start_line: { type: 'number', description: '起始行号（1-based，默认 1）' },
           end_line: { type: 'number', description: '结束行号（1-based，包含；默认 start_line + 199）' },
+          offset: { type: 'number', description: 'lazy call_id 模式的起始字符位置' },
+          limit: { type: 'number', description: 'lazy call_id 模式的读取字符数' },
         },
-        required: ['path'],
       },
     },
   },
@@ -1143,7 +1147,7 @@ const AVATAR_TOOLS: LLMTool[] = [
         type: 'object',
         properties: {
           pattern: { type: 'string', description: '正则表达式（JavaScript 语法，大小写不敏感）。如 "262KWh" / "峰谷.{0,5}差" / "^##\\s+电价"' },
-          scope: { type: 'string', description: '可选：相对 knowledge/ 的子目录限定搜索范围，如 "imports/2025"' },
+          scope: { type: 'string', description: '可选：限定搜索子目录，填知识库根内的相对路径，如 "工商业储能/01 洛希"（也接受带 knowledge/ 前缀的写法；不要带 avatars/<分身>/ 前缀）。不确定目录时不传，全库搜索' },
           max_per_file: { type: 'number', description: '单文件命中上限，默认 50，硬上限 200' },
           max_total: { type: 'number', description: '总命中上限，默认 200，硬上限 500' },
         },
@@ -1786,10 +1790,6 @@ IR 语法（markdown + 扩展）：
   },
   {
     /**
-     * task: 委派子任务给独立子代理（升级自 delegate_task）。
-     *
-  {
-    /**
      * sop_report: 汇报 SOP 流程进展（仅流程型技能，W5.3）。
      * 只有 load_skill 返回里出现「流程模式已启用」时才调用；状态机会硬校验转移合法性。
      */
@@ -1862,6 +1862,10 @@ IR 语法（markdown + 扩展）：
       },
     },
   },
+  {
+    /**
+     * task: 委派子任务给独立子代理（升级自 delegate_task）。
+     *
      * 升级要点：
      *   - 重命名为 task，与 Cursor / Claude Code 工具命名对齐
      *   - 子代理拥有独立对话上下文，不会污染主会话
@@ -2263,10 +2267,6 @@ IR 语法（markdown + 扩展）：
   },
   {
     /**
-     * web_fetch: 抓取单个 URL 内容（HTML→Markdown / 纯文本 / JSON / 原始）。
-     * 与 web_search 互补：先搜索得到 URL 列表 → 用 web_fetch 抓全文。
-  {
-    /**
      * cn_web_search: 通过本机 wigolo 边车搜索（多引擎融合，免 API key）。
      * 与 web_search（Tavily）分工：中文/国内站点走这里，英文/国际走 Tavily。
      * 边车由主进程懒启动；未安装/启动失败时返回明确错误（诚实降级，不伪装空结果）。
@@ -2303,6 +2303,10 @@ IR 语法（markdown + 扩展）：
       },
     },
   },
+  {
+    /**
+     * web_fetch: 抓取单个 URL 内容（HTML→Markdown / 纯文本 / JSON / 原始）。
+     * 与 web_search 互补：先搜索得到 URL 列表 → 用 web_fetch 抓全文。
      * 无需 API Key（直接走 fetch），但有 SSRF 防护（屏蔽内网 IP / localhost）。
      */
     type: 'function',
@@ -2412,7 +2416,7 @@ IR 语法（markdown + 扩展）：
     function: {
       name: 'read_tool_ref',
       description: [
-        '取回离线存储的工具调用正文（用于 web_fetch 等大体积返回的 lazy 模式）。',
+        '兼容旧会话的别名。新结果统一使用 read_tool_result(call_id=...) 取回 lazy 正文。',
         '',
         '何时使用：',
         '- 工具结果 JSON 里出现 `body_lazy_ref: { call_id, char_count, hint, source_url }` 字段时',
@@ -2901,24 +2905,34 @@ function compressOldToolResults(messages: LLMMessage[], opts?: { force?: boolean
   if (preserveFromIdx <= 0) return
 
   // 收集候选：旧区超阈值、且不是既有压缩产物的 tool 结果
-  const candidateIdx: number[] = []
+  const toolNameByCallId = new Map<string, string>()
+  for (const message of messages) {
+    for (const call of message.tool_calls ?? []) toolNameByCallId.set(call.id, call.function.name)
+  }
+  const candidates: Array<{ index: number; toolName?: string }> = []
   let candidateChars = 0
   for (let i = 0; i < preserveFromIdx; i++) {
     const msg = messages[i]
     if (msg.role !== 'tool' || typeof msg.content !== 'string') continue
     if (msg.content.startsWith(COMPRESSED_MARKER_PREFIX) || msg.content.startsWith(SUPERSEDED_MARKER_PREFIX)) continue
     if (msg.content.length <= TOOL_RESULT_COMPRESS_THRESHOLD) continue
-    candidateIdx.push(i)
+    const toolName = msg.tool_call_id ? toolNameByCallId.get(msg.tool_call_id) : undefined
+    if (routeToolResult(toolName, msg.content).route === 'passthrough') continue
+    candidates.push({ index: i, toolName })
     candidateChars += msg.content.length
   }
   // A3-3：未达批量触发线且非 force → 整体不动，前缀稳定保 cache
   if (!opts?.force && candidateChars < TOOL_RESULT_BATCH_COMPRESS_TRIGGER_CHARS) return
-  if (candidateIdx.length === 0 && !opts?.force) return
+  if (candidates.length === 0) return
 
   // A3-4 先做：被 SUPERSEDED 替换的旧结果不再进入统计压缩
-  markSupersededToolResults(messages, { endIndex: preserveFromIdx })
+  markSupersededToolResults(messages, {
+    endIndex: preserveFromIdx,
+    shouldReplace: (toolName, oldContent) => routeToolResult(toolName, oldContent).route !== 'passthrough',
+  })
 
-  for (const i of candidateIdx) {
+  for (const candidate of candidates) {
+    const i = candidate.index
     const msg = messages[i]
     if (typeof msg.content !== 'string') continue
     if (msg.content.startsWith(SUPERSEDED_MARKER_PREFIX)) continue // 刚被 A3-4 替换
@@ -2926,23 +2940,46 @@ function compressOldToolResults(messages: LLMMessage[], opts?: { force?: boolean
       maxChars: TOOL_RESULT_COMPRESSED_TARGET_CHARS,
       query: opts?.query,
       mode: opts?.force ? 'force' : 'standard',
+      requireRetrievableForLossy: true,
     })
     if (outcome.compressed) {
       messages[i] = { ...msg, content: outcome.content }
+      void window.electronAPI.logEvent('info', 'tool-result:compress', JSON.stringify({
+        tool: candidate.toolName ?? 'unknown',
+        method: outcome.method,
+        original: outcome.originalLength,
+        final: outcome.content.length,
+        saved: outcome.originalLength - outcome.content.length,
+        reversible: outcome.method === 'csv' && outcome.droppedRows === 0 ? false : true,
+      }))
     }
   }
 }
 
-/** 限制单条工具结果长度，避免超大 payload 拉高后续轮次 TTFT */
+/** live-zone：安全内容只在首次进入上下文时无损重排；有损路径必须可取回，否则 fail-open。 */
 function truncateToolResultForContext(toolName: string, content: string): { content: string; truncated: boolean; originalLength: number } {
   const originalLength = content.length
-  if (originalLength <= MAX_TOOL_RESULT_CONTEXT_CHARS) {
+  const route = routeToolResult(toolName, content)
+  if (route.route === 'lossless') {
+    const lossless = compressToolResult(content, {
+      maxChars: TOOL_RESULT_COMPRESSED_TARGET_CHARS,
+      allowLossy: false,
+    })
+    if (lossless.compressed) {
+      return { content: lossless.content, truncated: true, originalLength }
+    }
+  }
+  if (originalLength <= MAX_TOOL_RESULT_CONTEXT_CHARS || route.route === 'passthrough') {
     return { content, truncated: false, originalLength }
   }
-  const clipped = content.slice(0, MAX_TOOL_RESULT_CONTEXT_CHARS)
-  // A3-1 CCR marker 形态：此路径的原文低于 spool 阈值（12000）未落盘，如实标注不可取回
-  const note = `\n\n[已压缩 ${originalLength}→${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符，原文未落盘不可取回][系统提示] 工具 ${toolName} 返回内容过长（原始 ${originalLength} 字符），已截断为前 ${MAX_TOOL_RESULT_CONTEXT_CHARS} 字符用于上下文续推。请基于现有结果直接收敛回答，除非用户明确要求新的查询维度。`
-  return { content: clipped + note, truncated: true, originalLength }
+  const reversible = compressToolResult(content, {
+    maxChars: MAX_TOOL_RESULT_CONTEXT_CHARS,
+    mode: 'force',
+    requireRetrievableForLossy: true,
+  })
+  return reversible.compressed
+    ? { content: reversible.content, truncated: true, originalLength }
+    : { content, truncated: false, originalLength }
 }
 
 let activeChatRequest: { id: number; conversationId: string } | null = null
@@ -4441,6 +4478,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     // 构建 API 消息列表（包含 system prompt），截取最近消息避免 token 超限
+    const omittedHistoryCount = Math.max(0, messages.length - MAX_CONTEXT_MESSAGES)
+    let historyRecoveryNotice = omittedHistoryCount > 0
+      ? `\n\n[历史恢复指引] 当前工作上下文省略了本会话最早 ${omittedHistoryCount} 条消息；需要原文时调用 session_search(mode="view", conversation_id="${conversationId}", offset=0, limit=50)，不要猜测。`
+      : ''
     const recentMessages = messages.length > MAX_CONTEXT_MESSAGES
       ? messages.slice(-MAX_CONTEXT_MESSAGES)
       : messages
@@ -4460,7 +4501,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
     const compressedRecentMessages = recentMessages.map((m, i) => {
       if (m.role === 'assistant' && !keepFullIndices.has(i) && typeof m.content === 'string' && m.content.length > ASSISTANT_COMPRESS_THRESHOLD) {
-        return { ...m, content: m.content.slice(0, 800) + '\n\n[... 早期回答已压缩]' }
+        const offset = omittedHistoryCount + i
+        historyRecoveryNotice += `\n[历史恢复指引] 第 ${offset + 1} 条助手回答仅保留开头；取回原文：session_search(mode="view", conversation_id="${conversationId}", offset=${offset}, limit=1)。`
+        return { ...m, content: m.content.slice(0, 800) + `\n\n[... 早期回答已压缩；原文可用 session_search mode="view" conversation_id="${conversationId}" offset=${offset} limit=1 取回]` }
       }
       return m
     })
@@ -4538,7 +4581,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // 模型对"今天天气"这类时效问题只能臆测日期（曾把 2026-06-02 答成 6-04）。
     const currentWeekdayCn = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date().getDay()]
     const currentDateLine = `【当前日期】今天是 ${localDateString()}（${currentWeekdayCn}）。涉及"今天/现在/最近/最新"的时效问题（天气、新闻、行情等）一律以此日期为准；联网检索结果标注的"访问日期"也用它，不要臆测、也不要照搬搜索结果页里出现的其它日期。`
-    const dynamicSystemText = currentDateLine + behaviorModeText + guardrailText + '\n\n' + dynamicAppended + lorebookText + snipNoticeBlock
+    const dynamicSystemText = currentDateLine + behaviorModeText + guardrailText + '\n\n' + dynamicAppended + lorebookText + snipNoticeBlock + historyRecoveryNotice
 
     // agent-runtime 观测接入：保留原有 stats 上报，flag off 时无副作用
     try {
@@ -5599,6 +5642,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               messages: apiMessages,
               minTailMessages: COMPACTION_RETAIN_TAIL,
               minMiddleMessages: COMPACTION_MIN_MIDDLE,
+              recoveryHint: `完整原文可调用 session_search(mode="view", conversation_id="${conversationId}", offset=0, limit=50) 分页取回。`,
               summarize: async (mid) => llm.complete(
                 [{
                   role: 'user',

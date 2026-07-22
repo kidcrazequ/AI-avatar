@@ -14,13 +14,14 @@
  * @date 2026-07-06
  */
 
-import { compressToolResult } from '../tool-result-compressor'
+import { compressToolResult, routeToolResult } from '../tool-result-compressor'
 import { runEval } from './task'
 import type { EvalResult, Sample, Scorer, Solver, Task } from './types'
 
 /** 单条样本输入：一段模拟的工具结果原文 + 压缩时可用的用户 query */
 export interface CompressionAbInput {
   toolResult: string
+  toolName?: string
   query?: string
 }
 
@@ -28,6 +29,8 @@ export interface CompressionAbInput {
 export interface CompressionAbTarget {
   mustKeepNumbers?: string[]
   mustKeepAnchors?: string[]
+  /** 代码/RAG/密集数据等受保护样本必须逐字直通。 */
+  mustRemainExact?: boolean
 }
 
 function missingVerbatim(text: string, expected: string[] | undefined): string[] {
@@ -64,13 +67,29 @@ export const sourceAnchorKeepScorer: Scorer<CompressionAbTarget> = {
   },
 }
 
+export const protectedContentExactScorer: Scorer<CompressionAbTarget> = {
+  name: 'protected-content-exact',
+  score(sample, output) {
+    if (!sample.target?.mustRemainExact) return { value: 'pass', passed: true }
+    const passed = output.text === (sample.input as CompressionAbInput).toolResult
+    return passed
+      ? { value: 'pass', passed: true }
+      : { value: 'fail', passed: false, explanation: '受保护内容未逐字直通' }
+  },
+}
+
 /** 压缩开（compressed=true 路径）/ 压缩关（identity）两个纯函数 solver */
 export function makeCompressionSolver(compressionOn: boolean, maxChars: number): Solver<CompressionAbInput> {
   return (sample) => {
     const startedAt = Date.now()
     const input = sample.input as CompressionAbInput
-    const text = compressionOn
-      ? compressToolResult(input.toolResult, { maxChars, query: input.query }).content
+    const route = routeToolResult(input.toolName, input.toolResult)
+    const text = compressionOn && route.route !== 'passthrough'
+      ? compressToolResult(input.toolResult, {
+        maxChars,
+        query: input.query,
+        requireRetrievableForLossy: true,
+      }).content
       : input.toolResult
     return Promise.resolve({ text, toolEvents: [], durationMs: Date.now() - startedAt })
   }
@@ -87,7 +106,7 @@ export function buildCompressionAbTasks(
   opts: CompressionAbOptions = {},
 ): { on: Task<CompressionAbInput, CompressionAbTarget>; off: Task<CompressionAbInput, CompressionAbTarget> } {
   const maxChars = opts.maxChars ?? 1600
-  const scorers = [loadBearingNumbersScorer, sourceAnchorKeepScorer]
+  const scorers = [loadBearingNumbersScorer, sourceAnchorKeepScorer, protectedContentExactScorer]
   const config = { interSampleDelayMs: 0 }
   return {
     on: { name: 'tool-result-compression-on', dataset, solver: makeCompressionSolver(true, maxChars), scorers, config },
@@ -121,7 +140,7 @@ function buildExcelLikeSample(): Sample<CompressionAbInput, CompressionAbTarget>
   }
   return {
     id: 'excel-json-40rows',
-    input: { toolResult: JSON.stringify(rows), query: '262 柜体失败原因' },
+    input: { toolName: 'query_excel', toolResult: JSON.stringify(rows), query: '262 柜体失败原因' },
     target: {
       // 承重数字：错误行（88+17*0.09）与罕见值行（88+31*0.09）的良率
       mustKeepNumbers: ['89.53', '90.79'],
@@ -137,7 +156,7 @@ function buildKnowledgeTextSample(): Sample<CompressionAbInput, CompressionAbTar
   lines[39] = '数据校验失败：附表三缺失 缺口率 0.008'
   return {
     id: 'knowledge-text-60lines',
-    input: { toolResult: lines.join('\n') },
+    input: { toolName: 'search_knowledge', toolResult: lines.join('\n') },
     target: {
       mustKeepNumbers: ['0.352', '0.008'],
       mustKeepAnchors: ['[来源: knowledge/energy-policy.md#L120-L133]'],
@@ -158,7 +177,7 @@ function buildUniformCsvSample(): Sample<CompressionAbInput, CompressionAbTarget
   }
   return {
     id: 'uniform-json-to-csv',
-    input: { toolResult: JSON.stringify(rows) },
+    input: { toolName: 'github_list_repos', toolResult: JSON.stringify(rows) },
     target: {
       // 无损重排路径：中间行数字也必须逐字在（全量保留）
       mustKeepNumbers: [String(rows[14].良率), String(rows[14].出货量), String(rows[29].良率)],
@@ -175,4 +194,9 @@ export const defaultCompressionAbSamples: Sample<CompressionAbInput, Compression
   buildExcelLikeSample(),
   buildKnowledgeTextSample(),
   buildUniformCsvSample(),
+  {
+    id: 'protected-source-code',
+    input: { toolName: 'read_lines', toolResult: '```ts\nconst exact = 748.35\n```' },
+    target: { mustKeepNumbers: ['748.35'], mustRemainExact: true },
+  },
 ]

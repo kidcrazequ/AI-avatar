@@ -3,8 +3,8 @@
  *
  * 定位：插在「盲字节截断」与「LLM 摘要」之间的第三条路。对 JSON / 表格 / 多行文本类
  * 工具输出做**行级统计保留**——比盲截断多保住承重信息，又没有 LLM 摘要改写数字的
- * 溯源风险。所有数字与 `[来源: ...]` 锚点字符串**原样保留**（A1 溯源闭集校验依赖
- * 锚点逐字存在），全程零模型调用、纯函数可单测。
+ * 溯源风险。被选中的承重行数字与全部 `[来源: ...]` 锚点字符串原样保留，
+ * 全程零模型调用、纯函数可单测；生产入口另由 ContentRouter 保护代码/RAG/密集数值。
  *
  * 行保留规则（命中任一即保留；错误 / 锚点 / query 命中为硬保留，预算再紧也不丢）：
  *   1. 错误行永不丢（error / fail / exception / 错误 / 失败 等关键词表）
@@ -19,11 +19,9 @@
  * 节省 ≥15% 才采用；转完在预算内则全量无损返回，仍超预算则在 CSV 行上继续统计保留。
  *
  * A3-1 · CCR 可逆取回 marker：压缩输出首行形如
- *   `[已压缩 N→M 字符，…，取回原文: read_tool_result(path="<spool绝对路径>")]`
- * read_tool_result 是**已有工具**（electron/main.ts 直接处理，读 ToolResultSpool
- * 落盘文件，path = <userData>/tool-results/<convId>/<toolName>-<ts>.txt）。只有原文
- * 超过 spool 阈值（12000 字符）时才有落盘文件，路径从原文自带的 spool 提示中提取；
- * 未落盘时 marker 如实写"原文未落盘不可取回"——宁缺毋假，不编造取回方式。
+ *   `[已压缩 N→M 字符，…，取回原文: read_tool_result(ref="tool-result:...")]`
+ * 新结果使用会话隔离的内容哈希 ref；旧会话绝对路径仍兼容。有损压缩在生产入口必须
+ * 先有真实取回引用，否则 fail-open 原文。
  *
  * A3-4 · SUPERSEDED：同工具同参数被再次调用时，旧结果整体替换为一行 marker
  * （headroom 实测约 75% 的历史读字节属此类，零信息损失）；见 markSupersededToolResults。
@@ -51,6 +49,8 @@ const ANCHOR_HINT = '[来源:'
 
 /** spool 提示中的取回调用形态（tool-result-spool.ts 落盘时原样写入；path 可含空格） */
 const SPOOL_RETRIEVE_REGEX = /read_tool_result\(path="([^"]+)"\)/
+/** 新 CCR 使用会话内稳定 ref，不向模型暴露绝对路径。 */
+const SPOOL_RETRIEVE_REF_REGEX = /read_tool_result\(ref="([^"]+)"\)/
 /** spool 提示的路径行兜底（提示格式变化时的防御） */
 const SPOOL_PATH_LINE_REGEX = /已落盘到：\s*\n\s*(\S[^\n]*\.txt)/
 
@@ -85,6 +85,10 @@ export interface CompressToolResultOptions {
    * 保生存优先于保完整；standard（默认）：压不动则如实返回 compressed=false。
    */
   mode?: 'standard' | 'force'
+  /** false 时只允许 JSON→CSV 无损重排；用于 live-zone 首次入场。 */
+  allowLossy?: boolean
+  /** 有损压缩前必须存在 read_tool_result 取回引用；无引用则 fail-open 原文。 */
+  requireRetrievableForLossy?: boolean
 }
 
 export interface CompressToolResultOutcome {
@@ -96,6 +100,45 @@ export interface CompressToolResultOutcome {
   method?: CompressMethod
   /** 被丢弃（聚合进统计行）的行数（csv 无损 / blind 模式为 undefined 或 0） */
   droppedRows?: number
+}
+
+export type ToolResultRoute = 'passthrough' | 'lossless' | 'reversible'
+
+export interface ToolResultRouteDecision {
+  route: ToolResultRoute
+  reason: string
+}
+
+/** 这些工具承载源码、RAG 证据或密集数据，默认不做有损改写。 */
+const PROTECTED_TOOL_NAMES = new Set([
+  'search_knowledge',
+  'query_excel',
+  'read_lines',
+  'read_file',
+  'read_user_file',
+  'web_fetch',
+  'read_tool_result',
+  'read_tool_ref',
+])
+
+/** Headroom ContentRouter 的 Soul 原生保守版：不确定时保留，结构化列表才尝试压缩。 */
+export function routeToolResult(toolName: string | undefined, content: string): ToolResultRouteDecision {
+  if (toolName && PROTECTED_TOOL_NAMES.has(toolName)) {
+    return { route: 'passthrough', reason: 'protected-tool' }
+  }
+  if (ERROR_KEYWORD_REGEX.test(content)) return { route: 'passthrough', reason: 'error-signal' }
+  if (content.includes(ANCHOR_HINT)) return { route: 'passthrough', reason: 'source-evidence' }
+  if (/```[\s\S]*```|^diff --git |^@@\s+-\d+/m.test(content)) {
+    return { route: 'passthrough', reason: 'exact-code' }
+  }
+  const numericTokens = content.match(/(?:^|\s)-?\d+(?:\.\d+)?(?:%|[a-zA-Z单位元度瓦时伏安]*)/g)?.length ?? 0
+  const lineCount = Math.max(1, content.split('\n').length)
+  if (lineCount >= 10 && numericTokens / lineCount >= 3) {
+    return { route: 'passthrough', reason: 'dense-numeric-series' }
+  }
+  const jsonRows = tryParseJsonObjectArray(content)
+  if (jsonRows && tryEncodeCsv(jsonRows)) return { route: 'lossless', reason: 'uniform-tabular-json' }
+  return { route: 'reversible', reason: 'generic-large-result' }
 }
 
 /**
@@ -113,7 +156,7 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
     return notCompressed
   }
 
-  const retrievalPath = extractSpoolPath(content)
+  const retrievalCall = extractRetrievalCall(content)
 
   // 规则 0：均匀 JSON 对象数组先试无损重排为 CSV（键名只出现一次，天然省字节）
   const items = tryParseJsonObjectArray(content)
@@ -128,7 +171,7 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
       csvHeader = csv.header
       rows = csv.rows
       const csvBody = `${csv.header}\n${csv.rows.join('\n')}`
-      const marker = buildCompressionMarker(originalLength, csvBody.length, retrievalPath, 'csv')
+      const marker = buildCompressionMarker(originalLength, csvBody.length, retrievalCall, 'csv')
       const out = `${marker}\n${csvBody}`
       // CSV 全量已在预算内 → 无损返回，不丢任何行
       if (out.length <= opts.maxChars) {
@@ -142,6 +185,8 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
     rows = content.split('\n')
   }
 
+  if (opts.allowLossy === false || (opts.requireRetrievableForLossy && !retrievalCall)) return notCompressed
+
   if (rows.length >= MIN_ROWS_FOR_STATS) {
     const selection = selectRows(rows, rowObjs, {
       bodyBudget: Math.max(200, opts.maxChars - OVERHEAD_ESTIMATE_CHARS - (csvHeader?.length ?? 0)),
@@ -150,12 +195,12 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
     if (selection.droppedCount === 0) {
       // 全是硬保留行，统计压缩无从下手：standard 宁可不压（错误项永不丢）；force 保生存
       return opts.mode === 'force'
-        ? blindTruncate(content, opts.maxChars, retrievalPath, originalLength)
+        ? blindTruncate(content, opts.maxChars, retrievalCall, originalLength)
         : notCompressed
     }
     let body = assembleBody(rows, rowObjs, selection, csvHeader)
     body = appendMissingAnchors(content, body)
-    const marker = buildCompressionMarker(originalLength, body.length, retrievalPath, 'stats')
+    const marker = buildCompressionMarker(originalLength, body.length, retrievalCall, 'stats')
     const out = `${marker}\n${body}`
     // 通胀守卫：压完反而更长 → 无净收益，原样返回
     if (out.length >= originalLength) return notCompressed
@@ -163,7 +208,7 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
   }
 
   // 行数太少（单巨行 minified JSON / 大对象）：无统计意义，首尾盲截断兜底
-  return blindTruncate(content, opts.maxChars, retrievalPath, originalLength)
+  return blindTruncate(content, opts.maxChars, retrievalCall, originalLength)
 }
 
 // ─── A3-4 SUPERSEDED ─────────────────────────────────────────────────────
@@ -171,6 +216,8 @@ export function compressToolResult(content: string, opts: CompressToolResultOpti
 export interface MarkSupersededOptions {
   /** 只替换 index < endIndex 的旧 tool 结果（保护最近轮次窗口）。默认全部 */
   endIndex?: number
+  /** 受保护内容可拒绝替换；默认保持旧行为。 */
+  shouldReplace?: (toolName: string, content: string) => boolean
 }
 
 export interface MarkSupersededOutcome {
@@ -222,6 +269,7 @@ export function markSupersededToolResults(
       const msg = messages[idx]
       if (typeof msg.content !== 'string') continue
       if (msg.content.startsWith(SUPERSEDED_MARKER_PREFIX)) continue
+      if (opts.shouldReplace && !opts.shouldReplace(toolName, msg.content)) continue
       const marker = buildSupersededMarker(toolName, msg.content)
       if (marker.length >= msg.content.length) continue
       messages[idx] = { ...msg, content: marker }
@@ -234,18 +282,21 @@ export function markSupersededToolResults(
 
 // ─── 内部实现 ─────────────────────────────────────────────────────────────
 
-/** 从内容中提取 spool 落盘文件绝对路径（tool-result-spool.ts 写入的提示格式） */
-function extractSpoolPath(content: string): string | undefined {
+/** 从内容中提取真实可执行的取回调用；优先稳定 ref，兼容旧绝对路径 marker。 */
+function extractRetrievalCall(content: string): string | undefined {
+  const ref = SPOOL_RETRIEVE_REF_REGEX.exec(content)
+  if (ref) return `read_tool_result(ref="${ref[1]}")`
   const retrieve = SPOOL_RETRIEVE_REGEX.exec(content)
-  if (retrieve) return retrieve[1]
-  return SPOOL_PATH_LINE_REGEX.exec(content)?.[1]?.trim()
+  if (retrieve) return `read_tool_result(path="${retrieve[1]}")`
+  const legacyPath = SPOOL_PATH_LINE_REGEX.exec(content)?.[1]?.trim()
+  return legacyPath ? `read_tool_result(path="${legacyPath}")` : undefined
 }
 
 /** A3-1 CCR marker。M 为正文（不含 marker 行）字符数。 */
 function buildCompressionMarker(
   originalLength: number,
   bodyLength: number,
-  retrievalPath: string | undefined,
+  retrievalCall: string | undefined,
   method: CompressMethod,
 ): string {
   const modeText = method === 'csv'
@@ -253,18 +304,20 @@ function buildCompressionMarker(
     : method === 'blind'
       ? '首尾盲截断（统计规则不适用）'
       : '统计保留（错误行 / 来源锚点 / 罕见值 / 首尾行保留，数字原样）'
-  const retrieveText = retrievalPath
-    ? `取回原文: read_tool_result(path="${retrievalPath}")`
-    : '原文未落盘不可取回，不要因压缩重调同参数工具'
+  const retrieveText = retrievalCall
+    ? `取回原文: ${retrievalCall}`
+    : method === 'csv'
+      ? '无损重排，无需取回原 JSON'
+      : '原文未落盘不可取回，不要因压缩重调同参数工具'
   return `${COMPRESSED_MARKER_PREFIX}${originalLength}→${bodyLength} 字符，${modeText}，${retrieveText}]`
 }
 
 function buildSupersededMarker(toolName: string, oldContent: string): string {
-  const path = extractSpoolPath(oldContent)
+  const retrievalCall = extractRetrievalCall(oldContent)
   const anchors = Array.from(new Set(oldContent.match(RAW_ANCHOR_REGEX) ?? []))
   const parts = [
     `${SUPERSEDED_MARKER_PREFIX} 工具 ${toolName} 已在后续轮次以相同参数重新调用，本条旧结果（原 ${oldContent.length} 字符）已被最新一次结果取代，请以最新结果为准。`,
-    path ? `取回本条原文: read_tool_result(path="${path}")` : '',
+    retrievalCall ? `取回本条原文: ${retrievalCall}` : '',
     anchors.length > 0 ? `涉及来源锚点：${anchors.join(' ')}` : '',
   ]
   return parts.filter(Boolean).join('\n')
@@ -556,7 +609,7 @@ function appendMissingAnchors(original: string, body: string): string {
 function blindTruncate(
   content: string,
   maxChars: number,
-  retrievalPath: string | undefined,
+  retrievalCall: string | undefined,
   originalLength: number,
 ): CompressToolResultOutcome {
   const budget = Math.max(400, maxChars)
@@ -566,7 +619,7 @@ function blindTruncate(
   const tail = content.slice(-tailLen)
   let body = `${head}\n[…已截断中段…]\n${tail}`
   body = appendMissingAnchors(content, body)
-  const marker = buildCompressionMarker(originalLength, body.length, retrievalPath, 'blind')
+  const marker = buildCompressionMarker(originalLength, body.length, retrievalCall, 'blind')
   const out = `${marker}\n${body}`
   if (out.length >= originalLength) return { content, compressed: false, originalLength }
   return { content: out, compressed: true, originalLength, method: 'blind' }

@@ -69,7 +69,7 @@ export { cleanOcrHtml, cleanPdfFullText, cleanLlmOutput, detectFabricatedNumbers
 export { splitIntoChapters, detectChapterHeadings, formatChapter, formatDocument, FORMAT_SYSTEM_PROMPT } from './document-formatter'
 export type { Chapter, FormatProgress, LLMCallFn } from './document-formatter'
 
-export { splitBookIntoChapters, estimateDeepRead, runDeepRead, sanitizeFileSegment, chapterFileName, DEEP_READ_SYSTEM_PROMPT, DEEP_READ_SYNTHESIS_FILES } from './deep-reader'
+export { splitBookIntoChapters, estimateDeepRead, runDeepRead, sanitizeFileSegment, chapterFileName, DEEP_READ_SYSTEM_PROMPT, DEEP_READ_SYNTHESIS_FILES, DEEP_READ_LLM_FILES } from './deep-reader'
 export type {
   BookChapter,
   DeepReadDepth,

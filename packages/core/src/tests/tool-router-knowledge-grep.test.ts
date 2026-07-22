@@ -135,6 +135,71 @@ test('knowledge_grep scope 路径穿越拒绝', async () => {
   }
 })
 
+// 2026-07-21 小凯实测：LLM 把仓库相对路径 avatars/<分身>/knowledge 当 scope 传，
+// 连败 5 次浪费一整轮工具调用。归一化后这类写法必须等价于整库搜索而非报错。
+test('knowledge_grep scope 带 avatars/<分身>/knowledge 前缀时归一化为整库搜索', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  try {
+    fs.writeFileSync(path.join(knowledgePath, 'a.md'), 'ENS-L262 铭牌数据', 'utf-8')
+
+    const r = await router.execute(AVATAR_ID, {
+      name: 'knowledge_grep',
+      arguments: { pattern: 'L262', scope: `avatars/${AVATAR_ID}/knowledge` },
+    })
+    assert.equal(r.error, undefined, `归一化后不应报错: ${r.error ?? ''}`)
+    const out = parseJsonContent<{ count: number; matches: Array<{ file: string }> }>(r.content)
+    assert.equal(out.count, 1)
+    assert.equal(out.matches[0].file, 'knowledge/a.md')
+  } finally {
+    cleanup()
+  }
+})
+
+// 来源锚点展示为 knowledge/<路径>，LLM 会原样拷回来当 scope——必须与不带前缀的写法等价，
+// 否则"从锚点拷路径"这个最自然的用法永远失败。
+test('knowledge_grep scope 带 knowledge/ 展示前缀等价于根内相对路径', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  try {
+    fs.mkdirSync(path.join(knowledgePath, 'sub'), { recursive: true })
+    fs.writeFileSync(path.join(knowledgePath, 'sub', 'a.md'), 'ENS-L262 in sub', 'utf-8')
+    fs.writeFileSync(path.join(knowledgePath, 'other.md'), 'ENS-L262 outside scope', 'utf-8')
+
+    const r = await router.execute(AVATAR_ID, {
+      name: 'knowledge_grep',
+      arguments: { pattern: 'L262', scope: 'knowledge/sub' },
+    })
+    assert.equal(r.error, undefined, `不应报错: ${r.error ?? ''}`)
+    const out = parseJsonContent<{ count: number; matches: Array<{ file: string }> }>(r.content)
+    assert.equal(out.count, 1, 'scope 应只命中 sub/ 下文件')
+    assert.equal(out.matches[0].file, 'knowledge/sub/a.md')
+  } finally {
+    cleanup()
+  }
+})
+
+// scope 真不存在时，错误信息必须给出真实可用目录供模型下一次自救，
+// 不能只说"不存在"让模型盲猜（本次事故模型靠丢弃 scope 才自愈）。
+test('knowledge_grep scope 不存在时错误信息列出可用顶层目录', async () => {
+  const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
+  const router = new ToolRouter(avatarsPath)
+  try {
+    fs.mkdirSync(path.join(knowledgePath, '工商业储能'), { recursive: true })
+    fs.writeFileSync(path.join(knowledgePath, '工商业储能', 'a.md'), 'data', 'utf-8')
+
+    const r = await router.execute(AVATAR_ID, {
+      name: 'knowledge_grep',
+      arguments: { pattern: 'data', scope: '不存在的目录' },
+    })
+    assert.ok(r.error, '不存在的 scope 应报错')
+    assert.match(r.error!, /可用顶层目录/, '错误信息应含自救指引')
+    assert.match(r.error!, /工商业储能/, '错误信息应列出真实目录名')
+  } finally {
+    cleanup()
+  }
+})
+
 test('knowledge_grep max_per_file 硬上限生效', async () => {
   const { avatarsPath, knowledgePath, cleanup } = setupSandbox()
   const router = new ToolRouter(avatarsPath)

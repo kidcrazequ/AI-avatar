@@ -31,13 +31,19 @@ test('默认对照集：压缩开 / 关都全绿（承重数字 + 来源锚点�
   assert.strictEqual(on.summary.errored, 0)
 })
 
-test('压缩确实发生：开侧每条输出都短于关侧，且带 CCR marker', async () => {
+test('路由生效：可压缩样本变短，代码/RAG/密集数据逐字直通', async () => {
   const { on, off } = await runCompressionAbEval()
   for (let i = 0; i < on.samples.length; i++) {
     const onText = on.samples[i].output.text
     const offText = off.samples[i].output.text
-    assert.ok(onText.length < offText.length, `样本 ${on.samples[i].sampleId} 未被压缩`)
-    assert.ok(onText.startsWith('[已压缩 '), `样本 ${on.samples[i].sampleId} 缺少 CCR marker`)
+    const protectedSample = defaultCompressionAbSamples[i].target?.mustRemainExact
+      || ['query_excel', 'search_knowledge'].includes(defaultCompressionAbSamples[i].input.toolName ?? '')
+    if (protectedSample) {
+      assert.strictEqual(onText, offText, `受保护样本 ${on.samples[i].sampleId} 必须直通`)
+    } else {
+      assert.ok(onText.length < offText.length, `样本 ${on.samples[i].sampleId} 未被压缩`)
+      assert.ok(onText.startsWith('[已压缩 '), `样本 ${on.samples[i].sampleId} 缺少 marker`)
+    }
   }
 })
 
@@ -54,7 +60,10 @@ test('scorer 判别力：非承重中段数字被压掉时，开侧 fail、关�
   const dataset: Sample<CompressionAbInput, CompressionAbTarget>[] = [
     {
       id: 'negative-control',
-      input: { toolResult: JSON.stringify(rows) },
+      input: {
+        toolResult: JSON.stringify(rows)
+          + `\nread_tool_result(ref="tool-result:test:${'a'.repeat(64)}")`,
+      },
       target: { mustKeepNumbers: [midOnlyNumber] },
     },
   ]

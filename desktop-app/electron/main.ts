@@ -530,7 +530,15 @@ async function withToolCallAudit<T extends { content: string; error?: string }>(
     result = await body()
     // Stage 三 P2 #15: 工具结果超阈值时落盘，content 改为头尾摘要 + 路径提示。
     // 仅成功结果且 content 是非空字符串时才走 spool；error 路径不需要落盘。
-    if (result && typeof result.content === 'string' && result.content.length > 0 && !result.error && toolResultSpool) {
+    if (
+      result
+      && typeof result.content === 'string'
+      && result.content.length > 0
+      && !result.error
+      && toolResultSpool
+      && toolName !== 'read_tool_result'
+      && toolName !== 'read_tool_ref'
+    ) {
       originalContentLen = result.content.length
       const sp = toolResultSpool.spool(conversationId, toolName, result.content)
       if (sp.spilled) {
@@ -539,7 +547,7 @@ async function withToolCallAudit<T extends { content: string; error?: string }>(
         if (logger) {
           logger.activity(
             'tool-result-spool',
-            `tool=${toolName} originalLen=${sp.originalLength} path=${sp.path}`,
+            `tool=${toolName} originalLen=${sp.originalLength} ref=${sp.ref ?? 'legacy'} path=${sp.path}`,
           )
         }
       }
@@ -685,7 +693,7 @@ function initManagers() {
   templatesPath = resolveTemplatesPath()
   expertPacksPath = resolveExpertPacksPath()
   logger = new Logger(app.getPath('userData'))
-  // Stage 三 P2 #15: 工具返回值 spool（>12000 字符自动落盘到 userData/tool-results/）
+  // 工具返回值 CCR spool（>6000 字符按内容哈希落盘到 userData/tool-results/）
   toolResultSpool = new ToolResultSpool(app.getPath('userData'))
   // 对话框附件存储（2026-05-01）：用户上传的 PDF / Word / 文本等文件落到
   // userData/attachments/<convId>/<hash>.<ext>，元信息进 attachments 表
@@ -4943,7 +4951,19 @@ wrapHandler(
   //              LLM 经常把"工具名-时间戳"误当作 call_id 传，这里映射到 spool 文件解决。
   if (name === 'read_tool_result') {
     const rawPath = (args.path as string) ?? ''
+    const ref = typeof args.ref === 'string' ? args.ref.trim() : ''
     const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
+    // 统一入口：新 lazy marker 也使用 read_tool_result(call_id="tool-...")；旧
+    // read_tool_ref 仍由 ToolRouter 保留为兼容别名。
+    if (!rawPath && !ref && /^tool-[a-f0-9]{12}$/i.test(callId)) {
+      return toolRouter.execute(
+        avatarId,
+        { name: 'read_tool_ref', arguments: args },
+        undefined,
+        conversationId,
+        convProjectId,
+      )
+    }
     const startLine = typeof args.start_line === 'number' && Number.isFinite(args.start_line)
       ? Math.max(1, Math.floor(args.start_line))
       : (typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.max(1, Math.floor(args.offset)) : 1)
@@ -4956,26 +4976,41 @@ wrapHandler(
 
     const spoolRoot = toolResultSpool.getRootDir()
     let abs: string
-    if (rawPath) {
+    if (ref) {
+      const resolved = toolResultSpool.resolveRef(conversationId, ref)
+      if (!resolved) return { content: '', error: `tool-result 引用无效、已过期或不属于当前会话: ${ref}` }
+      abs = resolved
+    } else if (rawPath) {
       abs = path.resolve(rawPath)
     } else if (callId && conversationId) {
       // call_id 兼容：等价于 spool 文件 basename（与 ToolResultSpool.spool 的 ${safeName}-${ts} 对齐）
       const safeName = callId.replace(/\.txt$/i, '').replace(/[^\w.-]/g, '_')
       abs = path.join(spoolRoot, conversationId, `${safeName}.txt`)
     } else {
-      return { content: '', error: '需要 path（spool 文件绝对路径）或 call_id（spool 文件名，不含 .txt）' }
+      return { content: '', error: '需要 ref（推荐）、path（旧版兼容）或 call_id（旧版兼容）' }
     }
 
-    if (!abs.startsWith(spoolRoot + path.sep) && abs !== spoolRoot) {
-      return { content: '', error: `路径不在 tool-results 目录下，请使用 spool 提示的完整路径：${rawPath || callId}` }
+    if (!isUnderRoot(abs, spoolRoot)) {
+      return { content: '', error: `路径不在 tool-results 目录下：${ref || rawPath || callId}` }
     }
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      return { content: '', error: `tool-result 文件不存在或已被清理: ${rawPath || callId}` }
+      return { content: '', error: `tool-result 文件不存在或已被清理: ${ref || rawPath || callId}` }
     }
     // 流式按字节扫描读取目标区间（readSpoolLineRange，O(1) 内存）。spool 专门承接超大工具返回，
-    // 此前 readFileSync(abs).split() 会把整个文件读进内存；即便单行超大也只读前 ~1MB。
+    // 此前 readFileSync(abs).split() 会把整个文件读进内存；即便单行超大也只读前 6000 字节。
     const requestedEnd = endLineArg ?? startLine + 199
     const collected = await readSpoolLineRange(abs, startLine, requestedEnd)
+    toolResultSpool.recordRetrieval(conversationId, ref || path.basename(abs), {
+      start: startLine,
+      end: collected.cappedEnd,
+      truncated: collected.truncated,
+    })
+    if (logger) {
+      logger.activity(
+        'tool-result-retrieval',
+        `conversation=${conversationId} ref=${ref || path.basename(abs)} range=${startLine}-${collected.cappedEnd} truncated=${collected.truncated}`,
+      )
+    }
 
     if (collected.lastLine < startLine) {
       return {

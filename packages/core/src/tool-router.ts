@@ -3638,16 +3638,25 @@ ${content}` }
       ? Math.min(500, Math.floor(args.max_total))
       : 200
 
+    // 归一化 scope：LLM 常把来源锚点里的展示前缀（knowledge/、projects/<pid>/knowledge/）
+    // 或仓库相对路径（avatars/<分身>/knowledge/...）整段拷回来当 scope（2026-07-21 小凯
+    // 实测连败 5 次后才自愈）。仓库级前缀在这里剥；root 展示前缀在逐 root 解析时剥。
+    let scope = scopeRaw.replace(/^\/+|\/+$/g, '')
+    const repoPrefix = `avatars/${avatarId}`
+    if (scope === repoPrefix) scope = ''
+    else if (scope.startsWith(`${repoPrefix}/`)) scope = scope.slice(repoPrefix.length + 1)
+
     let roots = this.listKnowledgeRoots(avatarId)
     if (roots.length === 0) {
       return { content: JSON.stringify({ pattern, count: 0, matches: [], note: '知识库目录不存在' }, null, 2) }
     }
 
-    // 应用 scope（如果有）—— 限定到子目录，scope 段会按 path-security 校验
-    if (scopeRaw) {
+    // 应用 scope（如果有）—— 限定到子目录，scope 段会按 path-security 校验；
+    // 剥前缀后为空（如 scope="avatars/<分身>/knowledge"）≡ 指向知识库根 ≡ 整库搜索
+    if (scope) {
       try {
         // scope 可能含多段（如 `imports/2025/`），逐段验
-        for (const seg of scopeRaw.split('/').filter(Boolean)) {
+        for (const seg of scope.split('/').filter(Boolean)) {
           assertSafeSegment(seg, 'scope segment')
         }
       } catch (e) {
@@ -3655,19 +3664,42 @@ ${content}` }
       }
       roots = roots
         .map((r) => {
+          // 剥该 root 自己的展示前缀：scope="knowledge/工商业储能" ≡ "工商业储能"（对 avatar root）
+          let sub = scope
+          if (sub === r.relPrefix.replace(/\/$/, '')) sub = ''
+          else if (sub.startsWith(r.relPrefix)) sub = sub.slice(r.relPrefix.length)
+          if (!sub) return r
           // resolveUnderRoot 确保 scope 解析后仍在 absRoot 内
           let resolved: string
           try {
-            resolved = resolveUnderRoot(r.absRoot, scopeRaw)
+            resolved = resolveUnderRoot(r.absRoot, sub)
           } catch {
             return null
           }
           if (!fs.existsSync(resolved)) return null
-          return { relPrefix: r.relPrefix + scopeRaw.replace(/\/?$/, '/'), absRoot: resolved }
+          return { relPrefix: r.relPrefix + sub.replace(/\/?$/, '/'), absRoot: resolved }
         })
         .filter((r): r is { relPrefix: string; absRoot: string } => r !== null)
       if (roots.length === 0) {
-        return { content: '', error: `scope 路径不存在于任何知识库 root: ${scopeRaw}` }
+        // 自救指引：列出真实存在的顶层目录，模型下一次调用即可传对 scope
+        const tops = this.listKnowledgeRoots(avatarId)
+          .flatMap((r) => {
+            try {
+              return fs.readdirSync(r.absRoot, { withFileTypes: true })
+                .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+                .map((d) => r.relPrefix + d.name)
+            } catch {
+              return []
+            }
+          })
+          .slice(0, 12)
+        return {
+          content: '',
+          error: `scope 路径不存在于任何知识库 root: ${scopeRaw}。`
+            + 'scope 应为知识库根内的相对子目录（不带 avatars/<分身>/ 前缀）。'
+            + (tops.length ? `当前可用顶层目录：${tops.join('、')}。` : '')
+            + '不确定目录时可不传 scope 全库搜索。',
+        }
       }
     }
 
@@ -5207,13 +5239,9 @@ ${content}` }
       return { content: '', error: 'read_tool_ref 需要 conversationId（当前调用上下文缺失，无法定位会话工作区）' }
     }
     const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
-    // 工具名歧义警示：read_tool_ref（本工具）和 read_tool_result（spool 读取工具）名字几乎相同，
-    // LLM 经常 token-level 混淆。错误返回中明确指出"你想要的是 read_tool_result"。
-    const TOOL_DISAMBIGUATE_HINT = '\n\n⚠️ **工具名歧义警示**：\n'
-      + '- `read_tool_ref`（本工具）：仅取 web_fetch 返回 body_lazy_ref 的正文，**入参是 call_id="tool-{12hex}"**。\n'
-      + '- `read_tool_result`（不同工具）：读 search_knowledge / query_excel 等结果被 spool 落盘的完整文件，'
-      + '**入参是 path="/.../tool-results/<convId>/<工具名>-<时间戳>.txt"（绝对路径）**。\n'
-      + '如果你刚才看到的工具返回提示里有"完整内容已落盘到 /.../tool-results/.../*.txt"，**正确做法是调 `read_tool_result(path="...")`，不是 read_tool_ref**。'
+    const TOOL_DISAMBIGUATE_HINT = '\n\n统一取回入口：新结果请调用 `read_tool_result`。'
+      + 'lazy 正文传 call_id="tool-{12hex}"；spool 原文传 ref="tool-result:..."。'
+      + '`read_tool_ref` 仅为旧会话兼容。'
     if (!callId) {
       return {
         content: '',
@@ -5234,11 +5262,11 @@ ${content}` }
       const looksLikeToolTimestamp = /^[a-z_]+-\d{10,}$/i.test(callId)
       let extraHint = ''
       if (looksLikeSpoolPath) {
-        extraHint = '\n\n你传入的 call_id 看起来是 spool 文件路径，**应该用 `read_tool_result(path="..." )` 而不是 read_tool_ref**。'
+        extraHint = '\n\n你传入的 call_id 看起来是旧 spool 文件路径，应该用 `read_tool_result(path="...")`。'
           + '把这整串作为 path 重新调一次 read_tool_result。'
       } else if (looksLikeToolTimestamp) {
         extraHint = '\n\n你传入的 call_id 看起来是"工具名-时间戳"，**这是 spool 文件名的一部分，不是 call_id**。'
-          + '如果你想读完整工具返回内容，应该调 `read_tool_result(path="<工具返回提示里给的完整绝对路径>")`，不是 read_tool_ref。'
+          + '如果你想读完整工具返回内容，应该调 `read_tool_result(ref="<工具返回提示里的稳定引用>")`。'
       }
       return {
         content: '',
@@ -5262,7 +5290,7 @@ ${content}` }
           truncated: out.truncated,
           content: out.content,
           ...(out.truncated ? {
-            hint: `已截断；下一段调用 read_tool_ref(call_id="${callId}", offset=${out.offset + out.limit}, limit=${out.limit})`,
+            hint: `已截断；下一段调用 read_tool_result(call_id="${callId}", offset=${out.offset + out.limit}, limit=${out.limit})`,
           } : {}),
         }, null, 2),
       }
@@ -6462,6 +6490,10 @@ ${content}` }
           return { content: `## 技能：${skillId}\n\n${content}${extras}` }
         }
       }
+    }
+    return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
+  }
+
   // ─── SOP 状态机集成（W5.3/W5.4，见 docs/staffdeck-adoption-plan.md） ────────
   // 双轨：技能目录里有同名 `<skill>.sop.yaml` 才进流程模式，否则完全走原散文链路。
 
@@ -6602,10 +6634,6 @@ ${content}` }
       path.join(this.avatarsPath, '..', 'shared', 'skills', `${skillId}.sop.yaml`),
     ]
     return candidates.find((p) => fs.existsSync(p)) ?? null
-  }
-
-    }
-    return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
   }
 
   /** B1 目录型技能允许二次读取的子目录白名单（agentskills.io spec 的三个标准子目录） */

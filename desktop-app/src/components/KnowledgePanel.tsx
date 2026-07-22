@@ -209,7 +209,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
           showStatus(
             r.failedChapters.length > 0
               ? `✓ 精读完成：${r.products} 个产物（${r.failedChapters.length} 章失败：${r.failedChapters.slice(0, 3).join('、')}${r.failedChapters.length > 3 ? '…' : ''}，重新选择同一文件可续跑补全）`
-              : `✓ 精读完成：${r.products} 个产物${r.skippedChapters > 0 ? `（续跑跳过 ${r.skippedChapters} 章）` : ''}`,
+              : `✓ 深度提炼完成：通过 ${r.verifiedUnits} 个知识单元、淘汰 ${r.rejectedUnits} 个候选 · 共 ${r.products} 个产物${r.skippedChapters > 0 ? `（续跑跳过 ${r.skippedChapters} 章）` : ''}`,
             12000,
           )
           await loadTree()
@@ -900,7 +900,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
       deepReadOutputDirRef.current = deepReadPrepare.outputDir
       setDeepReadPrepare(null)
       setIsDeepReading(true)
-      showStatus('精读已启动，逐章蒸馏中...', false)
+      showStatus('精读已启动：逐章提炼后将执行整书理解、候选提取和三重校验...', false)
     } catch (err) {
       console.error('启动精读失败:', err)
       showStatus('✗ 启动精读失败: ' + (err instanceof Error ? err.message : String(err)), 10000)
@@ -1115,7 +1115,7 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
         return (
           <div className="px-6 py-3 bg-px-elevated border-b-2 border-px-border space-y-2">
             <div className="font-game text-[12px] text-px-primary tracking-wider">
-              精读《{deepReadPrepare.bookTitle}》 — {deepReadPrepare.chapterCount} 章 · 约 {Math.round(deepReadPrepare.totalChars / 10000)} 万字
+              深度提炼《{deepReadPrepare.bookTitle}》 — {deepReadPrepare.chapterCount} 章 · 约 {Math.round(deepReadPrepare.totalChars / 10000)} 万字
               {deepReadPrepare.existingCount > 0 && ` · 已有 ${deepReadPrepare.existingCount} 章笔记，将跳过续跑`}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-mono text-px-text-sec">
@@ -1140,6 +1140,9 @@ export default function KnowledgePanel({ avatarId, onClose, onSaved, ocrModel, c
             </div>
             <div className="text-[11px] font-mono text-px-text-dim">
               预估：约 {est.llmCalls} 次模型调用 · 输入 ~{fmtK(est.inputTokens)} tokens + 输出 ~{fmtK(est.outputTokens)} tokens · 约 {est.estMinutes} 分钟（实际费用取决于所配置模型单价）
+            </div>
+            <div className="text-[11px] font-mono text-px-text-dim">
+              产物：整书理解 → 五视角候选池 → V1/V2/V3 三重校验 → 知识单元与关系图；候选和淘汰记录均保留，不生成 Skill。
             </div>
             <div className="flex gap-2">
               <button onClick={handleDeepReadStart} className="pixel-btn-primary py-1.5">开始精读</button>

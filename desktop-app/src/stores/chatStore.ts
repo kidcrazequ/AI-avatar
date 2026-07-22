@@ -4566,6 +4566,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       systemBlocks.push({ text: dynamicSystemText })
     }
 
+    // 职场路线卡确定性召回（问题1·B）：命中触发级路线卡时，把"任务前上下文包"注入 systemBlocks，
+    // 让分身按该路线的必读文件/读法顺序/雷区提示作答，不再赌它自觉调 build_palace_context_card。
+    // best-effort：未命中/出错静默跳过；不标 cacheable（卡片随消息变，缓存反而拖累前缀命中）；
+    // 带图片、隐藏修复轮跳过（前者多针对图片，后者对用户不可见）。
+    if (!_hiddenRepairEarly && !(images && images.length > 0)) {
+      try {
+        const recalled = await window.electronAPI.palace.recallForMessage(avatarId, content)
+        if (recalled && !isStale()) {
+          systemBlocks.push({
+            text:
+              `\n\n[职场·路线卡预载 · ${recalled.roomName}]\n` +
+              `本轮任务命中职场路线卡，已预载"任务前上下文包"。请据此按该路线的必读文件 / 读法顺序 / ` +
+              `雷区提示作答；如需更多素材再调用相应工具。\n\n${recalled.card}`,
+          })
+          window.electronAPI.logEvent(
+            'info',
+            'palace-recall-fired',
+            `conv=${conversationId} room=${recalled.roomId} score=${recalled.score}`,
+          )
+        }
+      } catch (palaceErr) {
+        window.electronAPI.logEvent(
+          'warn',
+          'palace-recall-failed',
+          palaceErr instanceof Error ? palaceErr.message : String(palaceErr),
+        )
+      }
+    }
+
     // apiMessages 不再包含 role=system —— Provider 会优先采用 options.systemBlocks
     //
     // thinking 模型（DeepSeek-Reasoner 等）的严格校验：服务端要求历史里**所有** assistant

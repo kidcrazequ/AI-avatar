@@ -93,6 +93,31 @@ describe('tool-router palace tools', () => {
     assert.ok(parsed.matches[0]!.score > 0)
   })
 
+  it('recallPalaceForMessage 命中触发词时返回上下文卡（确定性召回·问题1·B）', async () => {
+    const router = new ToolRouter(avatarsRoot)
+    // "帮我写周报" 命中触发词 "写周报"（matcher 记 ≥80），应召回 weekly-report 并带上下文卡
+    const recalled = await router.recallPalaceForMessage(AVATAR_ID, '帮我写周报')
+    assert.ok(recalled, '触发词命中应返回非 null')
+    assert.equal(recalled!.roomId, 'weekly-report')
+    assert.ok(recalled!.score >= 80, `触发级命中分值应 ≥80，实际 ${recalled!.score}`)
+    assert.match(recalled!.card, /Palace 任务前上下文包/)
+    assert.match(recalled!.card, /周报路线/)
+  })
+
+  it('recallPalaceForMessage 仅零散提及路线关键词时不召回（避免误触发）', async () => {
+    const router = new ToolRouter(avatarsRoot)
+    // "周报制度太烦了" 只是关键词命中（分值 <80），与真实"写周报"意图同为弱匹配、
+    // 无法靠分值区分，因此确定性召回刻意不在触发词级以下开火，避免注入无关上下文
+    const recalled = await router.recallPalaceForMessage(AVATAR_ID, '我们组的周报制度太烦了')
+    assert.equal(recalled, null, '仅零散关键词不应召回')
+  })
+
+  it('recallPalaceForMessage 完全无关任务 / 空任务返回 null', async () => {
+    const router = new ToolRouter(avatarsRoot)
+    assert.equal(await router.recallPalaceForMessage(AVATAR_ID, '今天天气不错'), null)
+    assert.equal(await router.recallPalaceForMessage(AVATAR_ID, '   '), null)
+  })
+
   it('build_palace_context_card 生成任务前上下文包', async () => {
     const router = new ToolRouter(avatarsRoot)
     const result = await router.execute(AVATAR_ID, {

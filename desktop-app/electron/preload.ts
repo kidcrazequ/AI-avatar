@@ -296,6 +296,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('standing-orders:count', avatarId),
   palace: {
     getOverview: (avatarId: string) => ipcRenderer.invoke('palace:get-overview', avatarId),
+    /** 职场路线卡确定性召回（问题1·B）：命中触发级路线卡时返回上下文卡，否则 null */
+    recallForMessage: (avatarId: string, task: string) =>
+      ipcRenderer.invoke('palace:recall-for-message', avatarId, task),
     addCommitment: (avatarId: string, input: {
       title: string
       promise: string

@@ -3267,6 +3267,13 @@ wrapHandler('palace:get-overview', async (_, avatarId: string) => {
   }
 })
 
+// 职场路线卡确定性召回（问题1·B）：每轮消息前预检，命中触发级路线卡时返回"任务前上下文包"，
+// 由渲染层（chatStore）注入 systemBlocks，替代"赌模型自觉调 build_palace_context_card"。
+// 只读、best-effort：无路线卡 / 未命中 / 出错均返回 null，绝不阻断对话。
+wrapHandler('palace:recall-for-message', async (_, avatarId: string, task: string) => {
+  return toolRouter.recallPalaceForMessage(String(avatarId ?? ''), typeof task === 'string' ? task : '')
+})
+
 // 「职场」档案编辑：target 用字面量白名单（不接受任何路径成分）。
 // 限长校验已下沉到 core 的 writePalaceProfile/writePalaceCompany（单一闸口）。
 wrapHandler('palace:write-profile', async (_, avatarId: string, target: string, content: string) => {

@@ -1000,6 +1000,11 @@ interface ElectronAPI {
   countStandingOrders: (avatarId: string) => Promise<number>
   palace: {
     getOverview: (avatarId: string) => Promise<PalaceOverviewDTO>
+    /** 职场路线卡确定性召回（问题1·B）：命中触发级路线卡返回上下文卡，未命中/出错为 null */
+    recallForMessage: (
+      avatarId: string,
+      task: string,
+    ) => Promise<{ roomId: string; roomName: string; score: number; card: string } | null>
     addCommitment: (
       avatarId: string,
       input: {

@@ -2871,6 +2871,61 @@ ${content}` }
   }
 
   /**
+   * 职场路线卡确定性召回（问题1·B）。
+   *
+   * 与 match_palace_rooms / build_palace_context_card 工具不同：这是给"每轮消息前"的
+   * 确定性预检用的——用户消息命中触发级路线卡（score ≥ minScore）时，直接构建"任务前
+   * 上下文包"返回，由渲染层注入 systemBlocks，不再依赖模型自觉调工具。
+   *
+   * 召回是纯增益：无路线卡 / 未命中 / 出错都返回 null，绝不阻断对话。
+   * minScore 默认 80 = 至少一个触发词子串/精确命中（matcher 里 trigger 命中记 80/120，
+   * 路线名/关键词命中分值更低），确保只在真正命中路线时召回，不被零散关键词误触发。
+   */
+  async recallPalaceForMessage(
+    avatarId: string,
+    task: string,
+    minScore = 80,
+  ): Promise<{ roomId: string; roomName: string; score: number; card: string } | null> {
+    try {
+      const t = typeof task === 'string' ? task.trim() : ''
+      if (!t) return null
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      if (rooms.length === 0) return null
+      // matchPalaceRooms 是主进程事件循环上的同步计算，且 extractMatchTerms 的 n-gram
+      // 数量随文本长度增长。触发词是短语、通常在请求开头，截断头部 200 字既够召回、
+      // 又把每条消息的同步开销钉成常量，避免长消息拖慢发送。
+      const matchTask = t.length > 200 ? t.slice(0, 200) : t
+      const matches = matchPalaceRooms(rooms, matchTask, { limit: 3 })
+      const top = matches[0]
+      if (!top || top.score < minScore) return null
+
+      const [profile, company, commitments, inbox, extras] = await Promise.all([
+        readPalaceProfile(this.avatarsPath, avatarId),
+        readPalaceCompany(this.avatarsPath, avatarId),
+        readPalaceCommitments(this.avatarsPath, avatarId),
+        readPalaceInbox(this.avatarsPath, avatarId),
+        listPalaceContextExtras(this.avatarsPath, avatarId, t),
+      ])
+      const card = buildPalaceContextCard({
+        task: t,
+        room: top.room,
+        matches,
+        profile,
+        company,
+        commitments,
+        inbox,
+        peopleProfiles: extras.peopleProfiles,
+        materials: extras.materials,
+      })
+      return { roomId: top.room.id, roomName: top.room.name, score: Number(top.score.toFixed(2)), card }
+    } catch {
+      // 召回失败静默降级：不能因为路线卡读取异常就中断用户这轮对话
+      return null
+    }
+  }
+
+  /**
    * write_palace_room：创建或更新一张 Palace 路线卡（palace/rooms/<id>.md）。
    *
    * 持久写入，会改变分身的任务路由。只在用户明确要“把这类任务的流程固化成路线卡”，

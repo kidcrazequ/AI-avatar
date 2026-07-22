@@ -9,7 +9,7 @@ import L3EventsPanel from './L3EventsPanel'
 import AskQuestionCard from './AskQuestionCard'
 import { ModelConfig, getModelTier, type ModelTier } from '../services/llm-service'
 import type { DocumentAttachment } from '../services/chat-types'
-import { localDateString } from '@soul/core/browser'
+import { localDateString, normalizeIntentLocal } from '@soul/core/browser'
 // v19：ToolCallTimeline 不再由 ChatWindow 直接渲染（挪到了 MessageBubble 内）；
 // 保留组件文件供 MessageBubble 引用即可。
 import EventViewer from './EventViewer'
@@ -20,6 +20,9 @@ interface PendingAskQuestion {
   options: string[]
   allowCustom: boolean
 }
+
+/** 澄清闸门（问题2·A）：逃生口选项——用户不想澄清时一键放行，让分身直接按理解回答 */
+const CLARIFY_ESCAPE_LABEL = '直接按你理解回答'
 
 /** 九层重构 #17 switch_mode：模式徽章颜色映射 */
 const MODE_BADGE_STYLE: Record<'agent' | 'plan' | 'ask', { label: string; cls: string }> = {
@@ -142,6 +145,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   }
   /** 九层重构 #12 ask_question：当前等待用户回答的问题 */
   const [pendingAsk, setPendingAsk] = useState<PendingAskQuestion | null>(null)
+  /** 澄清闸门（问题2·A）：欠定义×高代价问题触发的澄清卡片；original 保留原始提问，答完合并重发 */
+  const [pendingClarify, setPendingClarify] = useState<{ question: string; options: string[]; original: string } | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const [initializedConversationId, setInitializedConversationId] = useState<string | null>(null)
   const [isRunningTests, setIsRunningTests] = useState(false)
@@ -206,6 +211,8 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     // 注入到 B（handleSendMessage 闭包到当前 conversationId）——跨会话"幽灵上下文"泄漏
     // eslint-disable-next-line react-hooks/set-state-in-effect -- conversationId 变化时清旧卡片，合法的 effect 联动
     setPendingAsk(null)
+    // 澄清闸门卡片同样按会话隔离：切走时清掉，避免在 B 会话回答 A 的澄清、把答案注入 B
+    setPendingClarify(null)
     const unsubscribe = window.electronAPI.onChatAskQuestion((payload) => {
       if (payload.conversationId !== conversationId) return
       setPendingAsk({
@@ -445,12 +452,33 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     images?: string[],
     attachments?: AttachmentRef[],
     inlineFiles?: Array<{ name: string; ext: string; mime: string; text: string; persist?: boolean }>,
+    opts?: { skipClarify?: boolean },
   ) => {
     // 发送链路观测点 #2：MessageInput.onSend 是否到达 ChatWindow
     window.electronAPI.logEvent('info', 'ui-handle-send-message', `contentLen=${content.length} conv=${conversationId}`)
     if (content.trim() === '/test-self') {
       await handleTestSelf()
       return
+    }
+    // 澄清闸门（问题2·A）：欠定义×高代价的纯文本提问，先弹澄清卡片、不进 LLM。
+    // 只拦用户自然语言输入——跳过：澄清已解决的重发(skipClarify)、ask_question 回填([...])、
+    // 斜杠命令(/...)、以及带图片/附件的消息（那类多半针对附件，且拦截会丢附件）。
+    const hasAttachedContext = !!(images?.length || attachments?.length || inlineFiles?.length)
+    if (!opts?.skipClarify && !hasAttachedContext && !content.startsWith('[') && !content.trim().startsWith('/')) {
+      const frame = normalizeIntentLocal(content)
+      if (frame.needsClarification) {
+        window.electronAPI.logEvent(
+          'info',
+          'clarify-gate-fired',
+          `conv=${conversationId} entity=${frame.entity ?? ''} conf=${frame.confidence}`,
+        )
+        setPendingClarify({
+          question: frame.clarificationQuestion ?? '你想聚焦哪一方面？选一个我直接答。',
+          options: frame.clarificationOptions,
+          original: content,
+        })
+        return
+      }
     }
     // 自动注入 project 上下文（prepend 到 inlineFiles，让分身在 system / user prompt 拼装时看到）。
     // persist:false——项目 README/notes 每轮重新加载并拼装，不进用户消息 snapshot；
@@ -796,6 +824,28 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
             void handleSendMessage(`[ask_question answer] ${answer}`)
           }}
           onCancel={() => setPendingAsk(null)}
+        />
+      )}
+
+      {/* 澄清闸门（问题2·A）：欠定义×高代价问题的澄清卡片。选项末尾附"逃生口"，
+          allowCustom 让用户直接改写成聚焦问题（教学回声）。答完把原问题与聚焦点合并重发。 */}
+      {pendingClarify && (
+        <AskQuestionCard
+          question={pendingClarify.question}
+          options={[...pendingClarify.options, CLARIFY_ESCAPE_LABEL]}
+          allowCustom={true}
+          onAnswer={(answer) => {
+            const original = pendingClarify.original
+            setPendingClarify(null)
+            const merged = answer === CLARIFY_ESCAPE_LABEL ? original : `${original}（我想聚焦：${answer}）`
+            void handleSendMessage(merged, undefined, undefined, undefined, { skipClarify: true })
+          }}
+          onCancel={() => {
+            const original = pendingClarify.original
+            setPendingClarify(null)
+            // 取消 = 放行原问题，不丢失用户输入
+            void handleSendMessage(original, undefined, undefined, undefined, { skipClarify: true })
+          }}
         />
       )}
 

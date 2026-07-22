@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, detectReasoning, type SystemBlock } from '../services/llm-service'
-import { runPreMessageStages } from '../services/message-pipeline'
-import { palaceRecallStage } from '../services/pre-message-stages'
+import { runPreMessageStages, type MessageContext } from '../services/message-pipeline'
+import { palaceRecallStage, boundaryGuardrailStage } from '../services/pre-message-stages'
 import {
   MEMORY_CHAR_LIMIT,
   localDateString,
@@ -10,7 +10,6 @@ import {
   evaluateConversationModeToolPolicy,
   detectSelfDescriptionIntent,
   buildSelfDescriptionAnswer,
-  normalizeIntentLocal,
   isContextOverflowError,
   buildAgentGatewayRunPlan,
   buildBehaviorModePromptBlock,
@@ -3510,18 +3509,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const _hiddenRepairEarly = options?.hiddenRepair === true
     // 发送链路观测点 #3：store.sendMessage 是否到达（在任何守卫之前）
     window.electronAPI.logEvent('info', 'store-sendmessage-entry', `conv=${conversationId} contentLen=${content.length} hiddenRepair=${_hiddenRepairEarly}`)
-    const earlyBoundaryGuardrail = _hiddenRepairEarly ? undefined : normalizeIntentLocal(content).guardrail
+    // 边界护栏（AstrBot 借鉴阶段 1b）：迁成早期短路管线——命中即回定式话术、不进 LLM。
+    // systemBlocks 此时尚未构建，短路 stage 不增补它，传 [] 即可；hiddenRepair 轮跳过。
+    const earlyGate: MessageContext = {
+      conversationId,
+      avatarId,
+      content,
+      systemBlocks: [],
+      hasAttachments: !!(images && images.length > 0),
+      outcome: null,
+    }
+    if (!_hiddenRepairEarly) {
+      await runPreMessageStages(earlyGate, [boundaryGuardrailStage()])
+    }
+    const boundaryOutcome = earlyGate.outcome?.kind === 'canned-answer' ? earlyGate.outcome : null
     if (get().isLoading && !_hiddenRepairEarly) {
       window.electronAPI.logEvent('warn', 'store-sendmessage-blocked', 'isLoading=true，本次发送被静默丢弃')
       await invokeProxyComplete({ ok: false, error: 'Soul 正有一条对话进行中（isLoading）' })
       return
     }
-    if (earlyBoundaryGuardrail) {
+    if (boundaryOutcome) {
       const requestId = ++chatRequestSeq
       const requestStartedAt = Date.now()
       const userMessageId = nextMessageId()
       const assistantMsgId = nextMessageId()
-      const answer = earlyBoundaryGuardrail.response
+      const answer = boundaryOutcome.text
       const shouldRenderLocally = proxyOpts?.proxyJobId === undefined
       const stateBeforeBoundary = get()
       const baseMessages = stateBeforeBoundary.currentConversationId === conversationId
@@ -3659,7 +3671,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           if (value !== 'true') return
           return window.electronAPI.logPerfEvent(
             'sendMessage:success',
-            `${perfTag} (+${Date.now() - requestStartedAt}ms) via-early-boundary-guardrail type=${earlyBoundaryGuardrail.type}`,
+            `${perfTag} (+${Date.now() - requestStartedAt}ms) via-early-boundary-guardrail type=${boundaryOutcome.sourceType}`,
           )
         })
         .catch(() => undefined)

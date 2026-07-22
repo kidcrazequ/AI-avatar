@@ -5,14 +5,36 @@
  * stage。每个 stage 的内部逻辑保持与迁移前**逐行等价**（KISS / inline-first），只是从
  * 巨函数里搬出来，由 runPreMessageStages 按序编排。
  *
- * 迁移进度：
- *   - [x] palace 路线卡召回（增补 systemBlocks）
- *   - [ ] 边界护栏（短路 canned-answer）
- *   - [ ] 澄清闸门（短路 clarify）
- *   - [ ] memory nudge（改写 content）
+ * 迁移进度 / 落点判断（soul 的拦截器不同质，不强行统一——对齐 AstrBot AGENTS.md 的
+ * KISS/inline-first：只把真正契合管线模型的迁进来）：
+ *   - [x] palace 路线卡召回 —— 增补 systemBlocks，天然是增补型 stage。
+ *   - [x] 边界护栏 —— 短路型 stage（置 canned-answer outcome）；那 ~140 行渲染/存库/
+ *         自动标题是"结果处理"，深耦 sendMessage 局部，仍留调用方按 outcome 处理。
+ *   - [—] memory nudge —— 不迁：它改写的是**多模态外发内容**(nudgedUserContent，在
+ *         chart/@web 累加簇里)，与本管线的 systemBlocks 目标语义错配，且属非默认路径。
+ *   - [—] 澄清闸门 —— 不迁：它在 ChatWindow（UI 层），本就不在 sendMessage 里、已解耦；
+ *         卡片驱动属 UI 关注点，移进 store 反而把 UI 逻辑耦合回来。
  */
 
+import { normalizeIntentLocal } from '@soul/core/browser'
 import type { MessageStage } from './message-pipeline'
+
+/**
+ * 边界护栏（实现隐私 / 检索边界 / 知识管线边界）。命中即置 canned-answer outcome 短路，
+ * 由调用方回一段固定话术、不进 LLM。迁自 sendMessage 内联的 earlyBoundaryGuardrail。
+ * sourceType 保留护栏子类型（implementation_privacy 等）供遥测。
+ */
+export function boundaryGuardrailStage(): MessageStage {
+  return {
+    name: 'boundary-guardrail',
+    run: (ctx) => {
+      const guardrail = normalizeIntentLocal(ctx.content).guardrail
+      if (guardrail) {
+        ctx.outcome = { kind: 'canned-answer', text: guardrail.response, sourceType: guardrail.type }
+      }
+    },
+  }
+}
 
 /**
  * 职场路线卡确定性召回（问题1·B）。命中触发级路线卡时，把"任务前上下文包"增补进

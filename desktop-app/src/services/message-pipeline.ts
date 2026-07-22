@@ -21,7 +21,7 @@ import type { SystemBlock } from './llm-service'
  * - clarify：澄清闸门——弹一张澄清卡片，等用户选定后合并重发。
  */
 export type PipelineOutcome =
-  | { kind: 'canned-answer'; text: string }
+  | { kind: 'canned-answer'; text: string; sourceType?: string }
   | { kind: 'clarify'; question: string; options: string[]; original: string }
 
 /**

@@ -85,3 +85,4 @@ avatars/*/knowledge/_raw/
 # 知识库衍生缓存（embedding 索引等），可由 _raw/ + .md 重新生成，无需入库
 expert-packs/*/knowledge/_index/
 avatars/*/knowledge/_index/
+outputs/

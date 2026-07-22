@@ -319,6 +319,16 @@ function App() {
     return () => window.removeEventListener('soul-palace-write', handler)
   }, [showToast, refreshPalaceBadge, loadAvatarConfig, activeAvatarId, activeProjectId])
 
+  // 记忆写入（memory_update 工具 / 后台复盘应用记忆）→ 静默重载分身配置，破冻结快照让本会话
+  // 下条消息即生效。记忆是后台/自动写入，不弹 toast，避免噪声。
+  useEffect(() => {
+    const handler = () => {
+      if (activeAvatarId) void loadAvatarConfig(activeAvatarId, activeProjectId)
+    }
+    window.addEventListener('soul-memory-updated', handler)
+    return () => window.removeEventListener('soul-memory-updated', handler)
+  }, [loadAvatarConfig, activeAvatarId, activeProjectId])
+
   const loadModelConfigs = useCallback(async () => {
     const [
       chatApiKey, chatBaseUrl, chatModelName,

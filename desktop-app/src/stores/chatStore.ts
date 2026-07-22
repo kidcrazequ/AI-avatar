@@ -5521,6 +5521,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 tc.function.name === 'update_palace_commitment'
               window.dispatchEvent(new CustomEvent('soul-palace-write', { detail: { tool: tc.function.name, reloadPrompt } }))
             }
+            // memory_update 显式写长期记忆 → 同破冻结快照：App 静默重载 systemPrompt，本会话下条即生效
+            if (toolOk && !wasSkipped && tc.function.name === 'memory_update') {
+              window.dispatchEvent(new CustomEvent('soul-memory-updated'))
+            }
           }
           const truncatedResult = truncateToolResultForContext(tc.function.name, resultText)
           if (truncatedResult.truncated) {

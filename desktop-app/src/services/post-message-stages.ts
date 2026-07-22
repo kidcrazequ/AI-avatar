@@ -59,6 +59,8 @@ export function memoryReviewStage(): PostMessageStage {
         const r = await window.electronAPI.runMemoryReview(ctx.avatarId, ctx.conversationId, apiKey, baseUrl)
         if (r.ok && (r.applied ?? 0) > 0) {
           window.electronAPI.logEvent('info', 'memory-review-applied', `conv=${ctx.conversationId} applied=${r.applied} rejected=${r.rejected ?? 0}`)
+          // 后台复盘真的写入了记忆 → 破冻结快照：App 静默重载 systemPrompt，本会话下条即生效（不必等新会话）
+          window.dispatchEvent(new CustomEvent('soul-memory-updated'))
         } else if (!r.ok && r.reason && !r.reason.includes('未达')) {
           // "未达复盘轮数"是常态跳过，不记日志；真实失败才 warn
           window.electronAPI.logEvent('warn', 'memory-review', r.reason)

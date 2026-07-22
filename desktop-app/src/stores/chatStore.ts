@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { LLMService, LLMMessage, LLMTool, ToolCall, ModelConfig, DEFAULT_CHAT_MODEL, DEFAULT_VISION_MODEL, detectReasoning, type SystemBlock } from '../services/llm-service'
-import { runPreMessageStages, type MessageContext } from '../services/message-pipeline'
+import { runPreMessageStages, runPostMessageStages, type MessageContext } from '../services/message-pipeline'
 import { palaceRecallStage, boundaryGuardrailStage } from '../services/pre-message-stages'
+import { episodeExtractStage, memoryReviewStage } from '../services/post-message-stages'
 import {
   MEMORY_CHAR_LIMIT,
   localDateString,
@@ -6250,54 +6251,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         console.error('[chatStore] 保存助手消息失败:', msg)
         window.electronAPI.logEvent('error', 'save-assistant-message-error', msg)
       }
-      // v17 Phase 2a：对话情景记忆 lazy 抽取触发（fire-and-forget）。
-      // 时机：每次成功完成一轮 assistant 回复后。如果消息条数 > 已有 episode.messageCount，
-      // 主进程会自动重抽，否则幂等跳过。避免阻塞 UI——所有失败仅 warn 不抛。
-      void (async () => {
-        try {
-          const [apiKey, baseUrl] = await Promise.all([
-            window.electronAPI.getSetting('chat_api_key').then(v => v ?? ''),
-            window.electronAPI.getSetting('chat_base_url').then(v => v ?? ''),
-          ])
-          if (!apiKey || !baseUrl) return // 用户没配 LLM 凭据，跳过
-          const r = await window.electronAPI.extractConversationEpisode(avatarId, conversationId, apiKey, baseUrl)
-          if (!r.ok && r.reason && !r.reason.includes('未变化')) {
-            // 真实失败才记 warn——"消息条数未变化"是正常跳过
-            window.electronAPI.logEvent('warn', 'extract-conversation-episode', r.reason)
-          }
-        } catch (extractErr) {
-          // 抽取失败绝不影响用户体验
-          const m = extractErr instanceof Error ? extractErr.message : String(extractErr)
-          window.electronAPI.logEvent('warn', 'extract-conversation-episode-throw', m)
-        }
-      })()
-
-      // A4（Hermes 借鉴）：N 轮一次后台记忆复盘（fire-and-forget）。
-      // 工程铁律：记忆写入/复盘永远不阻塞回复路径——回复已送达，这里异步跑；
-      // 未达 memory_review_turns（默认 10 用户轮）时主进程快速返回不调 LLM。
-      // 写入只落盘，不重载 systemPrompt（冻结快照，下个 session 生效）。
-      void (async () => {
-        try {
-          const reviewEnabled = (await window.electronAPI.getSetting('memory_review_enabled')) !== 'false'
-          if (!reviewEnabled) return
-          const [apiKey, baseUrl] = await Promise.all([
-            window.electronAPI.getSetting('chat_api_key').then(v => v ?? ''),
-            window.electronAPI.getSetting('chat_base_url').then(v => v ?? ''),
-          ])
-          if (!apiKey || !baseUrl) return // 未配 LLM 凭据，跳过
-          const r = await window.electronAPI.runMemoryReview(avatarId, conversationId, apiKey, baseUrl)
-          if (r.ok && (r.applied ?? 0) > 0) {
-            window.electronAPI.logEvent('info', 'memory-review-applied', `conv=${conversationId} applied=${r.applied} rejected=${r.rejected ?? 0}`)
-          } else if (!r.ok && r.reason && !r.reason.includes('未达')) {
-            // "未达复盘轮数"是常态跳过，不记日志；真实失败才 warn
-            window.electronAPI.logEvent('warn', 'memory-review', r.reason)
-          }
-        } catch (reviewErr) {
-          // 复盘失败绝不影响用户体验
-          const m = reviewErr instanceof Error ? reviewErr.message : String(reviewErr)
-          window.electronAPI.logEvent('warn', 'memory-review-throw', m)
-        }
-      })()
+      // 后处理管线（AstrBot 借鉴 · ⑧生命周期钩子地基）：回复完成后的 fire-and-forget 副作用
+      // （情景抽取 + N 轮记忆复盘）迁成 post-stage，与 pre-message 管线对称。逻辑逐行等价，
+      // 各 stage 立即启动、独立运行、互不阻塞。详见 docs/soul-extension-architecture.md。
+      runPostMessageStages(
+        { conversationId, avatarId },
+        [episodeExtractStage(), memoryReviewStage()],
+      )
 
       // ─── 写答案缓存（v14）─────────────────────────────────────────────
       // 只在常规对话写：cacheBypassed 路径（含 skipCache=true 的"重新生成"）跳过，

@@ -9,7 +9,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runPreMessageStages, type MessageContext, type MessageStage } from './message-pipeline'
+import { runPreMessageStages, runPostMessageStages, type MessageContext, type MessageStage, type PostMessageStage } from './message-pipeline'
 
 function baseCtx(overrides: Partial<MessageContext> = {}): MessageContext {
   return {
@@ -66,4 +66,28 @@ test('async stage 被正确 await', async () => {
   const slow: MessageStage = { name: 'slow', run: async (ctx) => { await Promise.resolve(); ctx.content = 'changed' } }
   const ctx = await runPreMessageStages(baseCtx(), [slow])
   assert.equal(ctx.content, 'changed')
+})
+
+// ── post-message 管线：fire-and-forget、无短路、互不阻塞 ──
+test('post: 所有 stage 都启动（无短路）', () => {
+  const ran: string[] = []
+  const mk = (n: string): PostMessageStage => ({ name: n, run: () => { ran.push(n) } })
+  runPostMessageStages({ conversationId: 'c', avatarId: 'a' }, [mk('x'), mk('y'), mk('z')])
+  assert.deepEqual(ran, ['x', 'y', 'z'])
+})
+
+test('post: 一个 stage 同步抛出，不影响后续 stage（互不阻塞）', () => {
+  const ran: string[] = []
+  const boom: PostMessageStage = { name: 'boom', run: () => { ran.push('boom'); throw new Error('x') } }
+  const ok: PostMessageStage = { name: 'ok', run: () => { ran.push('ok') } }
+  // runner 不应把同步抛出冒泡出来，且后续 stage 仍执行
+  assert.doesNotThrow(() => runPostMessageStages({ conversationId: 'c', avatarId: 'a' }, [boom, ok]))
+  assert.deepEqual(ran, ['boom', 'ok'])
+})
+
+test('post: async stage 的 rejection 被吞掉，不产生未处理 rejection', async () => {
+  const rejected: PostMessageStage = { name: 'rej', run: async () => { throw new Error('async fail') } }
+  // 不抛、不产生 unhandledRejection（runner 已 .catch）
+  assert.doesNotThrow(() => runPostMessageStages({ conversationId: 'c', avatarId: 'a' }, [rejected]))
+  await new Promise(r => setTimeout(r, 5)) // 让微任务跑完，确认无 unhandledRejection
 })

@@ -64,3 +64,37 @@ export async function runPreMessageStages(
   }
   return ctx
 }
+
+/**
+ * LLM 回复完成后的后处理上下文（记忆复盘 / 情景抽取等 fire-and-forget 副作用）。
+ * 这些副作用围绕会话本身（经 IPC 操作），只需 conversationId / avatarId。
+ */
+export interface PostMessageContext {
+  readonly conversationId: string
+  readonly avatarId: string
+}
+
+/** 一个 LLM 回复后的后处理步骤。 */
+export interface PostMessageStage {
+  readonly name: string
+  run(ctx: PostMessageContext): void | Promise<void>
+}
+
+/**
+ * fire-and-forget 执行后处理 stage：回复已送达用户，后处理绝不阻塞或中断彼此，也不阻塞
+ * 调用方。每个 stage 立即启动、独立运行；stage 自身负责 try/catch 与日志（与迁移前的
+ * `void (async () => {})()` 块一致），runner 只做防御性兜底吞掉未捕获的 rejection。
+ *
+ * 与 pre-message 的区别：post 无短路语义——所有 stage 都各跑各的。
+ */
+export function runPostMessageStages(
+  ctx: PostMessageContext,
+  stages: readonly PostMessageStage[],
+): void {
+  for (const stage of stages) {
+    try {
+      const maybe = stage.run(ctx)
+      if (maybe instanceof Promise) void maybe.catch(() => { /* stage 自身已兜底；防御性吞掉 */ })
+    } catch { /* 同步抛出的防御性兜底 */ }
+  }
+}

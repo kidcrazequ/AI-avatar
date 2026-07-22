@@ -35,11 +35,16 @@
 
 ## 分期
 
-- **P0 · 管线双半边**（✅ 本次）：pre + post message stages 落地，soul 自己的护栏/palace/记忆/情景已注册进去。这是钩子地基。
-- **P1 · 补钩子点（⑧核心）**：加 `on_llm_request` / `on_llm_response`（改 ProviderRequest / LLMResponse），与已有 `POST_TOOL_USE` 合成一套完整生命周期钩子。soul 自身行为继续内聚进钩子（内部可组合、可开关）。**非投机、纯收益**。
-- **P2 · MessageSource 接口（⑦地基）**：把 proxy-server 重构成第一个正式 `MessageSource`，UI 为第二个；`source` 进入管线上下文，stage 可按来源分流（如 IM 无卡片 UI → 跳过澄清）。
-- **P3 · 插件加载器（⑧）**：从 `plugins/` 发现并加载扩展，注册进 P1 的钩子；隔离/热重载/metadata（借鉴 AstrBot `Star.__init_subclass__` + watchfiles，但需解决"Electron 里代码插件跑在哪、安全边界"）。
-- **P4 · IM 适配器（⑦）**：QQ/微信/飞书 各实现 `MessageSource`，接 P2 接口。每个平台一期（SDK/webhook/鉴权/消息转换/会话映射）。
+- **P0 · 管线双半边**（✅ 已落地）：pre + post message stages，soul 自己的护栏/palace/记忆/情景已注册进去。这是钩子地基。
+  - **重要澄清**：pre-message 管线（LLM 前改 systemBlocks/content、可短路）≈ `on_llm_request`；post-message 管线（回复后）≈ `on_llm_response` 的会话级等价。**消息粒度的 LLM 请求/响应钩子，P0 已覆盖。**
+- **P1 · per-round 钩子（⑧·低优先，暂缓）**：在工具循环里每轮 LLM 调用前后的钩子。**降级为暂缓**——它深缠在流式 `runRound` 闭包里、无现成 soul 行为可迁、且少有插件需要每轮拦截；现在加 = 造没消费者的投机基建。**待某个具体插件确实需要每轮拦截时再做。**
+- **P2 · MessageSource 接口（⑦地基）**：把 proxy-server 重构成第一个正式 `MessageSource`，UI 为第二个。**注意**：只有一个真实非 UI 适配器（proxy）时，这个接口也偏投机——最好由"要接第一个 IM 平台"驱动设计（有真实客户端才能把接口设计对）。
+- **P3 · 插件加载器（⑧）**：从 `plugins/` 发现并加载扩展、注册进钩子；隔离/热重载/metadata（借鉴 AstrBot `Star.__init_subclass__` + watchfiles，需先定"Electron 里代码插件跑在哪、安全边界"）。
+- **P4 · IM 适配器（⑦）**：QQ/微信/飞书 各实现 `MessageSource`，接 P2。每平台一期。
+
+## 关键工程原则：先有扩展、再造扩展点
+
+P0 之所以非投机，是因为它**迁移了 soul 已有行为**（palace/记忆），有真实内容。P1/P2 及以后若在**没有具体消费者**时先造钩子点/接口，容易把接口设计错（有真实客户端才能设计对）。因此**下一步不该是继续造空基建，而是选一个具体消费者端到端做出来**——它自然会把 P1/P2 的设计逼成对的。
 
 ## 原则
 - 对齐 AstrBot AGENTS.md 的 KISS/inline-first：只在接缝处解耦，stage/hook 内部保持内联；不为"将来可能用"提前造投机字段。

@@ -1374,6 +1374,22 @@ const AVATAR_TOOLS: LLMTool[] = [
     },
   },
   {
+    // Palace 入职：写职业画像 / 公司情况（补齐模型侧唯一缺的画像写入，unblocks 画像注入）
+    type: 'function',
+    function: {
+      name: 'write_palace_profile',
+      description: '写入职业画像（profile.md）或公司情况（company.md）——分身对“我是谁/角色/风格偏好”与“公司/组织/关键人”的持久认知。这是 Palace 唯一稳定注入 system prompt 的内容：填了它，分身每个新会话都记得用户的职场底色。整文件替换语义（会覆盖原内容，更新时请保留仍有效的部分；不确定原内容时先用 build_palace_context_card 看当前画像）。持久写入，桌面端触发用户确认，Plan 模式不可用。典型场景：用户首次用职场功能、画像还空时，你先访谈几句（当前角色/公司/常做任务/沟通风格），再据此写入。',
+      parameters: {
+        type: 'object',
+        properties: {
+          target: { type: 'string', enum: ['profile', 'company'], description: 'profile=职业画像 / company=公司情况' },
+          content: { type: 'string', description: '完整 Markdown 内容（整文件替换，不是追加）' },
+        },
+        required: ['target', 'content'],
+      },
+    },
+  },
+  {
     // Palace P2：读取承诺闭环账本
     type: 'function',
     function: {

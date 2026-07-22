@@ -63,6 +63,8 @@ import {
   updatePalaceCommitmentEntry,
   updatePalaceInboxItemEntry,
   upsertPalaceRoom,
+  writePalaceProfile,
+  writePalaceCompany,
 } from './palace/store'
 import type { PalaceRoomInput } from './palace/room'
 import type {
@@ -1393,6 +1395,8 @@ export class ToolRouter {
           result = await this.buildPalaceContextCardTool(avatarId, args); break
         case 'write_palace_room':
           result = await this.writePalaceRoomTool(avatarId, args); break
+        case 'write_palace_profile':
+          result = await this.writePalaceProfileTool(avatarId, args); break
         case 'list_palace_commitments':
           result = await this.listPalaceCommitmentsTool(avatarId, args); break
         case 'add_palace_commitment':
@@ -2931,6 +2935,45 @@ ${content}` }
    * 持久写入，会改变分身的任务路由。只在用户明确要“把这类任务的流程固化成路线卡”，
    * 或已把路线卡草案展示给用户并得到确认后调用。
    */
+  /**
+   * write_palace_profile：写入职业画像 profile.md 或公司情况 company.md（整文件替换）。
+   *
+   * 补齐 palace 的关键缺口——此前模型侧无任何工具能写画像/公司，只能用户在面板手填；而画像
+   * 是 palace 唯一稳定注入 system prompt 的内容，用户不填→注入永远为空→palace 半瘫。有了它，
+   * 分身可在用户首次用职场功能时访谈几句、据此写入，让"职场底色"跨会话生效。
+   *
+   * 整文件替换：更新时调用方应保留仍有效的部分。持久写入，桌面端灰区确认、Plan 模式禁写。
+   */
+  private async writePalaceProfileTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const target = this.optionalTrimmedString(args.target)
+      const content = typeof args.content === 'string' ? args.content : ''
+      if (target !== 'profile' && target !== 'company') {
+        return { content: '', error: "target 必须是 'profile'（职业画像）或 'company'（公司情况）" }
+      }
+      if (!content.trim()) {
+        return { content: '', error: '缺少 content 参数（完整 Markdown 内容，整文件替换）' }
+      }
+      if (target === 'profile') await writePalaceProfile(this.avatarsPath, avatarId, content)
+      else await writePalaceCompany(this.avatarsPath, avatarId, content)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          target,
+          chars: content.length,
+          note: '已写入落盘；下个会话装配 system prompt 时注入生效（冻结快照语义）',
+        }, null, 2),
+      }
+    } catch (err) {
+      // 超字符预算等会在此转成 error 返回（assertProfileContentWithinCap 抛出）
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
   private async writePalaceRoomTool(
     avatarId: string,
     args: Record<string, unknown>,

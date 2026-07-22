@@ -54,6 +54,7 @@ export const PLAN_MODE_BLOCKED_TOOL_NAMES: ReadonlySet<string> = new Set([
   'add_palace_inbox_item',
   'update_palace_inbox_item',
   'write_palace_room',
+  'write_palace_profile',
   // A4 有界记忆原子编辑同理：Plan 模式不落盘长期记忆（session_search 只读不在列）。
   'memory_update',
 ])
@@ -93,6 +94,7 @@ export const GREY_ZONE_TOOL_NAMES: ReadonlySet<string> = new Set([
   'add_palace_commitment',
   'update_palace_commitment',
   'write_palace_room',
+  'write_palace_profile',
 ])
 
 const MODE_EXEMPT_TOOL_NAMES: ReadonlySet<string> = new Set(['switch_mode'])

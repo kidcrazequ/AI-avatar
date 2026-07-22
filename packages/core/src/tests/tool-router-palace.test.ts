@@ -13,6 +13,8 @@ import {
   ToolRouter,
   ensurePalaceWorkspace,
   makeDefaultPalaceRoom,
+  readPalaceProfile,
+  readPalaceCompany,
   writePalaceCommitments,
   writePalaceCompany,
   writePalaceInbox,
@@ -284,6 +286,34 @@ describe('tool-router palace tools', () => {
     })
     const againJson = JSON.parse(again.content) as { action: string }
     assert.equal(againJson.action, 'updated')
+  })
+
+  it('write_palace_profile 写入画像/公司并可读回（补齐模型侧画像写入）', async () => {
+    const router = new ToolRouter(avatarsRoot)
+    const wrote = await router.execute(AVATAR_ID, {
+      name: 'write_palace_profile',
+      arguments: { target: 'profile', content: '# Profile\n\n当前负责储能项目周报，风格：结论先行。' },
+    })
+    assert.equal(wrote.error, undefined)
+    const wroteJson = JSON.parse(wrote.content) as { ok: boolean; target: string }
+    assert.equal(wroteJson.ok, true)
+    assert.equal(wroteJson.target, 'profile')
+    assert.match(await readPalaceProfile(avatarsRoot, AVATAR_ID), /结论先行/)
+
+    const wroteCompany = await router.execute(AVATAR_ID, {
+      name: 'write_palace_profile',
+      arguments: { target: 'company', content: '# Company\n\n王总只看数字和风险。' },
+    })
+    assert.equal(wroteCompany.error, undefined)
+    assert.match(await readPalaceCompany(avatarsRoot, AVATAR_ID), /王总/)
+  })
+
+  it('write_palace_profile 非法 target / 空 content 报错', async () => {
+    const router = new ToolRouter(avatarsRoot)
+    const badTarget = await router.execute(AVATAR_ID, { name: 'write_palace_profile', arguments: { target: 'rooms', content: 'x' } })
+    assert.match(badTarget.error ?? '', /target/)
+    const emptyContent = await router.execute(AVATAR_ID, { name: 'write_palace_profile', arguments: { target: 'profile', content: '   ' } })
+    assert.match(emptyContent.error ?? '', /content/)
   })
 
   it('write_palace_room 缺 id 时报错', async () => {

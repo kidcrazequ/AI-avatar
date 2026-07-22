@@ -17,6 +17,21 @@ import { buildDefaultPalaceProfile } from './store'
 import { normalizePalaceCommitmentDocument } from './commitments'
 import type { PalaceCommitment, PalaceCommitmentDocument } from './types'
 
+/**
+ * 入职建档提示（画像为空时的一键入职 nudge）。
+ *
+ * 刻意**不**放进 buildPalacePromptInjection（session 级）——那会破坏"空 palace 分身
+ * 严格零注入、不占 token"的既定原则、且会对所有分身广播。改为挂在**每消息的 palace
+ * 召回**上：只有用户真做职场任务（命中路线卡）且画像还空时，才把这句附到上下文卡里，
+ * 提示分身在自然处提议帮用户建档（访谈 → write_palace_profile）。这是入职的自然时机，
+ * 上下文相关、不广播、自终止（画像一填就不再出现）。
+ */
+export const PALACE_ONBOARDING_NUDGE =
+  '---\n[职场·建档提示（画像为空）] 该分身还没有用户的职场画像（角色 / 公司 / 常做任务 / 沟通风格），' +
+  '每次都得从零猜处境。请在本次回复的自然处，简短提议帮用户花一分钟建档：问清关键几点、用户确认后调 ' +
+  'write_palace_profile(target=\'profile\' 或 \'company\') 写入——之后每个新会话都记得 TA 的职场底色。' +
+  '用户婉拒就跳过、照常办当前任务，别反复催。'
+
 /** 画像摘要注入的最大字符数（超出截断并标注）。 */
 export const PALACE_PROFILE_SUMMARY_MAX_CHARS = 600
 

@@ -32,6 +32,7 @@ import {
   type BoundedMemoryOp,
 } from './memory/bounded-store'
 import { buildPalaceContextCard } from './palace/context-card'
+import { hasSubstantivePalaceProfile, PALACE_ONBOARDING_NUDGE } from './palace/prompt-injection'
 import {
   PALACE_COMMITMENT_DIRECTIONS,
   PALACE_COMMITMENT_STATUSES,
@@ -2922,7 +2923,12 @@ ${content}` }
         peopleProfiles: extras.peopleProfiles,
         materials: extras.materials,
       })
-      return { roomId: top.room.id, roomName: top.room.name, score: Number(top.score.toFixed(2)), card }
+      // 一键入职 nudge：命中职场任务但画像还空 → 附一句建档提示（自然时机、上下文相关、
+      // 画像一填就不再出现）。不放 session 级注入，避免破坏"空 palace 零注入"原则。
+      const cardWithNudge = hasSubstantivePalaceProfile(profile)
+        ? card
+        : `${card}\n\n${PALACE_ONBOARDING_NUDGE}`
+      return { roomId: top.room.id, roomName: top.room.name, score: Number(top.score.toFixed(2)), card: cardWithNudge }
     } catch {
       // 召回失败静默降级：不能因为路线卡读取异常就中断用户这轮对话
       return null

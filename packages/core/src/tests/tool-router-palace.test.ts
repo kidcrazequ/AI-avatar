@@ -120,6 +120,23 @@ describe('tool-router palace tools', () => {
     assert.equal(await router.recallPalaceForMessage(AVATAR_ID, '   '), null)
   })
 
+  it('recall 时画像为空 → 上下文卡附一键入职建档提示', async () => {
+    await writePalaceProfile(avatarsRoot, AVATAR_ID, '') // 清空画像
+    const router = new ToolRouter(avatarsRoot)
+    const recalled = await router.recallPalaceForMessage(AVATAR_ID, '帮我写周报')
+    assert.ok(recalled, '命中路线卡')
+    assert.match(recalled!.card, /write_palace_profile/, '画像空时应提示分身用 write_palace_profile 帮用户建档')
+    assert.match(recalled!.card, /建档提示/)
+  })
+
+  it('recall 时画像已填 → 不附建档提示（避免反复催）', async () => {
+    // beforeEach 已写实质画像（"当前负责储能项目周报"）
+    const router = new ToolRouter(avatarsRoot)
+    const recalled = await router.recallPalaceForMessage(AVATAR_ID, '帮我写周报')
+    assert.ok(recalled)
+    assert.doesNotMatch(recalled!.card, /建档提示/, '画像已填不该再提示建档')
+  })
+
   it('build_palace_context_card 生成任务前上下文包', async () => {
     const router = new ToolRouter(avatarsRoot)
     const result = await router.execute(AVATAR_ID, {

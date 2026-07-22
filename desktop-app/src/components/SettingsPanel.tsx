@@ -373,8 +373,10 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   // 知识库 import 完成后自动重编译实体概念页（PAP 学习笔记借鉴，默认关，避免静默烧 LLM token）
   const [wikiAutoCompileOnImport, setWikiAutoCompileOnImport] = useState(false)
   const [wikiStatusMsg, setWikiStatusMsg] = useState('')
-  // 记忆设置状态
-  const [nudgeInterval, setNudgeInterval] = useState('5')
+  // 记忆设置状态（控制真实的后台复盘路径 memory_review_*，而非旧 nudge）
+  const [reviewEnabled, setReviewEnabled] = useState(true)            // memory_review_enabled，默认开
+  const [reviewTurns, setReviewTurns] = useState('10')               // memory_review_turns，每 N 轮复盘一次
+  const [memoryCredsMissing, setMemoryCredsMissing] = useState(false) // 未配置对话模型 → 自动记忆静默暂停
   const [memoryStatusMsg, setMemoryStatusMsg] = useState('')
   // 定时任务状态
   const [cronMemoryInterval, setCronMemoryInterval] = useState('0')
@@ -581,7 +583,7 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
       const [
         wikiSediment,
         wikiAutoCompileRaw,
-        nudge,
+        reviewTurnsRaw,
         cronConfigs,
         webEnabledRaw,
         tavilyKey,
@@ -599,10 +601,13 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         anthroBase,
         webFetchAllowPrivateRaw,
         perfLoggingRaw,
+        memoryReviewEnabledRaw,
+        memoryChatKey,
+        memoryChatBase,
       ] = await Promise.all([
         window.electronAPI.getSetting('wiki_auto_sediment'),
         window.electronAPI.getSetting('wiki_auto_compile_on_import'),
-        window.electronAPI.getSetting('memory_nudge_interval'),
+        window.electronAPI.getSetting('memory_review_turns'),
         window.electronAPI.getCronConfig(),
         window.electronAPI.getSetting('web_search_enabled'),
         window.electronAPI.getSetting('tavily_api_key'),
@@ -620,11 +625,16 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
         window.electronAPI.getSetting('anthropic_base_url'),
         window.electronAPI.getSetting('web_fetch_allow_private'),
         window.electronAPI.getSetting('perf_logging_enabled'),
+        window.electronAPI.getSetting('memory_review_enabled'),
+        window.electronAPI.getSetting('chat_api_key'),
+        window.electronAPI.getSetting('chat_base_url'),
       ])
       if (loadSeqRef.current !== seq) return
       setWikiAutoSediment(wikiSediment === 'true')
       setWikiAutoCompileOnImport(wikiAutoCompileRaw === 'true')
-      setNudgeInterval(nudge ?? '5')
+      setReviewTurns(reviewTurnsRaw ?? '10')
+      setReviewEnabled(memoryReviewEnabledRaw !== 'false') // 缺省即开
+      setMemoryCredsMissing(!((memoryChatKey ?? '').trim() && (memoryChatBase ?? '').trim()))
       for (const cfg of cronConfigs) {
         if (cfg.type === 'memory-consolidate') setCronMemoryInterval(String(cfg.intervalHours))
         if (cfg.type === 'knowledge-check') setCronKnowledgeInterval(String(cfg.intervalHours))
@@ -922,12 +932,18 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
   /** 保存记忆设置 */
   const handleSaveMemorySettings = async () => {
     try {
-      const interval = parseInt(nudgeInterval, 10)
-      if (isNaN(interval) || interval < 0) {
-        setMemoryStatusMsg('INVALID - 请输入非负整数')
+      const turns = parseInt(reviewTurns, 10)
+      if (isNaN(turns) || turns < 1) {
+        setMemoryStatusMsg('INVALID - 复盘轮数需为 ≥ 1 的整数')
         return
       }
-      await window.electronAPI.setSetting('memory_nudge_interval', String(interval))
+      await window.electronAPI.setSetting('memory_review_enabled', reviewEnabled ? 'true' : 'false')
+      await window.electronAPI.setSetting('memory_review_turns', String(turns))
+      // 关掉主开关时，同步把 legacy nudge 关死（memory_nudge_interval=0）：否则复盘一旦关闭，
+      // 旧的 per-N-turn nudge 路径会自动激活，"关闭自动记忆"反而没真正关掉。
+      if (!reviewEnabled) {
+        await window.electronAPI.setSetting('memory_nudge_interval', '0')
+      }
       setMemoryStatusMsg('SAVED')
       clearTimeout(memoryTimerRef.current)
       memoryTimerRef.current = setTimeout(() => setMemoryStatusMsg(''), 2000)
@@ -1847,27 +1863,52 @@ export default function SettingsPanel({ activeAvatarId, onClose }: Props) {
                     <p className="font-game text-[14px] text-px-text-sec">管理 AI 分身的长期记忆行为</p>
                   </div>
 
-                  {/* 记忆检查频率 */}
-                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-3">
-                    <div>
-                      <div className="font-game text-[14px] text-px-text mb-1">自动记忆频率</div>
-                      <div className="font-game text-[12px] text-px-text-dim mb-3">
-                        AI 每隔几轮对话自动检查是否有值得记住的内容（如你的偏好、重要决定等），保存到长期记忆中
+                  {/* 缺凭据提示：自动记忆强依赖对话模型凭据，缺失时后台会静默暂停——此处显式告知 */}
+                  {memoryCredsMissing && (
+                    <div className="border-2 border-px-warning bg-px-elevated p-4">
+                      <div className="font-game text-[13px] text-px-warning mb-1">⚠ 自动记忆当前已暂停</div>
+                      <div className="font-game text-[12px] text-px-text-sec">
+                        尚未配置对话模型（设置 → 对话模型）。后台复盘与对话情景抽取都依赖它，配置后自动记忆才会运行。
                       </div>
+                    </div>
+                  )}
+
+                  {/* 自动记忆主开关 + 复盘频率（控制真实的 memory_review_* 路径） */}
+                  <div className="border-2 border-px-border bg-px-elevated p-4 space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <span
+                        className="pixel-checkbox"
+                        role="checkbox"
+                        aria-checked={reviewEnabled}
+                        data-checked={reviewEnabled || undefined}
+                        onClick={() => setReviewEnabled(!reviewEnabled)}
+                        onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setReviewEnabled(!reviewEnabled) } }}
+                        tabIndex={0}
+                      />
+                      <div>
+                        <div className="font-game text-[14px] text-px-text">自动记忆（后台复盘）</div>
+                        <div className="font-game text-[12px] text-px-text-dim mt-0.5">
+                          每隔若干轮对话，AI 在后台自动回顾并沉淀值得长期记住的内容（你的偏好、重要决定、纠正过的信息等）。写入下个会话生效。
+                        </div>
+                      </div>
+                    </label>
+
+                    <div className={reviewEnabled ? '' : 'opacity-40 pointer-events-none'}>
                       <div className="flex items-center gap-3">
                         <label className="font-game text-[13px] text-px-text-sec">每</label>
                         <input
                           type="number"
-                          min="0"
+                          min="1"
                           max="50"
-                          value={nudgeInterval}
-                          onChange={(e) => setNudgeInterval(e.target.value)}
+                          value={reviewTurns}
+                          onChange={(e) => setReviewTurns(e.target.value)}
+                          disabled={!reviewEnabled}
                           className="pixel-input w-20 text-center"
                         />
-                        <label className="font-game text-[13px] text-px-text-sec">轮检查一次</label>
+                        <label className="font-game text-[13px] text-px-text-sec">轮复盘一次</label>
                       </div>
                       <div className="font-game text-[11px] text-px-text-dim mt-2">
-                        推荐值 5 · 设为 0 关闭自动记忆 · 一般无需修改
+                        推荐值 10 · 轮数越小越及时、但更费模型调用 · 一般无需修改
                       </div>
                     </div>
                   </div>

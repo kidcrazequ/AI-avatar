@@ -2642,6 +2642,13 @@ const MAX_LOAD_SKILL_CALLS_PER_REQUEST = 3
  * 当工具达到上限后，后续轮次禁用工具，强制 LLM 基于现有结果直接收敛回答。
  */
 const ENABLE_TOOL_CONVERGE_MODE = true
+/**
+ * 通用重复工具调用守卫上限（AstrBot 借鉴阶段2·②）。同一工具用完全相同参数连续调用达此
+ * 次数时拦截，补 query_excel/load_skill 专用守卫覆盖不到的通用工具（search_knowledge /
+ * read_file / knowledge_grep 等），避免模型在同一无效查询上空烧轮次。相同参数=相同结果，
+ * 拦截零信息损失；只拦这一个重复调用、不动其它工具，仍与 HARD_MAX_ROUNDS 硬上限互补。
+ */
+const MAX_IDENTICAL_TOOL_CALLS_PER_REQUEST = 3
 /** 单条工具结果注入上下文的最大字符数（超长会被本地截断） */
 const MAX_TOOL_RESULT_CONTEXT_CHARS = 6000
 /**
@@ -4854,6 +4861,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
      * 仍保留次数兜底（MAX_LOAD_SKILL_CALLS_PER_REQUEST 翻倍后作为"防滥用"上限）。
      */
     const loadedSkillIds = new Set<string>()
+    // 通用重复工具调用计数（阶段2·②）：key = 工具名 + 参数哈希，value = 相同调用累计次数
+    const identicalToolCallCounts = new Map<string, number>()
     let forceConvergeNoTools = false
     let convergeHintInjected = false
     let softWarnInjected = false
@@ -5450,11 +5459,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   : result.content
               }
             } else {
-              const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
-              if (isStale()) return
-              resultText = result.error
-                ? `工具执行失败: ${result.error}`
-                : result.content
+              // 通用重复调用守卫（AstrBot 借鉴阶段2·②）：同一工具用完全相同参数调用达上限即拦截，
+              // 提示模型收敛。相同参数=相同结果，拦截零信息损失；只拦这一个重复调用、不动其它工具。
+              const callSig = `${tc.function.name}:${hashQueryContent(JSON.stringify(toolArgs))}`
+              const identicalCount = (identicalToolCallCounts.get(callSig) ?? 0) + 1
+              identicalToolCallCounts.set(callSig, identicalCount)
+              if (identicalCount >= MAX_IDENTICAL_TOOL_CALLS_PER_REQUEST) {
+                resultText = `工具执行已跳过：你已用完全相同的参数调用 ${tc.function.name} ${identicalCount} 次，结果不会变化。请基于已获得的信息直接作答；若确实缺数据，请明确说明缺口，不要重复用相同参数调用同一工具。`
+                logPerf('tool-call:blocked', `round=${round} name=${tc.function.name} reason=repeated-identical(${identicalCount})`)
+              } else {
+                const result = await window.electronAPI.executeToolCall(avatarId, conversationId, tc.function.name, toolArgs, toolInvocationMeta)
+                if (isStale()) return
+                resultText = result.error
+                  ? `工具执行失败: ${result.error}`
+                  : result.content
+              }
             }
           } catch (toolErr) {
             const msg = toolErr instanceof Error ? toolErr.message : String(toolErr)

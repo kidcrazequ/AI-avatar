@@ -17,6 +17,7 @@
  */
 
 import { extractFrontmatter } from '../utils/markdown-parser'
+import { parseSopCard, type SopCard } from '../sop-schema'
 
 export const WORKFLOW_SKILL_DISTILL_PROTOCOL_VERSION = '2026-07-p1-workflow-distill'
 
@@ -91,6 +92,34 @@ const WORKFLOW_DISTILL_SYSTEM_PROMPT = `你是 AI 分身的工作流沉淀助手
 - 只提炼对话中真实出现过的做法；不要为了"完整"补上对话里从未发生的步骤。
 - description 只写触发场景；流程细节只出现在正文五节里。`
 
+const WORKFLOW_SOP_SYSTEM_PROMPT = `你是 AI 分身的 SOP 状态机生成器。请把已确认的工作流技能 Markdown 转成一张可执行的 SOP YAML。
+
+只输出 YAML，不要代码围栏或解释。必须严格使用以下结构：
+
+sop_version: 1
+skill: <技能 ID>
+goal: <一句话目标>
+start: <起点节点 ID>
+terminal: [<终点节点 ID>]
+interruption: pause
+nodes:
+  - id: <kebab-case 节点 ID>
+    name: <节点名称>
+    instruction: <本节点动作和产出>
+    expects: [<进入下一步前必须收齐的用户输入>]
+    tools: [<技能正文明确要求的工具>]
+    next:
+      - to: <下一节点 ID>
+        when: <转移条件>
+
+硬约束：
+- skill 必须与用户给定的技能 ID 完全一致。
+- 每个真实工作步骤对应一个节点；没有分支就生成线性流程，有明确分支才生成多条 next。
+- expects 只收录该节点推进前确实必须由用户提供的输入；不得把模型自己可完成的动作写成输入。
+- tools 只写技能正文明确出现的工具；没有就用 []，禁止猜工具名。
+- 最后一个实际步骤或交付前自检节点必须是 terminal，terminal 节点的 next 必须为 []。
+- 不得补写技能正文没有的专业事实、参数、阈值、审批人或业务结论。`
+
 function truncateForPrompt(text: string, max: number): string {
   const normalized = (text ?? '').trim()
   if (normalized.length <= max) return normalized
@@ -121,6 +150,25 @@ export function buildWorkflowDistillPrompt(
   return { system: WORKFLOW_DISTILL_SYSTEM_PROMPT, user: lines.join('\n') }
 }
 
+/** 根据用户确认后的技能正文生成严格 SOP；保存时调用，保证编辑后的正文与状态机同步。 */
+export function buildWorkflowSopPrompt(
+  skillId: string,
+  skillMarkdown: string,
+): { system: string; user: string } {
+  return {
+    system: WORKFLOW_SOP_SYSTEM_PROMPT,
+    user: [
+      `技能 ID：${skillId}`,
+      '',
+      '## 已确认的技能 Markdown',
+      '',
+      skillMarkdown.slice(0, 24_000),
+      '',
+      '请只输出与以上技能一致的 SOP YAML。',
+    ].join('\n'),
+  }
+}
+
 export interface ParsedWorkflowSkill {
   /** frontmatter name（已通过 kebab-case 校验） */
   name: string
@@ -143,6 +191,69 @@ export interface WorkflowDistillParseResult {
 function stripOuterFence(raw: string): string {
   const fence = raw.match(/^```[a-zA-Z]*\s*\n([\s\S]*?)\n```\s*$/)
   return fence ? fence[1] : raw
+}
+
+export interface WorkflowSopParseResult {
+  ok: boolean
+  errors: string[]
+  yaml?: string
+  card?: SopCard
+}
+
+/** SOP YAML 必须先通过图结构校验，且 skill 与最终技能 ID 一致，才能随技能一起启用。 */
+export function parseWorkflowSopResponse(
+  text: string,
+  expectedSkillId: string,
+): WorkflowSopParseResult {
+  const yaml = stripOuterFence((text ?? '').trim())
+  if (!yaml) return { ok: false, errors: ['SOP 输出为空'] }
+  const parsed = parseSopCard(yaml)
+  if (!parsed.ok) return { ok: false, errors: parsed.errors }
+  if (parsed.card.skill !== expectedSkillId) {
+    return {
+      ok: false,
+      errors: [`SOP skill 与目标技能 ID 不一致：${parsed.card.skill} != ${expectedSkillId}`],
+    }
+  }
+
+  const errors: string[] = []
+  const terminalIds = new Set(parsed.card.terminalIds)
+  for (const node of parsed.card.nodes) {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(node.id)) {
+      errors.push(`SOP 节点 ID 必须为 kebab-case：${node.id}`)
+    }
+    if (terminalIds.has(node.id) && node.next.length > 0) {
+      errors.push(`SOP 终点节点不能继续跳转：${node.id}`)
+    }
+  }
+
+  // 从终点沿反向边遍历；未命中的节点会让运行流程卡在无法完成的死路或闭环。
+  const reverseEdges = new Map<string, string[]>()
+  for (const node of parsed.card.nodes) {
+    for (const edge of node.next) {
+      const sources = reverseEdges.get(edge.to) ?? []
+      sources.push(node.id)
+      reverseEdges.set(edge.to, sources)
+    }
+  }
+  const canReachTerminal = new Set(parsed.card.terminalIds)
+  const queue = [...parsed.card.terminalIds]
+  while (queue.length > 0) {
+    const current = queue.shift() as string
+    for (const source of reverseEdges.get(current) ?? []) {
+      if (canReachTerminal.has(source)) continue
+      canReachTerminal.add(source)
+      queue.push(source)
+    }
+  }
+  for (const node of parsed.card.nodes) {
+    if (!canReachTerminal.has(node.id)) {
+      errors.push(`SOP 节点无法到达任何终点：${node.id}`)
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors }
+
+  return { ok: true, errors: [], yaml: `${yaml}\n`, card: parsed.card }
 }
 
 /** 丢掉 frontmatter 起始 `---` 之前的杂文字（"好的，以下是…"之类） */

@@ -4,6 +4,7 @@ import { useChatStore, nextMessageId, tryExtractDocumentAttachment, extractDocum
 import MessageList from './MessageList'
 import MessageInput from './MessageInput'
 import SkillProposalCard from './SkillProposalCard'
+import WorkflowSkillDraftCard, { type WorkflowSkillDraft } from './WorkflowSkillDraftCard'
 import TaskListPanel from './TaskListPanel'
 import L3EventsPanel from './L3EventsPanel'
 import AskQuestionCard from './AskQuestionCard'
@@ -13,6 +14,7 @@ import { localDateString, normalizeIntentLocal } from '@soul/core/browser'
 // v19：ToolCallTimeline 不再由 ChatWindow 直接渲染（挪到了 MessageBubble 内）；
 // 保留组件文件供 MessageBubble 引用即可。
 import EventViewer from './EventViewer'
+import { buildSkillRunPrompt } from '../stores/skill-run-prompt'
 
 /** 九层重构 #12 ask_question：当前等待用户回答的问题 payload（null = 无问题） */
 interface PendingAskQuestion {
@@ -65,6 +67,9 @@ function collectDocumentAttachmentsByAssistantId(
       // toolName 只在两条都识别不出时兜底，传空就是放弃兜底（安全选择）。
       const attachment = tryExtractDocumentAttachment('', message.content, conversationId)
       if (attachment) pending = [...pending, attachment]
+      for (const detected of extractDocumentAttachmentsFromText(message.content, conversationId, pending)) {
+        if (!pending.some(item => item.filePath === detected.filePath)) pending = [...pending, detected]
+      }
       continue
     }
 
@@ -92,9 +97,11 @@ interface Props {
   avatarRole?: string
   /** App 全局 toast，供"沉淀知识"等操作给用户明确反馈 */
   showToast?: (message: string, type?: 'success' | 'error') => void
+  /** 技能保存后刷新当前分身上下文，保证新技能立即可运行 */
+  onSkillsChanged?: () => void | Promise<void>
 }
 
-export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName, avatarRole, showToast }: Props) {
+export default function ChatWindow({ conversationId, avatarId, onConversationUpdate, visionModel, fillText, avatarImage, avatarName, avatarRole, showToast, onSkillsChanged }: Props) {
   const { messages, isLoading, skillProposals, clearSkillProposals, resetTransientState, sendMessage, setMessages, setConversationTree, bindConversation, restoreInflightStreamingMessage, mode, setMode, conversationModelOverride, setConversationModel, chatModel, localChatModel, chatModelMode, setChatModelMode } = useChatStore(
     useShallow(s => ({
       messages: s.messages,
@@ -158,6 +165,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   const [distillOpen, setDistillOpen] = useState(false)
   const [distillTitle, setDistillTitle] = useState('')
   const [isDistilling, setIsDistilling] = useState(false)
+  const [workflowSkillDraft, setWorkflowSkillDraft] = useState<WorkflowSkillDraft | null>(null)
   const conversationIdRef = useRef(conversationId)
   // eslint-disable-next-line react-hooks/refs -- 让事件回调（emit 给 main 的 async path）能拿到最新 conversationId，render-期同步写比 effect 同步更新及时（effect 写会让 event 期间读到旧值）
   conversationIdRef.current = conversationId
@@ -213,6 +221,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
     setPendingAsk(null)
     // 澄清闸门卡片同样按会话隔离：切走时清掉，避免在 B 会话回答 A 的澄清、把答案注入 B
     setPendingClarify(null)
+    setWorkflowSkillDraft(null)
     const unsubscribe = window.electronAPI.onChatAskQuestion((payload) => {
       if (payload.conversationId !== conversationId) return
       setPendingAsk({
@@ -582,19 +591,20 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
   /**
    * 入口 1·对话沉淀：把当前会话的工作流程蒸馏为一键工作流技能草稿。
    * 蒸馏是 LLM 调用（秒级到十秒级），isDistilling 期间按钮禁用防重复点击；
-   * 成功后引导用户去「技能面板 → 草稿」tab 评审晋升（入口 2）。
+   * 成功后直接在当前对话显示可编辑草稿卡片。
    */
   const handleDistillWorkflowSkill = useCallback(async () => {
     if (isDistilling) return
     setIsDistilling(true)
     try {
       const title = distillTitle.trim()
-      await window.electronAPI.distillWorkflowSkillDraft({
+      const result = await window.electronAPI.distillWorkflowSkillDraft({
         avatarId,
         conversationId,
         ...(title ? { title } : {}),
       })
-      showToast?.('草稿已生成，到技能面板·草稿页确认', 'success')
+      setWorkflowSkillDraft(result.draft)
+      showToast?.('技能草稿已生成，可在对话中直接修改并启用', 'success')
       setDistillOpen(false)
       setDistillTitle('')
     } catch (err) {
@@ -702,7 +712,7 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           disabled={messages.length === 0}
           title={messages.length === 0
             ? '当前会话还没有消息，无法沉淀工作流技能'
-            : '把本次对话的工作流程沉淀为一键工作流技能草稿（生成后到技能面板·草稿页确认）'}
+            : '把本次对话的工作流程沉淀为可编辑技能草稿，并在当前对话保存启用'}
           className="font-game text-[11px] text-px-text-dim hover:text-px-primary px-2 py-0.5
             border border-transparent hover:border-px-primary/50 transition-none
             disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-px-text-dim"
@@ -806,6 +816,22 @@ export default function ChatWindow({ conversationId, avatarId, onConversationUpd
           avatarId={avatarId}
           proposals={skillProposals}
           onDismiss={clearSkillProposals}
+        />
+      )}
+
+      {workflowSkillDraft && (
+        <WorkflowSkillDraftCard
+          key={workflowSkillDraft.filename}
+          avatarId={avatarId}
+          draft={workflowSkillDraft}
+          onDismiss={() => setWorkflowSkillDraft(null)}
+          onPromoted={(skillId) => {
+            if (onSkillsChanged) void onSkillsChanged()
+            else showToast?.(`技能 ${skillId} 已保存并启用`, 'success')
+          }}
+          onRun={(skillId) => {
+            void handleSendMessage(buildSkillRunPrompt(skillId))
+          }}
         />
       )}
 

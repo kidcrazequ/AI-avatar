@@ -254,6 +254,20 @@ describe('SkillManager', () => {
     assert.ok(content.includes('技能定义'), '应包含技能定义标题')
     assert.ok(content.includes('ROI 计算'), '应包含技能名称')
   })
+
+  it('deleteSkill 同时删除严格 SOP 伴随文件', () => {
+    const manager = new SkillManager(tmpDir)
+    const created = manager.createSkill(
+      avatarId,
+      'delete-me',
+      '---\nname: delete-me\ndescription: 当用户测试删除时使用。\n---\n\n# delete-me\n',
+    )
+    const sopPath = path.join(path.dirname(created.filePath), 'delete-me.sop.yaml')
+    fs.writeFileSync(sopPath, 'sop_version: 1\n', 'utf-8')
+    manager.deleteSkill(avatarId, 'delete-me')
+    assert.equal(fs.existsSync(created.filePath), false)
+    assert.equal(fs.existsSync(sopPath), false)
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -4629,6 +4629,24 @@ wrapHandler('generate-skill-draft', async (_, description: string) => {
 const workflowSkillDraftRoot = (avatarId: string): string =>
   path.join(avatarsPath, avatarId, 'drafts', 'skills')
 
+/** 保存前从用户最终确认的技能正文生成 SOP，校验不过就不创建/启用技能。 */
+async function generateWorkflowSop(skillId: string, skillMarkdown: string): Promise<string> {
+  const apiKey = getDb().getSetting('chat_api_key') ?? ''
+  const baseUrl = getDb().getSetting('chat_base_url') ?? 'https://api.deepseek.com/v1'
+  const chatModel = getDb().getSetting('chat_model') ?? 'deepseek-chat'
+  if (!apiKey) {
+    throw new Error('未配置 chat_api_key，无法生成严格 SOP，请先在设置里填写 LLM API Key')
+  }
+  const callLLM = createLLMFn(apiKey, baseUrl, chatModel)
+  const { system, user } = AgentRuntime.buildWorkflowSopPrompt(skillId, skillMarkdown)
+  const responseText = await callLLM(system, user, 4096)
+  const parsed = AgentRuntime.parseWorkflowSopResponse(responseText, skillId)
+  if (!parsed.ok || !parsed.yaml) {
+    throw new Error(`SOP 状态机校验未通过，技能未启用：${parsed.errors.join('；')}`)
+  }
+  return parsed.yaml
+}
+
 wrapHandler('skill-draft:distill', async (_, input: { avatarId: string; conversationId: string; title?: string }) => {
   assertSafeSegment(input.avatarId, '分身ID')
   // conversationId 会原样进草稿 frontmatter 与日志——拦掉换行/空字符，防 log injection 与 frontmatter 截断
@@ -4715,14 +4733,23 @@ wrapHandler('skill-draft:list', (_, avatarId: string) => {
   })
 })
 
-wrapHandler('skill-draft:promote', (_, input: { avatarId: string; filename: string; skillId?: string }) => {
+wrapHandler('skill-draft:promote', async (_, input: {
+  avatarId: string
+  filename: string
+  skillId?: string
+  draftContent?: string
+}) => {
   assertSafeSegment(input.avatarId, '分身ID')
   assertSafeSegment(input.filename, '草稿文件名')
   const draftPath = resolveUnderRoot(workflowSkillDraftRoot(input.avatarId), input.filename)
   if (!fs.existsSync(draftPath)) {
     throw new Error(`草稿不存在: ${input.filename}`)
   }
-  const draftContent = fs.readFileSync(draftPath, 'utf-8')
+  const storedDraftContent = fs.readFileSync(draftPath, 'utf-8')
+  const draftContent = typeof input.draftContent === 'string' ? input.draftContent : storedDraftContent
+  if (draftContent.length > 24_000) {
+    throw new Error('技能草稿过大（超过 24,000 字符），请精简后再保存')
+  }
   // 同名冲突拦截范围 = local + shared（community 经 shared 引用间接覆盖）
   const existingSkillIds = [
     ...skillManager.getSkills(input.avatarId).map(s => s.id),
@@ -4734,21 +4761,39 @@ wrapHandler('skill-draft:promote', (_, input: { avatarId: string; filename: stri
     existingSkillIds,
   })
   if (res.errors.length > 0 || !res.skillId || !res.skillMarkdown) {
-    return { skillPath: '', indexUpdated: false, errors: res.errors }
+    return { skillPath: '', skillId: '', indexUpdated: false, errors: res.errors }
   }
-  const created = skillManager.createSkill(input.avatarId, res.skillId, res.skillMarkdown)
+
+  // SOP 必须基于用户最后确认的正文生成；编辑后的草稿不会复用旧状态机。
+  const sopYaml = await generateWorkflowSop(res.skillId, res.skillMarkdown)
+
+  let created: ReturnType<typeof skillManager.createSkill> | null = null
+  let sopPath = ''
   let indexUpdated = false
   try {
+    created = skillManager.createSkill(input.avatarId, res.skillId, res.skillMarkdown)
+    sopPath = path.join(path.dirname(created.filePath), `${res.skillId}.sop.yaml`)
+    fs.writeFileSync(sopPath, sopYaml, 'utf-8')
     indexUpdated = skillManager.addLocalSkillToIndex(input.avatarId, res.skillId, { description: res.description })
   } catch (err) {
-    // 补偿：index 写入失败时回滚刚落盘的技能文件，避免"文件已存在但 index 未收录"
-    // 的孤儿态（重试同 ID 会被 createSkill 的已存在检查挡住，用户无法自愈）
-    try { fs.unlinkSync(created.filePath) } catch { /* 回滚失败保留现场，原错误照抛 */ }
+    // 任一步失败都回滚 md + sop，避免半启用或孤儿态。
+    if (created) {
+      try { fs.unlinkSync(created.filePath) } catch { /* 原错误照抛 */ }
+    }
+    if (sopPath) {
+      try { fs.unlinkSync(sopPath) } catch { /* 原错误照抛 */ }
+    }
     throw err
   }
-  fs.unlinkSync(draftPath)
+  if (!created) throw new Error('技能创建失败')
+  try {
+    fs.unlinkSync(draftPath)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (logger) logger.logEvent('warn', 'workflow-skill-draft-cleanup-failed', `avatar=${input.avatarId} draft=${input.filename} error=${message}`)
+  }
   if (logger) logger.logEvent('info', 'workflow-skill-promote', `avatar=${input.avatarId} skill=${res.skillId} indexUpdated=${indexUpdated} draft=${input.filename}`)
-  return { skillPath: created.filePath, indexUpdated, errors: [] }
+  return { skillPath: created.filePath, skillId: res.skillId, indexUpdated, errors: [] }
 })
 
 wrapHandler('skill-draft:delete', (_, input: { avatarId: string; filename: string }) => {
@@ -5198,7 +5243,7 @@ wrapHandler(
 
   // 导出：PPTX 真实可编辑（pptxgenjs + jsdom）+ 截图模式（hidden BrowserWindow per-slide）
   if (name === 'gen_pptx' || name === 'export_pptx') {
-    const outputPath = (args.save_to_project_path as string) || (args.output_path as string) || `export/${Date.now()}.pptx`
+    const outputPath = (args.save_to_project_path as string) || (args.output_path as string) || `exports/${Date.now()}.pptx`
     const absOut = workspaceManager.resolveSafe(convAvatarId, convProjectId, conversationId, outputPath)
     const inputPath = (args.input_path as string) || ''
     const mode = (args.mode as string) === 'screenshots' ? 'screenshots' : 'editable'
@@ -7794,13 +7839,13 @@ function isUnderRoot(absPath: string, root: string): boolean {
  *   2) 查 conversation 表 → 得 avatar_id + project_id（任何前端不知道的字段都
  *      由 trusted DB 提供）
  *   3) filePath 必须以 'exports/' 开头 + 不含 .. 段 + 扩展名白名单
- *      (pdf/docx/md/xlsx)
+ *      (pdf/docx/md/pptx/xlsx)
  *   4) resolveAvatarWorkspaceSessionRoot 算 workspace root
  *   5) join + isUnderRoot 双校验防 traversal
  *
  * 返回绝对路径或 null（任一校验失败）。
  */
-const DOC_EXT_ALLOWLIST = new Set(['.pdf', '.docx', '.md', '.xlsx'])
+const DOC_EXT_ALLOWLIST = new Set(['.pdf', '.docx', '.md', '.pptx', '.xlsx'])
 function resolveTrustedDocumentPath(conversationId: string, filePath: string): string | null {
   try {
     assertSafeSegment(conversationId, 'conversationId')

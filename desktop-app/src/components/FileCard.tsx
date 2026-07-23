@@ -1,7 +1,7 @@
 /**
  * FileCard：对话气泡内嵌的工具落盘文件卡片。
  *
- * 决策 B3：把 generate_document（PDF/DOCX/MD）和 export_excel 都接到统一的
+ * 决策 B3：把 generate_document（PDF/DOCX/MD）、PPTX 和 export_excel 都接到统一的
  * UI 上——assistant 消息内显示一行文件卡片，点击直接用系统默认应用打开。
  *
  * 设计：
@@ -27,6 +27,7 @@ const FORMAT_ICON: Record<DocumentAttachment['format'], string> = {
   md: '[MD]',
   pdf: '[PDF]',
   docx: '[DOC]',
+  pptx: '[PPT]',
   xlsx: '[XLS]',
 }
 
@@ -34,6 +35,7 @@ const FORMAT_LABEL: Record<DocumentAttachment['format'], string> = {
   md: 'Markdown 文档',
   pdf: 'PDF 报告',
   docx: 'Word 文档',
+  pptx: 'PowerPoint 演示文稿',
   xlsx: 'Excel 表格',
 }
 

@@ -919,6 +919,7 @@ function App() {
                   avatarName={activeAvatarName}
                   avatarRole={getAvatarRoleTagline(avatarList.find(a => a.id === activeAvatarId))}
                   showToast={showToast}
+                  onSkillsChanged={handleSkillsChanged}
                 />
               </div>
             </div>

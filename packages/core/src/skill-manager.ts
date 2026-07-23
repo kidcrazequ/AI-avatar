@@ -266,6 +266,8 @@ export class SkillManager {
       fs.rmSync(path.dirname(skill.filePath), { recursive: true, force: true })
     } else {
       fs.unlinkSync(skill.filePath)
+      const sopPath = path.join(path.dirname(skill.filePath), `${skillId}.sop.yaml`)
+      if (fs.existsSync(sopPath)) fs.unlinkSync(sopPath)
     }
 
     // 清理 disabledSkills 里的残留条目（不影响主流程，失败不抛）

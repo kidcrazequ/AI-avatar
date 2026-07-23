@@ -16,8 +16,10 @@ import {
   WORKFLOW_DISTILL_MAX_MESSAGES,
   WORKFLOW_SKILL_DISTILL_PROTOCOL_VERSION,
   buildWorkflowDistillPrompt,
+  buildWorkflowSopPrompt,
   buildWorkflowSkillDraftFile,
   parseWorkflowDistillResponse,
+  parseWorkflowSopResponse,
   validateWorkflowSkillPromotion,
 } from '../agent-runtime'
 
@@ -51,6 +53,29 @@ description: >-
 ## 不适用范围
 
 - 不做绩效评价：转介 HR 分身
+`
+
+const VALID_SOP = `sop_version: 1
+skill: weekly-report-workflow
+goal: 生成可溯源的周报
+start: collect
+terminal: [deliver]
+interruption: pause
+nodes:
+  - id: collect
+    name: 收集输入
+    instruction: 收集汇报周期与重点项目
+    expects: [汇报周期]
+    tools: []
+    next:
+      - to: deliver
+        when: 必填输入已收齐
+  - id: deliver
+    name: 生成并检查周报
+    instruction: 查询知识、组织周报并执行交付前自检
+    expects: []
+    tools: []
+    next: []
 `
 
 function makeTranscript(n: number): Array<{ role: 'user' | 'assistant'; content: string }> {
@@ -138,6 +163,54 @@ describe('parseWorkflowDistillResponse', () => {
     const res = parseWorkflowDistillResponse(noDesc)
     assert.equal(res.ok, false)
     assert.ok(res.errors.some((e) => e.includes('description')))
+  })
+})
+
+describe('严格 SOP 生成', () => {
+  it('prompt 固定最终技能 ID，并禁止编造工具和专业事实', () => {
+    const prompt = buildWorkflowSopPrompt('weekly-report-workflow', VALID_RESPONSE)
+    assert.match(prompt.user, /技能 ID：weekly-report-workflow/)
+    assert.match(prompt.system, /禁止猜工具名/)
+    assert.match(prompt.system, /不得补写/)
+  })
+
+  it('合法状态机通过；skill 不一致或图非法时拒绝启用', () => {
+    const valid = parseWorkflowSopResponse(VALID_SOP, 'weekly-report-workflow')
+    assert.equal(valid.ok, true)
+    assert.equal(valid.card?.nodes.length, 2)
+
+    const wrongSkill = parseWorkflowSopResponse(VALID_SOP, 'renamed-workflow')
+    assert.equal(wrongSkill.ok, false)
+    assert.ok(wrongSkill.errors.some(error => error.includes('不一致')))
+
+    const broken = parseWorkflowSopResponse(
+      VALID_SOP.replace('to: deliver', 'to: missing'),
+      'weekly-report-workflow',
+    )
+    assert.equal(broken.ok, false)
+    assert.ok(broken.errors.some(error => error.includes('不存在')))
+  })
+
+  it('拒绝非 kebab-case 节点、终点外跳和无法抵达终点的分支', () => {
+    const badNodeId = VALID_SOP.replace('id: collect', 'id: collect_input')
+    assert.equal(parseWorkflowSopResponse(badNodeId, 'weekly-report-workflow').ok, false)
+
+    const terminalWithNext = VALID_SOP.replace(
+      '    next: []\n',
+      '    next:\n      - to: collect\n        when: 重做\n',
+    )
+    assert.equal(parseWorkflowSopResponse(terminalWithNext, 'weekly-report-workflow').ok, false)
+
+    const deadEnd = VALID_SOP
+      .replace(
+        '      - to: deliver\n        when: 必填输入已收齐',
+        '      - to: deliver\n        when: 必填输入已收齐\n      - to: review\n        when: 需要复核',
+      )
+      .replace(
+        '  - id: deliver',
+        '  - id: review\n    name: 复核\n    instruction: 复核内容\n    expects: []\n    tools: []\n    next: []\n  - id: deliver',
+      )
+    assert.equal(parseWorkflowSopResponse(deadEnd, 'weekly-report-workflow').ok, false)
   })
 })
 

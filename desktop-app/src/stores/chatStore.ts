@@ -800,16 +800,34 @@ const AVATAR_TOOLS: LLMTool[] = [
     type: 'function',
     function: {
       name: 'export_pptx',
-      description: '导出为 PPTX。',
-      parameters: { type: 'object', properties: { save_to_project_path: { type: 'string' }, mode: { type: 'string' }, slides: { type: 'array' } } },
+      description: '把已生成的 HTML 幻灯片导出为可编辑 PPTX。',
+      parameters: {
+        type: 'object',
+        properties: {
+          input_path: { type: 'string', description: 'HTML 文件相对路径' },
+          save_to_project_path: { type: 'string', description: '必须使用 exports/<文件名>.pptx，才能在对话中显示文件卡片' },
+          mode: { type: 'string', enum: ['editable', 'screenshots'] },
+          page_selector: { type: 'string', description: '可选，幻灯片容器 CSS 选择器' },
+        },
+        required: ['input_path', 'save_to_project_path'],
+      },
     },
   },
   {
     type: 'function',
     function: {
       name: 'gen_pptx',
-      description: '生成 PPTX（兼容工具名）。',
-      parameters: { type: 'object', properties: { save_to_project_path: { type: 'string' }, slides: { type: 'array' } } },
+      description: '把已生成的 HTML 幻灯片导出为 PPTX（兼容工具名）。',
+      parameters: {
+        type: 'object',
+        properties: {
+          input_path: { type: 'string', description: 'HTML 文件相对路径' },
+          save_to_project_path: { type: 'string', description: '必须使用 exports/<文件名>.pptx，才能在对话中显示文件卡片' },
+          mode: { type: 'string', enum: ['editable', 'screenshots'] },
+          page_selector: { type: 'string', description: '可选，幻灯片容器 CSS 选择器' },
+        },
+        required: ['input_path', 'save_to_project_path'],
+      },
     },
   },
   {
@@ -3114,7 +3132,7 @@ export function tryExtractDocumentAttachment(
     // 占位 name 标记（实际 tool name 没入库），用它兜底容易把 generate_document
     // 的 .pdf 误判成 export_excel 的 .xlsx。
     let format: DocumentAttachmentFormat | null = null
-    const SUPPORTED_FORMATS = ['md', 'pdf', 'docx', 'xlsx'] as const
+    const SUPPORTED_FORMATS = ['md', 'pdf', 'docx', 'pptx', 'xlsx'] as const
     const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
     if ((SUPPORTED_FORMATS as readonly string[]).includes(ext)) {
       format = ext as DocumentAttachmentFormat
@@ -3163,8 +3181,68 @@ export function tryExtractDocumentAttachment(
   }
 }
 
-const TEXT_EXPORT_PATH_RE = /(?:^|[`"'(<\s])((?:\.\/)?exports\/[^`"'<>\n\r]+?\.(?:md|pdf|docx|xlsx))(?=$|[`"')>\s,，。；;])/gi
-const TEXT_EXPORT_FORMATS = new Set(['md', 'pdf', 'docx', 'xlsx'])
+const TEXT_EXPORT_PATH_RE = /(?:^|[`"'(<\s])((?:\.\/)?exports\/[^`"'<>\n\r]+?\.(?:md|pdf|docx|pptx|xlsx))(?=$|[`"')>\s,，。；;])/gi
+const TEXT_EXPORT_FORMATS = new Set(['md', 'pdf', 'docx', 'pptx', 'xlsx'])
+
+export interface ArtifactDeliveryRequest {
+  documentFormat?: 'md' | 'pdf' | 'docx'
+  pptx: boolean
+}
+
+/**
+ * 识别用户是否真的要求落盘文件。能力咨询与“怎么做”问题不触发，
+ * 防止用户只是问一句“能否生成 PDF”就意外创建文件。
+ */
+export function detectArtifactDeliveryRequest(text: string): ArtifactDeliveryRequest {
+  const source = text.trim()
+  const empty: ArtifactDeliveryRequest = { pptx: false }
+  if (!source) return empty
+  if (/(?:怎么|如何).{0,12}(?:生成|导出|制作|做成)/i.test(source)) return empty
+  if (/(?:能否|能不能|是否支持|可不可以|可以吗).{0,20}(?:生成|导出|制作|做成|产出)/i.test(source)) return empty
+  if (!/(?:落成|落盘|生成|出一份|做成|写一份|做个|导出|输出|制作)/i.test(source)) return empty
+
+  const pptx = /(?:pptx?|powerpoint|幻灯片|演示文稿)/i.test(source)
+  const wantsPdf = /pdf/i.test(source)
+  const wantsDocx = /(?:docx|word)/i.test(source)
+  const wantsMarkdown = /(?:markdown|md\b)/i.test(source)
+  const wantsGenericDocument = /(?:文档|报告|解决方案|方案书|方案计划|实施方案|协议|合同|纪要|说明书|意见书)/i.test(source)
+
+  let documentFormat: ArtifactDeliveryRequest['documentFormat']
+  if (wantsDocx) documentFormat = 'docx'
+  else if (wantsMarkdown) documentFormat = 'md'
+  else if (wantsPdf || (wantsGenericDocument && !pptx)) documentFormat = 'pdf'
+
+  return { documentFormat, pptx }
+}
+
+/**
+ * ISS 可能只保留 Top-N 工具。用户明确要求文件交付时，把完成交付所需的
+ * 最小工具集补回；调用方只在 agent 且无图片的场景使用。
+ */
+export function ensureArtifactDeliveryTools(
+  text: string,
+  selectedTools: LLMTool[],
+  availableTools: LLMTool[],
+): LLMTool[] {
+  const request = detectArtifactDeliveryRequest(text)
+  const requiredNames = new Set<string>()
+  if (request.documentFormat) requiredNames.add('generate_document')
+  if (request.pptx) {
+    requiredNames.add('write_file')
+    requiredNames.add('export_pptx')
+  }
+  if (requiredNames.size === 0) return selectedTools
+
+  const result = [...selectedTools]
+  const selectedNames = new Set(result.map(tool => tool.function.name))
+  for (const tool of availableTools) {
+    if (requiredNames.has(tool.function.name) && !selectedNames.has(tool.function.name)) {
+      result.push(tool)
+      selectedNames.add(tool.function.name)
+    }
+  }
+  return result
+}
 
 function buildDocumentAttachmentFromExportPath(
   rawPath: string,
@@ -4815,6 +4893,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     tools = await maybeRerankToolsWithIss(content, tools)
+    if (currentMode === 'agent' && (!images || images.length === 0)) {
+      tools = ensureArtifactDeliveryTools(content, tools, AVATAR_TOOLS)
+    }
 
     logPerf('tools:selected', `mode=${currentMode} count=${tools.length}`)
 
@@ -4854,7 +4935,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const excelBasenamesUsed = new Set<string>()
     /**
      * 本轮对话产出的工具落盘文件（决策 B3）。
-     * generate_document / export_excel 返回的 file_path 在 exports/ 下时被识别后追加，
+     * generate_document / export_excel / export_pptx 返回的路径在 exports/ 下时被识别后追加，
      * 最终随 upsertLastAssistant 一起写到 message.documentAttachments。
      */
     const collectedDocumentAttachments: DocumentAttachment[] = []
@@ -5632,9 +5713,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           // 决策 B3：检测落盘文件，统一以 FileCard 展示在对话气泡内
           // hiddenRepair 模式跳过 UI 更新——修正轮的工具产物不应展示在原 assistant 气泡。
           // collectedDocumentAttachments 仍 push（无害；本轮不落盘 assistant 消息，attachments 不会持久化）。
-          if (toolOk && (tc.function.name === 'generate_document' || tc.function.name === 'export_excel')) {
-            const attachment = tryExtractDocumentAttachment(tc.function.name, resultText, conversationId)
-            if (attachment) {
+          if (toolOk && ['generate_document', 'export_excel', 'export_pptx', 'gen_pptx'].includes(tc.function.name)) {
+            const structured = tryExtractDocumentAttachment(tc.function.name, resultText, conversationId)
+            const detected = structured
+              ? [structured]
+              : extractDocumentAttachmentsFromText(resultText, conversationId)
+            for (const attachment of detected) {
+              if (collectedDocumentAttachments.some(item => item.filePath === attachment.filePath)) continue
               collectedDocumentAttachments.push(attachment)
               emitTrace('artifact', {
                 tool: tc.function.name,
@@ -5797,13 +5882,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (isStale()) return
       }
 
-      // ─── B 兜底：承诺未兑现 retry（覆盖 doc 落盘 + 图表代码块两种） ─────────────
+      // ─── B 兜底：交付未兑现 retry（覆盖文件落盘 + 图表代码块两种） ─────────────
       // 触发条件（任一缺失即触发）：
       //
-      // [doc 缺失] 触发条件：
-      //   1) 用户 prompt 含文档生成意图（"落成/落盘/生成/出一份/做成" + "PDF/word/docx/md/文档/报告/方案/ADR/纪要"）
-      //   2) assistant 文本里出现交付承诺（"将落盘 / 已生成 / 立即落盘 / 现在将...落盘"）
-      //   3) toolCallSequence 里没调过 generate_document
+      // [文件缺失] 触发条件：
+      //   1) 用户明确要求生成 PDF/Word/Markdown/PPTX；解决方案未指定格式时默认 PDF
+      //   2) 当前回复没有产生对应格式的文件卡片
       //
       // [chart 缺失] 触发条件：
       //   1) 用户 prompt 含图表生成意图（柱状图/信息图/SWOT/对比卡 等触发词）
@@ -5822,17 +5906,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // - 2026-05-22 (chart): 分身 reasoning 18K+ 字"想象"了 3 个图表，content 只一句"已输出"
       //   没有任何 ```chart / ```infographic 代码块
 
-      // [doc 缺失] 检测
-      const docTriggerInPrompt = /落成|落盘|生成|出一份|做成|写一份|做个/.test(content)
-        && /pdf|word|docx|markdown|md\b|文档|报告|方案|adr|纪要|协议|说明书|意见书/i.test(content)
-      const docCommitmentInText = /(?:将|准备|立即|马上|现在).{0,8}(?:落盘|生成|落成|交付)/.test(assistantText)
-        || /已(?:落盘|生成|落成|交付)/.test(assistantText)
-      const generateDocAlreadyCalled = apiMessages.some(m => {
-        if (m.role !== 'assistant') return false
-        const tcs = (m as { tool_calls?: Array<{ function?: { name?: string } }> }).tool_calls
-        return Array.isArray(tcs) && tcs.some(tc => tc.function?.name === 'generate_document')
+      // [文件缺失] 检测
+      const artifactRequest = detectArtifactDeliveryRequest(content)
+      const requiredArtifactTools: Array<'generate_document' | 'export_pptx'> = []
+      if (artifactRequest.documentFormat) requiredArtifactTools.push('generate_document')
+      if (artifactRequest.pptx) requiredArtifactTools.push('export_pptx')
+      const missingArtifactTools = requiredArtifactTools.filter(tool => {
+        const expectedFormat = tool === 'export_pptx' ? 'pptx' : artifactRequest.documentFormat
+        return !collectedDocumentAttachments.some(item => item.format === expectedFormat)
       })
-      const docMissing = docTriggerInPrompt && docCommitmentInText && !generateDocAlreadyCalled
+      const artifactMissing = missingArtifactTools.length > 0
 
       // [chart 缺失] 检测：按用户 prompt 推算"应有"的图表类别数 vs content 实际代码块数
       const wantsDataChart = /柱状图|折线图|饼图|散点图|趋势图|对比图|分布图|雷达|桑基|热力|chart\b/i.test(content)
@@ -5848,13 +5931,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       const shouldRetryFinalCommitment =
         !emptyTextRetryMode &&
-        toolLoopStartedAt !== null &&
         (!pendingToolCalls || pendingToolCalls.length === 0) &&
-        (docMissing || chartMissing)
+        (artifactMissing || (toolLoopStartedAt !== null && chartMissing))
 
       if (shouldRetryFinalCommitment) {
-        const retryKind = docMissing && chartMissing ? 'doc+chart-unfulfilled'
-          : docMissing ? 'doc-commitment-unfulfilled'
+        const retryKind = artifactMissing && chartMissing ? 'artifact+chart-unfulfilled'
+          : artifactMissing ? 'artifact-delivery-unfulfilled'
           : 'chart-commitment-unfulfilled'
         logPerf(
           'tool-loop:final-retry-start',
@@ -5869,15 +5951,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         })
         // 根据 doc / chart 缺失情况动态组装 retry 提示
         const retryPromptParts: string[] = []
-        retryPromptParts.push('[系统提示] 你刚才在回答里写了交付承诺（"已输出 / 已生成 / 三个交付物均已输出 / 将落盘"等），但实际**没有完整交付**。')
+        retryPromptParts.push('[系统提示] 用户明确要求生成文件，但你刚才的回复**没有完整交付可下载文件**。')
         retryPromptParts.push('')
-        if (docMissing) {
-          retryPromptParts.push('## 缺失 1：generate_document 工具调用')
-          retryPromptParts.push('你说"将落盘 / 已生成 文档"，但 toolCallSequence 里**没有 generate_document**——只在 content 写了承诺就停了。')
-          retryPromptParts.push('请**立即发起 tool_call** 调一次 generate_document：')
-          retryPromptParts.push('- format: "md"')
-          retryPromptParts.push('- ir: 基于上面已经写好的内容构造（含 frontmatter title）')
-          retryPromptParts.push('- filename: 有意义的名字')
+        if (artifactMissing) {
+          retryPromptParts.push('## 缺失 1：真实文件')
+          retryPromptParts.push(`用户要求的文件还没有落盘，缺少工具调用：${missingArtifactTools.join('、')}。`)
+          if (missingArtifactTools.includes('generate_document')) {
+            retryPromptParts.push('请调用 generate_document：')
+            retryPromptParts.push(`- format: "${artifactRequest.documentFormat}"`)
+            retryPromptParts.push('- ir: 基于已确认内容构造，必须含 frontmatter title')
+            retryPromptParts.push('- filename: 有意义的名字')
+          }
+          if (missingArtifactTools.includes('export_pptx')) {
+            retryPromptParts.push('请完成 PPTX 两步落盘：')
+            retryPromptParts.push('1. 调用 write_file，把 16:9 多页幻灯片 HTML 写到 exports/<文件名>.html')
+            retryPromptParts.push('2. 调用 export_pptx，input_path 指向该 HTML，save_to_project_path 使用 exports/<文件名>.pptx')
+          }
           retryPromptParts.push('')
         }
         if (chartMissing) {

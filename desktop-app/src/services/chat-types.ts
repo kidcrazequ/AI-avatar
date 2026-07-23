@@ -16,7 +16,7 @@ export interface ChatMessage {
 /**
  * 工具落盘文件附件（generate_document / export_excel 共用）。
  *
- * 决策 B3：把 PDF/DOCX/MD 与 Excel 统一到同一附件类型，
+ * 决策 B3：把 PDF/DOCX/MD/PPTX 与 Excel 统一到同一附件类型，
  * UI 端用同一个 FileCard 组件渲染，避免出现"Excel 一种样式、文档另一种样式"。
  *
  * 与 AttachmentRef 的区别：
@@ -26,7 +26,7 @@ export interface ChatMessage {
  * @author zhi.qu
  * @date 2026-05-08
  */
-export type DocumentAttachmentFormat = 'md' | 'pdf' | 'docx' | 'xlsx'
+export type DocumentAttachmentFormat = 'md' | 'pdf' | 'docx' | 'pptx' | 'xlsx'
 
 export interface DocumentAttachmentSource {
   /** 引用源（cite 块的 source 属性，通常是 knowledge/xxx.md） */

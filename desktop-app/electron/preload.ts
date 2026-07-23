@@ -547,7 +547,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   distillWorkflowSkillDraft: (input: { avatarId: string; conversationId: string; title?: string }) =>
     ipcRenderer.invoke('skill-draft:distill', input),
   listSkillDrafts: (avatarId: string) => ipcRenderer.invoke('skill-draft:list', avatarId),
-  promoteSkillDraft: (input: { avatarId: string; filename: string; skillId?: string }) =>
+  promoteSkillDraft: (input: { avatarId: string; filename: string; skillId?: string; draftContent?: string }) =>
     ipcRenderer.invoke('skill-draft:promote', input),
   deleteSkillDraft: (input: { avatarId: string; filename: string }) =>
     ipcRenderer.invoke('skill-draft:delete', input),

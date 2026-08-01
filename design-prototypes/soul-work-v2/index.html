@@ -1436,6 +1436,15 @@
     .automation-editor-fields input:hover, .automation-editor-fields select:hover, .automation-editor-fields textarea:hover { border-color: #bdb9b2; background-color: #fff; }
     .automation-editor-fields input:focus, .automation-editor-fields select:focus, .automation-editor-fields textarea:focus, .automation-editor-fields input:focus-visible, .automation-editor-fields select:focus-visible, .automation-editor-fields textarea:focus-visible { border-color: #7c7980; outline: 2px solid rgba(37,38,43,.12); outline-offset: 0; background-color: #fff; box-shadow: none; }
     .automation-editor-actions { min-height: 70px; padding: 12px 30px; gap: 9px; background: #fff; }
+    .expert-test-list { display: grid; gap: 6px; overflow: visible; border: 0; border-radius: 0; background: transparent; counter-reset: expert-test; }
+    .expert-test-row { min-height: 64px; grid-template-columns: 32px minmax(0, 1fr) auto auto; gap: 14px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 1px 1px rgba(20,19,22,.025); counter-increment: expert-test; transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 140ms var(--ease); }
+    .expert-test-row:last-child { border-bottom: 1px solid var(--line); }
+    .expert-test-row:hover { border-color: #cbc7c0; background: #fdfcfb; transform: translateY(-1px); }
+    .expert-test-row::before { content: counter(expert-test, decimal-leading-zero); width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: #f6f5f2; color: var(--secondary); font: 620 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .expert-test-row strong { font-size: 14px; font-weight: 650; }
+    .expert-test-row > span:nth-of-type(1) { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f8f7f4; color: var(--secondary); font: 500 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .expert-test-row > span:last-child { min-width: 68px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 9px; border: 1px solid #dfdcd6; border-radius: 999px; background: #f6f5f2; color: var(--secondary); font-size: 12px; font-weight: 560; }
+    .expert-test-row > span:last-child::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #aaa79f; }
 
     @media (max-width: 1280px) {
       .home-inner { width: calc(100% - 46px); padding-top: 38px; }

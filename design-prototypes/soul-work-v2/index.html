@@ -1812,7 +1812,7 @@
 
         <nav class="nav-section" aria-label="主导航">
           <button class="nav-item active" type="button" data-view="home">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建任务</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
           <button class="nav-item has-running-task" type="button" data-view="work">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-work-card" x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8h6M9 12h6"/><path class="nav-work-progress" d="M9 16h5"/></svg><span class="nav-label">任务</span><span class="count">2</span>
@@ -2554,7 +2554,7 @@
               <section class="settings-panel" data-settings-panel="theme">
                 <header class="settings-panel-head"><h2>主题外观</h2><p>设置默认入口、主题、界面密度与任务确认方式。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">工作台</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>默认入口</strong><p>任务为主，仍可随时切换到历史 Chat。</p></span><select class="settings-control"><option>新建任务</option><option>Chat</option></select></div>
+                  <div class="settings-row"><span><strong>默认入口</strong><p>从统一入口开始对话，执行需求会在当前线程中创建任务。</p></span><select class="settings-control"><option>新建</option><option>最近</option></select></div>
                   <div class="settings-row"><span><strong>界面主题</strong><p>跟随系统或固定亮色 / 深色。</p></span><select class="settings-control"><option>跟随系统</option><option>亮色</option><option>深色</option></select></div>
                   <div class="settings-row"><span><strong>界面密度</strong><p>舒适密度使用 Codex / Claude 桌面端接近的字号与间距。</p></span><select class="settings-control"><option>舒适</option><option>紧凑</option></select></div>
                   <div class="settings-row"><span><strong>默认权限模式</strong><p>低风险自动执行，中风险确认一次，高风险单独确认。</p></span><select class="settings-control"><option>智能确认</option><option>每步确认</option><option>只读</option></select></div>
@@ -2651,7 +2651,7 @@
       var commandInput = document.getElementById('commandInput');
       var commandResults = document.getElementById('commandResults');
       var commandItems = [
-        { label: '新建任务', meta: '提出目标并匹配专家', icon: '+', view: 'home', group: '工作台' },
+        { label: '新建', meta: '开始对话或创建任务', icon: '+', view: 'home', group: '工作台' },
         { label: '任务', meta: '查看执行、结果和上下文', icon: 'T', view: 'work', group: '工作台' },
         { label: '看板', meta: '自定义个人工作台与组件', icon: 'B', view: 'dashboard', group: '工作台' },
         { label: '项目', meta: '共享上下文、文件和专家组', icon: 'P', view: 'project', group: '工作台' },

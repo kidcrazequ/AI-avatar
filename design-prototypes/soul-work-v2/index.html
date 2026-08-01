@@ -24,6 +24,8 @@
       --pink-soft: #fff0f5;
       --mint: #36c98f;
       --mint-dark: #13714d;
+      --blue: #2563eb;
+      --blue-soft: #eef4ff;
       --amber: #d99b36;
       --red: #cf4b54;
       --shadow-float: 0 18px 55px rgba(21, 20, 23, 0.12), 0 3px 12px rgba(21, 20, 23, 0.08);
@@ -225,47 +227,71 @@
     .nav-item {
       position: relative;
       width: 100%;
-      height: 36px;
+      height: 44px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 0 10px;
+      gap: 12px;
+      padding: 0 12px;
       border: 0;
-      border-radius: 6px;
+      border-radius: 14px;
       background: transparent;
       color: #5d5c64;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 16px;
+      font-weight: 520;
+      line-height: 24px;
+      letter-spacing: -.01em;
       text-align: left;
       cursor: pointer;
-      transition: background 140ms var(--ease), color 140ms var(--ease);
+      transition: background 180ms var(--ease), color 180ms var(--ease), transform 180ms var(--ease);
     }
 
-    .nav-item:hover { background: var(--soft-strong); color: var(--ink); }
-    .nav-item.active { background: #eceae6; color: var(--ink); font-weight: 610; }
+    .nav-item:hover { background: #efeeeb; color: var(--ink); }
+    .nav-item:active { transform: scale(.985); }
+    .nav-item.active { background: var(--blue-soft); color: var(--ink); font-weight: 620; }
     .nav-item.active::before {
       content: "";
       position: absolute;
-      left: 0;
-      top: 8px;
-      bottom: 8px;
-      width: 2px;
-      border-radius: 2px;
-      background: var(--pink);
+      left: 2px;
+      top: 13px;
+      bottom: 13px;
+      width: 3px;
+      border-radius: 3px;
+      background: var(--blue);
     }
+
+    .nav-label { min-width: 0; white-space: nowrap; }
+    .nav-icon.icon { width: 20px; height: 20px; flex: 0 0 auto; stroke-width: 1.8; transition: color 180ms var(--ease), transform 220ms var(--ease); }
+    .nav-icon > * { transform-box: fill-box; transform-origin: center; transition: transform 220ms var(--ease), opacity 180ms var(--ease); }
+    .nav-item:hover .nav-icon, .nav-item:focus-visible .nav-icon { transform: translateY(-1px); }
+    .nav-item.active .nav-icon { color: var(--blue); animation: nav-icon-pop 240ms var(--ease); }
+    .nav-item[data-view="home"]:hover .nav-new-plus { transform: rotate(90deg) scale(1.08); }
+    .nav-item[data-view="work"]:hover .nav-work-card { transform: translateY(-1px); }
+    .nav-item[data-view="project"]:hover .nav-project-lid { transform: translateY(-1.5px); }
+    .nav-item[data-view="automation"]:hover .nav-auto-hand { transform: rotate(38deg); }
+    .nav-item[data-view="experts"]:hover .nav-expert-front { transform: translateY(-1px); }
+    .nav-item[data-view="experts"]:hover .nav-expert-back { transform: translateX(1px); }
+    .nav-item[data-view="chat"]:hover .nav-chat-line:first-of-type { transform: translateX(1px); }
+    .nav-item[data-view="chat"]:hover .nav-chat-line:last-of-type { transform: translateX(2px); }
+    .nav-item[data-view="settings"]:hover .nav-settings-gear { transform: rotate(24deg); }
+    .nav-item.has-running-task .nav-work-progress { stroke-dasharray: 5; animation: nav-work-progress 1.8s ease-in-out infinite; }
+    @keyframes nav-icon-pop { 0% { transform: scale(.92); } 70% { transform: scale(1.06); } 100% { transform: scale(1); } }
+    @keyframes nav-work-progress { 0%, 100% { stroke-dashoffset: 0; opacity: 1; } 50% { stroke-dashoffset: 5; opacity: .35; } }
+
+    .nav-shortcut { display: inline-flex; gap: 3px; margin-left: auto; }
+    .nav-shortcut kbd { min-width: 20px; height: 24px; display: grid; place-items: center; padding: 0 5px; border: 0; border-radius: 7px; background: rgba(23,23,27,.055); color: #85858d; font: 550 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; box-shadow: inset 0 0 0 1px rgba(23,23,27,.025); }
 
     .nav-item .count {
       margin-left: auto;
-      min-width: 20px;
-      height: 18px;
+      min-width: 24px;
+      height: 22px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       padding: 0 5px;
-      border-radius: 5px;
-      background: #e7e4df;
-      color: #77757b;
-      font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      border-radius: 7px;
+      background: rgba(23,23,27,.055);
+      color: #777781;
+      font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
     .stage { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--work); }
@@ -1085,7 +1111,7 @@
     .settings-panel-head p, .settings-row p, .settings-control, .setting-switch,
     .settings-callout, .settings-provider-mark, .settings-provider p { font-size: 12px; }
 
-    .nav-item, .tool-button, .primary-button, .secondary-button, .section-tab,
+    .tool-button, .primary-button, .secondary-button, .section-tab,
     .row-sub, .attention-row .row-title, .rail-work-title, .execution-meta,
     .work-action-title, .activity-line, .log-row, .detail-tab, .detail-title,
     .progress-label, .person-name, .permission-row, .empty-state, .file-name,
@@ -1385,7 +1411,6 @@
     h1 { font-size: 28px; }
     .workspace-heading h1 { font-size: 25px; }
     .lead, .workspace-heading .lead { font-size: 15px; }
-    .nav-item { height: 38px; font-size: 14px; }
     .tool-button { height: 34px; padding: 0 10px; font-size: 13px; }
     .primary-button {
       height: 36px;
@@ -1557,7 +1582,7 @@
     }
 
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
     }
   </style>
 </head>
@@ -1601,28 +1626,28 @@
 
         <nav class="nav-section" aria-label="主导航">
           <button class="nav-item active" type="button" data-view="home">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>新工作</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 19H6.5L3 21l1.1-4A8 8 0 1 1 8 19Z"/><path class="nav-new-plus" d="M12 8v7M8.5 11.5h7"/></svg><span class="nav-label">新工作</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
-          <button class="nav-item" type="button" data-view="work">
-            <svg class="icon" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg><span>工作</span><span class="count">2</span>
+          <button class="nav-item has-running-task" type="button" data-view="work">
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-work-card" x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8h6M9 12h6"/><path class="nav-work-progress" d="M9 16h5"/></svg><span class="nav-label">工作</span><span class="count">2</span>
           </button>
           <button class="nav-item" type="button" data-view="project">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 8V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span>项目</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">项目</span>
           </button>
           <button class="nav-item" type="button" data-view="automation">
-            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg><span>自动任务</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 5.8 3.5 7.6M18.7 5.8l1.8 1.8"/><circle cx="12" cy="13" r="7"/><path class="nav-auto-hand" d="M12 9v4l2.6 1.6"/><path d="m8 20-1 1m9-1 1 1"/></svg><span class="nav-label">自动任务</span>
           </button>
           <button class="nav-item" type="button" data-view="experts">
-            <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><path d="M16 8.3a2.6 2.6 0 0 1 0 5.1M17 15.3c2 .5 3.1 1.7 3.5 3.7"/></svg><span>专家</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><g class="nav-expert-front"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/></g><g class="nav-expert-back"><path d="M16 8.3a2.6 2.6 0 0 1 0 5.1M17 15.3c2 .5 3.1 1.7 3.5 3.7"/></g></svg><span class="nav-label">专家</span>
           </button>
           <button class="nav-item" type="button" data-view="chat">
-            <svg class="icon" viewBox="0 0 24 24"><path d="M5 18.5 3.8 21l3.7-1.3A8.5 8.5 0 1 0 3.5 12c0 2 .7 3.8 1.8 5.2"/><path d="M8 10h8M8 14h5"/></svg><span>Chat</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18.5 3.8 21l3.7-1.3A8.5 8.5 0 1 0 3.5 12c0 2 .7 3.8 1.8 5.2"/><path class="nav-chat-line" d="M8 10h8"/><path class="nav-chat-line" d="M8 14h5"/></svg><span class="nav-label">Chat</span>
           </button>
         </nav>
 
         <div class="nav-spacer"></div>
         <button class="nav-item" type="button" data-view="settings">
-          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7a6.5 6.5 0 0 0-.7-1.6l.9-1.9-2.1-2.1-1.9.9a6.5 6.5 0 0 0-1.7-.7l-.6-2h-3l-.7 2a6.5 6.5 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6.5 6.5 0 0 0-.7 1.7l-2 .6v3l2 .7c.2.6.4 1.1.7 1.6l-.9 1.9 2.1 2.1 1.9-.9c.5.3 1.1.5 1.7.7l.6 2h3l.7-2c.6-.2 1.1-.4 1.6-.7l1.9.9 2.1-2.1-.9-1.9c.3-.5.5-1.1.7-1.7z"/></svg><span>设置</span>
+          <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><g class="nav-settings-gear"><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7a6.5 6.5 0 0 0-.7-1.6l.9-1.9-2.1-2.1-1.9.9a6.5 6.5 0 0 0-1.7-.7l-.6-2h-3l-.7 2a6.5 6.5 0 0 0-1.6.7l-1.9-.9-2.1 2.1.9 1.9a6.5 6.5 0 0 0-.7 1.7l-2 .6v3l2 .7c.2.6.4 1.1.7 1.6l-.9 1.9 2.1 2.1 1.9-.9c.5.3 1.1.5 1.7.7l.6 2h3l.7-2c.6-.2 1.1-.4 1.6-.7l1.9.9 2.1-2.1-.9-1.9c.3-.5.5-1.1.7-1.7z"/></g></svg><span class="nav-label">设置</span>
         </button>
       </aside>
 

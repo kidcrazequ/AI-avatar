@@ -1059,6 +1059,89 @@
     .state-lead, .state-list li, .state-note, .draft-row, .test-row,
     .artifact-title, .source-chip, .risk-copy { font-size: 14px; }
 
+    .feature-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 24;
+      display: grid;
+      grid-template-columns: 224px minmax(0, 1fr);
+      background: var(--work);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 160ms var(--ease), transform 180ms var(--ease);
+    }
+    .feature-layer.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    .feature-rail { min-width: 0; padding: 20px 12px; border-right: 1px solid var(--line); background: #f7f6f3; }
+    .feature-rail-kicker { padding: 0 10px 12px; color: var(--tertiary); font: 650 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
+    .feature-rail-context { margin: 0 4px 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .feature-rail-context strong { display: block; font-size: 13px; }
+    .feature-rail-context span { display: block; margin-top: 4px; color: var(--tertiary); font-size: 11px; line-height: 1.5; }
+    .feature-rail-nav { display: grid; gap: 2px; }
+    .feature-rail-tab { width: 100%; min-height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 13px; text-align: left; cursor: pointer; }
+    .feature-rail-tab:hover { background: #efede9; color: var(--ink); }
+    .feature-rail-tab.active { background: #e9e7e3; color: var(--ink); font-weight: 640; }
+    .feature-rail-tab .feature-tab-index { width: 18px; color: var(--tertiary); font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .feature-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fcfcfb; }
+    .feature-head { min-height: 94px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
+    .feature-head h2 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -.025em; }
+    .feature-head p { max-width: 720px; margin: 7px 0 0; color: var(--secondary); font-size: 13px; line-height: 1.55; }
+    .feature-head-actions { display: flex; align-items: center; gap: 7px; }
+    .quiet-button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: #fff; color: var(--secondary); font-size: 13px; font-weight: 560; cursor: pointer; box-shadow: 0 1px 1px rgba(20,19,22,.03); }
+    .quiet-button:hover { border-color: #c6c2bc; background: #faf9f7; color: var(--ink); }
+    .quiet-button.primary { border-color: #1f2024; background: #222328; color: #fff; }
+    .quiet-button.primary:hover { background: #111216; }
+    .quiet-button.danger { border-color: #e6c6c8; color: var(--red); }
+    .feature-close { width: 34px; padding: 0; font-size: 18px; }
+    .feature-scroll { min-width: 0; min-height: 0; overflow: auto; padding: 26px 30px 60px; }
+    .feature-content { width: min(1040px, 100%); margin: 0 auto; }
+    .feature-toolbar { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line-strong); }
+    .feature-toolbar h3 { margin: 0; font-size: 16px; }
+    .feature-toolbar p { margin: 5px 0 0; color: var(--tertiary); font-size: 12px; line-height: 1.5; }
+    .feature-toolbar-actions { display: flex; align-items: center; gap: 7px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .feature-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .feature-card { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .feature-card.span-2 { grid-column: span 2; }
+    .feature-card h4 { margin: 0; font-size: 14px; }
+    .feature-card > p { margin: 6px 0 0; color: var(--secondary); font-size: 13px; line-height: 1.6; }
+    .feature-list { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .feature-list-row { width: 100%; min-height: 58px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; }
+    .feature-list-row:last-child { border-bottom: 0; }
+    button.feature-list-row { cursor: pointer; }
+    button.feature-list-row:hover { background: #faf9f7; }
+    .feature-list-row strong { display: block; font-size: 13px; }
+    .feature-list-row small { display: block; margin-top: 4px; color: var(--tertiary); font-size: 11px; line-height: 1.45; }
+    .feature-row-actions { display: flex; align-items: center; gap: 6px; }
+    .feature-form { display: grid; gap: 15px; }
+    .feature-field { display: grid; gap: 6px; }
+    .feature-field > span { color: var(--secondary); font-size: 12px; font-weight: 600; }
+    .feature-input, .feature-select, .feature-textarea { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px; outline: 0; background: #fff; color: var(--ink); font-size: 13px; }
+    .feature-textarea { min-height: 160px; resize: vertical; line-height: 1.65; }
+    .feature-input:focus, .feature-select:focus, .feature-textarea:focus { border-color: #99959b; box-shadow: 0 0 0 3px rgba(40,39,43,.07); }
+    .feature-segmented { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #f3f1ee; }
+    .feature-segmented button { min-height: 29px; padding: 0 11px; border: 0; border-radius: 5px; background: transparent; color: var(--tertiary); font-size: 12px; cursor: pointer; }
+    .feature-segmented button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(30,28,32,.08); }
+    .feature-callout { margin-top: 14px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: #f8f7f4; color: var(--secondary); font-size: 12px; line-height: 1.65; }
+    .feature-callout strong { color: var(--ink); }
+    .feature-empty { display: grid; min-height: 260px; place-items: center; padding: 30px; border: 1px dashed var(--line-strong); border-radius: 9px; color: var(--tertiary); font-size: 13px; text-align: center; }
+
+    .command-backdrop { position: absolute; inset: 0; z-index: 40; display: grid; align-items: start; justify-items: center; padding-top: 11vh; background: rgba(28,27,30,.22); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
+    .command-backdrop.open { opacity: 1; pointer-events: auto; }
+    .command-palette { width: min(660px, calc(100% - 48px)); max-height: min(620px, 72vh); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid rgba(25,24,27,.14); border-radius: 12px; background: rgba(255,255,255,.98); box-shadow: 0 28px 80px rgba(24,22,26,.22), 0 4px 16px rgba(24,22,26,.1); transform: translateY(-8px) scale(.985); transition: transform 160ms var(--ease); }
+    .command-backdrop.open .command-palette { transform: translateY(0) scale(1); }
+    .command-search { height: 54px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 11px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .command-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 15px; }
+    .command-key { padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: #f5f4f1; color: var(--tertiary); font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .command-results { min-height: 0; overflow: auto; padding: 7px; }
+    .command-group-label { padding: 8px 9px 5px; color: var(--tertiary); font: 650 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
+    .command-result { width: 100%; min-height: 44px; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--secondary); text-align: left; cursor: pointer; }
+    .command-result:hover, .command-result.active { background: #efede9; color: var(--ink); }
+    .command-result-icon { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 12px; }
+    .command-result strong { display: block; font-size: 13px; }
+    .command-result small { display: block; margin-top: 2px; color: var(--tertiary); font-size: 11px; }
+    .command-result > span:last-child { color: var(--tertiary); font-size: 11px; }
+
     @media (max-width: 1280px) {
       .workspace-header { padding-left: 26px; padding-right: 26px; }
       .workspace-scroll { padding-left: 26px; padding-right: 26px; }
@@ -1066,6 +1149,8 @@
       .automation-layout, .expert-layout { grid-template-columns: 260px minmax(0, 1fr); }
       .chat-layout { grid-template-columns: 236px minmax(0, 1fr); }
       .settings-layout { grid-template-columns: 204px minmax(0, 1fr); }
+      .feature-layer { grid-template-columns: 206px minmax(0, 1fr); }
+      .feature-scroll { padding-left: 24px; padding-right: 24px; }
       .detail-workspace { padding-left: 28px; padding-right: 28px; }
     }
 
@@ -1903,6 +1988,28 @@
           </div>
         </section>
 
+        <section class="feature-layer" id="featureLayer" aria-hidden="true">
+          <aside class="feature-rail">
+            <div class="feature-rail-kicker" id="featureRailKicker">Expert workspace</div>
+            <div class="feature-rail-context"><strong id="featureContextTitle">小堵</strong><span id="featureContextMeta">工商储产品解决方案专家</span></div>
+            <nav class="feature-rail-nav" id="featureRailNav" aria-label="功能页面"></nav>
+          </aside>
+          <div class="feature-main">
+            <header class="feature-head">
+              <div><h2 id="featureTitle">功能页面</h2><p id="featureSubtitle">按现有分身逻辑展示完整页面与操作。</p></div>
+              <div class="feature-head-actions" id="featureHeadActions"><button class="quiet-button feature-close" id="closeFeature" type="button" aria-label="关闭">×</button></div>
+            </header>
+            <div class="feature-scroll"><div class="feature-content" id="featureContent"></div></div>
+          </div>
+        </section>
+
+        <div class="command-backdrop" id="commandBackdrop" aria-hidden="true">
+          <div class="command-palette" role="dialog" aria-modal="true" aria-label="全局搜索">
+            <div class="command-search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="commandInput" type="search" placeholder="搜索工作、项目、专家、对话和功能…" autocomplete="off"><span class="command-key">ESC</span></div>
+            <div class="command-results" id="commandResults"></div>
+          </div>
+        </div>
+
         <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
           <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
             <div class="modal-head"><div class="modal-kicker">Work input</div><h3 id="modalTitle">补充要求</h3></div>
@@ -1936,6 +2043,24 @@
       var toast = document.getElementById('toast');
       var toastText = document.getElementById('toastText');
       var toastTimer;
+      var featureLayer = document.getElementById('featureLayer');
+      var featureRegistry = {};
+      var featureGroups = {};
+      var activeFeatureKey = '';
+      var commandBackdrop = document.getElementById('commandBackdrop');
+      var commandInput = document.getElementById('commandInput');
+      var commandResults = document.getElementById('commandResults');
+      var commandItems = [
+        { label: '新工作', meta: '提出目标并匹配专家', icon: '+', view: 'home', group: '工作台' },
+        { label: '工作', meta: '查看执行、结果和上下文', icon: 'W', view: 'work', group: '工作台' },
+        { label: '项目', meta: '共享上下文、文件和专家组', icon: 'P', view: 'project', group: '工作台' },
+        { label: '自动任务', meta: '管理定时触发与独立 Work', icon: 'A', view: 'automation', group: '工作台' },
+        { label: '专家', meta: '管理分身能力与专家包', icon: 'E', view: 'experts', group: '工作台' },
+        { label: 'Chat', meta: '历史对话与辅助交流', icon: 'C', view: 'chat', group: '工作台' },
+        { label: '设置', meta: '模型、工具、文件和日志', icon: 'S', view: 'settings', group: '工作台' }
+      ];
+      var commandMatches = [];
+      var commandActiveIndex = 0;
 
       function showToast(message) {
         toastText.textContent = message;
@@ -1943,6 +2068,106 @@
         clearTimeout(toastTimer);
         toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2400);
       }
+
+      function registerFeature(key, definition) {
+        featureRegistry[key] = definition;
+        if (!commandItems.some(function (item) { return item.feature === key; })) {
+          commandItems.push({ label: definition.title, meta: definition.subtitle, icon: definition.icon || '◇', feature: key, group: definition.commandGroup || '专家功能' });
+        }
+      }
+
+      function registerFeatureGroup(key, items) { featureGroups[key] = items; }
+
+      function renderFeature(key) {
+        var definition = featureRegistry[key];
+        if (!definition) return;
+        activeFeatureKey = key;
+        document.getElementById('featureRailKicker').textContent = definition.kicker || 'Expert workspace';
+        document.getElementById('featureContextTitle').textContent = definition.contextTitle || document.getElementById('expertName').textContent || '当前专家';
+        document.getElementById('featureContextMeta').textContent = definition.contextMeta || document.getElementById('expertRole').textContent || '分身功能';
+        document.getElementById('featureTitle').textContent = definition.title;
+        document.getElementById('featureSubtitle').textContent = definition.subtitle;
+        document.getElementById('featureContent').innerHTML = typeof definition.content === 'function' ? definition.content() : definition.content;
+        var navItemsForGroup = definition.group && featureGroups[definition.group] ? featureGroups[definition.group] : [{ key: key, label: definition.title }];
+        document.getElementById('featureRailNav').innerHTML = navItemsForGroup.map(function (item, index) {
+          return '<button class="feature-rail-tab' + (item.key === key ? ' active' : '') + '" type="button" data-feature-key="' + item.key + '"><span class="feature-tab-index">' + String(index + 1).padStart(2, '0') + '</span><span>' + item.label + '</span></button>';
+        }).join('');
+        var actionMarkup = definition.actions || '';
+        document.getElementById('featureHeadActions').innerHTML = actionMarkup + '<button class="quiet-button feature-close" id="closeFeature" type="button" aria-label="关闭">×</button>';
+        document.getElementById('closeFeature').addEventListener('click', closeFeatureLayer);
+        document.querySelector('.feature-scroll').scrollTop = 0;
+      }
+
+      function openFeature(key) {
+        if (!featureRegistry[key]) return;
+        renderFeature(key);
+        featureLayer.classList.add('open');
+        featureLayer.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeFeatureLayer() {
+        featureLayer.classList.remove('open');
+        featureLayer.setAttribute('aria-hidden', 'true');
+        activeFeatureKey = '';
+      }
+
+      featureLayer.addEventListener('click', function (event) {
+        var featureButton = event.target.closest('[data-feature-key]');
+        if (featureButton) { renderFeature(featureButton.dataset.featureKey); return; }
+        var openButton = event.target.closest('[data-feature-open]');
+        if (openButton) { openFeature(openButton.dataset.featureOpen); }
+      });
+
+      function getCommandMatches(query) {
+        var normalized = query.trim().toLowerCase();
+        return commandItems.filter(function (item) { return !normalized || (item.label + ' ' + item.meta + ' ' + item.group).toLowerCase().includes(normalized); });
+      }
+
+      function renderCommandResults() {
+        commandMatches = getCommandMatches(commandInput.value);
+        if (commandActiveIndex >= commandMatches.length) commandActiveIndex = Math.max(0, commandMatches.length - 1);
+        if (!commandMatches.length) { commandResults.innerHTML = '<div class="feature-empty" style="min-height:160px">没有匹配的页面或功能</div>'; return; }
+        var lastGroup = '';
+        commandResults.innerHTML = commandMatches.map(function (item, index) {
+          var group = item.group !== lastGroup ? '<div class="command-group-label">' + item.group + '</div>' : '';
+          lastGroup = item.group;
+          return group + '<button class="command-result' + (index === commandActiveIndex ? ' active' : '') + '" type="button" data-command-index="' + index + '"><span class="command-result-icon">' + item.icon + '</span><span><strong>' + item.label + '</strong><small>' + item.meta + '</small></span><span>打开</span></button>';
+        }).join('');
+      }
+
+      function runCommand(index) {
+        var item = commandMatches[index];
+        if (!item) return;
+        closeCommandPalette();
+        if (item.view) switchView(item.view);
+        if (item.feature) openFeature(item.feature);
+      }
+
+      function openCommandPalette() {
+        commandActiveIndex = 0;
+        commandInput.value = '';
+        renderCommandResults();
+        commandBackdrop.classList.add('open');
+        commandBackdrop.setAttribute('aria-hidden', 'false');
+        setTimeout(function () { commandInput.focus(); }, 60);
+      }
+
+      function closeCommandPalette() {
+        commandBackdrop.classList.remove('open');
+        commandBackdrop.setAttribute('aria-hidden', 'true');
+      }
+
+      commandInput.addEventListener('input', function () { commandActiveIndex = 0; renderCommandResults(); });
+      commandInput.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown') { event.preventDefault(); commandActiveIndex = Math.min(commandActiveIndex + 1, commandMatches.length - 1); renderCommandResults(); }
+        if (event.key === 'ArrowUp') { event.preventDefault(); commandActiveIndex = Math.max(commandActiveIndex - 1, 0); renderCommandResults(); }
+        if (event.key === 'Enter') { event.preventDefault(); runCommand(commandActiveIndex); }
+      });
+      commandResults.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-command-index]');
+        if (button) runCommand(Number(button.dataset.commandIndex));
+      });
+      commandBackdrop.addEventListener('click', function (event) { if (event.target === commandBackdrop) closeCommandPalette(); });
 
       function switchView(name) {
         var views = { home: homeView, work: workView, project: projectView, automation: automationView, experts: expertsView, chat: chatView, settings: settingsView };
@@ -1952,6 +2177,7 @@
         detailRailToggle.setAttribute('aria-hidden', String(!isWork));
         detailRailToggle.tabIndex = isWork ? 0 : -1;
         if (!isWork) { setDetailRail(false); hideWorkState(); }
+        closeFeatureLayer();
         closeWorkMenu();
         navItems.forEach(function (item) { item.classList.toggle('active', item.dataset.view === name); });
       }
@@ -2453,22 +2679,24 @@
 
       document.getElementById('projectSwitcher').addEventListener('click', function () { showToast('当前项目：工商储方案'); });
       document.getElementById('notifyButton').addEventListener('click', function () { showToast('2 项工作需要你处理'); });
-      document.getElementById('searchButton').addEventListener('click', function () { showToast('全局搜索：工作、项目、专家与成果'); });
+      document.getElementById('searchButton').addEventListener('click', openCommandPalette);
 
       document.addEventListener('keydown', function (event) {
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && homeView.classList.contains('active')) {
           event.preventDefault();
           document.getElementById('startWork').click();
         }
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        if ((event.metaKey || event.ctrlKey) && ['k', 'p'].includes(event.key.toLowerCase())) {
           event.preventDefault();
-          showToast('全局搜索：工作、项目、专家与成果');
+          openCommandPalette();
         }
         if ((event.metaKey || event.ctrlKey) && event.altKey && event.key.toLowerCase() === 'b' && workView.classList.contains('active')) {
           event.preventDefault();
           setDetailRail(!detailRailOpen);
         }
         if (event.key === 'Escape') {
+          closeCommandPalette();
+          closeFeatureLayer();
           closeModal();
           closeRisk();
           closeWorkMenu();

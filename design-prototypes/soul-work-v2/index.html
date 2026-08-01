@@ -980,6 +980,8 @@
     .dashboard-widget-control { height: 27px; padding: 0 8px; border: 1px solid #d8dde6; border-radius: 7px; background: #fff; color: #5d6470; font-size: 11px; cursor: pointer; }
     .dashboard-widget-control:hover { border-color: #aac2e9; color: #205cb7; background: #f6f9ff; }
     .dashboard-widget-control.danger:hover { border-color: #edc7ca; color: var(--red); background: #fff7f7; }
+    .dashboard-widget-control:disabled, .dashboard-widget-control:disabled:hover { border-color: #e8e7e4; background: #faf9f7; color: #b8b6b1; cursor: default; }
+    .dashboard-widget-option:disabled, .dashboard-widget-option:disabled:hover { border-color: var(--line); background: #f5f4f1; color: #aaa7ad; cursor: default; opacity: .72; }
 
     .collection-rail {
       min-width: 0;
@@ -1682,6 +1684,15 @@
     .settings-row > .secondary-button { height: 44px; padding: 0 15px; border-color: #d8d4cd; border-radius: 11px; background: #fff; font-size: 14px; }
     .settings-callout { margin-top: 16px; padding: 0 2px; border: 0; border-radius: 0; background: transparent; font-size: 13px; line-height: 1.65; }
     .setting-switch { gap: 10px; font-size: 14px; } .setting-switch-mark { width: 36px; height: 20px; } .setting-switch-mark::after { width: 14px; height: 14px; } .setting-switch input:checked + .setting-switch-mark::after { transform: translateX(16px); }
+    .dashboard-detail-head h2 { font-size: 22px; }
+    .dashboard-widget-head h3 { font-size: 15px; }
+    .dashboard-task-row, .dashboard-output-row, .dashboard-person-row, .dashboard-progress-copy { font-size: 14px; }
+    .dashboard-task-row small, .dashboard-output-row small, .dashboard-person-row small { font-size: 12px; line-height: 1.45; }
+    .dashboard-template-copy strong { font-size: 15px; }
+    .dashboard-template-copy small, .dashboard-edit-copy { font-size: 13px; }
+    .dashboard-widget-control { font-size: 12px; }
+    #dashboardView button:focus-visible, #dashboardView textarea:focus-visible { outline-color: var(--blue); }
+    .dashboard-card:active, .dashboard-template:active, .dashboard-widget-option:active { transform: translateY(0) scale(.995); }
 
     @media (max-width: 1280px) {
       .home-inner { width: calc(100% - 46px); padding-top: 38px; }
@@ -1695,6 +1706,19 @@
       .goal-input { height: 136px; }
       .expert-profile-head { padding-left: 22px; padding-right: 22px; }
       .expert-panel-scroll { padding-left: 22px; padding-right: 22px; }
+      .dashboard-catalog { padding: 26px 28px 48px; }
+      .dashboard-detail { padding: 20px 28px 44px; }
+      .dashboard-create-layer { padding: 22px 28px 44px; }
+      .dashboard-grid { gap: 10px; }
+      .dashboard-widget { padding: 14px 16px; }
+      .dashboard-widget-options { gap: 7px; }
+    }
+
+    @media (max-height: 820px) {
+      .dashboard-zero { min-height: 410px; }
+      .dashboard-create-layer { padding-top: 18px; }
+      .dashboard-template { min-height: 196px; grid-template-rows: 102px auto; }
+      .dashboard-create-body { padding-top: 18px; padding-bottom: 18px; }
     }
 
     @media (max-height: 760px) {
@@ -3095,6 +3119,7 @@
         detailRailToggle.setAttribute('aria-hidden', String(!isWork));
         detailRailToggle.tabIndex = isWork ? 0 : -1;
         if (!isWork) { setDetailRail(false); hideWorkState(); }
+        if (name !== 'dashboard' && dashboardCreateLayer) { closeDashboardCreate(); setDashboardEditing(false); }
         closeFeatureLayer();
         closeWorkMenu();
         navItems.forEach(function (item) { item.classList.toggle('active', item.dataset.view === name); });
@@ -3176,12 +3201,23 @@
       }
 
       function decorateDashboardWidgets() {
-        dashboardGrid.querySelectorAll('.dashboard-widget').forEach(function (widget) {
+        var widgets = Array.from(dashboardGrid.querySelectorAll('.dashboard-widget'));
+        widgets.forEach(function (widget, index) {
           var previousControls = widget.querySelector('.dashboard-widget-controls');
           if (previousControls) previousControls.remove();
           widget.insertAdjacentHTML('afterbegin', dashboardWidgetControls());
+          widget.querySelector('[data-dashboard-widget-action="up"]').disabled = index === 0;
+          widget.querySelector('[data-dashboard-widget-action="down"]').disabled = index === widgets.length - 1;
           var resize = widget.querySelector('[data-dashboard-widget-action="resize"]');
           resize.textContent = widget.classList.contains('span-2') ? '缩小' : '放大';
+        });
+      }
+
+      function syncDashboardWidgetOptions() {
+        document.querySelectorAll('[data-dashboard-add-widget]').forEach(function (button) {
+          var installed = Boolean(dashboardGrid.querySelector('[data-widget="' + button.dataset.dashboardAddWidget + '"]'));
+          button.disabled = installed;
+          button.title = installed ? '已添加到当前看板' : '';
         });
       }
 
@@ -3192,7 +3228,7 @@
         dashboardEditButton.textContent = editing ? '完成编辑' : '编辑看板';
         dashboardEditButton.setAttribute('aria-pressed', String(editing));
         if (!editing) dashboardWidgetPicker.hidden = true;
-        if (editing) decorateDashboardWidgets();
+        if (editing) { decorateDashboardWidgets(); syncDashboardWidgetOptions(); }
       }
 
       function addDashboardWidget(name) {
@@ -3206,6 +3242,7 @@
         widget.innerHTML = dashboardWidgetCatalog[name];
         dashboardGrid.appendChild(widget);
         decorateDashboardWidgets();
+        syncDashboardWidgetOptions();
         updateDashboardWidgetCount();
         dashboardWidgetPicker.hidden = true;
         showToast('组件已添加到看板');
@@ -3221,6 +3258,7 @@
         template.addEventListener('click', function () { createDashboard(template.dataset.dashboardTemplate); });
       });
       document.getElementById('dashboardCreateClose').addEventListener('click', closeDashboardCreate);
+      dashboardCreateLayer.addEventListener('click', function (event) { if (event.target === dashboardCreateLayer) closeDashboardCreate(); });
       document.getElementById('dashboardDialogGenerate').addEventListener('click', function () {
         var prompt = document.getElementById('dashboardDialogPrompt').value.trim();
         if (!prompt) { showToast('请先描述希望长期关注的信息'); return; }
@@ -3230,7 +3268,7 @@
       document.getElementById('dashboardBack').addEventListener('click', function () { setDashboardEditing(false); showDashboardCatalog(); });
       document.getElementById('dashboardRefresh').addEventListener('click', function () { showToast('看板数据已刷新'); });
       dashboardEditButton.addEventListener('click', function () { setDashboardEditing(!dashboardEditing); });
-      document.getElementById('dashboardAddWidget').addEventListener('click', function () { dashboardWidgetPicker.hidden = !dashboardWidgetPicker.hidden; });
+      document.getElementById('dashboardAddWidget').addEventListener('click', function () { syncDashboardWidgetOptions(); dashboardWidgetPicker.hidden = !dashboardWidgetPicker.hidden; });
       document.getElementById('dashboardWidgetPickerClose').addEventListener('click', function () { dashboardWidgetPicker.hidden = true; });
       document.querySelectorAll('[data-dashboard-add-widget]').forEach(function (button) {
         button.addEventListener('click', function () { addDashboardWidget(button.dataset.dashboardAddWidget); });
@@ -3238,6 +3276,7 @@
       document.getElementById('dashboardReset').addEventListener('click', function () {
         dashboardGrid.innerHTML = dashboardDefaultMarkup;
         decorateDashboardWidgets();
+        syncDashboardWidgetOptions();
         updateDashboardWidgetCount();
         showToast('已恢复默认组件与顺序');
       });
@@ -3248,11 +3287,13 @@
         var action = control.dataset.dashboardWidgetAction;
         if (action === 'remove') {
           widget.remove();
+          decorateDashboardWidgets();
+          syncDashboardWidgetOptions();
           updateDashboardWidgetCount();
           showToast('组件已从当前看板移除');
         }
-        if (action === 'up' && widget.previousElementSibling) dashboardGrid.insertBefore(widget, widget.previousElementSibling);
-        if (action === 'down' && widget.nextElementSibling) dashboardGrid.insertBefore(widget.nextElementSibling, widget);
+        if (action === 'up' && widget.previousElementSibling) { dashboardGrid.insertBefore(widget, widget.previousElementSibling); decorateDashboardWidgets(); }
+        if (action === 'down' && widget.nextElementSibling) { dashboardGrid.insertBefore(widget.nextElementSibling, widget); decorateDashboardWidgets(); }
         if (action === 'resize') {
           widget.classList.toggle('span-2');
           control.textContent = widget.classList.contains('span-2') ? '缩小' : '放大';
@@ -3970,6 +4011,9 @@
           closeRisk();
           closeWorkMenu();
           closeChatTools();
+          if (!dashboardCreateLayer.hidden) closeDashboardCreate();
+          else if (!dashboardWidgetPicker.hidden) dashboardWidgetPicker.hidden = true;
+          else if (dashboardEditing) setDashboardEditing(false);
           if (workStateLayer.classList.contains('open')) hideWorkState();
         }
       });

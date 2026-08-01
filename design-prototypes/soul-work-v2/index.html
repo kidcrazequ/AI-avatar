@@ -1072,7 +1072,7 @@
       transition: opacity 160ms var(--ease), transform 180ms var(--ease);
     }
     .feature-layer.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .feature-rail { min-width: 0; padding: 20px 12px; border-right: 1px solid var(--line); background: #f7f6f3; }
+    .feature-rail { min-width: 0; overflow: auto; padding: 20px 12px; border-right: 1px solid var(--line); background: #f7f6f3; }
     .feature-rail-kicker { padding: 0 10px 12px; color: var(--tertiary); font: 650 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
     .feature-rail-context { margin: 0 4px 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .feature-rail-context strong { display: block; font-size: 13px; }
@@ -1136,6 +1136,16 @@
     .feature-split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 12px; }
     .feature-check { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 12px; }
     .feature-check input { accent-color: #24252a; }
+    .feature-metric { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .feature-metric strong { display: block; font-size: 23px; letter-spacing: -.04em; }
+    .feature-metric span { display: block; margin-top: 5px; color: var(--tertiary); font-size: 11px; }
+    .feature-timeline { position: relative; display: grid; gap: 12px; padding-left: 22px; }
+    .feature-timeline::before { content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 1px; background: var(--line-strong); }
+    .feature-timeline-item { position: relative; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .feature-timeline-item::before { content: ""; position: absolute; left: -20px; top: 19px; width: 7px; height: 7px; border: 2px solid #fcfcfb; border-radius: 50%; background: #76737a; box-shadow: 0 0 0 1px var(--line-strong); }
+    .feature-timeline-item time { color: var(--tertiary); font: 600 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .feature-timeline-item h4 { margin: 5px 0 0; font-size: 14px; }
+    .feature-timeline-item p { margin: 5px 0 0; color: var(--secondary); font-size: 12px; line-height: 1.6; }
 
     .command-backdrop { position: absolute; inset: 0; z-index: 40; display: grid; align-items: start; justify-items: center; padding-top: 11vh; background: rgba(28,27,30,.22); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
     .command-backdrop.open { opacity: 1; pointer-events: auto; }
@@ -1759,7 +1769,7 @@
               <h1>专家</h1>
               <p class="lead">专家是工作的执行能力；默认自动匹配，也可以在项目或 Work 中手动指定。</p>
             </div>
-            <div class="workspace-actions"><button class="secondary-button" type="button" data-modal="导入专家包">导入专家包</button></div>
+            <div class="workspace-actions"><button class="secondary-button" type="button" data-feature-open="import-pack">导入专家包</button><button class="primary-button" type="button" data-feature-open="create-expert">新建专家</button></div>
           </header>
           <div class="expert-layout">
             <aside class="collection-rail">
@@ -1829,8 +1839,8 @@
                     <header class="expert-panel-head"><div><h3>人格与画像</h3><p>集中管理原有的人设、人生时间线和用户画像，不与专业知识混用。</p></div><button class="secondary-button" type="button" data-feature-open="soul-editor">编辑人格</button></header>
                     <div class="expert-module-grid">
                       <article class="expert-module-card"><span class="expert-module-kicker">Soul</span><h4>人设</h4><p>身份、工作风格、表达方式和必须遵守的原则。</p><button type="button" data-feature-open="soul-editor">查看人格定义 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Timeline</span><h4>人生时间线</h4><p>专家背景叙事和关键经历，不作为专业事实来源。</p><button type="button" data-toast="打开专家人生时间线">打开时间线 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Profile</span><h4>用户画像</h4><p>只记录用户明确确认的偏好、称呼和协作方式。</p><button type="button" data-toast="打开当前用户画像">查看画像 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Timeline</span><h4>人生时间线</h4><p>专家背景叙事和关键经历，不作为专业事实来源。</p><button type="button" data-feature-open="life">打开时间线 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Profile</span><h4>用户画像</h4><p>只记录用户明确确认的偏好、称呼和协作方式。</p><button type="button" data-feature-open="profile">查看画像 →</button></article>
                     </div>
                   </section>
 
@@ -1854,9 +1864,9 @@
                   <section class="expert-panel" data-expert-panel="workplace">
                     <header class="expert-panel-head"><div><h3>职场与话术</h3><p>保留职场、提示词模板和分身办公室能力，统一在工作方式中管理。</p></div></header>
                     <div class="expert-module-grid">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Workplace</span><h4>职场</h4><p>路线、承诺、待确认事项和工作资料。</p><button type="button" data-toast="打开分身职场">进入职场 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Prompts</span><h4>话术</h4><p>可复用提示词、表达模板和沟通边界。</p><button type="button" data-toast="打开话术与提示词模板">管理话术 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Office</span><h4>办公室</h4><p>查看该专家当前参与的工作和协作状态。</p><button type="button" data-toast="进入分身办公室">进入办公室 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Workplace</span><h4>职场</h4><p>路线、承诺、待确认事项和工作资料。</p><button type="button" data-feature-open="palace">进入职场 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Prompts</span><h4>话术</h4><p>可复用提示词、表达模板和沟通边界。</p><button type="button" data-feature-open="prompts">管理话术 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Office</span><h4>办公室</h4><p>查看该专家当前参与的工作和协作状态。</p><button type="button" data-feature-open="office">进入办公室 →</button></article>
                     </div>
                   </section>
 
@@ -1872,18 +1882,18 @@
                   </section>
 
                   <section class="expert-panel" data-expert-panel="traces">
-                    <header class="expert-panel-head"><div><h3>轨迹与台账</h3><p>区分一次运行的执行轨迹和专家长期关联记录。</p></div><button class="secondary-button" type="button" data-toast="导出专家台账">导出台账</button></header>
+                    <header class="expert-panel-head"><div><h3>轨迹与台账</h3><p>区分一次运行的执行轨迹和专家长期关联记录。</p></div><button class="secondary-button" type="button" data-feature-open="dashboard">打开台账</button></header>
                     <div class="expert-module-grid two">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Trace</span><h4>执行轨迹</h4><p>按 Work 查看工具、检索、技能调用、事件和耗时。</p><button type="button" data-toast="打开该专家的执行轨迹">查看轨迹 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、自动任务和 Work 关联记录。</p><button type="button" data-toast="打开记忆、会话、定时与工作台账">查看台账 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Trace</span><h4>执行轨迹</h4><p>按 Work 查看工具、检索、技能调用、事件和耗时。</p><button type="button" data-feature-open="traces">查看轨迹 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、自动任务和 Work 关联记录。</p><button type="button" data-feature-open="dashboard">查看台账 →</button></article>
                     </div>
                   </section>
 
                   <section class="expert-panel" data-expert-panel="packages">
-                    <header class="expert-panel-head"><div><h3>专家包</h3><p>管理安装、结构检查、导入和导出；运行数据不混入专家包正本。</p></div><button class="secondary-button" type="button" data-modal="导入专家包">导入专家包</button></header>
+                    <header class="expert-panel-head"><div><h3>专家包</h3><p>管理安装、结构检查、导入和导出；运行数据不混入专家包正本。</p></div><button class="secondary-button" type="button" data-feature-open="import-pack">导入专家包</button></header>
                     <div class="expert-module-grid two">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Package</span><h4>当前专家包</h4><p>来源为本地安装；人格、知识、技能和测试结构从真实目录读取。</p><button type="button" data-toast="检查当前专家包结构">检查专家包 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Portable</span><h4>导入与导出</h4><p>导入前检查结构；导出时不包含未授权的会话和运行数据。</p><button type="button" data-toast="选择导入或导出专家包">管理导入 / 导出 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Package</span><h4>当前专家包</h4><p>来源为本地安装；人格、知识、技能和测试结构从真实目录读取。</p><button type="button" data-feature-open="packages">检查专家包 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Portable</span><h4>导入与导出</h4><p>导入前检查结构；导出时不包含未授权的会话和运行数据。</p><button type="button" data-feature-open="import-pack">管理导入 / 导出 →</button></article>
                     </div>
                   </section>
                 </div>
@@ -2094,8 +2104,17 @@
         { key: 'skills', label: '技能' },
         { key: 'knowledge', label: '知识库' },
         { key: 'memory', label: '记忆' },
+        { key: 'palace', label: '职场' },
+        { key: 'life', label: '人生' },
+        { key: 'profile', label: '画像' },
+        { key: 'prompts', label: '话术' },
+        { key: 'schedules', label: '定时' },
+        { key: 'traces', label: '轨迹' },
+        { key: 'dashboard', label: '台账' },
         { key: 'tests', label: '测试' },
-        { key: 'batch-regression', label: '批量回归' }
+        { key: 'batch-regression', label: '批量回归' },
+        { key: 'office', label: '办公室' },
+        { key: 'packages', label: '专家包' }
       ]);
 
       registerFeature('soul-editor', {
@@ -2191,6 +2210,117 @@
           <div class="feature-callout"><strong>报告内容：</strong>专家、用例文件、运行状态、失败原因和原始事件；不会在未运行时生成分数。</div>`
       });
 
+      registerFeature('palace', {
+        title: '职场', subtitle: '管理路线、承诺、待确认事项与长期工作资料。', icon: '职', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="add-workplace">新增事项</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>工作现场</h3><p>把长期方向和一次 Work 分开；承诺与待确认项都可追踪。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">路线</button><button type="button">承诺</button><button type="button">收件箱</button><button type="button">资料</button></div></div>
+          <div class="feature-grid">
+            <section class="feature-card"><h4>近期路线</h4><p>完善工商储方案需求澄清与交付结构，使每项结论都能回到来源。</p><div class="feature-meta-line"><span class="feature-pill ready">进行中</span><span>关联 2 项 Work</span></div></section>
+            <section class="feature-card"><h4>待确认承诺</h4><p>对客户材料不补充未经确认的专业参数或收益数据。</p><div class="feature-meta-line"><span class="feature-pill waiting">待用户确认</span><span>今天</span></div></section>
+            <section class="feature-card span-2"><h4>收件箱</h4><div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>工作需要补充资料</strong><small>客户沟通初步方案 · 2 个参数缺口</small></span><span class="feature-pill waiting">待处理</span></button><button class="feature-list-row" type="button" data-view="project"><span><strong>项目文件已更新</strong><small>客户需求说明.pdf · 等待知识检查</small></span><span class="feature-pill">新资料</span></button></div></section>
+          </div>`
+      });
+
+      registerFeature('life', {
+        title: '人生', subtitle: '维护专家背景叙事和关键经历；不作为专业事实来源。', icon: '生', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="add-life">添加经历</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>人生时间线</h3><p>用于塑造稳定人格和表达语境，与专业知识库严格分离。</p></div><span class="feature-pill">3 个阶段</span></div>
+          <div class="feature-timeline" id="lifeTimeline">
+            <article class="feature-timeline-item"><time>长期背景</time><h4>聚焦工商储产品解决方案</h4><p>以需求澄清、方案结构和证据边界为工作主线。</p></article>
+            <article class="feature-timeline-item"><time>协作原则</time><h4>先识别事实与缺口</h4><p>不把待确认项包装成结论，不以人格叙事替代知识来源。</p></article>
+            <article class="feature-timeline-item"><time>当前阶段</time><h4>参与「工商储方案」项目</h4><p>担任默认负责人，与财研共同完成可审阅成果。</p></article>
+          </div>`
+      });
+
+      registerFeature('profile', {
+        title: '用户画像', subtitle: '只记录用户明确确认的称呼、偏好和协作方式。', icon: '像', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="save-profile">保存画像</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>当前用户</h3><p>画像服务协作体验，不推断敏感属性，不自动扩展为专业事实。</p></div><span class="feature-pill ready">本地保存</span></div>
+          <form class="feature-grid" onsubmit="return false">
+            <label class="feature-card feature-field"><span>称呼</span><input class="feature-input" value="Kian"></label>
+            <label class="feature-card feature-field"><span>回答密度</span><select class="feature-select"><option>结论优先，必要时展开</option><option>详细说明</option><option>极简</option></select></label>
+            <label class="feature-card feature-field"><span>默认语言</span><select class="feature-select"><option>中文</option><option>English</option></select></label>
+            <label class="feature-card feature-field"><span>协作方式</span><select class="feature-select"><option>Work 为主，Chat 为辅</option><option>Chat 为主</option></select></label>
+            <label class="feature-card span-2 feature-field"><span>已确认偏好</span><textarea class="feature-textarea" style="min-height:110px">原型和正式产品分开验收；涉及专业事实时保留来源；关键流程要能实际点击，不以静态页面代替功能闭环。</textarea></label>
+          </form>`
+      });
+
+      registerFeature('prompts', {
+        title: '话术', subtitle: '管理可复用提示词、表达模板和沟通边界。', icon: '话', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="add-prompt">新建话术</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>话术模板</h3><p>可以在 Chat 中直接使用，也可以带入新 Work 作为目标草稿。</p></div><input class="feature-input" style="width:220px" placeholder="搜索话术"></div>
+          <div class="feature-list" id="promptFeatureList">
+            <div class="feature-list-row"><span><strong>需求参数缺口确认</strong><small>先列已知事实，再按影响程度列出需要客户确认的参数</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="use-prompt">使用</button><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>
+            <div class="feature-list-row"><span><strong>客户沟通提纲</strong><small>按目标、现状、缺口、下一步组织沟通内容</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="use-prompt">使用</button><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>
+            <div class="feature-list-row"><span><strong>来源与不确定项说明</strong><small>明确区分文件事实、专家判断与待确认内容</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="use-prompt">使用</button><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>
+          </div>`
+      });
+
+      registerFeature('schedules', {
+        title: '定时任务', subtitle: '查看当前专家关联的 Chat 提醒和 Work 自动任务。', icon: '定', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-view="automation">打开自动任务中心</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>专家定时任务</h3><p>每次 Work 类型触发都会创建独立运行；Chat 类型只发送辅助提醒。</p></div><span class="feature-pill">1 条规则</span></div>
+          <div class="feature-list"><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>每周一 · 工商储方案 · 独立 Work</small></span><span class="feature-pill waiting">未启用</span></button></div>`
+      });
+
+      registerFeature('traces', {
+        title: '执行轨迹', subtitle: '按 Work 查看专家的检索、工具、技能和事件记录。', icon: '轨', group: 'expert-core',
+        actions: '<button class="quiet-button" type="button" data-demo-action="export-trace">导出轨迹</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>客户沟通初步方案</h3><p>Run 01 · 小堵负责 · 只展示本次运行允许访问的记录。</p></div><select class="feature-select" style="width:190px"><option>全部事件</option><option>工具调用</option><option>来源检索</option><option>技能</option></select></div>
+          <div class="feature-timeline">
+            <article class="feature-timeline-item"><time>09:42:03</time><h4>开始执行</h4><p>载入 Work 目标、项目上下文和已批准附件。</p></article>
+            <article class="feature-timeline-item"><time>09:42:08</time><h4>检索知识库</h4><p>查询与需求澄清和方案结构相关的已安装知识文件。</p></article>
+            <article class="feature-timeline-item"><time>09:42:14</time><h4>识别资料缺口</h4><p>发现 2 项需要用户确认的输入，进入等待用户状态。</p></article>
+          </div>`
+      });
+
+      registerFeature('dashboard', {
+        title: '专家台账', subtitle: '汇总专家关联的记忆、对话、定时任务、Work 与成果。', icon: '账', group: 'expert-core',
+        actions: '<button class="quiet-button" type="button" data-demo-action="export-ledger">导出台账</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>使用概览</h3><p>数量从本地关联记录读取；不把运行数据写回专家包正本。</p></div><span class="feature-pill">当前专家</span></div>
+          <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联 Work</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>自动任务</span></div></div>
+          <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">工作</span></button><button class="feature-list-row" type="button" data-view="chat"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · Work 类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
+      });
+
+      registerFeature('office', {
+        title: '办公室', subtitle: '查看专家当前参与的工作、协作者和等待事项。', icon: '办', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-view="home">交给该专家</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>今日工作</h3><p>以 Work 为单位组织执行，不把办公室状态混入专家知识。</p></div><span class="feature-pill ready">可接新工作</span></div>
+          <div class="feature-grid"><section class="feature-card"><h4>正在执行</h4><p>客户沟通初步方案</p><div class="feature-meta-line"><span class="feature-pill ready">Run 01</span><span>与财研协作</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">打开工作</button></section><section class="feature-card"><h4>等待用户</h4><p>2 项输入需要确认，已保留当前执行上下文。</p><div class="feature-meta-line"><span class="feature-pill waiting">待处理</span><span>不会自动补全</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">查看问题</button></section></div>`
+      });
+
+      registerFeature('packages', {
+        title: '专家包', subtitle: '检查人格、知识、技能、测试和运行数据的边界。', icon: '包', group: 'expert-core',
+        actions: '<button class="quiet-button" type="button" data-feature-open="import-pack">导入</button><button class="quiet-button primary" type="button" data-demo-action="export-pack">导出专家包</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>当前专家包</h3><p>本地安装 · 运行时数据与专家包正本分离。</p></div><span class="feature-pill ready">结构可读取</span></div>
+          <div class="feature-split"><section class="feature-card"><h4>结构检查</h4><div class="feature-code">expert-pack/\n├─ soul.md\n├─ AGENTS.md\n├─ knowledge/README.md\n├─ skills/\n├─ tests/cases/\n└─ memory/MEMORY.md</div><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="check-pack">重新检查</button></section><aside class="feature-stack"><section class="feature-card"><h4>可移植内容</h4><p>人格、知识、技能、测试与空记忆结构。</p><span class="feature-pill ready" style="margin-top:10px">允许导出</span></section><section class="feature-card"><h4>默认排除</h4><p>会话、Work 运行、成果、凭据和未授权用户数据。</p><span class="feature-pill waiting" style="margin-top:10px">不会打包</span></section></aside></div>`
+      });
+
+      registerFeatureGroup('expert-library', [{ key: 'create-expert', label: '新建专家' }, { key: 'import-pack', label: '导入专家包' }, { key: 'expert-library', label: '专家包市场' }]);
+      registerFeature('create-expert', {
+        title: '新建专家', subtitle: '按模板创建人格、知识、技能和测试完整的专家草案。', icon: '+', group: 'expert-library', kicker: 'Expert setup',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="create-expert">创建草案</button>',
+        content: `<div class="feature-toolbar"><div><h3>基础信息</h3><p>知识库为空时只创建项目级草案，不允许直接转正。</p></div><span class="feature-pill waiting">草案</span></div><form class="feature-grid" onsubmit="return false"><label class="feature-card feature-field"><span>专家名称</span><input class="feature-input" placeholder="例如：政策研究专家"></label><label class="feature-card feature-field"><span>目录标识</span><input class="feature-input" placeholder="policy-research-expert"></label><label class="feature-card span-2 feature-field"><span>能力目标</span><textarea class="feature-textarea" style="min-height:100px" placeholder="说明专家应该处理什么，以及不能处理什么"></textarea></label><label class="feature-card feature-field"><span>创建位置</span><select class="feature-select"><option>项目级临时专家</option><option>本地专家草案</option></select></label><label class="feature-card feature-field"><span>知识状态</span><input class="feature-input" value="空 · 创建后必须补充知识文件" readonly></label></form><div class="feature-callout"><strong>转正条件：</strong>补充知识文件，并通过红线、知识约束、溯源、人格和能力边界至少五类测试。</div>`
+      });
+      registerFeature('import-pack', {
+        title: '导入专家包', subtitle: '先检查目录结构和风险，再由用户确认安装。', icon: '↓', group: 'expert-library', kicker: 'Expert setup',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="select-pack">选择本地目录</button>',
+        content: `<div class="feature-toolbar"><div><h3>导入流程</h3><p>不会覆盖同名专家；发现冲突时单独展示影响范围。</p></div><span class="feature-pill">等待选择</span></div><div class="feature-grid three"><section class="feature-card"><span class="feature-pill">01</span><h4 style="margin-top:10px">选择目录</h4><p>选择包含 soul.md、AGENTS.md 和知识目录的专家包。</p></section><section class="feature-card"><span class="feature-pill">02</span><h4 style="margin-top:10px">结构检查</h4><p>验证知识索引、技能引用、测试用例和不应打包的数据。</p></section><section class="feature-card"><span class="feature-pill">03</span><h4 style="margin-top:10px">确认安装</h4><p>安装属于高风险操作，执行前单独确认目标和影响。</p></section></div><div class="feature-empty" id="packDropzone" style="min-height:210px;margin-top:12px">将专家包拖到这里，或点击“选择本地目录”</div>`
+      });
+      registerFeature('expert-library', {
+        title: '专家包市场', subtitle: '浏览本地可安装的官方与自有专家包。', icon: '库', group: 'expert-library', kicker: 'Expert setup',
+        content: `<div class="feature-toolbar"><div><h3>可用专家包</h3><p>安装前查看来源、能力边界、知识状态和测试情况。</p></div><input class="feature-input" style="width:220px" placeholder="搜索专家"></div><div class="feature-grid three"><section class="feature-card"><h4>法研</h4><p>法务参阅级草案；条文不编造，非执业意见书。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section><section class="feature-card"><h4>市研</h4><p>市场分析、竞品备忘与可追溯外部数据。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section><section class="feature-card"><h4>项枢</h4><p>项目计划、风险、甘特和承诺边界。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section></div>`
+      });
+
       function renderFeature(key) {
         var definition = featureRegistry[key];
         if (!definition) return;
@@ -2227,6 +2357,10 @@
       featureLayer.addEventListener('click', function (event) {
         var featureButton = event.target.closest('[data-feature-key]');
         if (featureButton) { renderFeature(featureButton.dataset.featureKey); return; }
+        var linkedFeature = event.target.closest('[data-feature-open]');
+        if (linkedFeature) { openFeature(linkedFeature.dataset.featureOpen); return; }
+        var linkedView = event.target.closest('[data-view]');
+        if (linkedView) { switchView(linkedView.dataset.view); return; }
         var segmentedButton = event.target.closest('[data-segmented] button');
         if (segmentedButton) {
           segmentedButton.parentElement.querySelectorAll('button').forEach(function (button) { button.classList.toggle('active', button === segmentedButton); });
@@ -2276,6 +2410,27 @@
           showToast('测试已触发，原型不生成虚构通过结果');
         }
         if (action === 'run-regression') { document.getElementById('regressionStatus').textContent = '已创建运行'; document.getElementById('regressionStatus').classList.add('waiting'); showToast('批量回归已创建，等待真实测试结果'); }
+        if (action === 'add-workplace') showToast('已新增待确认事项草稿');
+        if (action === 'add-life') {
+          var timeline = document.getElementById('lifeTimeline');
+          if (timeline && !document.getElementById('lifeDraft')) timeline.insertAdjacentHTML('afterbegin', '<article class="feature-timeline-item" id="lifeDraft"><time>新经历 · 草稿</time><h4>等待补充标题</h4><p>此内容只用于人格叙事，不进入专业知识库。</p></article>');
+          showToast('已添加时间线草稿');
+        }
+        if (action === 'save-profile') showToast('用户画像已保存为本地原型草稿');
+        if (action === 'add-prompt') {
+          var promptList = document.getElementById('promptFeatureList');
+          if (promptList && !document.getElementById('promptDraft')) promptList.insertAdjacentHTML('afterbegin', '<div class="feature-list-row" id="promptDraft"><span><strong>未命名话术</strong><small>新建草稿 · 尚未用于对话或 Work</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>');
+          showToast('已创建话术草稿');
+        }
+        if (action === 'use-prompt') { closeFeatureLayer(); switchView('chat'); document.getElementById('chatInput').value = '请按「' + actionButton.closest('.feature-list-row').querySelector('strong').textContent + '」模板继续。'; document.getElementById('chatInput').focus(); showToast('话术已带入 Chat'); }
+        if (action === 'edit-prompt') { actionButton.closest('.feature-list-row').querySelector('small').textContent = '编辑中 · 保存后可用于 Chat 或 Work'; actionButton.textContent = '保存'; showToast('已进入话术编辑状态'); }
+        if (action === 'export-trace') showToast('已准备导出当前 Work 的可见轨迹');
+        if (action === 'export-ledger') showToast('已准备导出专家关联台账');
+        if (action === 'export-pack') showToast('已生成导出预览，运行数据和凭据已排除');
+        if (action === 'check-pack') { actionButton.textContent = '结构正常'; showToast('专家包结构检查完成'); }
+        if (action === 'create-expert') showToast('已创建项目级临时专家草案，知识库当前为空');
+        if (action === 'select-pack') { var dropzone = document.getElementById('packDropzone'); if (dropzone) dropzone.innerHTML = '<span><strong>已选择本地专家包</strong><br>等待结构检查；安装前仍需高风险确认。</span>'; showToast('已选择目录，正在准备结构检查'); }
+        if (action === 'install-pack') { actionButton.textContent = '等待确认'; actionButton.classList.add('primary'); showToast('已加入安装确认，尚未执行安装'); }
       });
 
       document.addEventListener('click', function (event) {

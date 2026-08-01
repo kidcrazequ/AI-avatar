@@ -1434,14 +1434,14 @@
     .chat-compose { border-radius: 10px; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
     .feature-card, .feature-list, .settings-surface { border-radius: 10px; }
     button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #676971; outline-offset: 2px; }
-    .automation-editor { place-items: center; padding: 28px; background: rgba(31,31,35,.14); backdrop-filter: blur(5px); }
-    .automation-editor-dialog { width: min(760px, calc(100vw - 72px)); max-height: min(720px, calc(100% - 56px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid #d8d4cd; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(23,23,26,.18), 0 2px 8px rgba(23,23,26,.08); }
+    .automation-editor { display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 28px; background: rgba(31,31,35,.14); backdrop-filter: blur(5px); }
+    .automation-editor-dialog { width: min(760px, calc(100vw - 72px)); max-height: none; flex: 0 0 auto; margin: auto 0; display: grid; grid-template-rows: auto auto auto; overflow: hidden; border: 1px solid #d8d4cd; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(23,23,26,.18), 0 2px 8px rgba(23,23,26,.08); }
     .automation-editor-head { min-height: 86px; padding: 18px 24px; background: #fff; }
     .automation-editor-head h2 { font-size: 20px; letter-spacing: -.025em; }
     .automation-editor-head p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
     .automation-editor-head button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--tertiary); font-size: 20px; }
     .automation-editor-head button:hover { background: #f3f2ef; color: var(--ink); }
-    .automation-editor-fields { width: auto; margin: 0; padding: 8px 24px 24px; gap: 0 18px; overflow: auto; border: 0; border-radius: 0; background: #fff; box-shadow: none; }
+    .automation-editor-fields { width: auto; margin: 0; padding: 8px 24px 24px; gap: 0 18px; overflow: visible; border: 0; border-radius: 0; background: #fff; box-shadow: none; }
     .automation-editor-fields label { gap: 8px; padding: 14px 0; border-bottom: 1px solid #ebe8e3; color: #55545b; font-size: 13px; font-weight: 560; }
     .automation-editor-fields label:last-child { border-bottom: 0; }
     .automation-editor-fields input, .automation-editor-fields select, .automation-editor-fields textarea { min-height: 44px; padding: 10px 13px; border-color: #d8d4cd; border-radius: 10px; background-color: #fff; color: var(--ink); font-size: 14px; line-height: 1.5; box-shadow: none; transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease), background 140ms var(--ease); }

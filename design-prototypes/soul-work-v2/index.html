@@ -918,6 +918,8 @@
     .expert-module-card > button { margin-top: auto; padding-top: 12px; border: 0; background: transparent; color: var(--pink-dark); font-size: 9px; font-weight: 620; text-align: left; cursor: pointer; }
     .expert-source-list, .expert-test-list { border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; }
     .expert-source-row, .expert-test-row { min-height: 46px; display: grid; align-items: center; gap: 14px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+    button.expert-source-row { width: 100%; border-width: 0 0 1px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+    button.expert-source-row:hover { background: #faf9f7; }
     .expert-source-row:last-child, .expert-test-row:last-child { border-bottom: 0; }
     .expert-source-row { grid-template-columns: minmax(0, 1.4fr) minmax(80px, .55fr) auto; }
     .expert-test-row { grid-template-columns: minmax(0, 1fr) 90px 70px; }
@@ -1352,6 +1354,63 @@
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
     .toast-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
 
+    /* Codex / Claude desktop polish: neutral actions, readable body type, restrained brand accents. */
+    h1 { font-size: 28px; }
+    .workspace-heading h1 { font-size: 25px; }
+    .lead, .workspace-heading .lead { font-size: 15px; }
+    .nav-item { height: 38px; font-size: 14px; }
+    .tool-button { height: 34px; padding: 0 10px; font-size: 13px; }
+    .primary-button {
+      height: 36px;
+      padding: 0 14px;
+      border-color: #202126;
+      border-radius: 7px;
+      background: #25262b;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 630;
+      box-shadow: 0 1px 2px rgba(20,20,23,.18), inset 0 1px 0 rgba(255,255,255,.08);
+    }
+    .primary-button:hover { background: #121317; box-shadow: 0 2px 6px rgba(20,20,23,.2); }
+    .secondary-button { height: 34px; padding: 0 12px; border-radius: 7px; font-size: 13px; box-shadow: 0 1px 1px rgba(20,19,22,.025); }
+    .section-tab, .expert-section-tab, .detail-tab { font-size: 13px; }
+    .work-action-title, .row-sub, .entity-meta, .entity-state, .collection-meta,
+    .chat-thread-preview, .chat-project, .message-name, .chat-mini-tool,
+    .settings-panel-head p, .settings-row p, .settings-control, .setting-switch,
+    .settings-callout, .feature-toolbar p, .feature-field > span,
+    .feature-list-row small, .feature-timeline-item p { font-size: 13px; }
+    .execution-meta, .activity-line, .log-row, .progress-label, .person-name,
+    .permission-row, .empty-state, .file-name, .definition-value, .entity-title,
+    .functional-head p, .automation-rule-card .rule-line, .detail-sheet-sub,
+    .collection-title, .expert-panel-head p, .expert-module-card p,
+    .chat-thread-title, .chat-title, .settings-row strong, .feature-list-row strong,
+    .feature-card > p, .feature-input, .feature-select, .feature-textarea { font-size: 14px; }
+    .message-copy, .chat-compose textarea, .boundary-note, .modal-copy, .modal-textarea,
+    .state-lead, .state-list li, .state-note, .draft-row, .test-row,
+    .artifact-title, .source-chip, .risk-copy { font-size: 15px; }
+    .settings-tab { height: 36px; font-size: 13px; }
+    .brand-edition, .eyebrow, .meta, .row-time, .rail-kicker, .rail-work-meta,
+    .collection-label, .settings-nav-label, .settings-section-title, .block-label,
+    .step-stamp, .log-key, .state-crumb, .feature-rail-kicker,
+    .feature-rail-context span, .feature-tab-index, .feature-pill,
+    .feature-meta-line, .feature-timeline-item time, .chat-search-note,
+    .chat-attachment, .chat-command-label, .chat-command-option span,
+    .command-key, .command-group-label, .command-result small,
+    .command-result > span:last-child { font-size: 12px; }
+    .section-head .meta, .shortcut, .avatar, .person-role, .person-state,
+    .flat-section-note, .definition-key, .file-icon, .expert-mini-role,
+    .expert-installed-badge, .expert-identity-meta, .expert-identity-meta span,
+    .chat-thread-time, .settings-glyph { font-size: 12px; }
+    .expert-source-row { min-height: 58px; }
+    .expert-source-row strong, .expert-source-row small { display: block; }
+    .expert-source-row small { margin-top: 4px; }
+    .settings-panel-head h2, .functional-head h2, .expert-panel-head h3 { font-size: 19px; }
+    .settings-row { min-height: 66px; padding: 12px 15px; }
+    .settings-control { min-height: 34px; }
+    .chat-compose { border-radius: 10px; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
+    .feature-card, .feature-list, .settings-surface { border-radius: 10px; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #676971; outline-offset: 2px; }
+
     @media (max-width: 1280px) {
       .home-inner { width: calc(100% - 46px); padding-top: 38px; }
       .home-lower { gap: 28px; grid-template-columns: minmax(0,1fr) 250px; }
@@ -1449,20 +1508,21 @@
 
             <div class="composer">
               <textarea class="goal-input" id="goalInput" aria-label="工作目标">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
+              <div class="chat-attachments" id="homeAttachments"></div>
               <div class="composer-tools">
-                <button class="tool-button" type="button" data-toast="原型：选择本地附件">
+                <button class="tool-button" id="homeAttach" type="button">
                   <svg class="icon" viewBox="0 0 24 24"><path d="m8 12.5 5.2-5.2a3.2 3.2 0 0 1 4.5 4.5l-7 7a4.8 4.8 0 0 1-6.8-6.8l7.4-7.4"/></svg><span>添加附件</span>
                 </button>
-                <button class="tool-button" type="button" data-toast="当前项目：工商储方案">
+                <button class="tool-button" type="button" data-feature-open="project-manager">
                   <svg class="icon" viewBox="0 0 24 24"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span>工商储方案</span>
                 </button>
-                <button class="tool-button" type="button" data-toast="将先匹配负责人，再补充最多三名协作专家">
+                <button class="tool-button" type="button" data-feature-open="project-expert-picker">
                   <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8M17 8v6M14 11h6"/></svg><span>自动匹配</span>
                 </button>
-                <button class="tool-button" type="button" data-toast="低风险自动执行，中高风险按影响确认">
+                <button class="tool-button" id="homePermission" type="button">
                   <svg class="icon" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.7 2.8 8 7 10 4.2-2 7-5.3 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>智能确认</span>
                 </button>
-                <button class="tool-button" type="button" data-toast="保留现有模型能力：端云/端侧切换与会话级模型选择">
+                <button class="tool-button" type="button" data-settings-open="chat">
                   <svg class="icon" viewBox="0 0 24 24"><path d="M5 7h14M8 12h8M10 17h4"/></svg><span>端云 · 默认模型</span>
                 </button>
                 <span class="push"></span>
@@ -1479,7 +1539,7 @@
                 <button class="work-row open-work" type="button">
                   <span class="status-dot waiting"></span><span><span class="row-title">需求参数缺口整理</span><span class="row-sub">等待确认 · 小堵</span></span><span class="row-time">稍早</span>
                 </button>
-                <button class="work-row" type="button" data-toast="草稿已保留在工商储方案项目中">
+                <button class="work-row home-draft-work" type="button">
                   <span class="status-dot"></span><span><span class="row-title">客户沟通提纲</span><span class="row-sub">草稿</span></span><span class="row-time">昨天</span>
                 </button>
               </section>
@@ -1505,9 +1565,9 @@
           <aside class="work-list-rail">
             <div class="rail-head"><div class="rail-kicker">CURRENT PROJECT</div><div class="rail-project">工商储方案</div></div>
             <div class="rail-list">
-              <button class="rail-work active" type="button"><span class="status-dot running"></span><span><span class="rail-work-title">客户沟通初步方案</span><span class="rail-work-meta">执行中 · 刚刚</span></span></button>
-              <button class="rail-work" type="button" data-toast="该工作正等待确认"><span class="status-dot waiting"></span><span><span class="rail-work-title">需求参数缺口整理</span><span class="rail-work-meta">等待确认 · 稍早</span></span></button>
-              <button class="rail-work" type="button" data-toast="该工作仍为草稿"><span class="status-dot"></span><span><span class="rail-work-title">客户沟通提纲</span><span class="rail-work-meta">草稿 · 昨天</span></span></button>
+              <button class="rail-work active" type="button" data-work-select="running"><span class="status-dot running"></span><span><span class="rail-work-title">客户沟通初步方案</span><span class="rail-work-meta">执行中 · 刚刚</span></span></button>
+              <button class="rail-work" type="button" data-work-select="waiting"><span class="status-dot waiting"></span><span><span class="rail-work-title">需求参数缺口整理</span><span class="rail-work-meta">等待确认 · 稍早</span></span></button>
+              <button class="rail-work" type="button" data-work-select="draft"><span class="status-dot"></span><span><span class="rail-work-title">客户沟通提纲</span><span class="rail-work-meta">草稿 · 昨天</span></span></button>
             </div>
           </aside>
 
@@ -1529,8 +1589,8 @@
                   <button class="work-action-item" type="button" role="menuitem" data-work-action="missing"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8M18 8v5M18 17h.01"/></svg></span><span><span class="work-action-title">重新匹配专家</span><span class="work-action-note">演示能力缺口处理</span></span></button>
                   <button class="work-action-item" type="button" role="menuitem" data-work-action="completed"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></span><span><span class="work-action-title">查看完成态</span><span class="work-action-note">结论、来源与成果</span></span></button>
                   <div class="work-action-separator"></div>
-                  <button class="work-action-item" type="button" role="menuitem" data-toast="保留现有轨迹能力：工具、检索、技能调用、事件与耗时"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg></span><span><span class="work-action-title">轨迹与事件</span><span class="work-action-note">完整执行明细</span></span></button>
-                  <button class="work-action-item" type="button" role="menuitem" data-toast="保留现有导出能力：Markdown、单文件 HTML 与成果分享"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></span><span><span class="work-action-title">导出与分享</span><span class="work-action-note">Markdown · HTML · 成果</span></span></button>
+                  <button class="work-action-item" type="button" role="menuitem" data-feature-open="traces"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h9"/></svg></span><span><span class="work-action-title">轨迹与事件</span><span class="work-action-note">完整执行明细</span></span></button>
+                  <button class="work-action-item" type="button" role="menuitem" data-feature-open="work-export"><span class="work-action-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></span><span><span class="work-action-title">导出与分享</span><span class="work-action-note">Markdown · HTML · 成果</span></span></button>
                 </div>
               </div>
             </header>
@@ -1564,7 +1624,7 @@
             </div>
 
             <footer class="execution-footer">
-              <button class="secondary-button danger" type="button" data-toast="取消属于中风险操作，正式执行前将展示影响范围">取消工作</button>
+              <button class="secondary-button danger" id="cancelWork" type="button">取消工作</button>
               <div class="footer-right"><button class="secondary-button" id="pauseButton" type="button">暂停</button><button class="secondary-button add-requirement" type="button">补充要求</button></div>
             </footer>
           </article>
@@ -1577,7 +1637,7 @@
             </div>
             <div class="detail-content">
               <div class="tab-panel active" data-panel="progress">
-                <section class="detail-section"><h3 class="detail-title">工作进度</h3><div class="progress-row done"><span class="progress-node"></span><span class="progress-label">读取现有资料</span></div><div class="progress-row active"><span class="progress-node"></span><span class="progress-label">整理需求与缺口</span></div><div class="progress-row upcoming"><span class="progress-node"></span><span class="progress-label">形成沟通结构</span></div><button class="secondary-button" style="width:100%;justify-content:center;margin-top:8px" type="button" data-toast="打开完整轨迹：工具、检索、技能调用、事件与耗时">查看完整轨迹</button></section>
+                <section class="detail-section"><h3 class="detail-title">工作进度</h3><div class="progress-row done"><span class="progress-node"></span><span class="progress-label">读取现有资料</span></div><div class="progress-row active"><span class="progress-node"></span><span class="progress-label">整理需求与缺口</span></div><div class="progress-row upcoming"><span class="progress-node"></span><span class="progress-label">形成沟通结构</span></div><button class="secondary-button" style="width:100%;justify-content:center;margin-top:8px" type="button" data-feature-open="traces">查看完整轨迹</button></section>
                 <section class="detail-section"><h3 class="detail-title">执行专家</h3><div class="person-row"><span class="avatar">小</span><span><span class="person-name">小堵</span><span class="person-role">负责人 · 工商储方案</span></span><span class="person-state">ACTIVE</span></div><div class="person-row"><span class="avatar">财</span><span><span class="person-name">财研</span><span class="person-role">协作 · 财务分析</span></span><span class="person-state">READY</span></div></section>
                 <section class="detail-section"><div class="permission-row"><span>权限模式</span><span class="permission-value">智能确认</span></div></section>
               </div>
@@ -1664,8 +1724,8 @@
                   <div class="page-column">
                     <section class="flat-section">
                       <div class="flat-section-head"><h2 class="flat-section-title">项目文件</h2><button class="flat-section-note" type="button" data-project-tab="files">管理文件</button></div>
-                      <button class="entity-row" type="button" data-toast="打开客户需求说明.pdf"><span><span class="entity-title">客户需求说明.pdf</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">PDF</span></button>
-                      <button class="entity-row" type="button" data-toast="打开场地资料.zip"><span><span class="entity-title">场地资料.zip</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">ZIP</span></button>
+                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">客户需求说明.pdf</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">PDF</span></button>
+                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">场地资料.zip</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">ZIP</span></button>
                     </section>
                     <section class="flat-section">
                       <div class="flat-section-head"><h2 class="flat-section-title">专家组</h2><button class="flat-section-note" type="button" data-project-tab="experts">管理专家组</button></div>
@@ -1690,7 +1750,7 @@
                 <div class="project-work-table">
                   <button class="entity-row project-open-work" type="button"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">今天 · 小堵、财研</span></span><span class="entity-state"><span class="status-dot running"></span>执行中</span></button>
                   <button class="entity-row project-open-work" type="button"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">今天 · 小堵</span></span><span class="entity-state"><span class="status-dot waiting"></span>等待确认</span></button>
-                  <button class="entity-row" type="button" data-toast="草稿仍保留在当前项目"><span><span class="entity-title">客户沟通提纲</span><span class="entity-meta">昨天 · 尚未路由</span></span><span class="entity-state"><span class="status-dot"></span>草稿</span></button>
+                  <button class="entity-row project-draft-work" type="button"><span><span class="entity-title">客户沟通提纲</span><span class="entity-meta">昨天 · 尚未路由</span></span><span class="entity-state"><span class="status-dot"></span>草稿</span></button>
                 </div>
               </section>
 
@@ -1864,9 +1924,9 @@
                   <section class="expert-panel" data-expert-panel="skills">
                     <header class="expert-panel-head"><div><h3>技能</h3><p>按分身专属、自有公共和社区开源来源加载，同名技能遵循优先级。</p></div><button class="secondary-button" type="button" data-feature-open="skills">管理技能</button></header>
                     <div class="expert-source-list">
-                      <div class="expert-source-row"><span><strong>分身专属技能</strong><small>avatars/&lt;expert&gt;/skills</small></span><span>最高优先级</span><span>查看 →</span></div>
-                      <div class="expert-source-row"><span><strong>自有公共技能</strong><small>shared/skills</small></span><span>共享能力</span><span>查看 →</span></div>
-                      <div class="expert-source-row"><span><strong>社区开源技能</strong><small>shared/skills/community</small></span><span>最低优先级</span><span>管理 →</span></div>
+                      <button class="expert-source-row" type="button" data-feature-open="skills"><span><strong>分身专属技能</strong><small>avatars/&lt;expert&gt;/skills</small></span><span>最高优先级</span><span>查看 →</span></button>
+                      <button class="expert-source-row" type="button" data-feature-open="skills"><span><strong>自有公共技能</strong><small>shared/skills</small></span><span>共享能力</span><span>查看 →</span></button>
+                      <button class="expert-source-row" type="button" data-feature-open="skills"><span><strong>社区开源技能</strong><small>shared/skills/community</small></span><span>最低优先级</span><span>管理 →</span></button>
                     </div>
                   </section>
 
@@ -1960,7 +2020,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Settings</p>
               <h1>设置</h1>
-              <p class="lead">管理工作台偏好、模型、联网与工具、数据和更新。</p>
+              <p class="lead">管理模型、知识、记忆、自动任务、工具集成、文件目录与诊断日志。</p>
             </div>
           </header>
           <div class="settings-layout">
@@ -2460,6 +2520,10 @@
         actions: '<button class="quiet-button primary" type="button" data-demo-action="save-distilled-skill">保存草案</button>',
         content: `<div class="feature-toolbar"><div><h3>技能草案</h3><p>只提取方法和步骤，不复制未授权的项目数据或敏感内容。</p></div><span class="feature-pill waiting">待审阅</span></div><form class="feature-form" onsubmit="return false"><label class="feature-field"><span>技能名称</span><input class="feature-input" value="客户沟通材料结构化"></label><label class="feature-field"><span>适用场景</span><input class="feature-input" value="将零散项目资料整理为可审阅沟通提纲"></label><label class="feature-field"><span>执行步骤</span><textarea class="feature-textarea">1. 归并用户已提供的事实\n2. 将缺失参数单独列出\n3. 区分事实、判断和待确认项\n4. 为关键结论保留来源\n5. 不自行补全专业参数或收益数据</textarea></label><label class="feature-field"><span>安装位置</span><select class="feature-select"><option>当前专家专属技能</option><option>自有公共技能草案</option></select></label></form>`
       });
+      registerFeature('work-export', {
+        title: '导出与分享', subtitle: '导出当前 Work 的结论、轨迹和成果，外部分享前单独确认。', icon: '↓', kicker: 'Work output', contextTitle: '客户沟通初步方案', contextMeta: '当前 Work · Run 01',
+        content: `<div class="feature-toolbar"><div><h3>导出内容</h3><p>导出只包含当前用户可见、可访问的内容和相对来源信息。</p></div><span class="feature-pill">尚未导出</span></div><div class="feature-grid three"><section class="feature-card"><h4>Markdown</h4><p>结论、来源、待确认项和成果文件清单。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">导出 .md</button></section><section class="feature-card"><h4>单文件 HTML</h4><p>适合本地打开和发送前预览，不依赖在线资源。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">导出 .html</button></section><section class="feature-card"><h4>成果包</h4><p>包含 outputs/ 正本和允许分享的来源说明。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">准备成果包</button></section></div><div class="feature-callout"><strong>外部分享属于高风险操作。</strong>导出到本地不会发送；选择接收方并实际发送前必须单独确认。</div>`
+      });
 
       function renderFeature(key) {
         var definition = featureRegistry[key];
@@ -2483,6 +2547,8 @@
 
       function openFeature(key) {
         if (!featureRegistry[key]) return;
+        if (typeof closeWorkMenu === 'function') closeWorkMenu();
+        if (typeof closeChatTools === 'function') closeChatTools();
         renderFeature(key);
         featureLayer.classList.add('open');
         featureLayer.setAttribute('aria-hidden', 'false');
@@ -2589,16 +2655,28 @@
         if (action === 'select-chat-project') { closeFeatureLayer(); switchView('chat'); document.getElementById('chatProjectFilter').value = 'none'; document.getElementById('chatProjectFilter').dispatchEvent(new Event('change')); }
         if (action === 'export-chat-events') showToast('已准备导出当前对话的事件记录');
         if (action === 'save-distilled-skill') showToast('技能草案已保存，尚未安装或启用');
+        if (action === 'export-work') { actionButton.textContent = '导出已准备'; actionButton.disabled = true; showToast('已准备本地导出，不会产生外部发送'); }
       });
 
       document.addEventListener('click', function (event) {
         var openButton = event.target.closest('[data-feature-open]');
         if (openButton && !featureLayer.contains(openButton)) openFeature(openButton.dataset.featureOpen);
+        var settingsButton = event.target.closest('[data-settings-open]');
+        if (settingsButton) { switchView('settings'); setSettingsTab(settingsButton.dataset.settingsOpen); }
       });
 
       function getCommandMatches(query) {
         var normalized = query.trim().toLowerCase();
-        return commandItems.filter(function (item) { return !normalized || (item.label + ' ' + item.meta + ' ' + item.group).toLowerCase().includes(normalized); });
+        var matches = commandItems.filter(function (item) { return !normalized || (item.label + ' ' + item.meta + ' ' + item.group).toLowerCase().includes(normalized); });
+        if (!normalized) return matches;
+        function score(item) {
+          var label = item.label.toLowerCase();
+          if (label === normalized) return 0;
+          if (label.startsWith(normalized)) return 1;
+          if (label.includes(normalized)) return 2;
+          return 3;
+        }
+        return matches.sort(function (a, b) { return score(a) - score(b); });
       }
 
       function renderCommandResults() {
@@ -2723,12 +2801,46 @@
         showToast('已匹配小堵为负责人、财研为协作专家，工作开始执行');
       });
 
+      document.getElementById('homeAttach').addEventListener('click', function () {
+        var attachments = document.getElementById('homeAttachments');
+        if (!document.getElementById('homeAttachmentDemo')) attachments.insertAdjacentHTML('beforeend', '<span class="chat-attachment" id="homeAttachmentDemo"><span>PDF · 客户需求说明.pdf</span><button type="button" aria-label="移除附件">×</button></span>');
+        showToast('已添加附件预览；正式产品支持文件、图片、粘贴和拖放');
+      });
+      document.getElementById('homeAttachments').addEventListener('click', function (event) { if (event.target.closest('button')) { event.target.closest('.chat-attachment').remove(); showToast('附件已移除'); } });
+      var permissionModes = ['智能确认', '每步确认', '只读'];
+      document.getElementById('homePermission').addEventListener('click', function (event) {
+        var label = event.currentTarget.querySelector('span');
+        var next = (permissionModes.indexOf(label.textContent) + 1) % permissionModes.length;
+        label.textContent = permissionModes[next];
+        showToast('权限模式已切换为' + permissionModes[next]);
+      });
+      document.querySelectorAll('.home-draft-work, .project-draft-work').forEach(function (button) {
+        button.addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').value = '继续完善客户沟通提纲，并在开始前重新确认项目、专家和资料范围。'; document.getElementById('goalInput').focus(); showToast('草稿已载入，新执行不会覆盖历史内容'); });
+      });
+
       document.querySelectorAll('.open-work').forEach(function (button) {
         button.addEventListener('click', function () { switchView('work'); });
       });
 
       document.querySelectorAll('.project-open-work').forEach(function (button) {
         button.addEventListener('click', function () { switchView('work'); });
+      });
+
+      var workSelection = {
+        running: { title: '客户沟通初步方案', state: '执行中', activity: '正在从已上传资料中归并已知信息与缺失项' },
+        waiting: { title: '需求参数缺口整理', state: '等待确认', activity: '需要用户确认并网条件和现场约束后才能继续' },
+        draft: { title: '客户沟通提纲', state: '草稿', activity: '尚未开始执行，可补充目标、资料和专家后启动' }
+      };
+      document.querySelectorAll('[data-work-select]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          document.querySelectorAll('[data-work-select]').forEach(function (row) { row.classList.toggle('active', row === button); });
+          var selected = workSelection[button.dataset.workSelect];
+          document.querySelector('.execution-title').textContent = selected.title;
+          document.getElementById('runStateText').textContent = selected.state;
+          document.getElementById('activityText').textContent = selected.activity;
+          document.getElementById('activeStepStamp').textContent = selected.state;
+          showToast('已打开工作「' + selected.title + '」');
+        });
       });
 
       function setProjectTab(name) {
@@ -2888,6 +3000,9 @@
           if (action === 'medium' || action === 'high') openRisk(action);
           if (action === 'missing' || action === 'completed') showWorkState(action);
         });
+      });
+      document.getElementById('cancelWork').addEventListener('click', function () {
+        openRisk('medium', { badge: '中风险 · 取消工作', title: '确认取消当前 Work', copy: '取消会停止当前运行，但保留目标、上下文、轨迹和已生成成果。', plan: ['停止当前 Run 的新工具调用', '保留工作上下文和运行轨迹', '将 Work 状态标记为已取消'], impact: '<strong>影响范围：</strong>只影响当前 Work 的本次运行，不删除项目文件或历史 Chat。', confirmLabel: '确认取消工作', success: '原型已确认取消流程，未停止任何真实任务' });
       });
 
       document.getElementById('createDraftExpert').addEventListener('click', function () { showWorkState('draft'); });

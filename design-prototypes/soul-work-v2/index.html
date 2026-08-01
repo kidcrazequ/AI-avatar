@@ -762,13 +762,17 @@
     .project-file-row > span:last-child { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: #74737b; font-size: 14px; letter-spacing: 2px; }
     .project-work-table .entity-row { padding-left: 12px; padding-right: 12px; }
     .project-work-table .entity-row:hover { padding-left: 16px; padding-right: 16px; }
-    .project-expert-row { min-height: 66px; display: grid; grid-template-columns: 34px minmax(0, 1fr) 150px 32px; align-items: center; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .project-expert-row { min-height: 78px; display: grid; grid-template-columns: 42px minmax(220px, 1fr) auto 36px; align-items: center; gap: 16px; padding: 12px 18px; border-bottom: 1px solid #ebe9e5; transition: background 140ms var(--ease); }
     .project-expert-row:last-child { border-bottom: 0; }
-    .project-expert-row strong { display: block; font-size: 10px; }
-    .project-expert-row small { display: block; margin-top: 3px; color: var(--tertiary); font-size: 8px; }
-    .project-expert-row label { display: flex; align-items: center; gap: 7px; color: var(--tertiary); font-size: 8px; }
-    .project-expert-row select { min-width: 105px; height: 30px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: var(--secondary); font-size: 9px; }
-    .project-expert-row > button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--tertiary); cursor: pointer; }
+    .project-expert-row:hover { background: #f7f9fc; }
+    .project-expert-row .avatar { width: 40px; height: 40px; border-color: #dfe1e5; border-radius: 11px; background: #f5f6f8; font-size: 14px; }
+    .project-expert-list .project-expert-row strong { display: block; font-size: 14px; font-weight: 650; }
+    .project-expert-list .project-expert-row small { display: block; margin-top: 5px; color: #85848c; font-size: 12px; }
+    .project-expert-row label { display: flex; align-items: center; gap: 10px; color: #85848c; font-size: 12px; }
+    .project-expert-row select { min-width: 132px; height: 40px; appearance: none; padding: 0 38px 0 12px; border: 1px solid #d8d6d1; border-radius: 10px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4.5 6.25 3.5 3.5 3.5-3.5' stroke='%2366666f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 12px center; color: #3f3e45; font-size: 12px; }
+    .project-expert-row select:focus { border-color: #3b82f6; outline: 0; box-shadow: 0 0 0 3px rgba(59,130,246,.14); }
+    .project-expert-row > button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #74737b; font-size: 14px; letter-spacing: 2px; cursor: pointer; }
+    .project-expert-row > button:hover { background: #eaedf2; color: #26262b; }
     .project-settings-form { width: min(900px, 100%); display: grid; gap: 22px; }
     .project-settings-surface { overflow: hidden; border: 1px solid #dedbd5; border-radius: 14px; background: #fff; }
     .project-setting-row { min-height: 86px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 16px 18px 16px 20px; border-bottom: 1px solid #e7e4df; }

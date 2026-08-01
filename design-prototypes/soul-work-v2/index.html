@@ -867,6 +867,13 @@
     .collection-item .status-dot { width: 6px; height: 6px; margin-top: 5px; }
     .collection-title { font-size: 11px; font-weight: 620; line-height: 1.5; }
     .collection-meta { margin-top: 4px; color: var(--tertiary); font-size: 9px; line-height: 1.45; }
+    .expert-item { min-height: 72px; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; }
+    .expert-item.active::before { top: 12px; bottom: 12px; width: 3px; background: #3b82f6; }
+    .expert-nav-mark { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #dfe1e5; border-radius: 10px; background: linear-gradient(180deg, #fff, #f1f3f6); color: #45464d; font-size: 13px; font-weight: 700; box-shadow: 0 1px 2px rgba(20,19,22,.05); }
+    .expert-item.active .expert-nav-mark { border-color: #bfd4ff; background: #edf4ff; color: #2563eb; box-shadow: 0 0 0 3px rgba(59,130,246,.08); }
+    .expert-item > span:last-child { min-width: 0; display: grid; gap: 4px; }
+    .expert-item .collection-title { display: block; font-size: 15px; line-height: 1.3; }
+    .expert-item .collection-meta { display: block; margin: 0; overflow: hidden; color: #8a8990; font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 
     .detail-workspace { min-width: 0; min-height: 0; overflow: auto; padding: 28px 34px 48px; }
     .detail-sheet { width: min(780px, 100%); }
@@ -1972,10 +1979,10 @@
           <div class="expert-layout">
             <aside class="collection-rail">
               <div class="collection-label">已安装专家</div>
-              <button class="collection-item active expert-item" type="button" data-expert="storage"><span class="status-dot running"></span><span><span class="collection-title">小堵</span><span class="collection-meta">工商储产品解决方案</span></span></button>
-              <button class="collection-item expert-item" type="button" data-expert="finance"><span class="status-dot running"></span><span><span class="collection-title">财研</span><span class="collection-meta">财务分析</span></span></button>
-              <button class="collection-item expert-item" type="button" data-expert="electrical"><span class="status-dot running"></span><span><span class="collection-title">电图</span><span class="collection-meta">电气工程与图纸阅读</span></span></button>
-              <button class="collection-item expert-item" type="button" data-expert="product"><span class="status-dot running"></span><span><span class="collection-title">品研</span><span class="collection-meta">产品经理</span></span></button>
+              <button class="collection-item active expert-item" type="button" data-expert="storage"><span class="expert-nav-mark" aria-hidden="true">小</span><span><span class="collection-title">小堵</span><span class="collection-meta">工商储产品解决方案</span></span></button>
+              <button class="collection-item expert-item" type="button" data-expert="finance"><span class="expert-nav-mark" aria-hidden="true">财</span><span><span class="collection-title">财研</span><span class="collection-meta">财务分析</span></span></button>
+              <button class="collection-item expert-item" type="button" data-expert="electrical"><span class="expert-nav-mark" aria-hidden="true">电</span><span><span class="collection-title">电图</span><span class="collection-meta">电气工程与图纸阅读</span></span></button>
+              <button class="collection-item expert-item" type="button" data-expert="product"><span class="expert-nav-mark" aria-hidden="true">品</span><span><span class="collection-title">品研</span><span class="collection-meta">产品经理</span></span></button>
             </aside>
             <div class="detail-workspace expert-detail-workspace">
               <article class="expert-profile-sheet">

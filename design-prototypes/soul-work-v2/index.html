@@ -767,13 +767,22 @@
     .project-expert-row label { display: flex; align-items: center; gap: 7px; color: var(--tertiary); font-size: 8px; }
     .project-expert-row select { min-width: 105px; height: 30px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: var(--secondary); font-size: 9px; }
     .project-expert-row > button { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--tertiary); cursor: pointer; }
-    .project-settings-form { width: min(660px, 100%); display: grid; gap: 14px; }
-    .project-setting-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 18px; }
-    .project-setting-row > span { color: var(--secondary); font-size: 10px; }
-    .project-setting-row input, .project-setting-row select { height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: var(--ink); font-size: 10px; }
-    .project-danger-zone { margin-top: 17px; padding: 15px; border: 1px solid #ecd8d9; border-radius: 8px; background: #fffafa; }
-    .project-danger-zone h3 { margin: 0 0 5px; color: var(--red); font-size: 11px; }
-    .project-danger-zone p { margin: 0 0 12px; color: var(--tertiary); font-size: 9px; }
+    .project-settings-form { width: min(900px, 100%); display: grid; gap: 22px; }
+    .project-settings-surface { overflow: hidden; border: 1px solid #dedbd5; border-radius: 14px; background: #fff; }
+    .project-setting-row { min-height: 86px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 16px 18px 16px 20px; border-bottom: 1px solid #e7e4df; }
+    .project-setting-row:last-child { border-bottom: 0; }
+    .project-setting-copy { min-width: 0; display: block; }
+    .project-setting-copy strong { display: block; color: var(--ink); font-size: 16px; font-weight: 650; line-height: 1.35; }
+    .project-setting-copy small { display: block; margin-top: 6px; color: #929198; font-size: 14px; font-weight: 400; line-height: 1.45; }
+    .project-setting-row input, .project-setting-row select { width: 240px; height: 44px; flex: 0 0 240px; padding: 0 13px; border: 1px solid #d8d4cd; border-radius: 11px; outline: 0; background-color: #fff; color: #3f3e44; font-size: 14px; }
+    .project-setting-row select { appearance: none; padding-right: 38px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4.5 6.25 3.5 3.5 3.5-3.5' stroke='%2376757d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+    .project-setting-row input:hover, .project-setting-row select:hover { border-color: #bdb9b2; }
+    .project-setting-row input:focus, .project-setting-row select:focus, .project-setting-row input:focus-visible, .project-setting-row select:focus-visible { border-color: #3b82f6; outline: 0; box-shadow: 0 0 0 3px rgba(59,130,246,.14); }
+    .project-danger-zone { min-height: 86px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 18px 16px 20px; border: 1px solid #eadcdd; border-radius: 14px; background: #fffafa; }
+    .project-danger-zone h3 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 650; }
+    .project-danger-zone p { margin: 6px 0 0; color: #929198; font-size: 14px; line-height: 1.45; }
+    .project-lifecycle-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+    .project-lifecycle-actions .secondary-button { height: 42px; padding: 0 15px; border-radius: 10px; font-size: 14px; }
 
     .automation-detail-workspace { position: relative; overflow: hidden; padding: 0; }
     .automation-detail-sheet { width: 100%; height: 100%; min-height: 0; display: grid; grid-template-rows: auto 44px minmax(0, 1fr); }
@@ -1852,10 +1861,12 @@
               <section class="section-panel" data-project-panel="settings">
                 <header class="functional-head"><div><h2>项目设置</h2><p>管理项目名称、默认权限和生命周期；旧项目不会自动转换。</p></div><button class="primary-button" id="saveProjectSettings" type="button">保存设置</button></header>
                 <form class="project-settings-form">
-                  <label class="project-setting-row"><span>项目名称</span><input value="工商储方案"></label>
-                  <label class="project-setting-row"><span>默认权限</span><select><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
-                  <label class="project-setting-row"><span>默认路由</span><select><option>项目专家组优先</option><option>全部已安装专家</option></select></label>
-                  <section class="project-danger-zone"><h3>项目生命周期</h3><p>归档可恢复；删除属于高风险操作，正式执行前必须单独确认。</p><button class="secondary-button" id="archiveProject" type="button">归档项目</button> <button class="secondary-button danger" id="deleteProject" type="button">删除项目</button></section>
+                  <div class="project-settings-surface">
+                    <label class="project-setting-row"><span class="project-setting-copy"><strong>项目名称</strong><small>显示在工作台、Work 与成果归属中。</small></span><input aria-label="项目名称" value="工商储方案"></label>
+                    <label class="project-setting-row"><span class="project-setting-copy"><strong>默认权限</strong><small>低风险自动执行，中风险确认一次，高风险单独确认。</small></span><select aria-label="默认权限"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
+                    <label class="project-setting-row"><span class="project-setting-copy"><strong>默认路由</strong><small>优先使用项目专家组，不足时再匹配已安装专家。</small></span><select aria-label="默认路由"><option>项目专家组优先</option><option>全部已安装专家</option></select></label>
+                  </div>
+                  <section class="project-danger-zone"><span><h3>项目生命周期</h3><p>归档可恢复；删除属于高风险操作，正式执行前必须单独确认。</p></span><div class="project-lifecycle-actions"><button class="secondary-button" id="archiveProject" type="button">归档项目</button><button class="secondary-button danger" id="deleteProject" type="button">删除项目</button></div></section>
                 </form>
               </section>
             </div>

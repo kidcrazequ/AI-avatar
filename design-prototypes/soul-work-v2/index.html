@@ -1423,19 +1423,25 @@
     .chat-compose { border-radius: 10px; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
     .feature-card, .feature-list, .settings-surface { border-radius: 10px; }
     button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #676971; outline-offset: 2px; }
-    .automation-editor { background: #f8f7f4; }
-    .automation-editor-head { min-height: 82px; padding: 16px 30px; background: #fff; }
+    .automation-editor { place-items: center; padding: 28px; background: rgba(31,31,35,.14); backdrop-filter: blur(5px); }
+    .automation-editor-dialog { width: min(760px, calc(100vw - 72px)); max-height: min(720px, calc(100% - 56px)); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid #d8d4cd; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(23,23,26,.18), 0 2px 8px rgba(23,23,26,.08); }
+    .automation-editor-head { min-height: 86px; padding: 18px 24px; background: #fff; }
     .automation-editor-head h2 { font-size: 20px; letter-spacing: -.025em; }
     .automation-editor-head p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
-    .automation-editor-head button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--secondary); font-size: 20px; }
-    .automation-editor-fields { width: min(860px, calc(100% - 56px)); margin: 30px auto; padding: 30px 32px 36px; gap: 24px 20px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
-    .automation-editor-fields label { gap: 9px; color: #55545b; font-size: 13px; font-weight: 560; }
-    .automation-editor-fields input, .automation-editor-fields select, .automation-editor-fields textarea { min-height: 44px; padding: 10px 13px; border-color: #d8d5cf; border-radius: 8px; background-color: #fff; color: var(--ink); font-size: 14px; line-height: 1.5; box-shadow: 0 1px 1px rgba(20,19,22,.025); transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease), background 140ms var(--ease); }
+    .automation-editor-head button { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--tertiary); font-size: 20px; }
+    .automation-editor-head button:hover { background: #f3f2ef; color: var(--ink); }
+    .automation-editor-fields { width: auto; margin: 0; padding: 8px 24px 24px; gap: 0 18px; overflow: auto; border: 0; border-radius: 0; background: #fff; box-shadow: none; }
+    .automation-editor-fields label { gap: 8px; padding: 14px 0; border-bottom: 1px solid #ebe8e3; color: #55545b; font-size: 13px; font-weight: 560; }
+    .automation-editor-fields label:last-child { border-bottom: 0; }
+    .automation-editor-fields input, .automation-editor-fields select, .automation-editor-fields textarea { min-height: 44px; padding: 10px 13px; border-color: #d8d4cd; border-radius: 10px; background-color: #fff; color: var(--ink); font-size: 14px; line-height: 1.5; box-shadow: none; transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease), background 140ms var(--ease); }
     .automation-editor-fields select { appearance: none; padding-right: 42px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4.5 6.25 3.5 3.5 3.5-3.5' stroke='%2366666f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
-    .automation-editor-fields textarea { min-height: 132px; padding-top: 12px; resize: vertical; }
+    .automation-editor-fields textarea { min-height: 112px; padding-top: 12px; resize: vertical; }
     .automation-editor-fields input:hover, .automation-editor-fields select:hover, .automation-editor-fields textarea:hover { border-color: #bdb9b2; background-color: #fff; }
-    .automation-editor-fields input:focus, .automation-editor-fields select:focus, .automation-editor-fields textarea:focus, .automation-editor-fields input:focus-visible, .automation-editor-fields select:focus-visible, .automation-editor-fields textarea:focus-visible { border-color: #7c7980; outline: 2px solid rgba(37,38,43,.12); outline-offset: 0; background-color: #fff; box-shadow: none; }
-    .automation-editor-actions { min-height: 70px; padding: 12px 30px; gap: 9px; background: #fff; }
+    .automation-editor-fields input:focus, .automation-editor-fields select:focus, .automation-editor-fields textarea:focus, .automation-editor-fields input:focus-visible, .automation-editor-fields select:focus-visible, .automation-editor-fields textarea:focus-visible { border-color: #3b82f6; outline: 0; background-color: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,.14); }
+    .automation-editor-actions { min-height: 70px; padding: 12px 24px; gap: 9px; border-top-color: #ebe8e3; background: #faf9f7; }
+    .automation-editor-actions .secondary-button, .automation-editor-actions .primary-button { height: 42px; padding: 0 17px; border-radius: 10px; font-size: 14px; }
+    .automation-editor-actions .primary-button { border-color: #25262b; background: #25262b; color: #fff; box-shadow: 0 1px 2px rgba(23,23,26,.16); }
+    .automation-editor-actions .primary-button:hover { background: #17181c; }
     .expert-test-list { display: grid; gap: 6px; overflow: visible; border: 0; border-radius: 0; background: transparent; counter-reset: expert-test; }
     .expert-test-row { min-height: 64px; grid-template-columns: 32px minmax(0, 1fr) auto auto; gap: 14px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 1px 1px rgba(20,19,22,.025); counter-increment: expert-test; transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 140ms var(--ease); }
     .expert-test-row:last-child { border-bottom: 1px solid var(--line); }
@@ -1905,16 +1911,18 @@
                 </div>
               </article>
               <form class="automation-editor" id="automationEditor" hidden>
-                <header class="automation-editor-head"><div><h2 id="automationEditorTitle">创建自动任务</h2><p>保存后只创建草稿，不会立即执行。</p></div><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
-                <div class="automation-editor-fields">
-                  <label class="wide">规则名称<input id="automationEditorName" required value="新自动任务"></label>
-                  <label>触发方式<select id="automationEditorTrigger"><option>每周</option><option>项目文件更新后</option><option>手动</option></select></label>
-                  <label>所属项目<select><option>工商储方案</option><option>不绑定项目</option></select></label>
-                  <label>目标类型<select id="automationEditorTarget"><option>Work · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
-                  <label>权限模式<select id="automationEditorPermission"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
-                  <label class="wide">每次触发的工作目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
+                <div class="automation-editor-dialog">
+                  <header class="automation-editor-head"><div><h2 id="automationEditorTitle">创建自动任务</h2><p>保存后只创建草稿，不会立即执行。</p></div><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
+                  <div class="automation-editor-fields">
+                    <label class="wide">规则名称<input id="automationEditorName" required value="新自动任务"></label>
+                    <label>触发方式<select id="automationEditorTrigger"><option>每周</option><option>项目文件更新后</option><option>手动</option></select></label>
+                    <label>所属项目<select><option>工商储方案</option><option>不绑定项目</option></select></label>
+                    <label>目标类型<select id="automationEditorTarget"><option>Work · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
+                    <label>权限模式<select id="automationEditorPermission"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
+                    <label class="wide">每次触发的工作目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
+                  </div>
+                  <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit">保存草稿</button></footer>
                 </div>
-                <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit">保存草稿</button></footer>
               </form>
             </div>
           </div>

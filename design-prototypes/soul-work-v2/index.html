@@ -89,33 +89,8 @@
     .window-dot:nth-child(2) { background: #ffbe46; }
     .window-dot:nth-child(3) { background: #34c84a; }
 
-    .titlebar-center {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      color: var(--secondary);
-      font-size: 12px;
-      font-weight: 520;
-      letter-spacing: .01em;
-    }
-
-    .project-switcher {
-      height: 26px;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 0 10px;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      background: transparent;
-      cursor: pointer;
-      transition: background 140ms var(--ease), border-color 140ms var(--ease);
-    }
-
-    .project-switcher:hover { background: rgba(255,255,255,.55); border-color: var(--line); }
-
     .titlebar-actions {
+      grid-column: 3;
       display: flex;
       justify-content: flex-end;
       align-items: center;
@@ -1783,13 +1758,6 @@
       <div class="window-controls" aria-label="窗口控制">
         <span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span>
       </div>
-      <div class="titlebar-center">
-        <button class="project-switcher" id="projectSwitcher" type="button" title="切换项目">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 8V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg>
-          <span>工商储方案</span>
-          <svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
-        </button>
-      </div>
       <div class="titlebar-actions">
         <button class="icon-button" id="searchButton" type="button" title="搜索（⌘K）" aria-label="搜索">
           <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
@@ -2413,7 +2381,6 @@
               <header class="chat-head">
                 <div><div class="chat-title" id="chatTitle">客户沟通材料</div><div class="chat-project" id="chatProject">工商储方案 · 保留原对话</div></div>
                 <div class="chat-head-actions">
-                  <button class="secondary-button" id="newChat" type="button">新对话</button>
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
                   <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
                   <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-feature-open="chat-events"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-feature-open="distill-skill"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-md"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-html"><span>导出 HTML</span><span>.html</span></button></div></div>
@@ -3864,16 +3831,6 @@
       document.getElementById('chatProjectFilter').addEventListener('change', filterChatThreads);
       document.getElementById('manageChatProjects').addEventListener('click', function () { openFeature('chat-projects'); });
 
-      document.getElementById('newChat').addEventListener('click', function () {
-        document.querySelectorAll('.chat-thread').forEach(function (button) { button.classList.remove('active'); });
-        document.querySelectorAll('.nav-conversation-item').forEach(function (button) { button.classList.remove('active'); });
-        document.getElementById('chatTitle').textContent = '新对话';
-        document.getElementById('chatProject').textContent = '未绑定项目 · 仅保留在 Chat';
-        document.getElementById('chatMessages').innerHTML = '<div class="chat-empty">从一个问题开始。需要持续执行时，再转为任务。</div>';
-        document.getElementById('chatInput').value = '';
-        document.getElementById('chatInput').focus();
-      });
-
       document.getElementById('chatToWork').addEventListener('click', function () {
         document.getElementById('goalInput').value = '把当前对话中的目标整理为一项可独立验收的任务，保留原对话和来源。';
         switchView('home');
@@ -4026,7 +3983,6 @@
         if (!chatCommandPopover.contains(event.target) && !event.target.closest('#chatSkill') && !event.target.closest('#chatContext') && !event.target.closest('#chatInput')) closeChatCommandPopover();
       });
 
-      document.getElementById('projectSwitcher').addEventListener('click', function () { openFeature('project-manager'); });
       document.getElementById('notifyButton').addEventListener('click', function () { showToast('2 项任务需要你处理'); });
       document.getElementById('searchButton').addEventListener('click', openCommandPalette);
 

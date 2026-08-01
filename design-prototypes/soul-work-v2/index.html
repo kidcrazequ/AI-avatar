@@ -230,7 +230,7 @@
     .nav-item:hover .nav-icon, .nav-item:focus-visible .nav-icon { transform: translateY(-1px); }
     .nav-item.active .nav-icon { color: currentColor; animation: nav-icon-pop 240ms var(--ease); }
     .nav-item[data-view="home"]:hover .nav-new-plus { transform: rotate(90deg) scale(1.08); }
-    .nav-item[data-view="work"]:hover .nav-work-card { transform: translateY(-1px); }
+    .nav-item[data-view="tasks"]:hover .nav-work-card { transform: translateY(-1px); }
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(1) { transform: translate(-1px, -1px); }
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(2) { transform: translate(1px, -1px); }
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(3) { transform: translate(-1px, 1px); }
@@ -695,6 +695,27 @@
     .workspace-actions { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
     .workspace-scroll { min-height: 0; overflow: auto; padding: 26px 32px 48px; }
     .workspace-inner { width: min(1080px, 100%); margin: 0 auto; }
+
+    .task-overview { width: min(980px, 100%); margin: 0 auto; }
+    .task-overview-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
+    .task-summary-item { min-height: 88px; padding: 17px 18px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .task-summary-item strong { display: block; font-size: 24px; font-weight: 650; line-height: 1.2; letter-spacing: -.035em; }
+    .task-summary-item span { display: block; margin-top: 7px; color: var(--tertiary); font-size: 13px; }
+    .task-overview-toolbar { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line-strong); }
+    .task-overview-toolbar h2 { margin: 0; font-size: 16px; font-weight: 650; }
+    .task-filter-group { display: flex; align-items: center; gap: 4px; }
+    .task-filter { height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--secondary); font-size: 12px; cursor: pointer; }
+    .task-filter:hover, .task-filter.active { background: #efeeeb; color: var(--ink); }
+    .task-overview-list { display: grid; }
+    .task-overview-row { width: 100%; min-height: 82px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 13px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; transition: background 140ms var(--ease), padding 140ms var(--ease); }
+    .task-overview-row:hover { padding-left: 10px; padding-right: 10px; background: #f7f6f3; }
+    .task-overview-row[hidden] { display: none; }
+    .task-overview-icon { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid #dedcd7; border-radius: 9px; color: #68676e; background: #fff; }
+    .task-overview-icon .icon { width: 16px; height: 16px; }
+    .task-overview-copy { min-width: 0; }
+    .task-overview-copy strong { display: block; overflow: hidden; color: var(--ink); font-size: 15px; font-weight: 620; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+    .task-overview-copy small { display: block; margin-top: 6px; overflow: hidden; color: var(--tertiary); font-size: 13px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+    .task-overview-state { min-width: 94px; color: var(--secondary); font-size: 13px; text-align: right; }
 
     .project-grid {
       display: grid;
@@ -1784,7 +1805,7 @@
           <button class="nav-item active" type="button" data-view="home">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
-          <button class="nav-item has-running-task" type="button" data-view="work">
+          <button class="nav-item has-running-task" type="button" data-view="tasks">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-work-card" x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8h6M9 12h6"/><path class="nav-work-progress" d="M9 16h5"/></svg><span class="nav-label">任务</span><span class="count">2</span>
           </button>
           <button class="nav-item" type="button" data-view="dashboard">
@@ -1836,6 +1857,25 @@
               <button class="home-project-strip" type="button" data-feature-open="project-manager"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span>工商储方案</span><span class="chevron">›</span></button>
             </div>
 
+          </div>
+        </section>
+
+        <section class="view workspace-page" id="tasksView">
+          <header class="workspace-header">
+            <div class="workspace-heading"><h1>任务</h1><p class="lead">跨项目查看需要持续执行、独立验收或等待你处理的对话。</p></div>
+            <div class="workspace-actions"><button class="primary-button" id="tasksNewButton" type="button">新建</button></div>
+          </header>
+          <div class="workspace-scroll">
+            <div class="task-overview">
+              <section class="task-overview-summary" aria-label="任务摘要"><div class="task-summary-item"><strong>1</strong><span>正在执行</span></div><div class="task-summary-item"><strong>2</strong><span>等待你处理</span></div><div class="task-summary-item"><strong>4</strong><span>本周已完成</span></div></section>
+              <div class="task-overview-toolbar"><h2>全部任务</h2><div class="task-filter-group" role="group" aria-label="筛选任务"><button class="task-filter active" type="button" data-task-filter="all">全部</button><button class="task-filter" type="button" data-task-filter="running">执行中</button><button class="task-filter" type="button" data-task-filter="waiting">待处理</button><button class="task-filter" type="button" data-task-filter="completed">已完成</button></div></div>
+              <div class="task-overview-list">
+                <button class="task-overview-row" type="button" data-task-state="running" data-open-task-thread="task"><span class="task-overview-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M8 5h8M8 10h8M8 15h5"/><path d="M5 3h14v18H5z"/></svg></span><span class="task-overview-copy"><strong>客户沟通初步方案</strong><small>工商储方案 · 小堵负责，财研协作 · 刚刚更新</small></span><span class="task-overview-state">执行中</span></button>
+                <button class="task-overview-row" type="button" data-task-state="waiting" data-open-task-thread="waiting"><span class="task-overview-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="8"/></svg></span><span class="task-overview-copy"><strong>需求参数缺口整理</strong><small>工商储方案 · 等待补充现场资料 · 稍早更新</small></span><span class="task-overview-state">待你确认</span></button>
+                <button class="task-overview-row" type="button" data-task-state="waiting" data-open-task-thread="draft"><span class="task-overview-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M5 19h14M7 16l8.8-8.8 2 2L9 18H7z"/></svg></span><span class="task-overview-copy"><strong>客户沟通提纲</strong><small>工商储方案 · 草稿尚未开始执行 · 昨天更新</small></span><span class="task-overview-state">草稿</span></button>
+                <button class="task-overview-row" type="button" data-task-state="completed" data-open-task-thread="completed"><span class="task-overview-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></span><span class="task-overview-copy"><strong>项目资料来源清单</strong><small>工商储方案 · 已形成可审阅结果 · 周一完成</small></span><span class="task-overview-state">已完成</span></button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -2571,6 +2611,7 @@
   <script>
     (function () {
       var homeView = document.getElementById('homeView');
+      var tasksView = document.getElementById('tasksView');
       var workView = document.getElementById('workView');
       var dashboardView = document.getElementById('dashboardView');
       var projectView = document.getElementById('projectView');
@@ -2593,7 +2634,7 @@
       var commandResults = document.getElementById('commandResults');
       var commandItems = [
         { label: '新建', meta: '开始对话或创建任务', icon: '+', view: 'home', group: '工作台' },
-        { label: '任务', meta: '查看执行、结果和上下文', icon: 'T', view: 'work', group: '工作台' },
+        { label: '任务', meta: '跨项目查看执行和待处理事项', icon: 'T', view: 'tasks', group: '工作台' },
         { label: '看板', meta: '自定义个人工作台与组件', icon: 'B', view: 'dashboard', group: '工作台' },
         { label: '项目', meta: '共享上下文、文件和专家组', icon: 'P', view: 'project', group: '工作台' },
         { label: '自动任务', meta: '管理定时触发与独立任务', icon: 'A', view: 'automation', group: '工作台' },
@@ -3086,7 +3127,7 @@
       commandBackdrop.addEventListener('click', function (event) { if (event.target === commandBackdrop) closeCommandPalette(); });
 
       function switchView(name) {
-        var views = { home: homeView, work: workView, dashboard: dashboardView, project: projectView, automation: automationView, experts: expertsView, chat: chatView, settings: settingsView };
+        var views = { home: homeView, tasks: tasksView, work: workView, dashboard: dashboardView, project: projectView, automation: automationView, experts: expertsView, chat: chatView, settings: settingsView };
         Object.keys(views).forEach(function (key) { views[key].classList.toggle('active', key === name); });
         var isWork = name === 'work';
         appRoot.classList.toggle('work-mode', isWork);
@@ -3331,6 +3372,15 @@
           if (item.dataset.toast) showToast(item.dataset.toast);
         });
       });
+
+      document.querySelectorAll('[data-task-filter]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var filter = button.dataset.taskFilter;
+          document.querySelectorAll('[data-task-filter]').forEach(function (item) { item.classList.toggle('active', item === button); });
+          document.querySelectorAll('.task-overview-row').forEach(function (row) { row.hidden = filter !== 'all' && row.dataset.taskState !== filter; });
+        });
+      });
+      document.getElementById('tasksNewButton').addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').focus(); });
 
       document.getElementById('startWork').addEventListener('click', function () {
         switchView('work');

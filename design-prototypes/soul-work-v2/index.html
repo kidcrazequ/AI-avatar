@@ -929,6 +929,11 @@
     .chat-layout { grid-template-columns: 260px minmax(0, 1fr); }
     .chat-thread-list { min-width: 0; overflow: auto; border-right: 1px solid var(--line); background: #f8f7f4; padding: 12px 8px; }
     .chat-thread-list-head { display: grid; gap: 9px; padding: 0 3px 10px; }
+    .chat-project-filter { display: grid; grid-template-columns: minmax(0, 1fr) 30px; gap: 5px; }
+    .chat-project-filter select, .chat-project-filter button { height: 31px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--secondary); font-size: 12px; }
+    .chat-project-filter select { min-width: 0; padding: 0 8px; }
+    .chat-project-filter button { display: grid; place-items: center; cursor: pointer; }
+    .chat-search-note { color: var(--tertiary); font-size: 10px; line-height: 1.45; }
     .chat-thread-search { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; outline: 0; background: #fff; color: var(--ink); font-size: 9px; }
     .chat-thread-search:focus { border-color: #d2a2b4; box-shadow: 0 0 0 3px rgba(255,143,181,.08); }
     .chat-thread {
@@ -972,10 +977,20 @@
     .chat-work-hint strong { display: block; margin-bottom: 3px; color: var(--ink); font-size: 10px; }
     .chat-empty { display: grid; min-height: 100%; place-items: center; color: var(--tertiary); font-size: 10px; text-align: center; }
     .chat-compose-wrap { padding: 12px max(22px, calc((100% - 760px) / 2)) 16px; border-top: 1px solid var(--line); background: rgba(250,249,247,.94); backdrop-filter: blur(12px); }
-    .chat-compose { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px 8px 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; }
+    .chat-compose { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; padding: 8px 8px 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; }
     .chat-compose textarea { width: 100%; height: 42px; max-height: 100px; resize: none; border: 0; outline: 0; padding: 6px 0; background: transparent; color: var(--ink); font-size: 12px; line-height: 1.55; }
     .chat-compose-actions { display: flex; align-items: center; gap: 4px; }
     .chat-compose-tools { display: flex; align-items: center; gap: 3px; min-width: 0; flex: 1; }
+    .chat-attachments { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chat-attachment { display: inline-flex; align-items: center; gap: 7px; min-height: 27px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: #f7f6f3; color: var(--secondary); font-size: 11px; }
+    .chat-attachment button { border: 0; background: transparent; color: var(--tertiary); cursor: pointer; }
+    .chat-command-popover { position: absolute; left: 8px; bottom: calc(100% + 8px); z-index: 8; width: min(360px, calc(100% - 16px)); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 9px; background: #fff; box-shadow: 0 16px 40px rgba(25,24,27,.14); }
+    .chat-command-popover[hidden] { display: none; }
+    .chat-command-label { padding: 9px 11px 6px; color: var(--tertiary); font-size: 10px; font-weight: 650; }
+    .chat-command-option { width: 100%; min-height: 42px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 11px; border: 0; border-top: 1px solid var(--line); background: #fff; color: var(--ink); text-align: left; cursor: pointer; }
+    .chat-command-option:hover { background: #f8f7f4; }
+    .chat-command-option strong { font-size: 12px; }
+    .chat-command-option span { color: var(--tertiary); font-size: 10px; }
     .chat-mini-tool { height: 27px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--tertiary); font-size: 9px; cursor: pointer; }
     .chat-mini-tool:hover { border-color: var(--line); background: #faf9f7; color: var(--ink); }
 
@@ -1664,8 +1679,8 @@
                 <header class="functional-head"><div><h2>项目文件</h2><p>项目下的新 Work 可按权限引用，渲染层不显示本地绝对路径。</p></div><button class="primary-button" type="button" data-modal="补充现场资料">上传文件</button></header>
                 <div class="project-file-table">
                   <div class="project-table-head"><span>名称</span><span>来源</span><span>更新时间</span><span></span></div>
-                  <button class="project-file-row" type="button" data-toast="打开客户需求说明.pdf"><span><span class="file-icon">PDF</span>客户需求说明.pdf</span><span>用户上传</span><span>今天</span><span>•••</span></button>
-                  <button class="project-file-row" type="button" data-toast="打开场地资料.zip"><span><span class="file-icon">ZIP</span>场地资料.zip</span><span>用户上传</span><span>今天</span><span>•••</span></button>
+                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon">PDF</span>客户需求说明.pdf</span><span>用户上传</span><span>今天</span><span>•••</span></button>
+                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon">ZIP</span>场地资料.zip</span><span>用户上传</span><span>今天</span><span>•••</span></button>
                 </div>
               </section>
 
@@ -1679,20 +1694,20 @@
               </section>
 
               <section class="section-panel" data-project-panel="experts">
-                <header class="functional-head"><div><h2>项目专家组</h2><p>自动路由优先使用项目专家组，单项 Work 仍可手动调整。</p></div><button class="primary-button" type="button" data-toast="选择已安装专家加入项目">添加专家</button></header>
+                <header class="functional-head"><div><h2>项目专家组</h2><p>自动路由优先使用项目专家组，单项 Work 仍可手动调整。</p></div><button class="primary-button" type="button" data-feature-open="project-expert-picker">添加专家</button></header>
                 <div class="project-expert-list">
-                  <article class="project-expert-row"><span class="avatar">小</span><span><strong>小堵</strong><small>工商储产品解决方案专家</small></span><label>角色<select><option>默认负责人</option><option>协作专家</option></select></label><button type="button" data-toast="打开小堵的项目角色设置">•••</button></article>
-                  <article class="project-expert-row"><span class="avatar">财</span><span><strong>财研</strong><small>财务分析专家</small></span><label>角色<select><option>协作专家</option><option>默认负责人</option></select></label><button type="button" data-toast="打开财研的项目角色设置">•••</button></article>
+                  <article class="project-expert-row"><span class="avatar">小</span><span><strong>小堵</strong><small>工商储产品解决方案专家</small></span><label>角色<select><option>默认负责人</option><option>协作专家</option></select></label><button type="button" data-feature-open="project-expert-picker">•••</button></article>
+                  <article class="project-expert-row"><span class="avatar">财</span><span><strong>财研</strong><small>财务分析专家</small></span><label>角色<select><option>协作专家</option><option>默认负责人</option></select></label><button type="button" data-feature-open="project-expert-picker">•••</button></article>
                 </div>
               </section>
 
               <section class="section-panel" data-project-panel="settings">
-                <header class="functional-head"><div><h2>项目设置</h2><p>管理项目名称、默认权限和生命周期；旧项目不会自动转换。</p></div><button class="primary-button" type="button" data-toast="项目设置已保存">保存设置</button></header>
+                <header class="functional-head"><div><h2>项目设置</h2><p>管理项目名称、默认权限和生命周期；旧项目不会自动转换。</p></div><button class="primary-button" id="saveProjectSettings" type="button">保存设置</button></header>
                 <form class="project-settings-form">
                   <label class="project-setting-row"><span>项目名称</span><input value="工商储方案"></label>
                   <label class="project-setting-row"><span>默认权限</span><select><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
                   <label class="project-setting-row"><span>默认路由</span><select><option>项目专家组优先</option><option>全部已安装专家</option></select></label>
-                  <section class="project-danger-zone"><h3>项目生命周期</h3><p>归档可恢复；删除属于高风险操作，正式执行前必须单独确认。</p><button class="secondary-button" type="button" data-toast="项目将进入归档确认流程">归档项目</button> <button class="secondary-button danger" type="button" data-toast="删除项目需要高风险确认，原型未删除任何内容">删除项目</button></section>
+                  <section class="project-danger-zone"><h3>项目生命周期</h3><p>归档可恢复；删除属于高风险操作，正式执行前必须单独确认。</p><button class="secondary-button" id="archiveProject" type="button">归档项目</button> <button class="secondary-button danger" id="deleteProject" type="button">删除项目</button></section>
                 </form>
               </section>
             </div>
@@ -1721,6 +1736,7 @@
                   <div><h2 id="automationTitle">整理项目待确认事项</h2><p class="detail-sheet-sub" id="automationSubtitle">将项目中需要用户处理的事项整理成独立 Work。</p></div>
                   <div class="automation-head-actions">
                     <label class="automation-toggle"><input id="automationEnabled" type="checkbox"><span class="automation-toggle-mark"></span><span id="automationEnableLabel">未启用</span></label>
+                    <button class="secondary-button" id="triggerAutomation" type="button">立即触发</button>
                     <button class="secondary-button" id="editAutomation" type="button">编辑规则</button>
                   </div>
                 </header>
@@ -1732,7 +1748,7 @@
                 <div class="automation-panel-scroll">
                   <section class="automation-panel active" data-automation-panel="rule">
                     <div class="automation-rule-grid">
-                      <section class="automation-rule-card"><h3>触发与范围</h3><div class="rule-line"><span class="rule-key">触发方式</span><span id="automationTrigger">每周一，由用户启用后生效</span></div><div class="rule-line"><span class="rule-key">所属项目</span><span>工商储方案</span></div><div class="rule-line"><span class="rule-key">目标类型</span><span>Work · 每次独立创建</span></div></section>
+                      <section class="automation-rule-card"><h3>触发与范围</h3><div class="rule-line"><span class="rule-key">触发方式</span><span id="automationTrigger">每周一，由用户启用后生效</span></div><div class="rule-line"><span class="rule-key">所属项目</span><span>工商储方案</span></div><div class="rule-line"><span class="rule-key">目标类型</span><span id="automationTarget">Work · 每次独立创建</span></div></section>
                       <section class="automation-rule-card"><h3>执行方式</h3><div class="rule-line"><span class="rule-key">专家路由</span><span>项目专家组优先</span></div><div class="rule-line"><span class="rule-key">权限</span><span>智能确认</span></div><div class="rule-line"><span class="rule-key">副作用</span><span>中高风险仍需确认</span></div></section>
                       <section class="automation-rule-card span-2"><h3>每次触发的工作目标</h3><div class="rule-line"><span class="rule-key">Work 目标</span><span id="automationGoal">归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。</span></div></section>
                       <section class="automation-rule-card span-2"><h3>与现有能力兼容</h3><div class="rule-line"><span class="rule-key">专家自检</span><span>沿用现有测试触发与质量报告</span></div><div class="rule-line"><span class="rule-key">记忆整理</span><span>沿用现有记忆归并任务</span></div><div class="rule-line"><span class="rule-key">知识检查</span><span>沿用现有知识索引与检查任务</span></div></section>
@@ -1752,8 +1768,8 @@
                   <label class="wide">规则名称<input id="automationEditorName" required value="新自动任务"></label>
                   <label>触发方式<select id="automationEditorTrigger"><option>每周</option><option>项目文件更新后</option><option>手动</option></select></label>
                   <label>所属项目<select><option>工商储方案</option><option>不绑定项目</option></select></label>
-                  <label>目标类型<select><option>Work · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
-                  <label>权限模式<select><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
+                  <label>目标类型<select id="automationEditorTarget"><option>Work · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
+                  <label>权限模式<select id="automationEditorPermission"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
                   <label class="wide">每次触发的工作目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
                 </div>
                 <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit">保存草稿</button></footer>
@@ -1913,7 +1929,7 @@
           </header>
           <div class="chat-layout">
             <aside class="chat-thread-list">
-              <div class="chat-thread-list-head"><div class="collection-label">最近对话</div><input class="chat-thread-search" id="chatThreadSearch" type="search" placeholder="搜索对话" aria-label="搜索对话"></div>
+              <div class="chat-thread-list-head"><div class="collection-label">对话项目</div><div class="chat-project-filter"><select id="chatProjectFilter" aria-label="筛选对话项目"><option value="all">全部项目</option><option value="storage">工商储方案</option><option value="none">未绑定项目</option></select><button id="manageChatProjects" type="button" aria-label="管理对话项目">•••</button></div><input class="chat-thread-search" id="chatThreadSearch" type="search" placeholder="搜索标题或消息" aria-label="搜索对话"><span class="chat-search-note" id="chatSearchNote">1–2 字搜索标题，3 字以上搜索消息全文</span></div>
               <button class="chat-thread active" type="button" data-chat="materials"><div class="chat-thread-line"><span class="chat-thread-title">客户沟通材料</span><span class="chat-thread-time">刚刚</span></div><div class="chat-thread-preview">把现有资料整理成沟通提纲…</div></button>
               <button class="chat-thread" type="button" data-chat="boundary"><div class="chat-thread-line"><span class="chat-thread-title">方案边界讨论</span><span class="chat-thread-time">今天</span></div><div class="chat-thread-preview">缺失信息应如何向客户说明…</div></button>
               <button class="chat-thread" type="button" data-chat="source"><div class="chat-thread-line"><span class="chat-thread-title">来源引用方式</span><span class="chat-thread-time">昨天</span></div><div class="chat-thread-preview">专业判断如何保留文件来源…</div></button>
@@ -1923,8 +1939,8 @@
                 <div><div class="chat-title" id="chatTitle">客户沟通材料</div><div class="chat-project" id="chatProject">工商储方案 · 保留原对话</div></div>
                 <div class="chat-head-actions">
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
-                  <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Ask</option><option>Plan</option><option>Agent</option></select>
-                  <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-toast="打开当前对话的事件流与工具调用"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-toast="将选中内容整理为可复用技能草案"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-toast="导出当前对话为 Markdown"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-toast="导出当前对话为单文件 HTML"><span>导出 HTML</span><span>.html</span></button></div></div>
+                  <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
+                  <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-feature-open="chat-events"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-feature-open="distill-skill"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-md"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-html"><span>导出 HTML</span><span>.html</span></button></div></div>
                   <button class="secondary-button" id="chatToWork" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>转为工作</span></button>
                 </div>
               </header>
@@ -1933,7 +1949,7 @@
                 <div class="message-row"><span class="message-author soul">S</span><div><div class="message-name">Soul</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项 Work。</div></div></div>
                 <div class="chat-work-hint"><strong>需要持续执行？</strong>转为 Work 后会保留这段 Chat，只建立关联，不移动或覆盖原始内容。</div>
               </div>
-              <div class="chat-compose-wrap"><div class="chat-compose"><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" type="button" data-toast="保留现有图片、文档与代码附件能力">＋ 附件</button><button class="chat-mini-tool" type="button" data-toast="保留现有语音识别输入">语音</button><button class="chat-mini-tool" type="button" data-toast="输入 / 可运行当前专家已启用的技能">/ 技能</button><button class="chat-mini-tool" type="button" data-toast="输入 @ 可引用知识、记忆、会话与联网检索">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button">发送</button></div></div></div>
+              <div class="chat-compose-wrap"><div class="chat-compose"><div class="chat-command-popover" id="chatCommandPopover" hidden></div><div class="chat-attachments" id="chatAttachments"></div><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" id="chatAttach" type="button">＋ 附件</button><button class="chat-mini-tool" id="chatVoice" type="button">语音</button><button class="chat-mini-tool" id="chatSkill" type="button">/ 技能</button><button class="chat-mini-tool" id="chatContext" type="button">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button">发送</button></div></div></div>
             </div>
           </div>
         </section>
@@ -2321,6 +2337,40 @@
         content: `<div class="feature-toolbar"><div><h3>可用专家包</h3><p>安装前查看来源、能力边界、知识状态和测试情况。</p></div><input class="feature-input" style="width:220px" placeholder="搜索专家"></div><div class="feature-grid three"><section class="feature-card"><h4>法研</h4><p>法务参阅级草案；条文不编造，非执业意见书。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section><section class="feature-card"><h4>市研</h4><p>市场分析、竞品备忘与可追溯外部数据。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section><section class="feature-card"><h4>项枢</h4><p>项目计划、风险、甘特和承诺边界。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="install-pack">查看并安装</button></section></div>`
       });
 
+      registerFeatureGroup('project-tools', [{ key: 'project-manager', label: '项目列表' }, { key: 'project-file', label: '文件详情' }, { key: 'project-expert-picker', label: '专家组' }]);
+      registerFeature('project-manager', {
+        title: '项目管理', subtitle: '创建、编辑、归档项目；旧版按专家划分的项目不会自动合并。', icon: 'P', group: 'project-tools', kicker: 'Project workspace', contextTitle: '项目', contextMeta: '共享上下文空间',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="create-project">新建项目</button>',
+        content: `<div class="feature-toolbar"><div><h3>全部项目</h3><p>选择项目后，Work、文件、专家组和 Chat 关联都会切换到该上下文。</p></div><span class="feature-pill">2 个项目</span></div><div class="feature-list" id="projectManagerList"><button class="feature-list-row" type="button" data-view="project"><span><strong>工商储方案</strong><small>2 项 Work · 2 位专家 · 2 个文件</small></span><span class="feature-pill ready">当前项目</span></button><div class="feature-list-row"><span><strong>个人工作区</strong><small>未绑定专家组 · 可用于通用办公</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="select-project">切换</button><button class="quiet-button" type="button" data-demo-action="archive-project">归档</button></span></div></div>`
+      });
+      registerFeature('project-file', {
+        title: '项目文件', subtitle: '查看文件来源、引用范围以及关联 Work；不显示绝对路径。', icon: 'F', group: 'project-tools', kicker: 'Project workspace', contextTitle: '工商储方案', contextMeta: '项目文件',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="add-knowledge">上传新版本</button>',
+        content: `<div class="feature-toolbar"><div><h3>客户需求说明.pdf</h3><p>用户上传 · 今天更新 · 当前 Project 可引用</p></div><span class="feature-pill ready">可读取</span></div><div class="feature-split"><section class="feature-card"><h4>文件预览</h4><div class="feature-empty" style="min-height:300px">PDF 内容预览区域<br>原型不读取或展示未提供的真实文件内容</div></section><aside class="feature-stack"><section class="feature-card"><h4>访问范围</h4><p>项目下新建的 Work 可按权限引用；旧 Chat 只建立关联，不移动原内容。</p></section><section class="feature-card"><h4>关联记录</h4><div class="feature-meta-line"><span class="feature-pill">2 项 Work</span><span class="feature-pill">1 条 Chat</span></div></section><button class="quiet-button" type="button" data-view="project">返回项目文件</button></aside></div>`
+      });
+      registerFeature('project-expert-picker', {
+        title: '项目专家组', subtitle: '设置默认负责人和协作专家，新的路由优先使用此专家组。', icon: 'E', group: 'project-tools', kicker: 'Project workspace', contextTitle: '工商储方案', contextMeta: '专家路由',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="save-project-experts">保存专家组</button>',
+        content: `<div class="feature-toolbar"><div><h3>已安装专家</h3><p>一个默认负责人，最多三名协作者；单项 Work 仍可手动覆盖。</p></div><span class="feature-pill">已选 2 位</span></div><div class="feature-list"><label class="feature-list-row"><span><strong>小堵</strong><small>工商储产品解决方案专家 · 匹配需求澄清和方案结构</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>默认负责人</option><option>协作专家</option></select></span></label><label class="feature-list-row"><span><strong>财研</strong><small>财务分析专家 · 协作校核财务表达与数据边界</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>协作专家</option><option>默认负责人</option></select></span></label><label class="feature-list-row"><span><strong>电图</strong><small>电气工程师 · 当前目标未匹配到图纸阅读任务</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label><label class="feature-list-row"><span><strong>品研</strong><small>产品经理 · 通用需求和产品结构</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label></div><div class="feature-callout"><strong>路由顺序：</strong>手动指定 › 项目专家组 › 已安装专家 › 缺失专家建议。</div>`
+      });
+
+      registerFeatureGroup('chat-tools', [{ key: 'chat-projects', label: '对话项目' }, { key: 'chat-events', label: '事件流' }, { key: 'distill-skill', label: '沉淀技能' }]);
+      registerFeature('chat-projects', {
+        title: '对话项目', subtitle: '创建和管理每位专家自己的对话分组与历史关联。', icon: 'C', group: 'chat-tools', kicker: 'Chat workspace', contextTitle: '当前专家', contextMeta: '历史对话管理',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="create-chat-project">新建对话项目</button>',
+        content: `<div class="feature-toolbar"><div><h3>项目与历史</h3><p>项目筛选不移动原始对话；删除对话前会单独确认。</p></div><span class="feature-pill">3 条对话</span></div><div class="feature-list" id="chatProjectList"><div class="feature-list-row"><span><strong>工商储方案</strong><small>2 条对话 · 当前筛选</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="rename-chat-project">重命名</button><button class="quiet-button" type="button" data-demo-action="archive-chat-project">归档</button></span></div><div class="feature-list-row"><span><strong>未绑定项目</strong><small>1 条历史 Chat</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="select-chat-project">查看</button></span></div></div>`
+      });
+      registerFeature('chat-events', {
+        title: '对话事件流', subtitle: '查看当前 Chat 的模型、模式、工具调用和上下文事件。', icon: '⌁', group: 'chat-tools', kicker: 'Chat workspace', contextTitle: '客户沟通材料', contextMeta: '当前历史对话',
+        actions: '<button class="quiet-button" type="button" data-demo-action="export-chat-events">导出事件</button>',
+        content: `<div class="feature-toolbar"><div><h3>事件</h3><p>与用户可见消息分开记录，不把隐藏修复轮写入普通对话。</p></div><select class="feature-select" style="width:160px"><option>全部事件</option><option>模型</option><option>工具</option><option>上下文</option></select></div><div class="feature-timeline"><article class="feature-timeline-item"><time>刚刚</time><h4>用户消息</h4><p>已加入当前对话，未创建 Work。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>上下文载入</h4><p>当前专家、工商储方案项目与用户明确选择的附件。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>模型响应</h4><p>端云 · Agent 模式；本轮未发生外部副作用。</p></article></div>`
+      });
+      registerFeature('distill-skill', {
+        title: '沉淀为技能', subtitle: '从当前对话提取可复用步骤，先保存为技能草案。', icon: '/', group: 'chat-tools', kicker: 'Chat workspace', contextTitle: '客户沟通材料', contextMeta: '技能蒸馏草案',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="save-distilled-skill">保存草案</button>',
+        content: `<div class="feature-toolbar"><div><h3>技能草案</h3><p>只提取方法和步骤，不复制未授权的项目数据或敏感内容。</p></div><span class="feature-pill waiting">待审阅</span></div><form class="feature-form" onsubmit="return false"><label class="feature-field"><span>技能名称</span><input class="feature-input" value="客户沟通材料结构化"></label><label class="feature-field"><span>适用场景</span><input class="feature-input" value="将零散项目资料整理为可审阅沟通提纲"></label><label class="feature-field"><span>执行步骤</span><textarea class="feature-textarea">1. 归并用户已提供的事实\n2. 将缺失参数单独列出\n3. 区分事实、判断和待确认项\n4. 为关键结论保留来源\n5. 不自行补全专业参数或收益数据</textarea></label><label class="feature-field"><span>安装位置</span><select class="feature-select"><option>当前专家专属技能</option><option>自有公共技能草案</option></select></label></form>`
+      });
+
       function renderFeature(key) {
         var definition = featureRegistry[key];
         if (!definition) return;
@@ -2431,6 +2481,24 @@
         if (action === 'create-expert') showToast('已创建项目级临时专家草案，知识库当前为空');
         if (action === 'select-pack') { var dropzone = document.getElementById('packDropzone'); if (dropzone) dropzone.innerHTML = '<span><strong>已选择本地专家包</strong><br>等待结构检查；安装前仍需高风险确认。</span>'; showToast('已选择目录，正在准备结构检查'); }
         if (action === 'install-pack') { actionButton.textContent = '等待确认'; actionButton.classList.add('primary'); showToast('已加入安装确认，尚未执行安装'); }
+        if (action === 'create-project') {
+          var projectList = document.getElementById('projectManagerList');
+          if (projectList && !document.getElementById('projectDraft')) projectList.insertAdjacentHTML('beforeend', '<div class="feature-list-row" id="projectDraft"><span><strong>未命名项目</strong><small>新建草稿 · 尚未绑定专家或文件</small></span><span class="feature-pill waiting">草稿</span></div>');
+          showToast('已创建项目草稿');
+        }
+        if (action === 'select-project') { closeFeatureLayer(); switchView('project'); showToast('已切换项目上下文'); }
+        if (action === 'archive-project') { actionButton.textContent = '已归档'; actionButton.disabled = true; showToast('项目已归档，可从项目管理恢复'); }
+        if (action === 'save-project-experts') showToast('项目专家组已保存，新路由将优先使用');
+        if (action === 'create-chat-project') {
+          var chatProjects = document.getElementById('chatProjectList');
+          if (chatProjects && !document.getElementById('chatProjectDraft')) chatProjects.insertAdjacentHTML('beforeend', '<div class="feature-list-row" id="chatProjectDraft"><span><strong>新对话项目</strong><small>0 条对话 · 草稿</small></span><span class="feature-pill waiting">新建</span></div>');
+          showToast('已创建对话项目草稿');
+        }
+        if (action === 'rename-chat-project') { actionButton.closest('.feature-list-row').querySelector('strong').textContent = '工商储方案（已编辑）'; showToast('对话项目名称已更新'); }
+        if (action === 'archive-chat-project') { actionButton.textContent = '已归档'; actionButton.disabled = true; showToast('对话项目已归档，原始对话仍保留'); }
+        if (action === 'select-chat-project') { closeFeatureLayer(); switchView('chat'); document.getElementById('chatProjectFilter').value = 'none'; document.getElementById('chatProjectFilter').dispatchEvent(new Event('change')); }
+        if (action === 'export-chat-events') showToast('已准备导出当前对话的事件记录');
+        if (action === 'save-distilled-skill') showToast('技能草案已保存，尚未安装或启用');
       });
 
       document.addEventListener('click', function (event) {
@@ -2599,6 +2667,12 @@
         button.addEventListener('click', function () { document.getElementById('projectNewWork').click(); });
       });
 
+      document.getElementById('saveProjectSettings').addEventListener('click', function () { showToast('项目名称、默认权限和路由设置已保存'); });
+      document.getElementById('archiveProject').addEventListener('click', function () { openModal('归档项目', '归档后项目不会出现在默认列表，历史 Chat、Work 与成果仍保留，可随时恢复。', '确认归档', '项目已归档，可从项目管理恢复'); });
+      document.getElementById('deleteProject').addEventListener('click', function () {
+        openRisk('high', { badge: '高风险 · 删除项目', title: '确认删除「工商储方案」', copy: '删除会影响项目上下文、专家组和后续访问。原型只演示确认，不会删除任何内容。', plan: ['停止项目下新的自动触发', '保留历史 Chat 与 Work 关联说明', '删除项目配置与共享上下文'], impact: '<strong>影响范围：</strong>项目配置将不可恢复；历史内容仍按正式迁移策略处理。原型不会执行删除。', confirmLabel: '确认删除项目', needsRecipient: false, success: '原型已确认，未删除任何项目数据' });
+      });
+
       document.querySelectorAll('[data-toast]').forEach(function (button) {
         button.addEventListener('click', function () { showToast(button.dataset.toast); if (workActionMenu.contains(button)) closeWorkMenu(); });
       });
@@ -2675,26 +2749,31 @@
       var riskRecipient = document.getElementById('riskRecipient');
       var confirmRisk = document.getElementById('confirmRisk');
       var currentRisk = 'medium';
+      var currentRiskSuccess = '';
 
       function planMarkup(items) {
         return items.map(function (item, index) { return '<div class="risk-plan-row"><span class="risk-plan-index">0' + (index + 1) + '</span><span>' + item + '</span></div>'; }).join('');
       }
 
-      function openRisk(type) {
+      function openRisk(type, override) {
+        override = override || {};
         currentRisk = type;
         var high = type === 'high';
         riskDialog.classList.toggle('high', high);
-        riskBadge.textContent = high ? '高风险 · 外部发送' : '中风险 · 修改文件';
-        riskTitle.textContent = high ? '确认外部发送' : '确认修改成果文件';
-        riskCopy.textContent = high ? '这项操作会产生外部副作用。请核验接收方与附件，发送发生前需要单独确认。' : '这项操作会写入当前 Work 的成果文件。确认后仅执行下列计划。';
-        riskPlan.innerHTML = high ? planMarkup(['核验接收方与披露范围', '附加客户沟通提纲.md', '向已核验接收方发送']) : planMarkup(['读取现有草稿', '写入已确认的结构调整', '保存为新的成果版本']);
-        riskImpact.innerHTML = high ? '<strong>影响范围：</strong>外部接收方将收到「客户沟通提纲.md」。原型不会实际发送任何内容。' : '<strong>影响范围：</strong>仅修改 outputs/客户沟通提纲.md，不发布、不覆盖原始资料，也不外部发送。';
+        riskBadge.textContent = override.badge || (high ? '高风险 · 外部发送' : '中风险 · 修改文件');
+        riskTitle.textContent = override.title || (high ? '确认外部发送' : '确认修改成果文件');
+        riskCopy.textContent = override.copy || (high ? '这项操作会产生外部副作用。请核验接收方与附件，发送发生前需要单独确认。' : '这项操作会写入当前 Work 的成果文件。确认后仅执行下列计划。');
+        riskPlan.innerHTML = planMarkup(override.plan || (high ? ['核验接收方与披露范围', '附加客户沟通提纲.md', '向已核验接收方发送'] : ['读取现有草稿', '写入已确认的结构调整', '保存为新的成果版本']));
+        riskImpact.innerHTML = override.impact || (high ? '<strong>影响范围：</strong>外部接收方将收到「客户沟通提纲.md」。原型不会实际发送任何内容。' : '<strong>影响范围：</strong>仅修改 outputs/客户沟通提纲.md，不发布、不覆盖原始资料，也不外部发送。');
         riskRecipient.value = '';
-        confirmRisk.textContent = high ? '确认并发送' : '确认一次并执行';
-        confirmRisk.disabled = high;
+        var needsRecipient = high && override.needsRecipient !== false;
+        riskRecipient.parentElement.hidden = !needsRecipient;
+        confirmRisk.textContent = override.confirmLabel || (high ? '确认并发送' : '确认一次并执行');
+        confirmRisk.disabled = needsRecipient;
+        currentRiskSuccess = override.success || '';
         riskBackdrop.classList.add('open');
         riskBackdrop.setAttribute('aria-hidden', 'false');
-        if (high) setTimeout(function () { riskRecipient.focus(); }, 180);
+        if (needsRecipient) setTimeout(function () { riskRecipient.focus(); }, 180);
       }
 
       function closeRisk() {
@@ -2708,7 +2787,7 @@
       confirmRisk.addEventListener('click', function () {
         if (confirmRisk.disabled) return;
         closeRisk();
-        showToast(currentRisk === 'high' ? '原型已确认，未实际发送任何内容' : '修改计划已确认，原型未写入本地文件');
+        showToast(currentRiskSuccess || (currentRisk === 'high' ? '原型已确认，未实际发送任何内容' : '修改计划已确认，原型未写入本地文件'));
       });
 
       document.querySelectorAll('[data-work-action]').forEach(function (button) {
@@ -2756,9 +2835,9 @@
       });
 
       var automationRules = {
-        weekly: { title: '整理项目待确认事项', subtitle: '将项目中需要用户处理的事项整理成独立 Work。', triggerType: '每周', trigger: '每周一，由用户启用后生效', goal: '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。', enabled: false },
-        file: { title: '资料更新后检查缺失项', subtitle: '项目资料发生变化时，重新检查输入缺口并生成独立 Work。', triggerType: '项目文件更新后', trigger: '项目文件更新后，由用户启用后生效', goal: '检查新增或更新资料带来的输入缺口，列明来源和仍需用户确认的内容。', enabled: false },
-        custom: { title: '新自动任务', subtitle: '尚未启用的自动任务草稿。', triggerType: '手动', trigger: '仅手动触发', goal: '说明需要完成什么、产出什么，以及哪些内容不能自行补全。', enabled: false }
+        weekly: { title: '整理项目待确认事项', subtitle: '将项目中需要用户处理的事项整理成独立 Work。', triggerType: '每周', trigger: '每周一，由用户启用后生效', target: 'Work · 每次独立创建', goal: '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。', enabled: false },
+        file: { title: '资料更新后检查缺失项', subtitle: '项目资料发生变化时，重新检查输入缺口并生成独立 Work。', triggerType: '项目文件更新后', trigger: '项目文件更新后，由用户启用后生效', target: 'Work · 每次独立创建', goal: '检查新增或更新资料带来的输入缺口，列明来源和仍需用户确认的内容。', enabled: false },
+        custom: { title: '新自动任务', subtitle: '尚未启用的自动任务草稿。', triggerType: '手动', trigger: '仅手动触发', target: 'Work · 每次独立创建', goal: '说明需要完成什么、产出什么，以及哪些内容不能自行补全。', enabled: false }
       };
 
       var currentAutomationRule = 'weekly';
@@ -2784,6 +2863,7 @@
         document.getElementById('automationTitle').textContent = rule.title;
         document.getElementById('automationSubtitle').textContent = rule.subtitle;
         document.getElementById('automationTrigger').textContent = rule.trigger;
+        document.getElementById('automationTarget').textContent = rule.target;
         document.getElementById('automationGoal').textContent = rule.goal;
         automationEnabled.checked = rule.enabled;
         document.getElementById('automationEnableLabel').textContent = rule.enabled ? '已启用' : '未启用';
@@ -2815,6 +2895,7 @@
         document.getElementById('automationEditorTitle').textContent = mode === 'new' ? '创建自动任务' : '编辑自动任务';
         document.getElementById('automationEditorName').value = rule.title;
         document.getElementById('automationEditorTrigger').value = rule.triggerType;
+        document.getElementById('automationEditorTarget').value = rule.target.includes('Chat') ? 'Chat · 辅助提醒' : 'Work · 独立运行';
         document.getElementById('automationEditorGoal').value = rule.goal;
         automationEditor.hidden = false;
         document.getElementById('automationEditorName').focus();
@@ -2840,10 +2921,27 @@
         automationRules[key].goal = automationRules[key].subtitle;
         automationRules[key].triggerType = triggerType;
         automationRules[key].trigger = triggerCopy[triggerType];
+        automationRules[key].target = document.getElementById('automationEditorTarget').value.includes('Chat') ? 'Chat · 辅助提醒' : 'Work · 每次独立创建';
         if (key === 'custom') document.getElementById('customAutomationItem').hidden = false;
         closeAutomationEditor();
         renderAutomationRule(key);
         showToast('自动任务草稿已保存，尚未启用或执行');
+      });
+
+      document.getElementById('triggerAutomation').addEventListener('click', function () {
+        var rule = automationRules[currentAutomationRule];
+        var workTarget = rule.target.includes('Work');
+        document.getElementById('automationHistoryEmpty').className = 'project-work-table';
+        document.getElementById('automationHistoryEmpty').innerHTML = '<button class="entity-row" type="button" data-automation-open-result><span><span class="entity-title">刚刚 · 手动触发</span><span class="entity-meta">运行已完成 · 专家路由已保留</span></span><span class="entity-state"><span class="status-dot running"></span>成功</span></button>';
+        document.getElementById('automationResultsEmpty').className = 'project-work-table';
+        document.getElementById('automationResultsEmpty').innerHTML = workTarget ? '<button class="entity-row" type="button" data-automation-open-work><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">独立 Work · Run 01 · 工商储方案</span></span><span class="entity-state">打开工作 →</span></button>' : '<button class="entity-row" type="button" data-automation-open-chat><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">Chat 辅助提醒 · 未创建 Work</span></span><span class="entity-state">打开对话 →</span></button>';
+        setAutomationTab('history');
+        showToast(workTarget ? '已触发并创建独立 Work' : '已触发 Chat 辅助提醒');
+      });
+      document.querySelector('.automation-panel-scroll').addEventListener('click', function (event) {
+        if (event.target.closest('[data-automation-open-work]')) switchView('work');
+        if (event.target.closest('[data-automation-open-chat]')) switchView('chat');
+        if (event.target.closest('[data-automation-open-result]')) setAutomationTab('results');
       });
 
       var expertProfiles = {
@@ -2893,9 +2991,9 @@
       });
 
       var chatThreads = {
-        materials: { title: '客户沟通材料', project: '工商储方案 · 保留原对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项 Work。' },
-        boundary: { title: '方案边界讨论', project: '工商储方案 · 保留原对话', user: '缺失信息应该怎么向客户说明？', reply: '可以把已知事实、缺失信息和需要客户确认的事项分开列出，避免把假设写成结论。' },
-        source: { title: '来源引用方式', project: '未绑定项目 · 历史 Chat', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
+        materials: { title: '客户沟通材料', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项 Work。' },
+        boundary: { title: '方案边界讨论', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '缺失信息应该怎么向客户说明？', reply: '可以把已知事实、缺失信息和需要客户确认的事项分开列出，避免把假设写成结论。' },
+        source: { title: '来源引用方式', projectKey: 'none', project: '未绑定项目 · 历史 Chat', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
       };
 
       function chatMessageMarkup(thread) {
@@ -2917,10 +3015,21 @@
         button.addEventListener('click', function () { renderChatThread(button.dataset.chat); });
       });
 
-      document.getElementById('chatThreadSearch').addEventListener('input', function (event) {
-        var value = event.target.value.trim().toLowerCase();
-        document.querySelectorAll('.chat-thread').forEach(function (button) { button.hidden = value && !button.textContent.toLowerCase().includes(value); });
-      });
+      function filterChatThreads() {
+        var value = document.getElementById('chatThreadSearch').value.trim().toLowerCase();
+        var projectKey = document.getElementById('chatProjectFilter').value;
+        document.getElementById('chatSearchNote').textContent = value.length >= 3 ? '正在搜索消息全文（FTS 语义）' : '1–2 字搜索标题，3 字以上搜索消息全文';
+        document.querySelectorAll('.chat-thread').forEach(function (button) {
+          var thread = chatThreads[button.dataset.chat];
+          var inProject = projectKey === 'all' || thread.projectKey === projectKey;
+          var searchText = value.length >= 3 ? thread.title + ' ' + thread.user + ' ' + thread.reply : thread.title;
+          button.hidden = !inProject || (value && !searchText.toLowerCase().includes(value));
+        });
+      }
+
+      document.getElementById('chatThreadSearch').addEventListener('input', filterChatThreads);
+      document.getElementById('chatProjectFilter').addEventListener('change', filterChatThreads);
+      document.getElementById('manageChatProjects').addEventListener('click', function () { openFeature('chat-projects'); });
 
       document.getElementById('newChat').addEventListener('click', function () {
         document.querySelectorAll('.chat-thread').forEach(function (button) { button.classList.remove('active'); });
@@ -2952,8 +3061,49 @@
         chatToolsButton.setAttribute('aria-expanded', String(open));
       });
       chatToolsMenu.addEventListener('click', closeChatTools);
-      document.getElementById('chatModel').addEventListener('change', function (event) { showToast('当前对话已切换为' + event.target.value); });
-      document.getElementById('chatMode').addEventListener('change', function (event) { showToast('当前对话模式：' + event.target.value); });
+      chatToolsMenu.addEventListener('click', function (event) {
+        var action = event.target.closest('[data-demo-chat]');
+        if (action) showToast(action.dataset.demoChat === 'export-md' ? '已准备 Markdown 对话导出' : '已准备单文件 HTML 对话导出');
+      });
+      document.getElementById('chatModel').addEventListener('change', function (event) {
+        showToast(event.target.value.includes('本地') ? '已切换端侧模型；云模型轮换在本地模式不可用' : '已切换端云默认模型');
+      });
+      document.getElementById('chatMode').addEventListener('change', function (event) {
+        var copy = { Agent: 'Agent：可按权限调用工具，中高风险仍需确认', Plan: 'Plan：只制定计划，不执行工具或写入', Ask: 'Ask：用于问答和只读检索' };
+        showToast(copy[event.target.value]);
+      });
+
+      var chatCommandPopover = document.getElementById('chatCommandPopover');
+      function closeChatCommandPopover() { chatCommandPopover.hidden = true; }
+      function openChatCommandPopover(type) {
+        var skill = type === 'skill';
+        chatCommandPopover.innerHTML = '<div class="chat-command-label">' + (skill ? '已启用技能' : '可引用上下文') + '</div>' + (skill ?
+          '<button class="chat-command-option" type="button" data-chat-insert="/需求澄清 "><strong>需求澄清</strong><span>专属技能</span></button><button class="chat-command-option" type="button" data-chat-insert="/深度阅读 "><strong>深度阅读</strong><span>共享技能</span></button>' :
+          '<button class="chat-command-option" type="button" data-chat-insert="@客户需求说明.pdf "><strong>客户需求说明.pdf</strong><span>项目文件</span></button><button class="chat-command-option" type="button" data-chat-insert="@长期记忆 "><strong>长期记忆</strong><span>用户已确认</span></button><button class="chat-command-option" type="button" data-chat-insert="@联网检索 "><strong>联网检索</strong><span>公开网络</span></button>');
+        chatCommandPopover.hidden = false;
+      }
+      chatCommandPopover.addEventListener('click', function (event) {
+        var option = event.target.closest('[data-chat-insert]');
+        if (!option) return;
+        var input = document.getElementById('chatInput');
+        input.value = option.dataset.chatInsert + input.value.replace(/^[/@]\S*\s?/, '');
+        input.focus();
+        closeChatCommandPopover();
+      });
+      document.getElementById('chatSkill').addEventListener('click', function () { openChatCommandPopover('skill'); });
+      document.getElementById('chatContext').addEventListener('click', function () { openChatCommandPopover('context'); });
+      document.getElementById('chatAttach').addEventListener('click', function () {
+        var attachments = document.getElementById('chatAttachments');
+        if (!document.getElementById('chatAttachmentDemo')) attachments.insertAdjacentHTML('beforeend', '<span class="chat-attachment" id="chatAttachmentDemo"><span>PDF · 客户需求说明.pdf</span><button type="button" aria-label="移除附件">×</button></span>');
+        showToast('已添加附件预览；支持图片、文档、粘贴和拖放');
+      });
+      document.getElementById('chatAttachments').addEventListener('click', function (event) { if (event.target.closest('button')) { event.target.closest('.chat-attachment').remove(); showToast('附件已移除'); } });
+      document.getElementById('chatVoice').addEventListener('click', function (event) {
+        var listening = event.currentTarget.dataset.listening === 'true';
+        event.currentTarget.dataset.listening = String(!listening);
+        event.currentTarget.textContent = listening ? '语音' : '正在听…';
+        showToast(listening ? '语音输入已停止' : '语音输入已开始，点击再次停止');
+      });
 
       function sendChatMessage() {
         var chatInput = document.getElementById('chatInput');
@@ -2969,11 +3119,19 @@
         chatMessages.appendChild(row);
         chatMessages.scrollTop = chatMessages.scrollHeight;
         chatInput.value = '';
+        document.getElementById('chatAttachments').innerHTML = '';
+        closeChatCommandPopover();
         showToast('消息已加入当前原型对话');
       }
       document.getElementById('sendChat').addEventListener('click', sendChatMessage);
       document.getElementById('chatInput').addEventListener('keydown', function (event) {
         if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendChatMessage(); }
+        if (event.key === 'Escape') closeChatCommandPopover();
+      });
+      document.getElementById('chatInput').addEventListener('input', function (event) {
+        if (event.target.value.startsWith('/')) openChatCommandPopover('skill');
+        else if (event.target.value.startsWith('@')) openChatCommandPopover('context');
+        else closeChatCommandPopover();
       });
 
       function setSettingsTab(name) {
@@ -2995,9 +3153,10 @@
 
       document.addEventListener('click', function (event) {
         if (!chatToolsMenu.contains(event.target) && event.target !== chatToolsButton) closeChatTools();
+        if (!chatCommandPopover.contains(event.target) && !event.target.closest('#chatSkill') && !event.target.closest('#chatContext') && !event.target.closest('#chatInput')) closeChatCommandPopover();
       });
 
-      document.getElementById('projectSwitcher').addEventListener('click', function () { showToast('当前项目：工商储方案'); });
+      document.getElementById('projectSwitcher').addEventListener('click', function () { openFeature('project-manager'); });
       document.getElementById('notifyButton').addEventListener('click', function () { showToast('2 项工作需要你处理'); });
       document.getElementById('searchButton').addEventListener('click', openCommandPalette);
 

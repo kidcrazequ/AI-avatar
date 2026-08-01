@@ -1125,6 +1125,17 @@
     .feature-callout { margin-top: 14px; padding: 13px 14px; border: 1px solid var(--line); border-radius: 8px; background: #f8f7f4; color: var(--secondary); font-size: 12px; line-height: 1.65; }
     .feature-callout strong { color: var(--ink); }
     .feature-empty { display: grid; min-height: 260px; place-items: center; padding: 30px; border: 1px dashed var(--line-strong); border-radius: 9px; color: var(--tertiary); font-size: 13px; text-align: center; }
+    .feature-stack { display: grid; gap: 12px; }
+    .feature-meta-line { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 8px; color: var(--tertiary); font-size: 11px; }
+    .feature-pill { display: inline-flex; align-items: center; gap: 5px; min-height: 23px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: #f8f7f4; color: var(--secondary); font-size: 11px; white-space: nowrap; }
+    .feature-pill.ready { border-color: #c8ddcf; background: #f2f8f4; color: #2f6f48; }
+    .feature-pill.waiting { border-color: #ead9b7; background: #fdf8ec; color: #8a641c; }
+    .feature-code { overflow: auto; margin-top: 12px; padding: 14px; border: 1px solid #dedbd5; border-radius: 8px; background: #f7f6f3; color: #343238; font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .feature-progress { width: 112px; height: 5px; overflow: hidden; border-radius: 999px; background: #ece9e4; }
+    .feature-progress > span { display: block; height: 100%; border-radius: inherit; background: #44454a; }
+    .feature-split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 12px; }
+    .feature-check { display: flex; align-items: center; gap: 8px; color: var(--secondary); font-size: 12px; }
+    .feature-check input { accent-color: #24252a; }
 
     .command-backdrop { position: absolute; inset: 0; z-index: 40; display: grid; align-items: start; justify-items: center; padding-top: 11vh; background: rgba(28,27,30,.22); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
     .command-backdrop.open { opacity: 1; pointer-events: auto; }
@@ -1769,7 +1780,7 @@
                       <span class="expert-identity-meta"><span class="status-dot running"></span><span>可用于工作路由</span><span>·</span><span>来源：本地专家包</span></span>
                     </span>
                   </div>
-                  <div class="expert-profile-actions"><button class="primary-button" id="startWithExpert" type="button">交给小堵</button><button class="secondary-button" type="button" data-toast="打开专家配置：人格、知识、技能与测试">配置</button></div>
+                  <div class="expert-profile-actions"><button class="primary-button" id="startWithExpert" type="button">交给小堵</button><button class="secondary-button" type="button" data-feature-open="soul-editor">配置</button></div>
                 </header>
 
                 <nav class="expert-section-tabs" role="tablist" aria-label="专家详情">
@@ -1815,16 +1826,16 @@
                   </section>
 
                   <section class="expert-panel" data-expert-panel="persona">
-                    <header class="expert-panel-head"><div><h3>人格与画像</h3><p>集中管理原有的人设、人生时间线和用户画像，不与专业知识混用。</p></div><button class="secondary-button" type="button" data-toast="编辑专家人格定义">编辑人格</button></header>
+                    <header class="expert-panel-head"><div><h3>人格与画像</h3><p>集中管理原有的人设、人生时间线和用户画像，不与专业知识混用。</p></div><button class="secondary-button" type="button" data-feature-open="soul-editor">编辑人格</button></header>
                     <div class="expert-module-grid">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Soul</span><h4>人设</h4><p>身份、工作风格、表达方式和必须遵守的原则。</p><button type="button" data-toast="打开 soul.md 人格定义">查看人格定义 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Soul</span><h4>人设</h4><p>身份、工作风格、表达方式和必须遵守的原则。</p><button type="button" data-feature-open="soul-editor">查看人格定义 →</button></article>
                       <article class="expert-module-card"><span class="expert-module-kicker">Timeline</span><h4>人生时间线</h4><p>专家背景叙事和关键经历，不作为专业事实来源。</p><button type="button" data-toast="打开专家人生时间线">打开时间线 →</button></article>
                       <article class="expert-module-card"><span class="expert-module-kicker">Profile</span><h4>用户画像</h4><p>只记录用户明确确认的偏好、称呼和协作方式。</p><button type="button" data-toast="打开当前用户画像">查看画像 →</button></article>
                     </div>
                   </section>
 
                   <section class="expert-panel" data-expert-panel="skills">
-                    <header class="expert-panel-head"><div><h3>技能</h3><p>按分身专属、自有公共和社区开源来源加载，同名技能遵循优先级。</p></div><button class="secondary-button" type="button" data-toast="进入技能安装与启用流程">安装技能</button></header>
+                    <header class="expert-panel-head"><div><h3>技能</h3><p>按分身专属、自有公共和社区开源来源加载，同名技能遵循优先级。</p></div><button class="secondary-button" type="button" data-feature-open="skills">管理技能</button></header>
                     <div class="expert-source-list">
                       <div class="expert-source-row"><span><strong>分身专属技能</strong><small>avatars/&lt;expert&gt;/skills</small></span><span>最高优先级</span><span>查看 →</span></div>
                       <div class="expert-source-row"><span><strong>自有公共技能</strong><small>shared/skills</small></span><span>共享能力</span><span>查看 →</span></div>
@@ -1833,10 +1844,10 @@
                   </section>
 
                   <section class="expert-panel" data-expert-panel="knowledge">
-                    <header class="expert-panel-head"><div><h3>知识与记忆</h3><p>专业事实优先来自知识文件；长期记忆只保存经确认的协作事实。</p></div><button class="secondary-button" type="button" data-toast="选择并添加可追溯知识文件">添加知识</button></header>
+                    <header class="expert-panel-head"><div><h3>知识与记忆</h3><p>专业事实优先来自知识文件；长期记忆只保存经确认的协作事实。</p></div><button class="secondary-button" type="button" data-feature-open="knowledge">添加知识</button></header>
                     <div class="expert-module-grid two">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Knowledge</span><h4>知识文件与索引</h4><p>查看知识目录、来源文件和索引状态；缺少资料时明确提示。</p><button type="button" data-toast="打开知识文件与索引">浏览知识文件 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Memory</span><h4>长期记忆</h4><p>查看和整理 MEMORY.md，不以记忆替代专业知识依据。</p><button type="button" data-toast="打开长期记忆与整理">管理长期记忆 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Knowledge</span><h4>知识文件与索引</h4><p>查看知识目录、来源文件和索引状态；缺少资料时明确提示。</p><button type="button" data-feature-open="knowledge">浏览知识文件 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Memory</span><h4>长期记忆</h4><p>查看和整理 MEMORY.md，不以记忆替代专业知识依据。</p><button type="button" data-feature-open="memory">管理长期记忆 →</button></article>
                     </div>
                   </section>
 
@@ -1850,7 +1861,7 @@
                   </section>
 
                   <section class="expert-panel" data-expert-panel="tests">
-                    <header class="expert-panel-head"><div><h3>测试与批量回归</h3><p>测试结果从真实专家包读取；原型不生成通过率或虚构分数。</p></div><div class="expert-profile-actions"><button class="secondary-button" type="button" data-toast="打开批量回归与报告">批量回归</button><button class="primary-button" type="button" data-toast="运行专家测试">运行测试</button></div></header>
+                    <header class="expert-panel-head"><div><h3>测试与批量回归</h3><p>测试结果从真实专家包读取；原型不生成通过率或虚构分数。</p></div><div class="expert-profile-actions"><button class="secondary-button" type="button" data-feature-open="batch-regression">批量回归</button><button class="primary-button" type="button" data-feature-open="tests">运行测试</button></div></header>
                     <div class="expert-test-list">
                       <div class="expert-test-row"><strong>红线约束</strong><span>tests/cases</span><span>待读取</span></div>
                       <div class="expert-test-row"><strong>知识库约束</strong><span>tests/cases</span><span>待读取</span></div>
@@ -2078,6 +2089,108 @@
 
       function registerFeatureGroup(key, items) { featureGroups[key] = items; }
 
+      registerFeatureGroup('expert-core', [
+        { key: 'soul-editor', label: '人设' },
+        { key: 'skills', label: '技能' },
+        { key: 'knowledge', label: '知识库' },
+        { key: 'memory', label: '记忆' },
+        { key: 'tests', label: '测试' },
+        { key: 'batch-regression', label: '批量回归' }
+      ]);
+
+      registerFeature('soul-editor', {
+        title: '人设', subtitle: '编辑 soul.md 中的身份、表达方式、工作原则和红线。', icon: 'S', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="save-soul">保存人设</button>',
+        content: function () { return `
+          <div class="feature-toolbar"><div><h3>人格定义</h3><p>文件结构遵循当前专家包；专业判断仍由知识库提供依据。</p></div><span class="feature-pill ready">已从专家包读取</span></div>
+          <div class="feature-split">
+            <form class="feature-card feature-form" onsubmit="return false">
+              <label class="feature-field"><span>专家名称</span><input class="feature-input" value="${document.getElementById('expertName').textContent}"></label>
+              <label class="feature-field"><span>身份定位</span><input class="feature-input" value="${document.getElementById('expertRole').textContent}"></label>
+              <label class="feature-field"><span>开场介绍</span><textarea class="feature-textarea" style="min-height:92px">我是你的工商储产品解决方案专家。我会先确认事实与资料边界，再给出可追溯的分析和工作成果。</textarea></label>
+              <label class="feature-field"><span>表达风格</span><textarea class="feature-textarea" style="min-height:112px">结论优先，说明依据；不使用模糊的行业惯例替代事实；缺少参数时明确列出，不自行补全。</textarea></label>
+              <label class="feature-field"><span>必须遵守的原则</span><textarea class="feature-textarea">1. 专业事实和参数必须来自 knowledge/\n2. 关键数据标注来源文件\n3. 从第一性原理说明判断\n4. 明确区分事实、判断和待确认项</textarea></label>
+            </form>
+            <aside class="feature-stack">
+              <section class="feature-card"><h4>文件结构</h4><div class="feature-code">soul.md\n├─ 身份\n├─ 工作风格\n├─ 表达方式\n└─ 原则与红线</div></section>
+              <section class="feature-card"><h4>使用边界</h4><p>人格只决定协作方式，不应成为专业参数、工程结论或收益数据的来源。</p><div class="feature-callout"><strong>知识库优先。</strong> 当知识文件为空或证据不足时，专家必须直接说明能力缺口。</div></section>
+            </aside>
+          </div>`; }
+      });
+
+      registerFeature('skills', {
+        title: '技能', subtitle: '管理分身专属、自有公共和社区技能，保留同名优先级。', icon: '/', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="install-skill">安装技能</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>已加载技能</h3><p>local › shared › community；关闭后新对话和新 Work 不再加载。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">全部</button><button type="button">专属</button><button type="button">共享</button><button type="button">社区</button></div></div>
+          <div class="feature-list" id="skillFeatureList">
+            <div class="feature-list-row"><span><strong>工商储需求澄清</strong><small>local · 小堵专属 · 读取真实项目资料后形成参数缺口</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>可追溯方案结构</strong><small>local · 产出结论、依据、待确认项和成果文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>文档深度阅读</strong><small>shared · 公共技能 · 需要用户提供可访问文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>社区技能目录</strong><small>community · 由 soul-sync 管理，安装前展示来源和版本</small></span><span class="feature-row-actions"><span class="feature-pill">未安装</span><button class="quiet-button" type="button" data-demo-action="install-skill">浏览</button></span></div>
+          </div>
+          <div class="feature-callout"><strong>技能不会扩大权限。</strong> 写文件、创建自动任务、发布或外部发送仍遵循三级风险确认。</div>`
+      });
+
+      registerFeature('knowledge', {
+        title: '知识库', subtitle: '浏览、搜索、导入和检查专家的专业知识文件与索引。', icon: 'K', group: 'expert-core',
+        actions: '<button class="quiet-button" type="button" data-demo-action="deep-read">深度阅读</button><button class="quiet-button primary" type="button" data-demo-action="add-knowledge">添加知识</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>知识文件</h3><p>原型展示真实能力结构，不编造文件中的专业参数和成果数据。</p></div><input class="feature-input" id="knowledgeSearch" style="width:240px" placeholder="搜索文件和主题"></div>
+          <div class="feature-split">
+            <div class="feature-list" id="knowledgeFeatureList">
+              <button class="feature-list-row" type="button" data-demo-action="inspect-knowledge"><span><strong>knowledge/README.md</strong><small>知识库索引 · 入口文件</small></span><span class="feature-pill ready">已索引</span></button>
+              <button class="feature-list-row" type="button" data-demo-action="inspect-knowledge"><span><strong>专业知识目录</strong><small>本地专家包 · 具体文件名从已安装目录读取</small></span><span class="feature-pill ready">已连接</span></button>
+              <button class="feature-list-row" type="button" data-demo-action="inspect-knowledge"><span><strong>共享知识</strong><small>shared/knowledge · 按专家声明引用</small></span><span class="feature-pill">可引用</span></button>
+            </div>
+            <aside class="feature-stack">
+              <section class="feature-card" id="knowledgeInspector"><h4>知识状态</h4><p>选择左侧文件可查看来源、索引状态和引用边界。</p><div class="feature-meta-line"><span class="feature-pill ready">索引可用</span><span>更新时间从本地文件读取</span></div></section>
+              <section class="feature-card"><h4>检查工具</h4><p>知识库检查会验证索引、空文件、失效链接和来源声明。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="knowledge-lint">运行检查</button></section>
+            </aside>
+          </div>`
+      });
+
+      registerFeature('memory', {
+        title: '记忆', subtitle: '管理结构化长期记忆和 MEMORY.md；不以记忆替代专业知识。', icon: 'M', group: 'expert-core',
+        actions: '<button class="quiet-button" type="button" data-demo-action="consolidate-memory">整理记忆</button><button class="quiet-button primary" type="button" data-demo-action="add-memory">新增记忆</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>长期记忆</h3><p>只保存用户明确确认的协作事实、偏好与长期上下文。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">记忆条目</button><button type="button">MEMORY.md</button></div></div>
+          <div class="feature-grid">
+            <section class="feature-card"><h4>协作偏好</h4><p>结论优先；涉及专业参数时标注来源；缺数据不自行补齐。</p><div class="feature-meta-line"><span class="feature-pill ready">用户已确认</span><span>长期有效</span></div></section>
+            <section class="feature-card"><h4>当前工作方式</h4><p>Work 为主，Chat 为辅；需要持续执行和验收的请求转为 Work。</p><div class="feature-meta-line"><span class="feature-pill">工作台偏好</span><span>可编辑</span></div></section>
+            <section class="feature-card span-2"><h4>MEMORY.md 预览</h4><div class="feature-code" id="memoryPreview"># 长期记忆\n\n- 仅记录经用户确认的事实和偏好。\n- 专业参数、政策条文和工程判断必须返回知识库查证。\n- 对话中的临时推测不自动进入长期记忆。</div></section>
+          </div>`
+      });
+
+      registerFeature('tests', {
+        title: '专家测试', subtitle: '按红线、知识约束、溯源、人格和能力边界验证专家。', icon: 'T', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="run-tests">运行全部测试</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>测试用例</h3><p>结果从真实 tests/cases 运行读取；此原型不展示虚构通过率。</p></div><span class="feature-pill waiting" id="testSummary">尚未运行</span></div>
+          <div class="feature-list" id="testFeatureList">
+            <div class="feature-list-row"><span><strong>红线约束</strong><small>至少 2 个用例 · 验证拒答和高风险边界</small></span><span class="feature-pill test-state">待读取</span></div>
+            <div class="feature-list-row"><span><strong>知识库约束</strong><small>专业事实必须引用知识文件，空库不得补全</small></span><span class="feature-pill test-state">待读取</span></div>
+            <div class="feature-list-row"><span><strong>数据溯源</strong><small>关键数据包含来源文件和可核验上下文</small></span><span class="feature-pill test-state">待读取</span></div>
+            <div class="feature-list-row"><span><strong>人格一致性</strong><small>表达方式、身份和工作原则保持稳定</small></span><span class="feature-pill test-state">待读取</span></div>
+            <div class="feature-list-row"><span><strong>能力边界</strong><small>不越过专家知识范围给出确定性结论</small></span><span class="feature-pill test-state">待读取</span></div>
+          </div>
+          <div class="feature-callout"><strong>转正门槛。</strong> 临时专家必须补充知识文件，并通过上述至少五类测试后才能申请转正。</div>`
+      });
+
+      registerFeature('batch-regression', {
+        title: '批量回归', subtitle: '选择多个已安装专家运行同一轮结构与行为回归。', icon: 'R', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="run-regression">开始回归</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>回归范围</h3><p>只运行已勾选专家的真实测试文件，并生成可导出的报告。</p></div><span class="feature-pill" id="regressionStatus">未开始</span></div>
+          <div class="feature-list">
+            <label class="feature-list-row"><span><strong>小堵</strong><small>工商储产品解决方案专家</small></span><span class="feature-check"><input type="checkbox" checked>纳入本轮</span></label>
+            <label class="feature-list-row"><span><strong>财研</strong><small>财务分析专家</small></span><span class="feature-check"><input type="checkbox" checked>纳入本轮</span></label>
+            <label class="feature-list-row"><span><strong>电图</strong><small>电气工程与图纸阅读</small></span><span class="feature-check"><input type="checkbox">纳入本轮</span></label>
+            <label class="feature-list-row"><span><strong>品研</strong><small>产品经理</small></span><span class="feature-check"><input type="checkbox">纳入本轮</span></label>
+          </div>
+          <div class="feature-callout"><strong>报告内容：</strong>专家、用例文件、运行状态、失败原因和原始事件；不会在未运行时生成分数。</div>`
+      });
+
       function renderFeature(key) {
         var definition = featureRegistry[key];
         if (!definition) return;
@@ -2114,8 +2227,60 @@
       featureLayer.addEventListener('click', function (event) {
         var featureButton = event.target.closest('[data-feature-key]');
         if (featureButton) { renderFeature(featureButton.dataset.featureKey); return; }
+        var segmentedButton = event.target.closest('[data-segmented] button');
+        if (segmentedButton) {
+          segmentedButton.parentElement.querySelectorAll('button').forEach(function (button) { button.classList.toggle('active', button === segmentedButton); });
+          showToast('已切换为「' + segmentedButton.textContent.trim() + '」');
+          return;
+        }
+        var actionButton = event.target.closest('[data-demo-action]');
+        if (!actionButton) return;
+        var action = actionButton.dataset.demoAction;
+        if (action === 'save-soul') showToast('人格定义已保存为原型草稿');
+        if (action === 'toggle-row') {
+          var state = actionButton.parentElement.querySelector('.feature-pill');
+          var enabled = actionButton.textContent.trim() === '停用';
+          actionButton.textContent = enabled ? '启用' : '停用';
+          state.textContent = enabled ? '已停用' : '已启用';
+          state.classList.toggle('ready', !enabled);
+          showToast(enabled ? '技能已停用' : '技能已启用');
+        }
+        if (action === 'install-skill') {
+          var skillList = document.getElementById('skillFeatureList');
+          if (skillList && !document.getElementById('skillDraftRow')) {
+            skillList.insertAdjacentHTML('beforeend', '<div class="feature-list-row" id="skillDraftRow"><span><strong>待安装技能</strong><small>等待选择本地技能文件或社区来源</small></span><span class="feature-row-actions"><span class="feature-pill waiting">草稿</span><button class="quiet-button" type="button" data-demo-action="confirm-skill">选择来源</button></span></div>');
+          }
+          showToast('已打开技能安装草稿');
+        }
+        if (action === 'confirm-skill') { actionButton.textContent = '已选择'; actionButton.disabled = true; showToast('已记录技能来源，正式安装前仍需确认'); }
+        if (action === 'inspect-knowledge') {
+          var inspector = document.getElementById('knowledgeInspector');
+          inspector.innerHTML = '<h4>' + actionButton.querySelector('strong').textContent + '</h4><p>来源位于当前专家包允许访问的知识目录；引用时保留相对文件名，不向渲染层暴露绝对路径。</p><div class="feature-meta-line"><span class="feature-pill ready">索引可用</span><span>点击“深度阅读”可生成结构化阅读任务</span></div>';
+        }
+        if (action === 'add-knowledge') {
+          var knowledgeList = document.getElementById('knowledgeFeatureList');
+          if (knowledgeList && !document.getElementById('knowledgeDraftRow')) knowledgeList.insertAdjacentHTML('beforeend', '<button class="feature-list-row" id="knowledgeDraftRow" type="button" data-demo-action="inspect-knowledge"><span><strong>待导入知识</strong><small>支持文档、文件夹、压缩包和企业微信截图</small></span><span class="feature-pill waiting">等待选择</span></button>');
+          showToast('已进入知识导入流程');
+        }
+        if (action === 'deep-read') showToast('已创建深度阅读草稿，选择文件后开始');
+        if (action === 'knowledge-lint') { actionButton.textContent = '检查完成'; showToast('结构检查完成：详细结果从真实文件读取'); }
+        if (action === 'add-memory') {
+          var preview = document.getElementById('memoryPreview');
+          if (preview && !preview.textContent.includes('待确认记忆')) preview.textContent += '\n- [待确认记忆] 在用户确认前不会写入长期记忆。';
+          showToast('已新增待确认记忆草稿');
+        }
+        if (action === 'consolidate-memory') showToast('已生成记忆整理预览，确认后才会写入');
+        if (action === 'run-tests') {
+          document.querySelectorAll('#testFeatureList .test-state').forEach(function (state) { state.textContent = '等待真实运行'; state.classList.add('waiting'); });
+          document.getElementById('testSummary').textContent = '已触发 · 等待结果';
+          showToast('测试已触发，原型不生成虚构通过结果');
+        }
+        if (action === 'run-regression') { document.getElementById('regressionStatus').textContent = '已创建运行'; document.getElementById('regressionStatus').classList.add('waiting'); showToast('批量回归已创建，等待真实测试结果'); }
+      });
+
+      document.addEventListener('click', function (event) {
         var openButton = event.target.closest('[data-feature-open]');
-        if (openButton) { openFeature(openButton.dataset.featureOpen); }
+        if (openButton && !featureLayer.contains(openButton)) openFeature(openButton.dataset.featureOpen);
       });
 
       function getCommandMatches(query) {

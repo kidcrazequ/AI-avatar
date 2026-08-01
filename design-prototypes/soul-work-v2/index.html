@@ -178,7 +178,7 @@
     .body-grid {
       min-height: 0;
       display: grid;
-      grid-template-columns: 184px minmax(0, 1fr);
+      grid-template-columns: 220px minmax(0, 1fr);
     }
 
     .global-nav {
@@ -287,6 +287,15 @@
       color: #777781;
       font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
+    .nav-projects { margin-top: 18px; }
+    .nav-projects-title { padding: 0 12px 8px; color: #929198; font-size: 13px; line-height: 1.4; }
+    .nav-project-item { height: 48px; gap: 8px; padding: 0 9px; background: #f3f2ef; }
+    .nav-project-item:hover, .nav-project-item.active { background: #eeece8; }
+    .nav-project-item .nav-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+    .nav-project-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; margin-left: auto; color: #89888f; }
+    .nav-project-more { font-size: 14px; letter-spacing: 1px; transform: translateY(-2px); }
+    .nav-project-add { width: 22px; height: 22px; display: grid; place-items: center; border: 1.5px solid currentColor; border-radius: 50%; }
+    .nav-project-add .icon { width: 14px; height: 14px; stroke-width: 1.8; }
 
     .stage { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--work); }
     .view { position: absolute; inset: 0; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity 180ms var(--ease), transform 180ms var(--ease); }
@@ -1783,9 +1792,6 @@
           <button class="nav-item" type="button" data-view="dashboard">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-dashboard-tile" x="4" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="4" y="13.5" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4"/></svg><span class="nav-label">看板</span>
           </button>
-          <button class="nav-item" type="button" data-view="project">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">项目</span>
-          </button>
           <button class="nav-item" type="button" data-view="automation">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 5.8 3.5 7.6M18.7 5.8l1.8 1.8"/><circle cx="12" cy="13" r="7"/><path class="nav-auto-hand" d="M12 9v4l2.6 1.6"/><path d="m8 20-1 1m9-1 1 1"/></svg><span class="nav-label">自动任务</span>
           </button>
@@ -1796,6 +1802,8 @@
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18.5 3.8 21l3.7-1.3A8.5 8.5 0 1 0 3.5 12c0 2 .7 3.8 1.8 5.2"/><path class="nav-chat-line" d="M8 10h8"/><path class="nav-chat-line" d="M8 14h5"/></svg><span class="nav-label">Chat</span>
           </button>
         </nav>
+
+        <section class="nav-projects" aria-label="项目"><div class="nav-projects-title">项目</div><button class="nav-item nav-project-item" type="button" data-view="project" title="打开工商储方案"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">工商储方案</span><span class="nav-project-actions" aria-hidden="true"><span class="nav-project-more">•••</span><span class="nav-project-add"><svg class="icon" viewBox="0 0 24 24"><path d="M12 7v10M7 12h10"/></svg></span></span></button></section>
 
         <div class="nav-spacer"></div>
         <button class="nav-item" type="button" data-view="settings">

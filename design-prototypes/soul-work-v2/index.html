@@ -956,6 +956,30 @@
     .dashboard-dialog-create textarea { width: 100%; min-height: 132px; padding: 14px 15px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 12px; outline: 0; background: #fbfbfa; color: var(--ink); font-size: 14px; line-height: 1.65; }
     .dashboard-dialog-create textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,111,221,.12); }
     .dashboard-dialog-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
+    .dashboard-edit-bar[hidden], .dashboard-widget-picker[hidden] { display: none; }
+    .dashboard-edit-bar { min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; padding: 8px 10px 8px 14px; border: 1px solid #cfddf4; border-radius: 11px; background: #f4f8ff; }
+    .dashboard-edit-copy { color: #5e6672; font-size: 13px; line-height: 1.5; }
+    .dashboard-edit-copy strong { color: #1f2732; font-weight: 650; }
+    .dashboard-edit-actions { display: flex; flex: 0 0 auto; gap: 7px; }
+    .dashboard-widget-picker { margin-bottom: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(20,19,22,.06); }
+    .dashboard-widget-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+    .dashboard-widget-picker-head h3 { margin: 0; font-size: 14px; }
+    .dashboard-widget-picker-head p { margin: 4px 0 0; color: var(--tertiary); font-size: 12px; }
+    .dashboard-widget-picker-close { width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--tertiary); font-size: 18px; cursor: pointer; }
+    .dashboard-widget-picker-close:hover { background: #f2f1ee; color: var(--ink); }
+    .dashboard-widget-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .dashboard-widget-option { min-height: 70px; display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 11px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #fbfbfa; text-align: left; cursor: pointer; }
+    .dashboard-widget-option:hover { border-color: #c8d6ee; background: #f5f8fd; }
+    .dashboard-widget-option > span:first-child { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid #dce2eb; border-radius: 10px; background: #fff; color: #3269bc; font-size: 12px; font-weight: 700; }
+    .dashboard-widget-option strong, .dashboard-widget-option small { display: block; }
+    .dashboard-widget-option strong { font-size: 13px; }
+    .dashboard-widget-option small { margin-top: 4px; color: var(--tertiary); font-size: 11px; line-height: 1.4; }
+    .dashboard-grid.editing .dashboard-widget { border-color: #cbd9ef; box-shadow: 0 0 0 1px rgba(47,111,221,.04), 0 6px 16px rgba(20,19,22,.045); }
+    .dashboard-widget-controls { display: none; align-items: center; justify-content: flex-end; gap: 4px; min-height: 30px; margin: -4px -5px 10px; padding-bottom: 8px; border-bottom: 1px dashed #d9dfe8; }
+    .dashboard-grid.editing .dashboard-widget-controls { display: flex; }
+    .dashboard-widget-control { height: 27px; padding: 0 8px; border: 1px solid #d8dde6; border-radius: 7px; background: #fff; color: #5d6470; font-size: 11px; cursor: pointer; }
+    .dashboard-widget-control:hover { border-color: #aac2e9; color: #205cb7; background: #f6f9ff; }
+    .dashboard-widget-control.danger:hover { border-color: #edc7ca; color: var(--red); background: #fff7f7; }
 
     .collection-rail {
       min-width: 0;
@@ -1959,7 +1983,7 @@
               <div class="dashboard-list" id="dashboardList" hidden>
                 <button class="dashboard-card" id="dashboardCard" type="button" hidden>
                   <span class="dashboard-card-preview" aria-hidden="true"><span></span><span></span><span></span></span>
-                  <span class="dashboard-card-copy"><span><strong id="dashboardCardTitle">任务指挥台</strong><small>当前项目 · 5 个组件</small></span><span>刚刚更新</span></span>
+                  <span class="dashboard-card-copy"><span><strong id="dashboardCardTitle">任务指挥台</strong><small id="dashboardCardMeta">当前项目 · 5 个组件</small></span><span>刚刚更新</span></span>
                 </button>
               </div>
               <section class="dashboard-zero" id="dashboardZero" aria-labelledby="dashboardZeroTitle">
@@ -1978,6 +2002,8 @@
                 <div class="dashboard-detail-identity"><button class="dashboard-back" id="dashboardBack" type="button" aria-label="返回我的看板"><svg class="icon" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button><div><h2 id="dashboardDetailTitle">任务指挥台</h2><p>全部项目 · 组件数据来自 Soul 任务、项目与自动任务</p></div></div>
                 <div class="dashboard-detail-actions"><button class="secondary-button" type="button" id="dashboardRefresh">刷新</button><button class="primary-button" type="button" id="dashboardEdit">编辑看板</button></div>
               </header>
+              <div class="dashboard-edit-bar" id="dashboardEditBar" hidden><span class="dashboard-edit-copy"><strong>编辑模式</strong>　调整组件顺序和大小，变更只影响当前看板。</span><span class="dashboard-edit-actions"><button class="secondary-button" id="dashboardReset" type="button">恢复默认</button><button class="primary-button" id="dashboardAddWidget" type="button">添加组件</button></span></div>
+              <section class="dashboard-widget-picker" id="dashboardWidgetPicker" hidden><div class="dashboard-widget-picker-head"><div><h3>添加组件</h3><p>从现有任务、项目和专家数据中选择，不创建新的业务数据。</p></div><button class="dashboard-widget-picker-close" id="dashboardWidgetPickerClose" type="button" aria-label="关闭组件选择">×</button></div><div class="dashboard-widget-options"><button class="dashboard-widget-option" type="button" data-dashboard-add-widget="experts"><span>专</span><span><strong>专家状态</strong><small>负责人、协作者与当前可用状态</small></span></button><button class="dashboard-widget-option" type="button" data-dashboard-add-widget="files"><span>文</span><span><strong>项目文件</strong><small>最近更新的项目共享资料</small></span></button><button class="dashboard-widget-option" type="button" data-dashboard-add-widget="notes"><span>记</span><span><strong>快捷便签</strong><small>固定在个人工作台的文字提醒</small></span></button></div></section>
               <div class="dashboard-grid" id="dashboardGrid">
                 <article class="dashboard-widget span-2" data-widget="tasks"><header class="dashboard-widget-head"><h3>任务状态</h3><span class="dashboard-widget-note">3 项任务</span></header><div class="dashboard-task-row"><span class="status-dot running"></span><span><strong>客户沟通初步方案</strong><small>小堵、财研 · 工商储方案</small></span><span>执行中</span></div><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>需求参数缺口整理</strong><small>等待补充现场资料</small></span><span>待确认</span></div><div class="dashboard-task-row"><span class="status-dot"></span><span><strong>客户沟通提纲</strong><small>尚未匹配专家</small></span><span>草稿</span></div></article>
                 <article class="dashboard-widget" data-widget="attention"><header class="dashboard-widget-head"><h3>待我处理</h3><span class="dashboard-widget-note">2 项</span></header><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>确认成果结构</strong><small>客户沟通初步方案</small></span><span>打开</span></div><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>补充现场资料</strong><small>缺少可核验输入</small></span><span>打开</span></div></article>
@@ -3083,6 +3109,18 @@
       var dashboardDetail = document.getElementById('dashboardDetail');
       var dashboardDetailTitle = document.getElementById('dashboardDetailTitle');
       var dashboardCreateLayer = document.getElementById('dashboardCreateLayer');
+      var dashboardGrid = document.getElementById('dashboardGrid');
+      var dashboardEditButton = document.getElementById('dashboardEdit');
+      var dashboardEditBar = document.getElementById('dashboardEditBar');
+      var dashboardWidgetPicker = document.getElementById('dashboardWidgetPicker');
+      var dashboardCardMeta = document.getElementById('dashboardCardMeta');
+      var dashboardEditing = false;
+      var dashboardDefaultMarkup = dashboardGrid.innerHTML;
+      var dashboardWidgetCatalog = {
+        experts: '<header class="dashboard-widget-head"><h3>专家状态</h3><span class="dashboard-widget-note">当前项目</span></header><div class="dashboard-person-row"><span class="avatar">小</span><span><strong>小堵</strong><small>工商储产品解决方案</small></span><span>负责人</span></div><div class="dashboard-person-row"><span class="avatar">财</span><span><strong>财研</strong><small>财务分析</small></span><span>协作</span></div>',
+        files: '<header class="dashboard-widget-head"><h3>项目文件</h3><span class="dashboard-widget-note">最近更新</span></header><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><strong>客户需求说明.pdf</strong><small>项目共享文件</small></span><span>打开</span></div><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span><span><strong>场地资料.zip</strong><small>今天更新</small></span><span>查看</span></div>',
+        notes: '<header class="dashboard-widget-head"><h3>快捷便签</h3><span class="dashboard-widget-note">仅自己可见</span></header><div class="dashboard-widget-empty">现场参数需要用户确认<br>不得自行补全专业数据</div>'
+      };
 
       function setDashboardCreateMode(mode) {
         document.querySelectorAll('[data-dashboard-mode]').forEach(function (tab) {
@@ -3116,6 +3154,7 @@
       }
 
       function createDashboard(title) {
+        setDashboardEditing(false);
         dashboardCardTitle.textContent = title;
         dashboardDetailTitle.textContent = title;
         dashboardZero.hidden = true;
@@ -3125,6 +3164,51 @@
         closeDashboardCreate();
         showDashboardDetail(title);
         showToast('已创建看板草案「' + title + '」');
+      }
+
+      function updateDashboardWidgetCount() {
+        var count = dashboardGrid.querySelectorAll('.dashboard-widget').length;
+        dashboardCardMeta.textContent = '当前项目 · ' + count + ' 个组件';
+      }
+
+      function dashboardWidgetControls() {
+        return '<div class="dashboard-widget-controls" aria-label="组件编辑操作"><button class="dashboard-widget-control" type="button" data-dashboard-widget-action="up">上移</button><button class="dashboard-widget-control" type="button" data-dashboard-widget-action="down">下移</button><button class="dashboard-widget-control" type="button" data-dashboard-widget-action="resize">放大</button><button class="dashboard-widget-control danger" type="button" data-dashboard-widget-action="remove">删除</button></div>';
+      }
+
+      function decorateDashboardWidgets() {
+        dashboardGrid.querySelectorAll('.dashboard-widget').forEach(function (widget) {
+          var previousControls = widget.querySelector('.dashboard-widget-controls');
+          if (previousControls) previousControls.remove();
+          widget.insertAdjacentHTML('afterbegin', dashboardWidgetControls());
+          var resize = widget.querySelector('[data-dashboard-widget-action="resize"]');
+          resize.textContent = widget.classList.contains('span-2') ? '缩小' : '放大';
+        });
+      }
+
+      function setDashboardEditing(editing) {
+        dashboardEditing = editing;
+        dashboardGrid.classList.toggle('editing', editing);
+        dashboardEditBar.hidden = !editing;
+        dashboardEditButton.textContent = editing ? '完成编辑' : '编辑看板';
+        dashboardEditButton.setAttribute('aria-pressed', String(editing));
+        if (!editing) dashboardWidgetPicker.hidden = true;
+        if (editing) decorateDashboardWidgets();
+      }
+
+      function addDashboardWidget(name) {
+        if (dashboardGrid.querySelector('[data-widget="' + name + '"]')) {
+          showToast('该组件已经在当前看板中');
+          return;
+        }
+        var widget = document.createElement('article');
+        widget.className = 'dashboard-widget';
+        widget.dataset.widget = name;
+        widget.innerHTML = dashboardWidgetCatalog[name];
+        dashboardGrid.appendChild(widget);
+        decorateDashboardWidgets();
+        updateDashboardWidgetCount();
+        dashboardWidgetPicker.hidden = true;
+        showToast('组件已添加到看板');
       }
 
       document.querySelectorAll('[data-dashboard-create]').forEach(function (button) {
@@ -3143,9 +3227,38 @@
         createDashboard('我的任务工作台');
       });
       dashboardCard.addEventListener('click', function () { showDashboardDetail(dashboardCardTitle.textContent); });
-      document.getElementById('dashboardBack').addEventListener('click', showDashboardCatalog);
+      document.getElementById('dashboardBack').addEventListener('click', function () { setDashboardEditing(false); showDashboardCatalog(); });
       document.getElementById('dashboardRefresh').addEventListener('click', function () { showToast('看板数据已刷新'); });
-      document.getElementById('dashboardEdit').addEventListener('click', function () { showToast('编辑模式将在下一步启用'); });
+      dashboardEditButton.addEventListener('click', function () { setDashboardEditing(!dashboardEditing); });
+      document.getElementById('dashboardAddWidget').addEventListener('click', function () { dashboardWidgetPicker.hidden = !dashboardWidgetPicker.hidden; });
+      document.getElementById('dashboardWidgetPickerClose').addEventListener('click', function () { dashboardWidgetPicker.hidden = true; });
+      document.querySelectorAll('[data-dashboard-add-widget]').forEach(function (button) {
+        button.addEventListener('click', function () { addDashboardWidget(button.dataset.dashboardAddWidget); });
+      });
+      document.getElementById('dashboardReset').addEventListener('click', function () {
+        dashboardGrid.innerHTML = dashboardDefaultMarkup;
+        decorateDashboardWidgets();
+        updateDashboardWidgetCount();
+        showToast('已恢复默认组件与顺序');
+      });
+      dashboardGrid.addEventListener('click', function (event) {
+        var control = event.target.closest('[data-dashboard-widget-action]');
+        if (!control || !dashboardEditing) return;
+        var widget = control.closest('.dashboard-widget');
+        var action = control.dataset.dashboardWidgetAction;
+        if (action === 'remove') {
+          widget.remove();
+          updateDashboardWidgetCount();
+          showToast('组件已从当前看板移除');
+        }
+        if (action === 'up' && widget.previousElementSibling) dashboardGrid.insertBefore(widget, widget.previousElementSibling);
+        if (action === 'down' && widget.nextElementSibling) dashboardGrid.insertBefore(widget.nextElementSibling, widget);
+        if (action === 'resize') {
+          widget.classList.toggle('span-2');
+          control.textContent = widget.classList.contains('span-2') ? '缩小' : '放大';
+        }
+      });
+      updateDashboardWidgetCount();
 
       var detailRailOpen = false;
       var detailRailToggle = document.getElementById('detailRailToggle');

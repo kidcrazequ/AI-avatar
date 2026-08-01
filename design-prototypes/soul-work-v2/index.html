@@ -1005,12 +1005,14 @@
     .chat-mini-tool { height: 27px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--tertiary); font-size: 9px; cursor: pointer; }
     .chat-mini-tool:hover { border-color: var(--line); background: #faf9f7; color: var(--ink); }
 
-    .settings-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: 218px minmax(0, 1fr); }
-    .settings-nav { min-width: 0; overflow: auto; padding: 15px 10px; border-right: 1px solid var(--line); background: #f8f7f4; }
-    .settings-nav-label { padding: 0 9px 9px; color: var(--tertiary); font: 620 8px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
-    .settings-tab { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 10px; text-align: left; cursor: pointer; }
+    .settings-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: 206px minmax(0, 1fr); }
+    .settings-nav { min-width: 0; overflow: auto; padding: 20px 12px; border-right: 1px solid var(--line); background: #f8f7f4; }
+    .settings-nav-label { padding: 0 10px 8px; color: #929198; font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; letter-spacing: 0; text-transform: none; }
+    .settings-nav-label.spaced { margin-top: 20px; }
+    .settings-tab { width: 100%; height: 38px; display: flex; align-items: center; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: #66656c; font-size: 14px; font-weight: 500; text-align: left; cursor: pointer; }
     .settings-tab:hover { background: #f0efeb; color: var(--ink); }
-    .settings-tab.active { background: #ebe9e5; color: var(--ink); font-weight: 630; }
+    .settings-tab.active { background: #ebe9e5; color: #25262b; font-weight: 620; }
+    .settings-tab:focus-visible { outline: 0; box-shadow: 0 0 0 2px rgba(59,130,246,.18); }
     .settings-tab .icon { width: 14px; height: 14px; }
     .settings-glyph { width: 18px; color: var(--tertiary); font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
     .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: 26px 34px 52px; }
@@ -1397,7 +1399,7 @@
     .message-copy, .chat-compose textarea, .boundary-note, .modal-copy, .modal-textarea,
     .state-lead, .state-list li, .state-note, .draft-row, .test-row,
     .artifact-title, .source-chip, .risk-copy { font-size: 15px; }
-    .settings-tab { height: 36px; font-size: 13px; }
+    .settings-tab { height: 38px; font-size: 14px; }
     .brand-edition, .eyebrow, .meta, .row-time, .rail-kicker, .rail-work-meta,
     .collection-label, .settings-nav-label, .settings-section-title, .block-label,
     .step-stamp, .log-key, .state-crumb, .feature-rail-kicker,
@@ -2128,19 +2130,19 @@
           <div class="settings-layout">
             <aside class="settings-nav" aria-label="设置分类">
               <div class="settings-nav-label">模型与运行</div>
-              <button class="settings-tab active" type="button" data-settings-tab="chat"><span class="settings-glyph">01</span><span>对话模型</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="create"><span class="settings-glyph">02</span><span>创作模型</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="vision"><span class="settings-glyph">03</span><span>视觉模型</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="ocr"><span class="settings-glyph">04</span><span>OCR 模型</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="local"><span class="settings-glyph">05</span><span>本地模型</span></button>
-              <div class="settings-nav-label" style="margin-top:13px">知识与工作台</div>
-              <button class="settings-tab" type="button" data-settings-tab="wiki"><span class="settings-glyph">06</span><span>Wiki</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="memory"><span class="settings-glyph">07</span><span>记忆</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="cron"><span class="settings-glyph">08</span><span>定时任务</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="theme"><span class="settings-glyph">09</span><span>主题外观</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="tools"><span class="settings-glyph">10</span><span>工具与集成</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="files"><span class="settings-glyph">11</span><span>文件目录</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="logs"><span class="settings-glyph">12</span><span>日志与诊断</span></button>
+              <button class="settings-tab active" type="button" data-settings-tab="chat">对话模型</button>
+              <button class="settings-tab" type="button" data-settings-tab="create">创作模型</button>
+              <button class="settings-tab" type="button" data-settings-tab="vision">视觉模型</button>
+              <button class="settings-tab" type="button" data-settings-tab="ocr">OCR 模型</button>
+              <button class="settings-tab" type="button" data-settings-tab="local">本地模型</button>
+              <div class="settings-nav-label spaced">知识与工作台</div>
+              <button class="settings-tab" type="button" data-settings-tab="wiki">Wiki</button>
+              <button class="settings-tab" type="button" data-settings-tab="memory">记忆</button>
+              <button class="settings-tab" type="button" data-settings-tab="cron">定时任务</button>
+              <button class="settings-tab" type="button" data-settings-tab="theme">主题外观</button>
+              <button class="settings-tab" type="button" data-settings-tab="tools">工具与集成</button>
+              <button class="settings-tab" type="button" data-settings-tab="files">文件目录</button>
+              <button class="settings-tab" type="button" data-settings-tab="logs">日志与诊断</button>
             </aside>
             <div class="settings-content">
               <section class="settings-panel active" data-settings-panel="chat">

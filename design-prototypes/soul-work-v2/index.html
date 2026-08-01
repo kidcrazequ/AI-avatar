@@ -995,12 +995,13 @@
     .chat-mini-tool:hover { border-color: var(--line); background: #faf9f7; color: var(--ink); }
 
     .settings-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: 218px minmax(0, 1fr); }
-    .settings-nav { min-width: 0; padding: 15px 10px; border-right: 1px solid var(--line); background: #f8f7f4; }
+    .settings-nav { min-width: 0; overflow: auto; padding: 15px 10px; border-right: 1px solid var(--line); background: #f8f7f4; }
     .settings-nav-label { padding: 0 9px 9px; color: var(--tertiary); font: 620 8px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
     .settings-tab { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 10px; text-align: left; cursor: pointer; }
     .settings-tab:hover { background: #f0efeb; color: var(--ink); }
     .settings-tab.active { background: #ebe9e5; color: var(--ink); font-weight: 630; }
     .settings-tab .icon { width: 14px; height: 14px; }
+    .settings-glyph { width: 18px; color: var(--tertiary); font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
     .settings-content { min-width: 0; min-height: 0; overflow: auto; padding: 26px 34px 52px; }
     .settings-panel { display: none; width: min(820px, 100%); }
     .settings-panel.active { display: block; animation: fadeIn 160ms var(--ease); }
@@ -1964,62 +1965,147 @@
           </header>
           <div class="settings-layout">
             <aside class="settings-nav" aria-label="设置分类">
-              <div class="settings-nav-label">工作台设置</div>
-              <button class="settings-tab active" type="button" data-settings-tab="general"><svg class="icon" viewBox="0 0 24 24"><path d="M5 7h14M8 12h8M10 17h4"/></svg><span>通用</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="models"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/></svg><span>模型</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="tools"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12h16M12 4v16"/><circle cx="12" cy="12" r="8"/></svg><span>联网与工具</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="data"><svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg><span>数据与隐私</span></button>
-              <button class="settings-tab" type="button" data-settings-tab="updates"><svg class="icon" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.5-1L20 9M4 15l2.3 2a7 7 0 0 0 11.5-1"/></svg><span>更新</span></button>
+              <div class="settings-nav-label">模型与运行</div>
+              <button class="settings-tab active" type="button" data-settings-tab="chat"><span class="settings-glyph">01</span><span>对话模型</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="create"><span class="settings-glyph">02</span><span>创作模型</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="vision"><span class="settings-glyph">03</span><span>视觉模型</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="ocr"><span class="settings-glyph">04</span><span>OCR 模型</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="local"><span class="settings-glyph">05</span><span>本地模型</span></button>
+              <div class="settings-nav-label" style="margin-top:13px">知识与工作台</div>
+              <button class="settings-tab" type="button" data-settings-tab="wiki"><span class="settings-glyph">06</span><span>Wiki</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="memory"><span class="settings-glyph">07</span><span>记忆</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="cron"><span class="settings-glyph">08</span><span>定时任务</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="theme"><span class="settings-glyph">09</span><span>主题外观</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="tools"><span class="settings-glyph">10</span><span>工具与集成</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="files"><span class="settings-glyph">11</span><span>文件目录</span></button>
+              <button class="settings-tab" type="button" data-settings-tab="logs"><span class="settings-glyph">12</span><span>日志与诊断</span></button>
             </aside>
             <div class="settings-content">
-              <section class="settings-panel active" data-settings-panel="general">
-                <header class="settings-panel-head"><h2>通用</h2><p>设置 Soul 启动后的默认入口和工作确认方式。</p></header>
-                <section class="settings-section"><h3 class="settings-section-title">启动与外观</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>默认入口</strong><p>Work 为主，仍可切换到历史 Chat。</p></span><select class="settings-control"><option>新工作</option><option>Chat</option></select></div>
-                  <div class="settings-row"><span><strong>界面主题</strong><p>跟随系统外观或固定使用亮色。</p></span><select class="settings-control"><option>跟随系统</option><option>亮色</option><option>深色</option></select></div>
-                  <div class="settings-row"><span><strong>界面密度</strong><p>当前原型使用适合桌面工作的舒适密度。</p></span><select class="settings-control"><option>舒适</option><option>紧凑</option></select></div>
+              <section class="settings-panel active" data-settings-panel="chat">
+                <header class="settings-panel-head"><h2>对话模型</h2><p>用于普通对话、Agent / Plan / Ask 模式和 Work 执行中的主要推理。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">端云模型配置</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>模型供应商</strong><p>沿用当前已配置的 OpenAI 兼容供应商。</p></span><select class="settings-control"><option>从现有配置读取</option><option>OpenAI 兼容</option></select></div>
+                  <div class="settings-row"><span><strong>模型名称</strong><p>具体值从桌面端安全配置读取，原型不展示凭据。</p></span><input class="settings-control" value="当前对话模型" aria-label="对话模型名称"></div>
+                  <div class="settings-row"><span><strong>API 地址与密钥</strong><p>密钥只存于主进程安全配置，渲染层不可读取明文。</p></span><button class="secondary-button" type="button" data-settings-action="credentials">管理凭据</button></div>
+                  <div class="settings-row"><span><strong>连接测试</strong><p>只发送最小测试请求，不写入对话历史。</p></span><button class="secondary-button" type="button" data-settings-action="test-model">测试连接</button></div>
                 </div></section>
-                <section class="settings-section"><h3 class="settings-section-title">工作确认</h3><div class="settings-surface"><div class="settings-row"><span><strong>默认权限模式</strong><p>低风险自动执行，中风险确认一次，高风险单独确认。</p></span><select class="settings-control"><option>智能确认</option><option>每步确认</option><option>只读</option></select></div></div></section>
+                <div class="settings-callout"><strong>模型与专家分离。</strong>模型决定推理位置和能力；专家继续决定人格、知识、技能和安全边界。</div>
               </section>
 
-              <section class="settings-panel" data-settings-panel="models">
-                <header class="settings-panel-head"><h2>模型</h2><p>保留端云与端侧选择；凭据和具体模型由现有配置读取。</p></header>
-                <section class="settings-section"><h3 class="settings-section-title">可用模型位置</h3><div class="settings-surface">
-                  <div class="settings-provider"><span class="settings-provider-mark">云</span><span><strong>端云模型</strong><p>当前默认 · 沿用现有供应商与模型配置</p></span><button class="secondary-button" type="button" data-toast="打开端云模型配置">配置</button></div>
-                  <div class="settings-provider"><span class="settings-provider-mark">端</span><span><strong>端侧模型</strong><p>本地运行 · 可按会话切换</p></span><button class="secondary-button" type="button" data-toast="打开端侧模型配置">配置</button></div>
+              <section class="settings-panel" data-settings-panel="create">
+                <header class="settings-panel-head"><h2>创作模型</h2><p>用于长文、专家创建、技能生成和结构化内容草拟。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">创作模型配置</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>使用独立模型</strong><p>关闭时跟随对话模型；开启后可单独设置创作模型。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>模型名称</strong><p>用于长上下文和结构化生成。</p></span><input class="settings-control" value="当前创作模型" aria-label="创作模型名称"></div>
+                  <div class="settings-row"><span><strong>连接测试</strong><p>验证供应商、模型和输出能力。</p></span><button class="secondary-button" type="button" data-settings-action="test-model">测试连接</button></div>
                 </div></section>
-                <div class="settings-callout"><strong>工作路由与模型选择分离。</strong>专家决定知识、人格和技能边界；模型决定本次推理的运行位置与能力。</div>
+                <div class="settings-callout"><strong>专家创建约束不变。</strong>模型只能生成草案，知识文件与至少五类测试仍是转正前提。</div>
               </section>
 
               <section class="settings-panel" data-settings-panel="tools">
-                <header class="settings-panel-head"><h2>联网与工具</h2><p>控制联网检索和工具调用；风险确认不因开关而绕过。</p></header>
-                <section class="settings-section"><h3 class="settings-section-title">能力开关</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>联网检索</strong><p>允许在用户需要时访问公开网络信息。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
-                  <div class="settings-row"><span><strong>工具调用</strong><p>允许专家使用已安装且获授权的工具。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
-                  <div class="settings-row"><span><strong>自动读取项目上下文</strong><p>只读取当前 Project 与 Work 允许访问的内容。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                <header class="settings-panel-head"><h2>工具与集成</h2><p>管理外部 API、WebBridge、WebDAV 备份和 MCP 服务器。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">工具能力</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>联网检索</strong><p>访问公开网络信息，并保留链接和检索时间。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>外部 API</strong><p>配置专家可调用的 HTTP API 与授权范围。</p></span><button class="secondary-button" type="button" data-settings-action="external-api">管理 API</button></div>
+                  <div class="settings-row"><span><strong>WebBridge / 嵌入</strong><p>管理桌面端与网页嵌入页面的安全桥接。</p></span><button class="secondary-button" type="button" data-settings-action="webbridge">配置</button></div>
                 </div></section>
-                <div class="settings-callout"><strong>风险边界保持不变。</strong>发布、覆盖、删除、外部发送、安装和凭据操作仍需在发生前单独确认。</div>
+                <section class="settings-section"><h3 class="settings-section-title">同步与协议</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>WebDAV 备份</strong><p>备份设置、专家包和允许同步的数据；凭据单独保存。</p></span><button class="secondary-button" type="button" data-settings-action="webdav">配置并测试</button></div>
+                  <div class="settings-row"><span><strong>MCP 服务器</strong><p>当前 0 个自定义服务器；安装前展示命令和权限。</p></span><button class="secondary-button" type="button" data-settings-action="add-mcp">添加服务器</button></div>
+                </div></section>
+                <div class="settings-callout"><strong>风险边界保持不变。</strong>发布、覆盖、删除、外部发送、安装、凭据和其他外部副作用仍需确认。</div>
               </section>
 
-              <section class="settings-panel" data-settings-panel="data">
-                <header class="settings-panel-head"><h2>数据与隐私</h2><p>管理本地工作数据、导出和清理；界面不暴露绝对文件路径。</p></header>
-                <section class="settings-section"><h3 class="settings-section-title">本地数据</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>工作与成果目录</strong><p>按 Project、Work 和 Run 组织，旧 Chat 继续兼容原目录。</p></span><button class="secondary-button" type="button" data-toast="打开 Soul 本地数据目录">打开目录</button></div>
-                  <div class="settings-row"><span><strong>导出数据</strong><p>导出对话、项目和工作记录，不包含未授权凭据。</p></span><button class="secondary-button" type="button" data-toast="准备导出本地数据">导出</button></div>
-                </div></section>
-                <section class="settings-section"><h3 class="settings-section-title">危险操作</h3><div class="settings-surface settings-danger">
-                  <div class="settings-row"><span><strong>清理历史对话</strong><p>属于高风险操作，确认前不会删除任何内容。</p></span><button class="secondary-button danger" type="button" data-toast="清理历史对话需要高风险确认，原型未删除任何内容">清理…</button></div>
-                  <div class="settings-row"><span><strong>重置本地数据</strong><p>会影响项目、工作、专家运行数据和设置。</p></span><button class="secondary-button danger" type="button" data-toast="重置本地数据需要高风险确认，原型未执行">重置…</button></div>
+              <section class="settings-panel" data-settings-panel="vision">
+                <header class="settings-panel-head"><h2>视觉模型</h2><p>用于图片理解、图纸阅读前置分析和企业微信截图导入。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">视觉能力</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>使用独立视觉模型</strong><p>关闭时尝试使用当前对话模型的视觉能力。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>模型名称</strong><p>需要支持图片输入；原型不虚构当前供应商。</p></span><input class="settings-control" value="当前视觉模型" aria-label="视觉模型名称"></div>
+                  <div class="settings-row"><span><strong>最大图片尺寸</strong><p>超出尺寸时在本地生成预览，不覆盖原图。</p></span><select class="settings-control"><option>自动</option><option>2048 px</option><option>4096 px</option></select></div>
+                  <div class="settings-row"><span><strong>连接测试</strong><p>使用内置测试图，不上传用户资料。</p></span><button class="secondary-button" type="button" data-settings-action="test-model">测试连接</button></div>
                 </div></section>
               </section>
 
-              <section class="settings-panel" data-settings-panel="updates">
-                <header class="settings-panel-head"><h2>更新</h2><p>版本信息从实际安装包读取，原型不虚构当前版本号。</p></header>
-                <section class="settings-section"><h3 class="settings-section-title">应用更新</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>Soul AI 分身桌面端</strong><p>当前版本：从安装包读取</p></span><button class="secondary-button" type="button" data-toast="正在检查可用更新">检查更新</button></div>
-                  <div class="settings-row"><span><strong>自动检查更新</strong><p>启动后在后台检查，不自动覆盖安装。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+              <section class="settings-panel" data-settings-panel="ocr">
+                <header class="settings-panel-head"><h2>OCR 模型</h2><p>用于扫描件、截图和图纸文字识别；识别结果必须回到原图校核。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">文字识别</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>OCR 方式</strong><p>可选择端云服务或本地 OCR。</p></span><select class="settings-control"><option>从现有配置读取</option><option>本地 OCR</option><option>端云 OCR</option></select></div>
+                  <div class="settings-row"><span><strong>语言</strong><p>支持中英文混合识别。</p></span><select class="settings-control"><option>简体中文 + English</option><option>自动检测</option></select></div>
+                  <div class="settings-row"><span><strong>保留版面坐标</strong><p>图纸与表格识别时保留文字区域，便于回看原图。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>测试识别</strong><p>选择本地图片后预览，不自动加入知识库。</p></span><button class="secondary-button" type="button" data-settings-action="test-ocr">选择测试图片</button></div>
                 </div></section>
-                <div class="settings-callout"><strong>跨平台发布检查。</strong>macOS 与 Windows 均需验证启动、资源完整、窗口尺寸和成果打开。</div>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="local">
+                <header class="settings-panel-head"><h2>本地模型</h2><p>管理端侧推理地址、已安装模型和本地运行状态。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">本地运行</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>本地服务地址</strong><p>默认只连接本机；渲染层不直接访问本地进程。</p></span><input class="settings-control" value="http://127.0.0.1:11434" aria-label="本地模型地址"></div>
+                  <div class="settings-row"><span><strong>默认本地模型</strong><p>用于 Chat 中的端侧模式。</p></span><select class="settings-control"><option>从本地服务读取</option></select></div>
+                  <div class="settings-row"><span><strong>运行状态</strong><p>尚未进行连接测试。</p></span><button class="secondary-button" type="button" data-settings-action="test-local">检测本地服务</button></div>
+                </div></section>
+                <div class="settings-callout"><strong>本地模式限制。</strong>云模型轮换不可用；工具能力仍受当前对话模式和风险确认控制。</div>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="wiki">
+                <header class="settings-panel-head"><h2>Wiki</h2><p>管理内部 Wiki 连接、索引和可供专家检索的知识范围。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">Wiki 连接</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>启用 Wiki</strong><p>允许已授权专家检索指定 Wiki 空间。</p></span><label class="setting-switch"><input type="checkbox"><span class="setting-switch-mark"></span><span>已关闭</span></label></div>
+                  <div class="settings-row"><span><strong>Wiki 地址</strong><p>支持现有桌面端的 Wiki 配置。</p></span><input class="settings-control" placeholder="https://wiki.example.com" aria-label="Wiki 地址"></div>
+                  <div class="settings-row"><span><strong>索引范围</strong><p>按空间或页面根路径限制，避免知识越界。</p></span><button class="secondary-button" type="button" data-settings-action="wiki-scope">选择范围</button></div>
+                  <div class="settings-row"><span><strong>重新索引</strong><p>保留来源页面和更新时间。</p></span><button class="secondary-button" type="button" data-settings-action="wiki-index">开始索引</button></div>
+                </div></section>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="memory">
+                <header class="settings-panel-head"><h2>记忆</h2><p>设置长期记忆写入、整理周期和用户确认方式。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">记忆策略</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>长期记忆</strong><p>只记录用户明确确认的事实和偏好。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>写入前确认</strong><p>对话中的推测和临时内容不会自动进入 MEMORY.md。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>自动整理周期</strong><p>归并重复条目但不修改专业知识文件。</p></span><select class="settings-control"><option>每周</option><option>每月</option><option>关闭</option></select></div>
+                  <div class="settings-row"><span><strong>立即整理</strong><p>先生成差异预览，确认后写入。</p></span><button class="secondary-button" type="button" data-settings-action="memory-consolidate">生成预览</button></div>
+                </div></section>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="cron">
+                <header class="settings-panel-head"><h2>定时任务</h2><p>设置调度时区、错过触发处理和后台运行策略。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">调度</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>默认时区</strong><p>新建自动任务时使用，单条规则仍可覆盖。</p></span><select class="settings-control"><option>Asia/Shanghai</option><option>跟随系统</option></select></div>
+                  <div class="settings-row"><span><strong>错过触发</strong><p>设备恢复在线后是否补跑已错过的规则。</p></span><select class="settings-control"><option>询问后补跑</option><option>跳过</option><option>自动补跑</option></select></div>
+                  <div class="settings-row"><span><strong>后台调度</strong><p>应用运行时保持调度；关机状态不会触发。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
+                  <div class="settings-row"><span><strong>自动任务中心</strong><p>创建规则、查看触发历史和独立 Work 结果。</p></span><button class="secondary-button" type="button" data-settings-action="open-automation">打开</button></div>
+                </div></section>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="theme">
+                <header class="settings-panel-head"><h2>主题外观</h2><p>设置默认入口、主题、界面密度与工作确认方式。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">工作台</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>默认入口</strong><p>Work 为主，仍可随时切换到历史 Chat。</p></span><select class="settings-control"><option>新工作</option><option>Chat</option></select></div>
+                  <div class="settings-row"><span><strong>界面主题</strong><p>跟随系统或固定亮色 / 深色。</p></span><select class="settings-control"><option>跟随系统</option><option>亮色</option><option>深色</option></select></div>
+                  <div class="settings-row"><span><strong>界面密度</strong><p>舒适密度使用 Codex / Claude 桌面端接近的字号与间距。</p></span><select class="settings-control"><option>舒适</option><option>紧凑</option></select></div>
+                  <div class="settings-row"><span><strong>默认权限模式</strong><p>低风险自动执行，中风险确认一次，高风险单独确认。</p></span><select class="settings-control"><option>智能确认</option><option>每步确认</option><option>只读</option></select></div>
+                </div></section>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="files">
+                <header class="settings-panel-head"><h2>文件目录</h2><p>管理用户授权目录、工作空间、成果和旧 Chat 兼容位置。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">授权目录</h3><div class="settings-surface" id="settingsFileRoots">
+                  <div class="settings-row"><span><strong>用户文件根目录</strong><p>已授权目录的显示名称；渲染层不获取绝对路径。</p></span><button class="secondary-button" type="button" data-settings-action="add-file-root">添加目录</button></div>
+                  <div class="settings-row"><span><strong>工作与成果</strong><p>work-projects/&lt;project&gt;/works/&lt;work&gt;/outputs</p></span><button class="secondary-button" type="button" data-settings-action="open-files">打开</button></div>
+                  <div class="settings-row"><span><strong>旧 Chat 导出</strong><p>继续兼容 exports/，不自动迁移历史文件。</p></span><span class="feature-pill ready">兼容</span></div>
+                </div></section>
+                <section class="settings-section"><h3 class="settings-section-title">数据操作</h3><div class="settings-surface settings-danger"><div class="settings-row"><span><strong>重置本地数据</strong><p>影响项目、工作、专家运行数据和设置，必须高风险确认。</p></span><button class="secondary-button danger" type="button" data-settings-action="reset-data">重置…</button></div></div></section>
+              </section>
+
+              <section class="settings-panel" data-settings-panel="logs">
+                <header class="settings-panel-head"><h2>日志与诊断</h2><p>查看工作区、应用日志、错误导出、工具审计和性能记录。</p></header>
+                <section class="settings-section"><h3 class="settings-section-title">诊断入口</h3><div class="settings-surface">
+                  <div class="settings-row"><span><strong>工作空间</strong><p>查看当前 Project / Work 的本地运行目录。</p></span><button class="secondary-button" type="button" data-settings-action="open-workspaces">打开</button></div>
+                  <div class="settings-row"><span><strong>应用日志</strong><p>主进程、渲染进程和更新日志。</p></span><button class="secondary-button" type="button" data-settings-action="open-logs">查看</button></div>
+                  <div class="settings-row"><span><strong>错误报告</strong><p>导出前自动移除密钥和敏感配置。</p></span><button class="secondary-button" type="button" data-settings-action="export-errors">导出</button></div>
+                  <div class="settings-row"><span><strong>工具审计</strong><p>按 Work 查看工具调用、权限确认和外部副作用。</p></span><button class="secondary-button" type="button" data-settings-action="tool-audit">查看</button></div>
+                  <div class="settings-row"><span><strong>性能日志</strong><p>模型耗时、首字时间、IPC 与渲染性能。</p></span><button class="secondary-button" type="button" data-settings-action="perf-logs">查看</button></div>
+                </div></section>
+                <section class="settings-section"><h3 class="settings-section-title">应用</h3><div class="settings-surface"><div class="settings-row"><span><strong>Soul AI 分身桌面端</strong><p>版本信息从实际安装包读取。</p></span><button class="secondary-button" type="button" data-settings-action="check-update">检查更新</button></div></div></section>
               </section>
             </div>
           </div>
@@ -2096,6 +2182,10 @@
         { label: 'Chat', meta: '历史对话与辅助交流', icon: 'C', view: 'chat', group: '工作台' },
         { label: '设置', meta: '模型、工具、文件和日志', icon: 'S', view: 'settings', group: '工作台' }
       ];
+      [
+        ['对话模型', 'chat'], ['创作模型', 'create'], ['视觉模型', 'vision'], ['OCR 模型', 'ocr'], ['本地模型', 'local'], ['Wiki', 'wiki'],
+        ['记忆设置', 'memory'], ['定时任务设置', 'cron'], ['主题外观', 'theme'], ['工具与集成', 'tools'], ['文件目录', 'files'], ['日志与诊断', 'logs']
+      ].forEach(function (item) { commandItems.push({ label: item[0], meta: '打开设置 · ' + item[0], icon: 'S', view: 'settings', setting: item[1], group: '设置' }); });
       var commandMatches = [];
       var commandActiveIndex = 0;
 
@@ -2528,6 +2618,7 @@
         if (!item) return;
         closeCommandPalette();
         if (item.view) switchView(item.view);
+        if (item.setting) setSettingsTab(item.setting);
         if (item.feature) openFeature(item.feature);
       }
 
@@ -3149,6 +3240,39 @@
           input.parentElement.querySelector('span:last-child').textContent = input.checked ? '已开启' : '已关闭';
           showToast(input.checked ? '设置已开启' : '设置已关闭');
         });
+      });
+
+      document.getElementById('settingsView').addEventListener('click', function (event) {
+        var button = event.target.closest('[data-settings-action]');
+        if (!button) return;
+        var action = button.dataset.settingsAction;
+        if (action === 'credentials') openModal('管理模型凭据', '凭据只会交给主进程安全存储，原型不会读取、显示或保存任何真实密钥。', '保存配置草稿', '凭据配置草稿已保存');
+        if (action === 'test-model' || action === 'test-local') { button.textContent = '测试已触发'; showToast('连接测试已触发，结果将显示在当前配置项'); }
+        if (action === 'test-ocr') showToast('已打开本地测试图片选择，不会自动加入知识库');
+        if (action === 'external-api') openModal('外部 API', '配置 API 名称、地址、授权范围和允许调用的专家；密钥不会显示在渲染层。', '保存 API 草稿', '外部 API 草稿已保存');
+        if (action === 'webbridge') openModal('WebBridge / 嵌入', '配置允许嵌入的来源和桥接能力；默认拒绝未授权网页访问本地数据。', '保存桥接配置', 'WebBridge 配置草稿已保存');
+        if (action === 'webdav') openModal('WebDAV 备份', '填写服务地址和授权范围后先测试连接；原型不会上传任何数据。', '测试配置', 'WebDAV 配置测试已触发');
+        if (action === 'add-mcp') {
+          button.closest('.settings-surface').insertAdjacentHTML('beforeend', '<div class="settings-row"><span><strong>新 MCP 服务器</strong><p>草稿 · 尚未安装或启动</p></span><span class="feature-pill waiting">等待确认</span></div>');
+          button.disabled = true;
+          showToast('MCP 服务器草稿已添加，安装前仍需确认命令与权限');
+        }
+        if (action === 'wiki-scope') openModal('选择 Wiki 范围', '输入允许索引的空间或页面根路径；范围之外的页面不会提供给专家。', '保存范围', 'Wiki 索引范围已保存');
+        if (action === 'wiki-index') { button.textContent = '索引已排队'; showToast('Wiki 索引任务已创建，将保留页面来源和更新时间'); }
+        if (action === 'memory-consolidate') openFeature('memory');
+        if (action === 'open-automation') switchView('automation');
+        if (action === 'add-file-root') {
+          var roots = document.getElementById('settingsFileRoots');
+          if (!document.getElementById('fileRootDraft')) roots.insertAdjacentHTML('beforeend', '<div class="settings-row" id="fileRootDraft"><span><strong>新授权目录</strong><p>显示名称：项目资料 · 绝对路径对渲染层隐藏</p></span><button class="secondary-button" type="button" data-settings-action="remove-file-root">移除</button></div>');
+          showToast('已添加目录授权草稿');
+        }
+        if (action === 'remove-file-root') { button.closest('.settings-row').remove(); showToast('目录授权草稿已移除'); }
+        if (action === 'open-files' || action === 'open-workspaces' || action === 'open-logs') showToast('已请求主进程打开对应的本地位置');
+        if (action === 'export-errors') showToast('错误报告已准备，密钥和敏感配置将被移除');
+        if (action === 'tool-audit') openFeature('traces');
+        if (action === 'perf-logs') showToast('已打开性能日志视图：模型、IPC 与渲染耗时');
+        if (action === 'check-update') showToast('正在检查可用更新；不会自动覆盖安装');
+        if (action === 'reset-data') openRisk('high', { badge: '高风险 · 重置本地数据', title: '确认重置 Soul 本地数据', copy: '这会影响项目、Work、专家运行数据和设置。原型不会执行重置。', plan: ['停止新的自动任务触发', '生成可导出数据摘要', '重置项目、工作和运行配置'], impact: '<strong>影响范围：</strong>历史数据和设置可能不可恢复；正式产品必须再次显示实际范围。', confirmLabel: '确认重置', needsRecipient: false, success: '原型已确认，未重置任何本地数据' });
       });
 
       document.addEventListener('click', function (event) {

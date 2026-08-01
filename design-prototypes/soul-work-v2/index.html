@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:," />
-  <title>Soul Work-first V2 Prototype</title>
+  <title>Soul Task-first V2 Prototype</title>
   <style>
     :root {
       --chrome: #ecebe8;
@@ -1637,15 +1637,15 @@
       <aside class="global-nav">
         <div class="brand">
           <span class="brand-mark" aria-hidden="true"></span>
-          <div><div class="brand-name">Soul</div><div class="brand-edition">Work console</div></div>
+          <div><div class="brand-name">Soul</div><div class="brand-edition">Task console</div></div>
         </div>
 
         <nav class="nav-section" aria-label="主导航">
           <button class="nav-item active" type="button" data-view="home">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 19H6.5L3 21l1.1-4A8 8 0 1 1 8 19Z"/><path class="nav-new-plus" d="M12 8v7M8.5 11.5h7"/></svg><span class="nav-label">新工作</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 19H6.5L3 21l1.1-4A8 8 0 1 1 8 19Z"/><path class="nav-new-plus" d="M12 8v7M8.5 11.5h7"/></svg><span class="nav-label">新建任务</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
           <button class="nav-item has-running-task" type="button" data-view="work">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-work-card" x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8h6M9 12h6"/><path class="nav-work-progress" d="M9 16h5"/></svg><span class="nav-label">工作</span><span class="count">2</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-work-card" x="5" y="3.5" width="14" height="17" rx="2.5"/><path d="M9 8h6M9 12h6"/><path class="nav-work-progress" d="M9 16h5"/></svg><span class="nav-label">任务</span><span class="count">2</span>
           </button>
           <button class="nav-item" type="button" data-view="project">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">项目</span>
@@ -1670,12 +1670,12 @@
       <main class="stage">
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
-            <p class="eyebrow">New work</p>
-            <h1>开始一项工作</h1>
+            <p class="eyebrow">New task</p>
+            <h1>开始一项任务</h1>
             <p class="lead">说清目标，Soul 会匹配专家、制定计划并交付可审阅结果。</p>
 
             <div class="composer">
-              <textarea class="goal-input" id="goalInput" aria-label="工作目标">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
+              <textarea class="goal-input" id="goalInput" aria-label="任务目标">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
               <div class="chat-attachments" id="homeAttachments"></div>
               <div class="composer-tools">
                 <button class="tool-button" id="homeAttach" type="button">
@@ -1694,13 +1694,13 @@
                   <svg class="icon" viewBox="0 0 24 24"><path d="M5 7h14M8 12h8M10 17h4"/></svg><span>端云 · 默认模型</span>
                 </button>
                 <span class="push"></span>
-                <button class="primary-button" id="startWork" type="button"><span>开始工作</span><span class="shortcut">⌘↵</span></button>
+                <button class="primary-button" id="startWork" type="button"><span>开始任务</span><span class="shortcut">⌘↵</span></button>
               </div>
             </div>
 
             <div class="home-lower">
               <section>
-                <div class="section-head"><h2>最近工作</h2><span class="meta">按更新时间</span></div>
+                <div class="section-head"><h2>最近任务</h2><span class="meta">按更新时间</span></div>
                 <button class="work-row open-work" type="button">
                   <span class="status-dot running"></span><span><span class="row-title">客户沟通初步方案</span><span class="row-sub">执行中 · 小堵 + 财研</span></span><span class="row-time">刚刚</span>
                 </button>
@@ -1792,7 +1792,7 @@
             </div>
 
             <footer class="execution-footer">
-              <button class="secondary-button danger" id="cancelWork" type="button">取消工作</button>
+              <button class="secondary-button danger" id="cancelWork" type="button">取消任务</button>
               <div class="footer-right"><button class="secondary-button" id="pauseButton" type="button">暂停</button><button class="secondary-button add-requirement" type="button">补充要求</button></div>
             </footer>
           </article>
@@ -1805,12 +1805,12 @@
             </div>
             <div class="detail-content">
               <div class="tab-panel active" data-panel="progress">
-                <section class="detail-section"><h3 class="detail-title">工作进度</h3><div class="progress-row done"><span class="progress-node"></span><span class="progress-label">读取现有资料</span></div><div class="progress-row active"><span class="progress-node"></span><span class="progress-label">整理需求与缺口</span></div><div class="progress-row upcoming"><span class="progress-node"></span><span class="progress-label">形成沟通结构</span></div><button class="secondary-button" style="width:100%;justify-content:center;margin-top:8px" type="button" data-feature-open="traces">查看完整轨迹</button></section>
+                <section class="detail-section"><h3 class="detail-title">任务进度</h3><div class="progress-row done"><span class="progress-node"></span><span class="progress-label">读取现有资料</span></div><div class="progress-row active"><span class="progress-node"></span><span class="progress-label">整理需求与缺口</span></div><div class="progress-row upcoming"><span class="progress-node"></span><span class="progress-label">形成沟通结构</span></div><button class="secondary-button" style="width:100%;justify-content:center;margin-top:8px" type="button" data-feature-open="traces">查看完整轨迹</button></section>
                 <section class="detail-section"><h3 class="detail-title">执行专家</h3><div class="person-row"><span class="avatar">小</span><span><span class="person-name">小堵</span><span class="person-role">负责人 · 工商储方案</span></span><span class="person-state">ACTIVE</span></div><div class="person-row"><span class="avatar">财</span><span><span class="person-name">财研</span><span class="person-role">协作 · 财务分析</span></span><span class="person-state">READY</span></div></section>
                 <section class="detail-section"><div class="permission-row"><span>权限模式</span><span class="permission-value">智能确认</span></div></section>
               </div>
-              <div class="tab-panel" data-panel="result"><section class="detail-section"><h3 class="detail-title">结论与成果</h3><div class="empty-state">工作完成后，将在这里显示可审阅结论与成果文件。</div></section></div>
-              <div class="tab-panel" data-panel="context"><section class="detail-section"><h3 class="detail-title">所属项目</h3><div class="permission-row"><span>项目</span><span class="permission-value">工商储方案</span></div></section><section class="detail-section"><h3 class="detail-title">工作资料</h3><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><span class="file-name">客户需求说明.pdf</span><span class="file-meta">用户上传 · 当前 Work</span></span></div><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span><span><span class="file-name">场地资料.zip</span><span class="file-meta">用户上传 · 当前 Work</span></span></div></section></div>
+              <div class="tab-panel" data-panel="result"><section class="detail-section"><h3 class="detail-title">结论与成果</h3><div class="empty-state">任务完成后，将在这里显示可审阅结论与成果文件。</div></section></div>
+              <div class="tab-panel" data-panel="context"><section class="detail-section"><h3 class="detail-title">所属项目</h3><div class="permission-row"><span>项目</span><span class="permission-value">工商储方案</span></div></section><section class="detail-section"><h3 class="detail-title">任务资料</h3><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><span class="file-name">客户需求说明.pdf</span><span class="file-meta">用户上传 · 当前任务</span></span></div><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span><span><span class="file-name">场地资料.zip</span><span class="file-meta">用户上传 · 当前任务</span></span></div></section></div>
             </div>
           </aside>
 
@@ -1830,24 +1830,24 @@
             <section class="work-state-screen" data-work-state="draft">
               <div class="state-shell">
                 <div class="state-topline"><span class="state-crumb">Project expert draft</span><button class="icon-button close-work-state" type="button" aria-label="返回执行记录"><svg class="icon" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div>
-                <div class="state-hero"><span class="state-symbol draft"><svg class="icon" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4M9 12h6M9 16h4"/></svg></span><div><h2 class="state-title">外部材料校核专家 · 临时草案</h2><p class="state-lead">只在当前项目内可见。补充知识文件并通过测试前，它不能成为正式专家，也不会恢复当前 Work。</p></div></div>
+                <div class="state-hero"><span class="state-symbol draft"><svg class="icon" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M14 3v4h4M9 12h6M9 16h4"/></svg></span><div><h2 class="state-title">外部材料校核专家 · 临时草案</h2><p class="state-lead">只在当前项目内可见。补充知识文件并通过测试前，它不能成为正式专家，也不会恢复当前任务。</p></div></div>
                 <div class="state-grid">
                   <div><section class="state-section"><h3 class="state-section-title">知识与边界</h3><div class="draft-definition"><div class="draft-row"><span class="draft-key">适用范围</span><span class="draft-value">外部发送前的材料范围、接收方与披露边界校核</span></div><div class="draft-row"><span class="draft-key">禁止事项</span><span class="draft-value">不代替法务意见，不补写法规条文，不推断未提供的接收方权限</span></div><div class="draft-row"><span class="draft-key">知识状态</span><span class="draft-value" id="draftKnowledgeStatus">尚未添加知识文件</span></div></div></section></div>
                   <aside><section class="state-section"><h3 class="state-section-title">转正测试</h3><div class="test-list"><div class="test-row"><span>红线约束</span><span class="test-status">待测试</span></div><div class="test-row"><span>知识库约束</span><span class="test-status">待测试</span></div><div class="test-row"><span>数据溯源</span><span class="test-status">待测试</span></div><div class="test-row"><span>人格一致性</span><span class="test-status">待测试</span></div><div class="test-row"><span>能力边界</span><span class="test-status">待测试</span></div></div></section></aside>
                 </div>
-                <div class="state-actions"><button class="secondary-button" id="addDraftKnowledge" type="button">补充知识文件</button><button class="secondary-button" id="runDraftTests" type="button" disabled>运行 5 类测试</button><button class="primary-button" id="resumeDraftWork" type="button" disabled>恢复工作</button></div>
+                <div class="state-actions"><button class="secondary-button" id="addDraftKnowledge" type="button">补充知识文件</button><button class="secondary-button" id="runDraftTests" type="button" disabled>运行 5 类测试</button><button class="primary-button" id="resumeDraftWork" type="button" disabled>恢复任务</button></div>
               </div>
             </section>
 
             <section class="work-state-screen" data-work-state="completed">
               <div class="state-shell">
-                <div class="state-topline"><span class="state-crumb">Work completed · current run</span><button class="icon-button close-work-state" type="button" aria-label="返回执行记录"><svg class="icon" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div>
-                <div class="state-hero"><span class="state-symbol success"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></span><div><h2 class="state-title">工作已完成</h2><p class="state-lead">已将现有资料整理为客户沟通结构，并明确列出仍需确认的信息；未计算收益，也未生成缺失参数。</p></div></div>
+                <div class="state-topline"><span class="state-crumb">Task completed · current run</span><button class="icon-button close-work-state" type="button" aria-label="返回执行记录"><svg class="icon" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div>
+                <div class="state-hero"><span class="state-symbol success"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></span><div><h2 class="state-title">任务已完成</h2><p class="state-lead">已将现有资料整理为客户沟通结构，并明确列出仍需确认的信息；未计算收益，也未生成缺失参数。</p></div></div>
                 <div class="state-grid">
                   <div><section class="state-section"><h3 class="state-section-title">成果文件</h3><button class="artifact-card" id="openCompletedArtifact" type="button"><span class="artifact-icon">MD</span><span><span class="artifact-title">客户沟通提纲.md</span><span class="artifact-meta">小堵 + 财研 · 当前运行 · 成果正本</span></span><svg class="icon" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button></section><section class="state-section"><h3 class="state-section-title">执行边界</h3><div class="state-note"><strong>仍需用户确认</strong>并网条件、电价口径和现场约束尚未获得可核验输入，成果中已作为缺口列出。</div></section></div>
                   <aside><section class="state-section"><h3 class="state-section-title">来源</h3><div class="source-stack"><span class="source-chip"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span>客户需求说明.pdf</span><span class="source-chip"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span>场地资料.zip</span></div></section></aside>
                 </div>
-                <div class="state-actions"><button class="secondary-button close-work-state" type="button">返回执行记录</button><button class="primary-button" id="continueFromCompleted" type="button">继续新工作</button></div>
+                <div class="state-actions"><button class="secondary-button close-work-state" type="button">返回执行记录</button><button class="primary-button" id="continueFromCompleted" type="button">继续新任务</button></div>
               </div>
             </section>
           </div>
@@ -1858,19 +1858,19 @@
             <div class="workspace-heading">
               <p class="eyebrow">Project</p>
               <h1>工商储方案</h1>
-              <p class="lead">共享上下文、文件、工作与专家组，持续为每一项 Work 提供边界。</p>
+              <p class="lead">共享上下文、文件、任务与专家组，持续为每一项任务提供边界。</p>
             </div>
             <div class="workspace-actions">
               <button class="secondary-button" type="button" data-project-tab="settings">管理项目</button>
               <button class="secondary-button" type="button" data-project-tab="experts">管理专家组</button>
-              <button class="primary-button" id="projectNewWork" type="button">新建工作</button>
+              <button class="primary-button" id="projectNewWork" type="button">新建任务</button>
             </div>
           </header>
           <div class="sectioned-workspace">
             <nav class="section-tabs" role="tablist" aria-label="项目详情">
               <button class="section-tab active" type="button" role="tab" aria-selected="true" data-project-tab="overview">概览</button>
               <button class="section-tab" type="button" role="tab" aria-selected="false" data-project-tab="files">文件</button>
-              <button class="section-tab" type="button" role="tab" aria-selected="false" data-project-tab="works">工作</button>
+              <button class="section-tab" type="button" role="tab" aria-selected="false" data-project-tab="works">任务</button>
               <button class="section-tab" type="button" role="tab" aria-selected="false" data-project-tab="experts">专家组</button>
               <button class="section-tab" type="button" role="tab" aria-selected="false" data-project-tab="settings">项目设置</button>
             </nav>
@@ -1879,12 +1879,12 @@
                 <div class="project-grid">
                   <div class="page-column">
                     <section class="flat-section">
-                      <div class="flat-section-head"><h2 class="flat-section-title">共享上下文</h2><span class="flat-section-note">用于项目下的新 Work</span></div>
+                      <div class="flat-section-head"><h2 class="flat-section-title">共享上下文</h2><span class="flat-section-note">用于项目下的新任务</span></div>
                       <div class="definition-row"><span class="definition-key">目标</span><span class="definition-value">形成可审阅、可溯源的客户沟通材料。</span></div>
                       <div class="definition-row"><span class="definition-key">边界</span><span class="definition-value">缺失参数单独列出，不代替用户确认；不编造收益与专业结论。</span></div>
                     </section>
                     <section class="flat-section">
-                      <div class="flat-section-head"><h2 class="flat-section-title">最近工作</h2><button class="flat-section-note" type="button" data-project-tab="works">查看全部</button></div>
+                      <div class="flat-section-head"><h2 class="flat-section-title">最近任务</h2><button class="flat-section-note" type="button" data-project-tab="works">查看全部</button></div>
                       <button class="entity-row project-open-work" type="button"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">负责人 小堵 · 协作 财研</span></span><span class="entity-state"><span class="status-dot running"></span>执行中</span></button>
                       <button class="entity-row project-open-work" type="button"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">负责人 小堵</span></span><span class="entity-state"><span class="status-dot waiting"></span>等待确认</span></button>
                     </section>
@@ -1905,7 +1905,7 @@
               </section>
 
               <section class="section-panel" data-project-panel="files">
-                <header class="functional-head"><div><h2>项目文件</h2><p>项目下的新 Work 可按权限引用，渲染层不显示本地绝对路径。</p></div><button class="primary-button" type="button" data-modal="补充现场资料">上传文件</button></header>
+                <header class="functional-head"><div><h2>项目文件</h2><p>项目下的新任务可按权限引用，渲染层不显示本地绝对路径。</p></div><button class="primary-button" type="button" data-modal="补充现场资料">上传文件</button></header>
                 <div class="project-file-table">
                   <div class="project-table-head"><span>名称</span><span>来源</span><span>更新时间</span><span></span></div>
                   <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span>客户需求说明.pdf</span><span>用户上传</span><span>今天</span><span>•••</span></button>
@@ -1914,7 +1914,7 @@
               </section>
 
               <section class="section-panel" data-project-panel="works">
-                <header class="functional-head"><div><h2>项目工作</h2><p>每项 Work 都可独立执行、验收、追踪和打开成果。</p></div><button class="primary-button project-new-work" type="button">新建工作</button></header>
+                <header class="functional-head"><div><h2>项目任务</h2><p>每项任务都可独立执行、验收、追踪和打开成果。</p></div><button class="primary-button project-new-work" type="button">新建任务</button></header>
                 <div class="project-work-table">
                   <button class="entity-row project-open-work" type="button"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">今天 · 小堵、财研</span></span><span class="entity-state"><span class="status-dot running"></span>执行中</span></button>
                   <button class="entity-row project-open-work" type="button"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">今天 · 小堵</span></span><span class="entity-state"><span class="status-dot waiting"></span>等待确认</span></button>
@@ -1923,7 +1923,7 @@
               </section>
 
               <section class="section-panel" data-project-panel="experts">
-                <header class="functional-head"><div><h2>项目专家组</h2><p>自动路由优先使用项目专家组，单项 Work 仍可手动调整。</p></div><button class="primary-button" type="button" data-feature-open="project-expert-picker">添加专家</button></header>
+                <header class="functional-head"><div><h2>项目专家组</h2><p>自动路由优先使用项目专家组，单项任务仍可手动调整。</p></div><button class="primary-button" type="button" data-feature-open="project-expert-picker">添加专家</button></header>
                 <div class="project-expert-list">
                   <article class="project-expert-row"><span class="avatar">小</span><span><strong>小堵</strong><small>工商储产品解决方案专家</small></span><label>角色<select><option>默认负责人</option><option>协作专家</option></select></label><button type="button" data-feature-open="project-expert-picker">•••</button></article>
                   <article class="project-expert-row"><span class="avatar">财</span><span><strong>财研</strong><small>财务分析专家</small></span><label>角色<select><option>协作专家</option><option>默认负责人</option></select></label><button type="button" data-feature-open="project-expert-picker">•••</button></article>
@@ -1934,7 +1934,7 @@
                 <header class="functional-head"><div><h2>项目设置</h2><p>管理项目名称、默认权限和生命周期；旧项目不会自动转换。</p></div><button class="primary-button" id="saveProjectSettings" type="button">保存设置</button></header>
                 <form class="project-settings-form">
                   <div class="project-settings-surface">
-                    <label class="project-setting-row"><span class="project-setting-copy"><strong>项目名称</strong><small>显示在工作台、Work 与成果归属中。</small></span><input aria-label="项目名称" value="工商储方案"></label>
+                    <label class="project-setting-row"><span class="project-setting-copy"><strong>项目名称</strong><small>显示在工作台、任务与成果归属中。</small></span><input aria-label="项目名称" value="工商储方案"></label>
                     <label class="project-setting-row"><span class="project-setting-copy"><strong>默认权限</strong><small>低风险自动执行，中风险确认一次，高风险单独确认。</small></span><select aria-label="默认权限"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
                     <label class="project-setting-row"><span class="project-setting-copy"><strong>默认路由</strong><small>优先使用项目专家组，不足时再匹配已安装专家。</small></span><select aria-label="默认路由"><option>项目专家组优先</option><option>全部已安装专家</option></select></label>
                   </div>
@@ -1950,7 +1950,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Automations</p>
               <h1>自动任务</h1>
-              <p class="lead">每次触发都创建一项独立 Work，保留专家路由、运行记录与成果。</p>
+              <p class="lead">每次触发都创建一项独立任务，保留专家路由、运行记录与成果。</p>
             </div>
             <div class="workspace-actions"><button class="primary-button" id="newAutomation" type="button">创建自动任务</button></div>
           </header>
@@ -1964,7 +1964,7 @@
             <div class="detail-workspace automation-detail-workspace" id="automationDetailWorkspace" hidden>
               <article class="automation-detail-sheet">
                 <header class="automation-detail-head">
-                  <div><h2 id="automationTitle">整理项目待确认事项</h2><p class="detail-sheet-sub" id="automationSubtitle">将项目中需要用户处理的事项整理成独立 Work。</p></div>
+                  <div><h2 id="automationTitle">整理项目待确认事项</h2><p class="detail-sheet-sub" id="automationSubtitle">将项目中需要用户处理的事项整理成独立任务。</p></div>
                   <div class="automation-head-actions">
                     <label class="automation-toggle"><input id="automationEnabled" type="checkbox"><span class="automation-toggle-mark"></span><span id="automationEnableLabel">未启用</span></label>
                     <button class="secondary-button" id="triggerAutomation" type="button">立即触发</button>
@@ -1974,22 +1974,22 @@
                 <nav class="section-tabs" role="tablist" aria-label="自动任务详情">
                   <button class="section-tab automation-section-tab active" type="button" role="tab" aria-selected="true" data-automation-tab="rule">规则</button>
                   <button class="section-tab automation-section-tab" type="button" role="tab" aria-selected="false" data-automation-tab="history">触发历史</button>
-                  <button class="section-tab automation-section-tab" type="button" role="tab" aria-selected="false" data-automation-tab="results">Work 结果</button>
+                  <button class="section-tab automation-section-tab" type="button" role="tab" aria-selected="false" data-automation-tab="results">任务结果</button>
                 </nav>
                 <div class="automation-panel-scroll">
                   <section class="automation-panel active" data-automation-panel="rule">
                     <div class="automation-rule-grid">
-                      <section class="automation-rule-card"><h3>触发与范围</h3><div class="rule-line"><span class="rule-key">触发方式</span><span id="automationTrigger">每周一，由用户启用后生效</span></div><div class="rule-line"><span class="rule-key">所属项目</span><span>工商储方案</span></div><div class="rule-line"><span class="rule-key">目标类型</span><span id="automationTarget">Work · 每次独立创建</span></div></section>
+                      <section class="automation-rule-card"><h3>触发与范围</h3><div class="rule-line"><span class="rule-key">触发方式</span><span id="automationTrigger">每周一，由用户启用后生效</span></div><div class="rule-line"><span class="rule-key">所属项目</span><span>工商储方案</span></div><div class="rule-line"><span class="rule-key">目标类型</span><span id="automationTarget">任务 · 每次独立创建</span></div></section>
                       <section class="automation-rule-card"><h3>执行方式</h3><div class="rule-line"><span class="rule-key">专家路由</span><span>项目专家组优先</span></div><div class="rule-line"><span class="rule-key">权限</span><span>智能确认</span></div><div class="rule-line"><span class="rule-key">副作用</span><span>中高风险仍需确认</span></div></section>
-                      <section class="automation-rule-card span-2"><h3>每次触发的工作目标</h3><div class="rule-line"><span class="rule-key">Work 目标</span><span id="automationGoal">归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。</span></div></section>
+                      <section class="automation-rule-card span-2"><h3>每次触发的任务目标</h3><div class="rule-line"><span class="rule-key">任务目标</span><span id="automationGoal">归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。</span></div></section>
                       <section class="automation-rule-card span-2"><h3>与现有能力兼容</h3><div class="rule-line"><span class="rule-key">专家自检</span><span>沿用现有测试触发与质量报告</span></div><div class="rule-line"><span class="rule-key">记忆整理</span><span>沿用现有记忆归并任务</span></div><div class="rule-line"><span class="rule-key">知识检查</span><span>沿用现有知识索引与检查任务</span></div></section>
                     </div>
                   </section>
                   <section class="automation-panel" data-automation-panel="history">
-                    <div class="automation-empty" id="automationHistoryEmpty">规则尚未启用，因此没有触发记录。启用后，每次触发会保留时间、状态和关联 Work。</div>
+                    <div class="automation-empty" id="automationHistoryEmpty">规则尚未启用，因此没有触发记录。启用后，每次触发会保留时间、状态和关联任务。</div>
                   </section>
                   <section class="automation-panel" data-automation-panel="results">
-                    <div class="automation-empty" id="automationResultsEmpty">还没有由该规则创建的 Work。规则触发后，可在这里打开独立运行记录与成果。</div>
+                    <div class="automation-empty" id="automationResultsEmpty">还没有由该规则创建的任务。规则触发后，可在这里打开独立运行记录与成果。</div>
                   </section>
                 </div>
               </article>
@@ -2000,9 +2000,9 @@
                     <label class="wide">规则名称<input id="automationEditorName" required value="新自动任务"></label>
                     <label>触发方式<select id="automationEditorTrigger"><option>每周</option><option>项目文件更新后</option><option>手动</option></select></label>
                     <label>所属项目<select><option>工商储方案</option><option>不绑定项目</option></select></label>
-                    <label>目标类型<select id="automationEditorTarget"><option>Work · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
+                    <label>目标类型<select id="automationEditorTarget"><option>任务 · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
                     <label>权限模式<select id="automationEditorPermission"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
-                    <label class="wide">每次触发的工作目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
+                    <label class="wide">每次触发的任务目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
                   </div>
                   <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit">保存草稿</button></footer>
                 </div>
@@ -2030,7 +2030,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Experts</p>
               <h1>专家</h1>
-              <p class="lead">专家是工作的执行能力；默认自动匹配，也可以在项目或 Work 中手动指定。</p>
+              <p class="lead">专家是任务的执行能力；默认自动匹配，也可以在项目或任务中手动指定。</p>
             </div>
             <div class="workspace-actions"><button class="secondary-button" type="button" data-feature-open="import-pack">导入专家包</button><button class="primary-button" type="button" data-feature-open="create-expert">新建专家</button></div>
           </header>
@@ -2050,7 +2050,7 @@
                     <span>
                       <span class="expert-name-line"><h2 id="expertName">小堵</h2><span class="expert-installed-badge">已安装专家</span></span>
                       <p class="detail-sheet-sub" id="expertRole">工商储产品解决方案专家</p>
-                      <span class="expert-identity-meta"><span class="status-dot running"></span><span>可用于工作路由</span><span>·</span><span>来源：本地专家包</span></span>
+                      <span class="expert-identity-meta"><span class="status-dot running"></span><span>可用于任务路由</span><span>·</span><span>来源：本地专家包</span></span>
                     </span>
                   </div>
                   <div class="expert-profile-actions"><button class="primary-button" id="startWithExpert" type="button">交给小堵</button><button class="secondary-button" type="button" data-feature-open="soul-editor">配置</button></div>
@@ -2075,7 +2075,7 @@
                         <div class="capability-list" id="expertCapabilities"><span class="capability">需求澄清</span><span class="capability">方案结构</span><span class="capability">知识库检索</span></div>
                       </section>
                       <aside class="expert-surface">
-                        <div class="expert-card-head"><h3 class="expert-card-title">工作就绪状态</h3><button type="button" data-expert-tab="tests">查看测试</button></div>
+                        <div class="expert-card-head"><h3 class="expert-card-title">任务就绪状态</h3><button type="button" data-expert-tab="tests">查看测试</button></div>
                         <div class="expert-status-list">
                           <div class="expert-status-row"><span class="expert-status-key">人格定义</span><span class="expert-status-value">已安装</span></div>
                           <div class="expert-status-row"><span class="expert-status-key">知识文件</span><span class="expert-status-value ready"><span class="status-dot running"></span>已连接</span></div>
@@ -2083,7 +2083,7 @@
                         </div>
                       </aside>
                       <section class="expert-surface span-2">
-                        <div class="expert-card-head"><h3 class="expert-card-title">知识与工作边界</h3><button type="button" data-expert-tab="knowledge">查看来源</button></div>
+                        <div class="expert-card-head"><h3 class="expert-card-title">知识与任务边界</h3><button type="button" data-expert-tab="knowledge">查看来源</button></div>
                         <div class="rule-line"><span class="rule-key">知识状态</span><span id="expertKnowledge">已连接工商储专业知识文件</span></div>
                         <div class="boundary-note" id="expertBoundary">涉及专业参数、收益与工程判断时必须引用知识文件；缺少资料时明确说明，不自行补全。</div>
                       </section>
@@ -2092,7 +2092,7 @@
                         <div class="expert-project-use"><span><strong>工商储方案</strong><p>默认负责人 · 自动路由优先</p></span><span class="expert-installed-badge">负责人</span></div>
                       </section>
                       <section class="expert-surface">
-                        <div class="expert-card-head"><h3 class="expert-card-title">最近参与的工作</h3><button type="button" data-view="work">全部工作</button></div>
+                        <div class="expert-card-head"><h3 class="expert-card-title">最近参与的任务</h3><button type="button" data-view="work">全部任务</button></div>
                         <button class="expert-recent-work" type="button" data-view="work"><span class="status-dot running"></span><span><strong>客户沟通初步方案</strong><small>负责人 · 当前项目</small></span><span>执行中</span></button>
                       </section>
                     </div>
@@ -2129,7 +2129,7 @@
                     <div class="expert-module-grid">
                       <article class="expert-module-card"><span class="expert-module-kicker">Workplace</span><h4>职场</h4><p>路线、承诺、待确认事项和工作资料。</p><button type="button" data-feature-open="palace">进入职场 →</button></article>
                       <article class="expert-module-card"><span class="expert-module-kicker">Prompts</span><h4>话术</h4><p>可复用提示词、表达模板和沟通边界。</p><button type="button" data-feature-open="prompts">管理话术 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Office</span><h4>办公室</h4><p>查看该专家当前参与的工作和协作状态。</p><button type="button" data-feature-open="office">进入办公室 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Office</span><h4>办公室</h4><p>查看该专家当前参与的任务和协作状态。</p><button type="button" data-feature-open="office">进入办公室 →</button></article>
                     </div>
                   </section>
 
@@ -2147,8 +2147,8 @@
                   <section class="expert-panel" data-expert-panel="traces">
                     <header class="expert-panel-head"><div><h3>轨迹与台账</h3><p>区分一次运行的执行轨迹和专家长期关联记录。</p></div><button class="secondary-button" type="button" data-feature-open="dashboard">打开台账</button></header>
                     <div class="expert-module-grid two">
-                      <article class="expert-module-card"><span class="expert-module-kicker">Trace</span><h4>执行轨迹</h4><p>按 Work 查看工具、检索、技能调用、事件和耗时。</p><button type="button" data-feature-open="traces">查看轨迹 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、自动任务和 Work 关联记录。</p><button type="button" data-feature-open="dashboard">查看台账 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Trace</span><h4>执行轨迹</h4><p>按任务查看工具、检索、技能调用、事件和耗时。</p><button type="button" data-feature-open="traces">查看轨迹 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、自动任务和任务关联记录。</p><button type="button" data-feature-open="dashboard">查看台账 →</button></article>
                     </div>
                   </section>
 
@@ -2170,7 +2170,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Chat</p>
               <h1>对话</h1>
-              <p class="lead">用于交流、澄清和探索；需要持续执行时，可以非破坏性转为 Work。</p>
+              <p class="lead">用于交流、澄清和探索；需要持续执行时，可以非破坏性转为任务。</p>
             </div>
             <div class="workspace-actions"><button class="secondary-button" id="newChat" type="button">新对话</button></div>
           </header>
@@ -2188,13 +2188,13 @@
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
                   <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
                   <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-feature-open="chat-events"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-feature-open="distill-skill"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-md"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-html"><span>导出 HTML</span><span>.html</span></button></div></div>
-                  <button class="secondary-button" id="chatToWork" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>转为工作</span></button>
+                  <button class="secondary-button" id="chatToWork" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>转为任务</span></button>
                 </div>
               </header>
               <div class="chat-messages" id="chatMessages">
                 <div class="message-row user"><div class="message-copy">把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。</div></div>
-                <div class="message-row assistant"><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项 Work。</div></div>
-                <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为工作</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>
+                <div class="message-row assistant"><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div>
+                <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为任务</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>
               </div>
               <div class="chat-compose-wrap"><div class="chat-compose"><div class="chat-command-popover" id="chatCommandPopover" hidden></div><div class="chat-attachments" id="chatAttachments"></div><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" id="chatAttach" type="button">＋ 附件</button><button class="chat-mini-tool" id="chatVoice" type="button">语音</button><button class="chat-mini-tool" id="chatSkill" type="button">/ 技能</button><button class="chat-mini-tool" id="chatContext" type="button">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button" aria-label="发送"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button></div></div></div>
             </div>
@@ -2228,7 +2228,7 @@
             </aside>
             <div class="settings-content">
               <section class="settings-panel active" data-settings-panel="chat">
-                <header class="settings-panel-head"><h2>对话模型</h2><p>用于普通对话、Agent / Plan / Ask 模式和 Work 执行中的主要推理。</p></header>
+                <header class="settings-panel-head"><h2>对话模型</h2><p>用于普通对话、Agent / Plan / Ask 模式和任务执行中的主要推理。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">端云模型配置</h3><div class="settings-surface">
                   <div class="settings-row"><span><strong>模型供应商</strong><p>沿用当前已配置的 OpenAI 兼容供应商。</p></span><select class="settings-control"><option>从现有配置读取</option><option>OpenAI 兼容</option></select></div>
                   <div class="settings-row"><span><strong>模型名称</strong><p>具体值从桌面端安全配置读取，原型不展示凭据。</p></span><input class="settings-control" value="当前对话模型" aria-label="对话模型名称"></div>
@@ -2318,14 +2318,14 @@
                   <div class="settings-row"><span><strong>默认时区</strong><p>新建自动任务时使用，单条规则仍可覆盖。</p></span><select class="settings-control"><option>Asia/Shanghai</option><option>跟随系统</option></select></div>
                   <div class="settings-row"><span><strong>错过触发</strong><p>设备恢复在线后是否补跑已错过的规则。</p></span><select class="settings-control"><option>询问后补跑</option><option>跳过</option><option>自动补跑</option></select></div>
                   <div class="settings-row"><span><strong>后台调度</strong><p>应用运行时保持调度；关机状态不会触发。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
-                  <div class="settings-row"><span><strong>自动任务中心</strong><p>创建规则、查看触发历史和独立 Work 结果。</p></span><button class="secondary-button" type="button" data-settings-action="open-automation">打开</button></div>
+                  <div class="settings-row"><span><strong>自动任务中心</strong><p>创建规则、查看触发历史和独立任务结果。</p></span><button class="secondary-button" type="button" data-settings-action="open-automation">打开</button></div>
                 </div></section>
               </section>
 
               <section class="settings-panel" data-settings-panel="theme">
-                <header class="settings-panel-head"><h2>主题外观</h2><p>设置默认入口、主题、界面密度与工作确认方式。</p></header>
+                <header class="settings-panel-head"><h2>主题外观</h2><p>设置默认入口、主题、界面密度与任务确认方式。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">工作台</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>默认入口</strong><p>Work 为主，仍可随时切换到历史 Chat。</p></span><select class="settings-control"><option>新工作</option><option>Chat</option></select></div>
+                  <div class="settings-row"><span><strong>默认入口</strong><p>任务为主，仍可随时切换到历史 Chat。</p></span><select class="settings-control"><option>新建任务</option><option>Chat</option></select></div>
                   <div class="settings-row"><span><strong>界面主题</strong><p>跟随系统或固定亮色 / 深色。</p></span><select class="settings-control"><option>跟随系统</option><option>亮色</option><option>深色</option></select></div>
                   <div class="settings-row"><span><strong>界面密度</strong><p>舒适密度使用 Codex / Claude 桌面端接近的字号与间距。</p></span><select class="settings-control"><option>舒适</option><option>紧凑</option></select></div>
                   <div class="settings-row"><span><strong>默认权限模式</strong><p>低风险自动执行，中风险确认一次，高风险单独确认。</p></span><select class="settings-control"><option>智能确认</option><option>每步确认</option><option>只读</option></select></div>
@@ -2333,22 +2333,22 @@
               </section>
 
               <section class="settings-panel" data-settings-panel="files">
-                <header class="settings-panel-head"><h2>文件目录</h2><p>管理用户授权目录、工作空间、成果和旧 Chat 兼容位置。</p></header>
+                <header class="settings-panel-head"><h2>文件目录</h2><p>管理用户授权目录、任务空间、成果和旧 Chat 兼容位置。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">授权目录</h3><div class="settings-surface" id="settingsFileRoots">
                   <div class="settings-row"><span><strong>用户文件根目录</strong><p>已授权目录的显示名称；渲染层不获取绝对路径。</p></span><button class="secondary-button" type="button" data-settings-action="add-file-root">添加目录</button></div>
-                  <div class="settings-row"><span><strong>工作与成果</strong><p>work-projects/&lt;project&gt;/works/&lt;work&gt;/outputs</p></span><button class="secondary-button" type="button" data-settings-action="open-files">打开</button></div>
+                  <div class="settings-row"><span><strong>任务与成果</strong><p>work-projects/&lt;project&gt;/works/&lt;work&gt;/outputs</p></span><button class="secondary-button" type="button" data-settings-action="open-files">打开</button></div>
                   <div class="settings-row"><span><strong>旧 Chat 导出</strong><p>继续兼容 exports/，不自动迁移历史文件。</p></span><span class="feature-pill ready">兼容</span></div>
                 </div></section>
-                <section class="settings-section"><h3 class="settings-section-title">数据操作</h3><div class="settings-surface settings-danger"><div class="settings-row"><span><strong>重置本地数据</strong><p>影响项目、工作、专家运行数据和设置，必须高风险确认。</p></span><button class="secondary-button danger" type="button" data-settings-action="reset-data">重置…</button></div></div></section>
+                <section class="settings-section"><h3 class="settings-section-title">数据操作</h3><div class="settings-surface settings-danger"><div class="settings-row"><span><strong>重置本地数据</strong><p>影响项目、任务、专家运行数据和设置，必须高风险确认。</p></span><button class="secondary-button danger" type="button" data-settings-action="reset-data">重置…</button></div></div></section>
               </section>
 
               <section class="settings-panel" data-settings-panel="logs">
-                <header class="settings-panel-head"><h2>日志与诊断</h2><p>查看工作区、应用日志、错误导出、工具审计和性能记录。</p></header>
+                <header class="settings-panel-head"><h2>日志与诊断</h2><p>查看任务空间、应用日志、错误导出、工具审计和性能记录。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">诊断入口</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>工作空间</strong><p>查看当前 Project / Work 的本地运行目录。</p></span><button class="secondary-button" type="button" data-settings-action="open-workspaces">打开</button></div>
+                  <div class="settings-row"><span><strong>任务空间</strong><p>查看当前 Project / 任务的本地运行目录。</p></span><button class="secondary-button" type="button" data-settings-action="open-workspaces">打开</button></div>
                   <div class="settings-row"><span><strong>应用日志</strong><p>主进程、渲染进程和更新日志。</p></span><button class="secondary-button" type="button" data-settings-action="open-logs">查看</button></div>
                   <div class="settings-row"><span><strong>错误报告</strong><p>导出前自动移除密钥和敏感配置。</p></span><button class="secondary-button" type="button" data-settings-action="export-errors">导出</button></div>
-                  <div class="settings-row"><span><strong>工具审计</strong><p>按 Work 查看工具调用、权限确认和外部副作用。</p></span><button class="secondary-button" type="button" data-settings-action="tool-audit">查看</button></div>
+                  <div class="settings-row"><span><strong>工具审计</strong><p>按任务查看工具调用、权限确认和外部副作用。</p></span><button class="secondary-button" type="button" data-settings-action="tool-audit">查看</button></div>
                   <div class="settings-row"><span><strong>性能日志</strong><p>模型耗时、首字时间、IPC 与渲染性能。</p></span><button class="secondary-button" type="button" data-settings-action="perf-logs">查看</button></div>
                 </div></section>
                 <section class="settings-section"><h3 class="settings-section-title">应用</h3><div class="settings-surface"><div class="settings-row"><span><strong>Soul AI 分身桌面端</strong><p>版本信息从实际安装包读取。</p></span><button class="secondary-button" type="button" data-settings-action="check-update">检查更新</button></div></div></section>
@@ -2374,22 +2374,22 @@
 
         <div class="command-backdrop" id="commandBackdrop" aria-hidden="true">
           <div class="command-palette" role="dialog" aria-modal="true" aria-label="全局搜索">
-            <div class="command-search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="commandInput" type="search" placeholder="搜索工作、项目、专家、对话和功能…" autocomplete="off"><span class="command-key">ESC</span></div>
+            <div class="command-search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg><input id="commandInput" type="search" placeholder="搜索任务、项目、专家、对话和功能…" autocomplete="off"><span class="command-key">ESC</span></div>
             <div class="command-results" id="commandResults"></div>
           </div>
         </div>
 
         <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
           <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-            <div class="modal-head"><div class="modal-kicker">Work input</div><h3 id="modalTitle">补充要求</h3></div>
-            <div class="modal-body"><p class="modal-copy" id="modalCopy">补充的信息会进入当前 Work 上下文，不会覆盖已有目标。</p><textarea class="modal-textarea" id="modalTextarea" placeholder="输入补充要求或资料说明…"></textarea><div class="modal-actions"><button class="secondary-button" id="closeModal" type="button">取消</button><button class="primary-button" id="confirmModal" type="button">加入当前工作</button></div></div>
+            <div class="modal-head"><div class="modal-kicker">Task input</div><h3 id="modalTitle">补充要求</h3></div>
+            <div class="modal-body"><p class="modal-copy" id="modalCopy">补充的信息会进入当前任务上下文，不会覆盖已有目标。</p><textarea class="modal-textarea" id="modalTextarea" placeholder="输入补充要求或资料说明…"></textarea><div class="modal-actions"><button class="secondary-button" id="closeModal" type="button">取消</button><button class="primary-button" id="confirmModal" type="button">加入当前任务</button></div></div>
           </div>
         </div>
 
         <div class="risk-backdrop" id="riskBackdrop" aria-hidden="true">
           <div class="risk-dialog" id="riskDialog" role="dialog" aria-modal="true" aria-labelledby="riskTitle">
             <div class="risk-head"><span class="risk-mark"><svg class="icon" viewBox="0 0 24 24"><path d="M12 8v5M12 17h.01"/><path d="M10.3 4.8 3.4 17a2 2 0 0 0 1.8 3h13.6a2 2 0 0 0 1.8-3L13.7 4.8a2 2 0 0 0-3.4 0z"/></svg></span><div><div class="risk-badge" id="riskBadge">中风险 · 修改文件</div><h3 class="risk-title" id="riskTitle">确认修改成果文件</h3></div></div>
-            <div class="risk-body"><p class="risk-copy" id="riskCopy">这项操作会写入当前 Work 的成果文件。确认后仅执行下列计划。</p><div class="risk-plan" id="riskPlan"></div><div class="risk-field"><label class="risk-label" for="riskRecipient">接收方（必填）</label><input class="risk-input" id="riskRecipient" type="text" autocomplete="off" placeholder="输入已核验的接收方" /></div><div class="risk-impact" id="riskImpact"></div><div class="risk-actions"><button class="secondary-button" id="cancelRisk" type="button">取消</button><button class="primary-button" id="confirmRisk" type="button">确认一次并执行</button></div></div>
+            <div class="risk-body"><p class="risk-copy" id="riskCopy">这项操作会写入当前任务的成果文件。确认后仅执行下列计划。</p><div class="risk-plan" id="riskPlan"></div><div class="risk-field"><label class="risk-label" for="riskRecipient">接收方（必填）</label><input class="risk-input" id="riskRecipient" type="text" autocomplete="off" placeholder="输入已核验的接收方" /></div><div class="risk-impact" id="riskImpact"></div><div class="risk-actions"><button class="secondary-button" id="cancelRisk" type="button">取消</button><button class="primary-button" id="confirmRisk" type="button">确认一次并执行</button></div></div>
           </div>
         </div>
 
@@ -2420,10 +2420,10 @@
       var commandInput = document.getElementById('commandInput');
       var commandResults = document.getElementById('commandResults');
       var commandItems = [
-        { label: '新工作', meta: '提出目标并匹配专家', icon: '+', view: 'home', group: '工作台' },
-        { label: '工作', meta: '查看执行、结果和上下文', icon: 'W', view: 'work', group: '工作台' },
+        { label: '新建任务', meta: '提出目标并匹配专家', icon: '+', view: 'home', group: '工作台' },
+        { label: '任务', meta: '查看执行、结果和上下文', icon: 'T', view: 'work', group: '工作台' },
         { label: '项目', meta: '共享上下文、文件和专家组', icon: 'P', view: 'project', group: '工作台' },
-        { label: '自动任务', meta: '管理定时触发与独立 Work', icon: 'A', view: 'automation', group: '工作台' },
+        { label: '自动任务', meta: '管理定时触发与独立任务', icon: 'A', view: 'automation', group: '工作台' },
         { label: '专家', meta: '管理分身能力与专家包', icon: 'E', view: 'experts', group: '工作台' },
         { label: 'Chat', meta: '历史对话与辅助交流', icon: 'C', view: 'chat', group: '工作台' },
         { label: '设置', meta: '模型、工具、文件和日志', icon: 'S', view: 'settings', group: '工作台' }
@@ -2478,7 +2478,7 @@
             <form class="feature-card feature-form" onsubmit="return false">
               <label class="feature-field"><span>专家名称</span><input class="feature-input" value="${document.getElementById('expertName').textContent}"></label>
               <label class="feature-field"><span>身份定位</span><input class="feature-input" value="${document.getElementById('expertRole').textContent}"></label>
-              <label class="feature-field"><span>开场介绍</span><textarea class="feature-textarea" style="min-height:92px">我是你的工商储产品解决方案专家。我会先确认事实与资料边界，再给出可追溯的分析和工作成果。</textarea></label>
+              <label class="feature-field"><span>开场介绍</span><textarea class="feature-textarea" style="min-height:92px">我是你的工商储产品解决方案专家。我会先确认事实与资料边界，再给出可追溯的分析和任务成果。</textarea></label>
               <label class="feature-field"><span>表达风格</span><textarea class="feature-textarea" style="min-height:112px">结论优先，说明依据；不使用模糊的行业惯例替代事实；缺少参数时明确列出，不自行补全。</textarea></label>
               <label class="feature-field"><span>必须遵守的原则</span><textarea class="feature-textarea">1. 专业事实和参数必须来自 knowledge/\n2. 关键数据标注来源文件\n3. 从第一性原理说明判断\n4. 明确区分事实、判断和待确认项</textarea></label>
             </form>
@@ -2493,7 +2493,7 @@
         title: '技能', subtitle: '管理分身专属、自有公共和社区技能，保留同名优先级。', icon: '/', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="install-skill">安装技能</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>已加载技能</h3><p>local › shared › community；关闭后新对话和新 Work 不再加载。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">全部</button><button type="button">专属</button><button type="button">共享</button><button type="button">社区</button></div></div>
+          <div class="feature-toolbar"><div><h3>已加载技能</h3><p>local › shared › community；关闭后新对话和新任务不再加载。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">全部</button><button type="button">专属</button><button type="button">共享</button><button type="button">社区</button></div></div>
           <div class="feature-list" id="skillFeatureList">
             <div class="feature-list-row"><span><strong>工商储需求澄清</strong><small>local · 小堵专属 · 读取真实项目资料后形成参数缺口</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
             <div class="feature-list-row"><span><strong>可追溯方案结构</strong><small>local · 产出结论、依据、待确认项和成果文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
@@ -2528,7 +2528,7 @@
           <div class="feature-toolbar"><div><h3>长期记忆</h3><p>只保存用户明确确认的协作事实、偏好与长期上下文。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">记忆条目</button><button type="button">MEMORY.md</button></div></div>
           <div class="feature-grid">
             <section class="feature-card"><h4>协作偏好</h4><p>结论优先；涉及专业参数时标注来源；缺数据不自行补齐。</p><div class="feature-meta-line"><span class="feature-pill ready">用户已确认</span><span>长期有效</span></div></section>
-            <section class="feature-card"><h4>当前工作方式</h4><p>Work 为主，Chat 为辅；需要持续执行和验收的请求转为 Work。</p><div class="feature-meta-line"><span class="feature-pill">工作台偏好</span><span>可编辑</span></div></section>
+            <section class="feature-card"><h4>当前协作方式</h4><p>任务为主，Chat 为辅；需要持续执行和验收的请求转为任务。</p><div class="feature-meta-line"><span class="feature-pill">工作台偏好</span><span>可编辑</span></div></section>
             <section class="feature-card span-2"><h4>MEMORY.md 预览</h4><div class="feature-code" id="memoryPreview"># 长期记忆\n\n- 仅记录经用户确认的事实和偏好。\n- 专业参数、政策条文和工程判断必须返回知识库查证。\n- 对话中的临时推测不自动进入长期记忆。</div></section>
           </div>`
       });
@@ -2563,14 +2563,14 @@
       });
 
       registerFeature('palace', {
-        title: '职场', subtitle: '管理路线、承诺、待确认事项与长期工作资料。', icon: '职', group: 'expert-core',
+        title: '职场', subtitle: '管理路线、承诺、待确认事项与长期资料。', icon: '职', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="add-workplace">新增事项</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>工作现场</h3><p>把长期方向和一次 Work 分开；承诺与待确认项都可追踪。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">路线</button><button type="button">承诺</button><button type="button">收件箱</button><button type="button">资料</button></div></div>
+          <div class="feature-toolbar"><div><h3>任务现场</h3><p>把长期方向和一次任务分开；承诺与待确认项都可追踪。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">路线</button><button type="button">承诺</button><button type="button">收件箱</button><button type="button">资料</button></div></div>
           <div class="feature-grid">
-            <section class="feature-card"><h4>近期路线</h4><p>完善工商储方案需求澄清与交付结构，使每项结论都能回到来源。</p><div class="feature-meta-line"><span class="feature-pill ready">进行中</span><span>关联 2 项 Work</span></div></section>
+            <section class="feature-card"><h4>近期路线</h4><p>完善工商储方案需求澄清与交付结构，使每项结论都能回到来源。</p><div class="feature-meta-line"><span class="feature-pill ready">进行中</span><span>关联 2 项任务</span></div></section>
             <section class="feature-card"><h4>待确认承诺</h4><p>对客户材料不补充未经确认的专业参数或收益数据。</p><div class="feature-meta-line"><span class="feature-pill waiting">待用户确认</span><span>今天</span></div></section>
-            <section class="feature-card span-2"><h4>收件箱</h4><div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>工作需要补充资料</strong><small>客户沟通初步方案 · 2 个参数缺口</small></span><span class="feature-pill waiting">待处理</span></button><button class="feature-list-row" type="button" data-view="project"><span><strong>项目文件已更新</strong><small>客户需求说明.pdf · 等待知识检查</small></span><span class="feature-pill">新资料</span></button></div></section>
+            <section class="feature-card span-2"><h4>收件箱</h4><div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>任务需要补充资料</strong><small>客户沟通初步方案 · 2 个参数缺口</small></span><span class="feature-pill waiting">待处理</span></button><button class="feature-list-row" type="button" data-view="project"><span><strong>项目文件已更新</strong><small>客户需求说明.pdf · 等待知识检查</small></span><span class="feature-pill">新资料</span></button></div></section>
           </div>`
       });
 
@@ -2595,7 +2595,7 @@
             <label class="feature-card feature-field"><span>称呼</span><input class="feature-input" value="Kian"></label>
             <label class="feature-card feature-field"><span>回答密度</span><select class="feature-select"><option>结论优先，必要时展开</option><option>详细说明</option><option>极简</option></select></label>
             <label class="feature-card feature-field"><span>默认语言</span><select class="feature-select"><option>中文</option><option>English</option></select></label>
-            <label class="feature-card feature-field"><span>协作方式</span><select class="feature-select"><option>Work 为主，Chat 为辅</option><option>Chat 为主</option></select></label>
+            <label class="feature-card feature-field"><span>协作方式</span><select class="feature-select"><option>任务为主，Chat 为辅</option><option>Chat 为主</option></select></label>
             <label class="feature-card span-2 feature-field"><span>已确认偏好</span><textarea class="feature-textarea" style="min-height:110px">原型和正式产品分开验收；涉及专业事实时保留来源；关键流程要能实际点击，不以静态页面代替功能闭环。</textarea></label>
           </form>`
       });
@@ -2604,7 +2604,7 @@
         title: '话术', subtitle: '管理可复用提示词、表达模板和沟通边界。', icon: '话', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="add-prompt">新建话术</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>话术模板</h3><p>可以在 Chat 中直接使用，也可以带入新 Work 作为目标草稿。</p></div><input class="feature-input" style="width:220px" placeholder="搜索话术"></div>
+          <div class="feature-toolbar"><div><h3>话术模板</h3><p>可以在 Chat 中直接使用，也可以带入新任务作为目标草稿。</p></div><input class="feature-input" style="width:220px" placeholder="搜索话术"></div>
           <div class="feature-list" id="promptFeatureList">
             <div class="feature-list-row"><span><strong>需求参数缺口确认</strong><small>先列已知事实，再按影响程度列出需要客户确认的参数</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="use-prompt">使用</button><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>
             <div class="feature-list-row"><span><strong>客户沟通提纲</strong><small>按目标、现状、缺口、下一步组织沟通内容</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="use-prompt">使用</button><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>
@@ -2613,40 +2613,40 @@
       });
 
       registerFeature('schedules', {
-        title: '定时任务', subtitle: '查看当前专家关联的 Chat 提醒和 Work 自动任务。', icon: '定', group: 'expert-core',
+        title: '定时任务', subtitle: '查看当前专家关联的 Chat 提醒和自动任务。', icon: '定', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-view="automation">打开自动任务中心</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>专家定时任务</h3><p>每次 Work 类型触发都会创建独立运行；Chat 类型只发送辅助提醒。</p></div><span class="feature-pill">1 条规则</span></div>
-          <div class="feature-list"><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>每周一 · 工商储方案 · 独立 Work</small></span><span class="feature-pill waiting">未启用</span></button></div>`
+          <div class="feature-toolbar"><div><h3>专家定时任务</h3><p>每次任务类型触发都会创建独立运行；Chat 类型只发送辅助提醒。</p></div><span class="feature-pill">1 条规则</span></div>
+          <div class="feature-list"><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>每周一 · 工商储方案 · 独立任务</small></span><span class="feature-pill waiting">未启用</span></button></div>`
       });
 
       registerFeature('traces', {
-        title: '执行轨迹', subtitle: '按 Work 查看专家的检索、工具、技能和事件记录。', icon: '轨', group: 'expert-core',
+        title: '执行轨迹', subtitle: '按任务查看专家的检索、工具、技能和事件记录。', icon: '轨', group: 'expert-core',
         actions: '<button class="quiet-button" type="button" data-demo-action="export-trace">导出轨迹</button>',
         content: `
           <div class="feature-toolbar"><div><h3>客户沟通初步方案</h3><p>Run 01 · 小堵负责 · 只展示本次运行允许访问的记录。</p></div><select class="feature-select" style="width:190px"><option>全部事件</option><option>工具调用</option><option>来源检索</option><option>技能</option></select></div>
           <div class="feature-timeline">
-            <article class="feature-timeline-item"><time>09:42:03</time><h4>开始执行</h4><p>载入 Work 目标、项目上下文和已批准附件。</p></article>
+            <article class="feature-timeline-item"><time>09:42:03</time><h4>开始执行</h4><p>载入任务目标、项目上下文和已批准附件。</p></article>
             <article class="feature-timeline-item"><time>09:42:08</time><h4>检索知识库</h4><p>查询与需求澄清和方案结构相关的已安装知识文件。</p></article>
             <article class="feature-timeline-item"><time>09:42:14</time><h4>识别资料缺口</h4><p>发现 2 项需要用户确认的输入，进入等待用户状态。</p></article>
           </div>`
       });
 
       registerFeature('dashboard', {
-        title: '专家台账', subtitle: '汇总专家关联的记忆、对话、定时任务、Work 与成果。', icon: '账', group: 'expert-core',
+        title: '专家台账', subtitle: '汇总专家关联的记忆、对话、定时任务、任务与成果。', icon: '账', group: 'expert-core',
         actions: '<button class="quiet-button" type="button" data-demo-action="export-ledger">导出台账</button>',
         content: `
           <div class="feature-toolbar"><div><h3>使用概览</h3><p>数量从本地关联记录读取；不把运行数据写回专家包正本。</p></div><span class="feature-pill">当前专家</span></div>
-          <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联 Work</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>自动任务</span></div></div>
-          <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">工作</span></button><button class="feature-list-row" type="button" data-view="chat"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · Work 类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
+          <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联任务</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>自动任务</span></div></div>
+          <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">任务</span></button><button class="feature-list-row" type="button" data-view="chat"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · 任务类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
       });
 
       registerFeature('office', {
-        title: '办公室', subtitle: '查看专家当前参与的工作、协作者和等待事项。', icon: '办', group: 'expert-core',
+        title: '办公室', subtitle: '查看专家当前参与的任务、协作者和等待事项。', icon: '办', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-view="home">交给该专家</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>今日工作</h3><p>以 Work 为单位组织执行，不把办公室状态混入专家知识。</p></div><span class="feature-pill ready">可接新工作</span></div>
-          <div class="feature-grid"><section class="feature-card"><h4>正在执行</h4><p>客户沟通初步方案</p><div class="feature-meta-line"><span class="feature-pill ready">Run 01</span><span>与财研协作</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">打开工作</button></section><section class="feature-card"><h4>等待用户</h4><p>2 项输入需要确认，已保留当前执行上下文。</p><div class="feature-meta-line"><span class="feature-pill waiting">待处理</span><span>不会自动补全</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">查看问题</button></section></div>`
+          <div class="feature-toolbar"><div><h3>今日任务</h3><p>以任务为单位组织执行，不把办公室状态混入专家知识。</p></div><span class="feature-pill ready">可接新任务</span></div>
+          <div class="feature-grid"><section class="feature-card"><h4>正在执行</h4><p>客户沟通初步方案</p><div class="feature-meta-line"><span class="feature-pill ready">Run 01</span><span>与财研协作</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">打开任务</button></section><section class="feature-card"><h4>等待用户</h4><p>2 项输入需要确认，已保留当前执行上下文。</p><div class="feature-meta-line"><span class="feature-pill waiting">待处理</span><span>不会自动补全</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">查看问题</button></section></div>`
       });
 
       registerFeature('packages', {
@@ -2654,7 +2654,7 @@
         actions: '<button class="quiet-button" type="button" data-feature-open="import-pack">导入</button><button class="quiet-button primary" type="button" data-demo-action="export-pack">导出专家包</button>',
         content: `
           <div class="feature-toolbar"><div><h3>当前专家包</h3><p>本地安装 · 运行时数据与专家包正本分离。</p></div><span class="feature-pill ready">结构可读取</span></div>
-          <div class="feature-split"><section class="feature-card"><h4>结构检查</h4><div class="feature-code">expert-pack/\n├─ soul.md\n├─ AGENTS.md\n├─ knowledge/README.md\n├─ skills/\n├─ tests/cases/\n└─ memory/MEMORY.md</div><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="check-pack">重新检查</button></section><aside class="feature-stack"><section class="feature-card"><h4>可移植内容</h4><p>人格、知识、技能、测试与空记忆结构。</p><span class="feature-pill ready" style="margin-top:10px">允许导出</span></section><section class="feature-card"><h4>默认排除</h4><p>会话、Work 运行、成果、凭据和未授权用户数据。</p><span class="feature-pill waiting" style="margin-top:10px">不会打包</span></section></aside></div>`
+          <div class="feature-split"><section class="feature-card"><h4>结构检查</h4><div class="feature-code">expert-pack/\n├─ soul.md\n├─ AGENTS.md\n├─ knowledge/README.md\n├─ skills/\n├─ tests/cases/\n└─ memory/MEMORY.md</div><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="check-pack">重新检查</button></section><aside class="feature-stack"><section class="feature-card"><h4>可移植内容</h4><p>人格、知识、技能、测试与空记忆结构。</p><span class="feature-pill ready" style="margin-top:10px">允许导出</span></section><section class="feature-card"><h4>默认排除</h4><p>会话、任务运行、成果、凭据和未授权用户数据。</p><span class="feature-pill waiting" style="margin-top:10px">不会打包</span></section></aside></div>`
       });
 
       registerFeatureGroup('expert-library', [{ key: 'create-expert', label: '新建专家' }, { key: 'import-pack', label: '导入专家包' }, { key: 'expert-library', label: '专家包市场' }]);
@@ -2677,17 +2677,17 @@
       registerFeature('project-manager', {
         title: '项目管理', subtitle: '创建、编辑、归档项目；旧版按专家划分的项目不会自动合并。', icon: 'P', group: 'project-tools', kicker: 'Project workspace', contextTitle: '项目', contextMeta: '共享上下文空间',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="create-project">新建项目</button>',
-        content: `<div class="feature-toolbar"><div><h3>全部项目</h3><p>选择项目后，Work、文件、专家组和 Chat 关联都会切换到该上下文。</p></div><span class="feature-pill">2 个项目</span></div><div class="feature-list" id="projectManagerList"><button class="feature-list-row" type="button" data-view="project"><span><strong>工商储方案</strong><small>2 项 Work · 2 位专家 · 2 个文件</small></span><span class="feature-pill ready">当前项目</span></button><div class="feature-list-row"><span><strong>个人工作区</strong><small>未绑定专家组 · 可用于通用办公</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="select-project">切换</button><button class="quiet-button" type="button" data-demo-action="archive-project">归档</button></span></div></div>`
+        content: `<div class="feature-toolbar"><div><h3>全部项目</h3><p>选择项目后，任务、文件、专家组和 Chat 关联都会切换到该上下文。</p></div><span class="feature-pill">2 个项目</span></div><div class="feature-list" id="projectManagerList"><button class="feature-list-row" type="button" data-view="project"><span><strong>工商储方案</strong><small>2 项任务 · 2 位专家 · 2 个文件</small></span><span class="feature-pill ready">当前项目</span></button><div class="feature-list-row"><span><strong>个人工作区</strong><small>未绑定专家组 · 可用于通用办公</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="select-project">切换</button><button class="quiet-button" type="button" data-demo-action="archive-project">归档</button></span></div></div>`
       });
       registerFeature('project-file', {
-        title: '项目文件', subtitle: '查看文件来源、引用范围以及关联 Work；不显示绝对路径。', icon: 'F', group: 'project-tools', kicker: 'Project workspace', contextTitle: '工商储方案', contextMeta: '项目文件',
+        title: '项目文件', subtitle: '查看文件来源、引用范围以及关联任务；不显示绝对路径。', icon: 'F', group: 'project-tools', kicker: 'Project workspace', contextTitle: '工商储方案', contextMeta: '项目文件',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="add-knowledge">上传新版本</button>',
-        content: `<div class="feature-toolbar"><div><h3>客户需求说明.pdf</h3><p>用户上传 · 今天更新 · 当前 Project 可引用</p></div><span class="feature-pill ready">可读取</span></div><div class="feature-split"><section class="feature-card"><h4>文件预览</h4><div class="feature-empty" style="min-height:300px">PDF 内容预览区域<br>原型不读取或展示未提供的真实文件内容</div></section><aside class="feature-stack"><section class="feature-card"><h4>访问范围</h4><p>项目下新建的 Work 可按权限引用；旧 Chat 只建立关联，不移动原内容。</p></section><section class="feature-card"><h4>关联记录</h4><div class="feature-meta-line"><span class="feature-pill">2 项 Work</span><span class="feature-pill">1 条 Chat</span></div></section><button class="quiet-button" type="button" data-view="project">返回项目文件</button></aside></div>`
+        content: `<div class="feature-toolbar"><div><h3>客户需求说明.pdf</h3><p>用户上传 · 今天更新 · 当前 Project 可引用</p></div><span class="feature-pill ready">可读取</span></div><div class="feature-split"><section class="feature-card"><h4>文件预览</h4><div class="feature-empty" style="min-height:300px">PDF 内容预览区域<br>原型不读取或展示未提供的真实文件内容</div></section><aside class="feature-stack"><section class="feature-card"><h4>访问范围</h4><p>项目下新建的任务可按权限引用；旧 Chat 只建立关联，不移动原内容。</p></section><section class="feature-card"><h4>关联记录</h4><div class="feature-meta-line"><span class="feature-pill">2 项任务</span><span class="feature-pill">1 条 Chat</span></div></section><button class="quiet-button" type="button" data-view="project">返回项目文件</button></aside></div>`
       });
       registerFeature('project-expert-picker', {
         title: '项目专家组', subtitle: '设置默认负责人和协作专家，新的路由优先使用此专家组。', icon: 'E', group: 'project-tools', kicker: 'Project workspace', contextTitle: '工商储方案', contextMeta: '专家路由',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="save-project-experts">保存专家组</button>',
-        content: `<div class="feature-toolbar"><div><h3>已安装专家</h3><p>一个默认负责人，最多三名协作者；单项 Work 仍可手动覆盖。</p></div><span class="feature-pill">已选 2 位</span></div><div class="feature-list"><label class="feature-list-row"><span><strong>小堵</strong><small>工商储产品解决方案专家 · 匹配需求澄清和方案结构</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>默认负责人</option><option>协作专家</option></select></span></label><label class="feature-list-row"><span><strong>财研</strong><small>财务分析专家 · 协作校核财务表达与数据边界</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>协作专家</option><option>默认负责人</option></select></span></label><label class="feature-list-row"><span><strong>电图</strong><small>电气工程师 · 当前目标未匹配到图纸阅读任务</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label><label class="feature-list-row"><span><strong>品研</strong><small>产品经理 · 通用需求和产品结构</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label></div><div class="feature-callout"><strong>路由顺序：</strong>手动指定 › 项目专家组 › 已安装专家 › 缺失专家建议。</div>`
+        content: `<div class="feature-toolbar"><div><h3>已安装专家</h3><p>一个默认负责人，最多三名协作者；单项任务仍可手动覆盖。</p></div><span class="feature-pill">已选 2 位</span></div><div class="feature-list"><label class="feature-list-row"><span><strong>小堵</strong><small>工商储产品解决方案专家 · 匹配需求澄清和方案结构</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>默认负责人</option><option>协作专家</option></select></span></label><label class="feature-list-row"><span><strong>财研</strong><small>财务分析专家 · 协作校核财务表达与数据边界</small></span><span class="feature-check"><input type="checkbox" checked><select class="feature-select" style="width:120px"><option>协作专家</option><option>默认负责人</option></select></span></label><label class="feature-list-row"><span><strong>电图</strong><small>电气工程师 · 当前目标未匹配到图纸阅读任务</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label><label class="feature-list-row"><span><strong>品研</strong><small>产品经理 · 通用需求和产品结构</small></span><span class="feature-check"><input type="checkbox">加入项目</span></label></div><div class="feature-callout"><strong>路由顺序：</strong>手动指定 › 项目专家组 › 已安装专家 › 缺失专家建议。</div>`
       });
 
       registerFeatureGroup('chat-tools', [{ key: 'chat-projects', label: '对话项目' }, { key: 'chat-events', label: '事件流' }, { key: 'distill-skill', label: '沉淀技能' }]);
@@ -2699,7 +2699,7 @@
       registerFeature('chat-events', {
         title: '对话事件流', subtitle: '查看当前 Chat 的模型、模式、工具调用和上下文事件。', icon: '⌁', group: 'chat-tools', kicker: 'Chat workspace', contextTitle: '客户沟通材料', contextMeta: '当前历史对话',
         actions: '<button class="quiet-button" type="button" data-demo-action="export-chat-events">导出事件</button>',
-        content: `<div class="feature-toolbar"><div><h3>事件</h3><p>与用户可见消息分开记录，不把隐藏修复轮写入普通对话。</p></div><select class="feature-select" style="width:160px"><option>全部事件</option><option>模型</option><option>工具</option><option>上下文</option></select></div><div class="feature-timeline"><article class="feature-timeline-item"><time>刚刚</time><h4>用户消息</h4><p>已加入当前对话，未创建 Work。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>上下文载入</h4><p>当前专家、工商储方案项目与用户明确选择的附件。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>模型响应</h4><p>端云 · Agent 模式；本轮未发生外部副作用。</p></article></div>`
+        content: `<div class="feature-toolbar"><div><h3>事件</h3><p>与用户可见消息分开记录，不把隐藏修复轮写入普通对话。</p></div><select class="feature-select" style="width:160px"><option>全部事件</option><option>模型</option><option>工具</option><option>上下文</option></select></div><div class="feature-timeline"><article class="feature-timeline-item"><time>刚刚</time><h4>用户消息</h4><p>已加入当前对话，未创建任务。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>上下文载入</h4><p>当前专家、工商储方案项目与用户明确选择的附件。</p></article><article class="feature-timeline-item"><time>刚刚</time><h4>模型响应</h4><p>端云 · Agent 模式；本轮未发生外部副作用。</p></article></div>`
       });
       registerFeature('distill-skill', {
         title: '沉淀为技能', subtitle: '从当前对话提取可复用步骤，先保存为技能草案。', icon: '/', group: 'chat-tools', kicker: 'Chat workspace', contextTitle: '客户沟通材料', contextMeta: '技能蒸馏草案',
@@ -2707,7 +2707,7 @@
         content: `<div class="feature-toolbar"><div><h3>技能草案</h3><p>只提取方法和步骤，不复制未授权的项目数据或敏感内容。</p></div><span class="feature-pill waiting">待审阅</span></div><form class="feature-form" onsubmit="return false"><label class="feature-field"><span>技能名称</span><input class="feature-input" value="客户沟通材料结构化"></label><label class="feature-field"><span>适用场景</span><input class="feature-input" value="将零散项目资料整理为可审阅沟通提纲"></label><label class="feature-field"><span>执行步骤</span><textarea class="feature-textarea">1. 归并用户已提供的事实\n2. 将缺失参数单独列出\n3. 区分事实、判断和待确认项\n4. 为关键结论保留来源\n5. 不自行补全专业参数或收益数据</textarea></label><label class="feature-field"><span>安装位置</span><select class="feature-select"><option>当前专家专属技能</option><option>自有公共技能草案</option></select></label></form>`
       });
       registerFeature('work-export', {
-        title: '导出与分享', subtitle: '导出当前 Work 的结论、轨迹和成果，外部分享前单独确认。', icon: '↓', kicker: 'Work output', contextTitle: '客户沟通初步方案', contextMeta: '当前 Work · Run 01',
+        title: '导出与分享', subtitle: '导出当前任务的结论、轨迹和成果，外部分享前单独确认。', icon: '↓', kicker: 'Task output', contextTitle: '客户沟通初步方案', contextMeta: '当前任务 · Run 01',
         content: `<div class="feature-toolbar"><div><h3>导出内容</h3><p>导出只包含当前用户可见、可访问的内容和相对来源信息。</p></div><span class="feature-pill">尚未导出</span></div><div class="feature-grid three"><section class="feature-card"><h4>Markdown</h4><p>结论、来源、待确认项和成果文件清单。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">导出 .md</button></section><section class="feature-card"><h4>单文件 HTML</h4><p>适合本地打开和发送前预览，不依赖在线资源。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">导出 .html</button></section><section class="feature-card"><h4>成果包</h4><p>包含 outputs/ 正本和允许分享的来源说明。</p><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="export-work">准备成果包</button></section></div><div class="feature-callout"><strong>外部分享属于高风险操作。</strong>导出到本地不会发送；选择接收方并实际发送前必须单独确认。</div>`
       });
 
@@ -2811,12 +2811,12 @@
         if (action === 'save-profile') showToast('用户画像已保存为本地原型草稿');
         if (action === 'add-prompt') {
           var promptList = document.getElementById('promptFeatureList');
-          if (promptList && !document.getElementById('promptDraft')) promptList.insertAdjacentHTML('afterbegin', '<div class="feature-list-row" id="promptDraft"><span><strong>未命名话术</strong><small>新建草稿 · 尚未用于对话或 Work</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>');
+          if (promptList && !document.getElementById('promptDraft')) promptList.insertAdjacentHTML('afterbegin', '<div class="feature-list-row" id="promptDraft"><span><strong>未命名话术</strong><small>新建草稿 · 尚未用于对话或任务</small></span><span class="feature-row-actions"><button class="quiet-button" type="button" data-demo-action="edit-prompt">编辑</button></span></div>');
           showToast('已创建话术草稿');
         }
         if (action === 'use-prompt') { closeFeatureLayer(); switchView('chat'); document.getElementById('chatInput').value = '请按「' + actionButton.closest('.feature-list-row').querySelector('strong').textContent + '」模板继续。'; document.getElementById('chatInput').focus(); showToast('话术已带入 Chat'); }
-        if (action === 'edit-prompt') { actionButton.closest('.feature-list-row').querySelector('small').textContent = '编辑中 · 保存后可用于 Chat 或 Work'; actionButton.textContent = '保存'; showToast('已进入话术编辑状态'); }
-        if (action === 'export-trace') showToast('已准备导出当前 Work 的可见轨迹');
+        if (action === 'edit-prompt') { actionButton.closest('.feature-list-row').querySelector('small').textContent = '编辑中 · 保存后可用于 Chat 或任务'; actionButton.textContent = '保存'; showToast('已进入话术编辑状态'); }
+        if (action === 'export-trace') showToast('已准备导出当前任务的可见轨迹');
         if (action === 'export-ledger') showToast('已准备导出专家关联台账');
         if (action === 'export-pack') showToast('已生成导出预览，运行数据和凭据已排除');
         if (action === 'check-pack') { actionButton.textContent = '结构正常'; showToast('专家包结构检查完成'); }
@@ -2984,7 +2984,7 @@
 
       document.getElementById('startWork').addEventListener('click', function () {
         switchView('work');
-        showToast('已匹配小堵为负责人、财研为协作专家，工作开始执行');
+        showToast('已匹配小堵为负责人、财研为协作专家，任务开始执行');
       });
 
       document.getElementById('homeAttach').addEventListener('click', function () {
@@ -3025,7 +3025,7 @@
           document.getElementById('runStateText').textContent = selected.state;
           document.getElementById('activityText').textContent = selected.activity;
           document.getElementById('activeStepStamp').textContent = selected.state;
-          showToast('已打开工作「' + selected.title + '」');
+          showToast('已打开任务「' + selected.title + '」');
         });
       });
 
@@ -3057,9 +3057,9 @@
       });
 
       document.getElementById('saveProjectSettings').addEventListener('click', function () { showToast('项目名称、默认权限和路由设置已保存'); });
-      document.getElementById('archiveProject').addEventListener('click', function () { openModal('归档项目', '归档后项目不会出现在默认列表，历史 Chat、Work 与成果仍保留，可随时恢复。', '确认归档', '项目已归档，可从项目管理恢复'); });
+      document.getElementById('archiveProject').addEventListener('click', function () { openModal('归档项目', '归档后项目不会出现在默认列表，历史 Chat、任务与成果仍保留，可随时恢复。', '确认归档', '项目已归档，可从项目管理恢复'); });
       document.getElementById('deleteProject').addEventListener('click', function () {
-        openRisk('high', { badge: '高风险 · 删除项目', title: '确认删除「工商储方案」', copy: '删除会影响项目上下文、专家组和后续访问。原型只演示确认，不会删除任何内容。', plan: ['停止项目下新的自动触发', '保留历史 Chat 与 Work 关联说明', '删除项目配置与共享上下文'], impact: '<strong>影响范围：</strong>项目配置将不可恢复；历史内容仍按正式迁移策略处理。原型不会执行删除。', confirmLabel: '确认删除项目', needsRecipient: false, success: '原型已确认，未删除任何项目数据' });
+        openRisk('high', { badge: '高风险 · 删除项目', title: '确认删除「工商储方案」', copy: '删除会影响项目上下文、专家组和后续访问。原型只演示确认，不会删除任何内容。', plan: ['停止项目下新的自动触发', '保留历史 Chat 与任务关联说明', '删除项目配置与共享上下文'], impact: '<strong>影响范围：</strong>项目配置将不可恢复；历史内容仍按正式迁移策略处理。原型不会执行删除。', confirmLabel: '确认删除项目', needsRecipient: false, success: '原型已确认，未删除任何项目数据' });
       });
 
       document.querySelectorAll('[data-toast]').forEach(function (button) {
@@ -3080,9 +3080,9 @@
         pauseButton.textContent = paused ? '继续' : '暂停';
         document.getElementById('runStateText').textContent = paused ? '已暂停' : '执行中';
         document.getElementById('activeStepStamp').textContent = paused ? '已暂停' : '进行中';
-        document.getElementById('activityText').textContent = paused ? '工作已安全暂停，当前上下文已保留' : '正在从已上传资料中归并已知信息与缺失项';
+        document.getElementById('activityText').textContent = paused ? '任务已安全暂停，当前上下文已保留' : '正在从已上传资料中归并已知信息与缺失项';
         document.getElementById('activeStep').classList.toggle('paused', paused);
-        showToast(paused ? '工作已暂停，上下文已保留' : '工作已继续执行');
+        showToast(paused ? '任务已暂停，上下文已保留' : '任务已继续执行');
       });
 
       var modalBackdrop = document.getElementById('modalBackdrop');
@@ -3095,7 +3095,7 @@
 
       function openModal(title, copy, actionLabel, successMessage, afterConfirm) {
         modalTitle.textContent = title;
-        modalCopy.textContent = copy || '补充的信息会进入当前 Work 上下文，不会覆盖已有目标。';
+        modalCopy.textContent = copy || '补充的信息会进入当前任务上下文，不会覆盖已有目标。';
         confirmModal.textContent = actionLabel || '确认';
         modalSuccessMessage = successMessage || '操作已记录';
         modalAfterConfirm = afterConfirm || null;
@@ -3110,10 +3110,10 @@
         modalBackdrop.setAttribute('aria-hidden', 'true');
       }
 
-      document.querySelectorAll('.add-requirement').forEach(function (button) { button.addEventListener('click', function () { openModal('补充要求', '补充的信息会进入当前 Work 上下文，不会覆盖已有目标。', '加入当前工作', '已加入当前 Work 上下文'); }); });
+      document.querySelectorAll('.add-requirement').forEach(function (button) { button.addEventListener('click', function () { openModal('补充要求', '补充的信息会进入当前任务上下文，不会覆盖已有目标。', '加入当前任务', '已加入当前任务上下文'); }); });
       var modalCopies = {
         '补充现场资料': ['上传或说明现场资料，Soul 会重新评估计划，不会自行补齐缺失数据。', '加入项目', '现场资料说明已加入项目'],
-        '管理项目专家组': ['调整项目负责人和协作专家；新的路由只影响之后创建或重新规划的 Work。', '保存调整', '项目专家组调整已保存'],
+        '管理项目专家组': ['调整项目负责人和协作专家；新的路由只影响之后创建或重新规划的任务。', '保存调整', '项目专家组调整已保存'],
         '导入专家包': ['选择符合 Soul 专家包结构的本地目录；正式导入前会检查知识文件与测试状态。', '选择专家包', '已进入专家包选择流程']
       };
       document.querySelectorAll('[data-modal]').forEach(function (button) { button.addEventListener('click', function () { var item = modalCopies[button.dataset.modal] || ['继续完成此操作。', '确认', '操作已记录']; openModal(button.dataset.modal, item[0], item[1], item[2]); }); });
@@ -3151,7 +3151,7 @@
         riskDialog.classList.toggle('high', high);
         riskBadge.textContent = override.badge || (high ? '高风险 · 外部发送' : '中风险 · 修改文件');
         riskTitle.textContent = override.title || (high ? '确认外部发送' : '确认修改成果文件');
-        riskCopy.textContent = override.copy || (high ? '这项操作会产生外部副作用。请核验接收方与附件，发送发生前需要单独确认。' : '这项操作会写入当前 Work 的成果文件。确认后仅执行下列计划。');
+        riskCopy.textContent = override.copy || (high ? '这项操作会产生外部副作用。请核验接收方与附件，发送发生前需要单独确认。' : '这项操作会写入当前任务的成果文件。确认后仅执行下列计划。');
         riskPlan.innerHTML = planMarkup(override.plan || (high ? ['核验接收方与披露范围', '附加客户沟通提纲.md', '向已核验接收方发送'] : ['读取现有草稿', '写入已确认的结构调整', '保存为新的成果版本']));
         riskImpact.innerHTML = override.impact || (high ? '<strong>影响范围：</strong>外部接收方将收到「客户沟通提纲.md」。原型不会实际发送任何内容。' : '<strong>影响范围：</strong>仅修改 outputs/客户沟通提纲.md，不发布、不覆盖原始资料，也不外部发送。');
         riskRecipient.value = '';
@@ -3188,7 +3188,7 @@
         });
       });
       document.getElementById('cancelWork').addEventListener('click', function () {
-        openRisk('medium', { badge: '中风险 · 取消工作', title: '确认取消当前 Work', copy: '取消会停止当前运行，但保留目标、上下文、轨迹和已生成成果。', plan: ['停止当前 Run 的新工具调用', '保留工作上下文和运行轨迹', '将 Work 状态标记为已取消'], impact: '<strong>影响范围：</strong>只影响当前 Work 的本次运行，不删除项目文件或历史 Chat。', confirmLabel: '确认取消工作', success: '原型已确认取消流程，未停止任何真实任务' });
+        openRisk('medium', { badge: '中风险 · 取消任务', title: '确认取消当前任务', copy: '取消会停止当前运行，但保留目标、上下文、轨迹和已生成成果。', plan: ['停止当前 Run 的新工具调用', '保留任务上下文和运行轨迹', '将任务状态标记为已取消'], impact: '<strong>影响范围：</strong>只影响当前任务的本次运行，不删除项目文件或历史 Chat。', confirmLabel: '确认取消任务', success: '原型已确认取消流程，未停止任何真实任务' });
       });
 
       document.getElementById('createDraftExpert').addEventListener('click', function () { showWorkState('draft'); });
@@ -3206,12 +3206,12 @@
         runDraftTests.textContent = '5 类测试已通过';
         runDraftTests.disabled = true;
         resumeDraftWork.disabled = false;
-        showToast('临时专家草案已通过 5 类测试，可恢复当前 Work');
+        showToast('临时专家草案已通过 5 类测试，可恢复当前任务');
       });
       resumeDraftWork.addEventListener('click', function () {
         hideWorkState();
         document.getElementById('runStateText').textContent = '执行中';
-        showToast('已由项目临时专家恢复工作，草案尚未转正');
+        showToast('已由项目临时专家恢复任务，草案尚未转正');
       });
       document.getElementById('openCompletedArtifact').addEventListener('click', function () { showToast('原型：打开成果正本「客户沟通提纲.md」'); });
       document.getElementById('continueFromCompleted').addEventListener('click', function () {
@@ -3219,7 +3219,7 @@
         document.getElementById('goalInput').value = '';
         switchView('home');
         document.getElementById('goalInput').focus();
-        showToast('已保留本次成果，可继续创建新 Work');
+        showToast('已保留本次成果，可继续创建新任务');
       });
 
       document.addEventListener('click', function (event) {
@@ -3227,9 +3227,9 @@
       });
 
       var automationRules = {
-        weekly: { title: '整理项目待确认事项', subtitle: '将项目中需要用户处理的事项整理成独立 Work。', triggerType: '每周', trigger: '每周一，由用户启用后生效', target: 'Work · 每次独立创建', goal: '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。', enabled: false },
-        file: { title: '资料更新后检查缺失项', subtitle: '项目资料发生变化时，重新检查输入缺口并生成独立 Work。', triggerType: '项目文件更新后', trigger: '项目文件更新后，由用户启用后生效', target: 'Work · 每次独立创建', goal: '检查新增或更新资料带来的输入缺口，列明来源和仍需用户确认的内容。', enabled: false },
-        custom: { title: '新自动任务', subtitle: '尚未启用的自动任务草稿。', triggerType: '手动', trigger: '仅手动触发', target: 'Work · 每次独立创建', goal: '说明需要完成什么、产出什么，以及哪些内容不能自行补全。', enabled: false }
+        weekly: { title: '整理项目待确认事项', subtitle: '将项目中需要用户处理的事项整理成独立任务。', triggerType: '每周', trigger: '每周一，由用户启用后生效', target: '任务 · 每次独立创建', goal: '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。', enabled: false },
+        file: { title: '资料更新后检查缺失项', subtitle: '项目资料发生变化时，重新检查输入缺口并生成独立任务。', triggerType: '项目文件更新后', trigger: '项目文件更新后，由用户启用后生效', target: '任务 · 每次独立创建', goal: '检查新增或更新资料带来的输入缺口，列明来源和仍需用户确认的内容。', enabled: false },
+        custom: { title: '新自动任务', subtitle: '尚未启用的自动任务草稿。', triggerType: '手动', trigger: '仅手动触发', target: '任务 · 每次独立创建', goal: '说明需要完成什么、产出什么，以及哪些内容不能自行补全。', enabled: false }
       };
 
       var currentAutomationRule = 'weekly';
@@ -3311,7 +3311,7 @@
         document.getElementById('automationEditorTitle').textContent = mode === 'new' ? '创建自动任务' : '编辑自动任务';
         document.getElementById('automationEditorName').value = rule.title;
         document.getElementById('automationEditorTrigger').value = rule.triggerType;
-        document.getElementById('automationEditorTarget').value = rule.target.includes('Chat') ? 'Chat · 辅助提醒' : 'Work · 独立运行';
+        document.getElementById('automationEditorTarget').value = rule.target.includes('Chat') ? 'Chat · 辅助提醒' : '任务 · 独立运行';
         document.getElementById('automationEditorGoal').value = rule.goal;
         automationEditor.hidden = false;
         document.getElementById('automationEditorName').focus();
@@ -3325,7 +3325,7 @@
       automationEnabled.addEventListener('change', function () {
         automationRules[currentAutomationRule].enabled = automationEnabled.checked;
         renderAutomationRule(currentAutomationRule);
-        showToast(automationEnabled.checked ? '自动任务已启用；正式触发时将创建独立 Work' : '自动任务已停用，不会产生新的触发');
+        showToast(automationEnabled.checked ? '自动任务已启用；正式触发时将创建独立任务' : '自动任务已停用，不会产生新的触发');
       });
 
       automationEditor.addEventListener('submit', function (event) {
@@ -3334,11 +3334,11 @@
         var triggerType = document.getElementById('automationEditorTrigger').value;
         var triggerCopy = { '每周': '每周一，由用户启用后生效', '项目文件更新后': '项目文件更新后，由用户启用后生效', '手动': '仅手动触发' };
         automationRules[key].title = document.getElementById('automationEditorName').value.trim() || '未命名自动任务';
-        automationRules[key].subtitle = document.getElementById('automationEditorGoal').value.trim() || '尚未补充工作目标。';
+        automationRules[key].subtitle = document.getElementById('automationEditorGoal').value.trim() || '尚未补充任务目标。';
         automationRules[key].goal = automationRules[key].subtitle;
         automationRules[key].triggerType = triggerType;
         automationRules[key].trigger = triggerCopy[triggerType];
-        automationRules[key].target = document.getElementById('automationEditorTarget').value.includes('Chat') ? 'Chat · 辅助提醒' : 'Work · 每次独立创建';
+        automationRules[key].target = document.getElementById('automationEditorTarget').value.includes('Chat') ? 'Chat · 辅助提醒' : '任务 · 每次独立创建';
         if (key === 'custom') document.getElementById('customAutomationItem').hidden = false;
         closeAutomationEditor();
         renderAutomationRule(key);
@@ -3349,13 +3349,13 @@
 
       document.getElementById('triggerAutomation').addEventListener('click', function () {
         var rule = automationRules[currentAutomationRule];
-        var workTarget = rule.target.includes('Work');
+        var workTarget = !rule.target.includes('Chat');
         document.getElementById('automationHistoryEmpty').className = 'project-work-table';
         document.getElementById('automationHistoryEmpty').innerHTML = '<button class="entity-row" type="button" data-automation-open-result><span><span class="entity-title">刚刚 · 手动触发</span><span class="entity-meta">运行已完成 · 专家路由已保留</span></span><span class="entity-state"><span class="status-dot running"></span>成功</span></button>';
         document.getElementById('automationResultsEmpty').className = 'project-work-table';
-        document.getElementById('automationResultsEmpty').innerHTML = workTarget ? '<button class="entity-row" type="button" data-automation-open-work><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">独立 Work · Run 01 · 工商储方案</span></span><span class="entity-state">打开工作 →</span></button>' : '<button class="entity-row" type="button" data-automation-open-chat><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">Chat 辅助提醒 · 未创建 Work</span></span><span class="entity-state">打开对话 →</span></button>';
+        document.getElementById('automationResultsEmpty').innerHTML = workTarget ? '<button class="entity-row" type="button" data-automation-open-work><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">独立任务 · Run 01 · 工商储方案</span></span><span class="entity-state">打开任务 →</span></button>' : '<button class="entity-row" type="button" data-automation-open-chat><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">Chat 辅助提醒 · 未创建任务</span></span><span class="entity-state">打开对话 →</span></button>';
         setAutomationTab('history');
-        showToast(workTarget ? '已触发并创建独立 Work' : '已触发 Chat 辅助提醒');
+        showToast(workTarget ? '已触发并创建独立任务' : '已触发 Chat 辅助提醒');
       });
       document.querySelector('.automation-panel-scroll').addEventListener('click', function (event) {
         if (event.target.closest('[data-automation-open-work]')) switchView('work');
@@ -3391,7 +3391,7 @@
       document.getElementById('startWithExpert').addEventListener('click', function () {
         var name = document.getElementById('expertName').textContent;
         switchView('home');
-        showToast('已指定' + name + '为负责人，可继续填写工作目标');
+        showToast('已指定' + name + '为负责人，可继续填写任务目标');
       });
 
       document.querySelectorAll('.expert-item').forEach(function (button) {
@@ -3410,7 +3410,7 @@
       });
 
       var chatThreads = {
-        materials: { title: '客户沟通材料', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项 Work。' },
+        materials: { title: '客户沟通材料', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。' },
         boundary: { title: '方案边界讨论', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '缺失信息应该怎么向客户说明？', reply: '可以把已知事实、缺失信息和需要客户确认的事项分开列出，避免把假设写成结论。' },
         source: { title: '来源引用方式', projectKey: 'none', project: '未绑定项目 · 历史 Chat', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
       };
@@ -3418,7 +3418,7 @@
       function chatMessageMarkup(thread) {
         return '<div class="message-row user"><div class="message-copy">' + thread.user + '</div></div>' +
           '<div class="message-row assistant"><div class="message-copy">' + thread.reply + '</div></div>' +
-          '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为工作</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>';
+          '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为任务</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>';
       }
 
       function renderChatThread(key) {
@@ -3454,15 +3454,15 @@
         document.querySelectorAll('.chat-thread').forEach(function (button) { button.classList.remove('active'); });
         document.getElementById('chatTitle').textContent = '新对话';
         document.getElementById('chatProject').textContent = '未绑定项目 · 仅保留在 Chat';
-        document.getElementById('chatMessages').innerHTML = '<div class="chat-empty">从一个问题开始。需要持续执行时，再转为 Work。</div>';
+        document.getElementById('chatMessages').innerHTML = '<div class="chat-empty">从一个问题开始。需要持续执行时，再转为任务。</div>';
         document.getElementById('chatInput').value = '';
         document.getElementById('chatInput').focus();
       });
 
       document.getElementById('chatToWork').addEventListener('click', function () {
-        document.getElementById('goalInput').value = '把当前对话中的目标整理为一项可独立验收的工作，保留原对话和来源。';
+        document.getElementById('goalInput').value = '把当前对话中的目标整理为一项可独立验收的任务，保留原对话和来源。';
         switchView('home');
-        showToast('已从 Chat 创建 Work 草稿，原对话保持不变');
+        showToast('已从 Chat 创建任务草稿，原对话保持不变');
       });
       document.getElementById('chatMessages').addEventListener('click', function (event) {
         if (event.target.closest('[data-chat-to-work]')) document.getElementById('chatToWork').click();
@@ -3603,7 +3603,7 @@
         if (action === 'tool-audit') openFeature('traces');
         if (action === 'perf-logs') showToast('已打开性能日志视图：模型、IPC 与渲染耗时');
         if (action === 'check-update') showToast('正在检查可用更新；不会自动覆盖安装');
-        if (action === 'reset-data') openRisk('high', { badge: '高风险 · 重置本地数据', title: '确认重置 Soul 本地数据', copy: '这会影响项目、Work、专家运行数据和设置。原型不会执行重置。', plan: ['停止新的自动任务触发', '生成可导出数据摘要', '重置项目、工作和运行配置'], impact: '<strong>影响范围：</strong>历史数据和设置可能不可恢复；正式产品必须再次显示实际范围。', confirmLabel: '确认重置', needsRecipient: false, success: '原型已确认，未重置任何本地数据' });
+        if (action === 'reset-data') openRisk('high', { badge: '高风险 · 重置本地数据', title: '确认重置 Soul 本地数据', copy: '这会影响项目、任务、专家运行数据和设置。原型不会执行重置。', plan: ['停止新的自动任务触发', '生成可导出数据摘要', '重置项目、任务和运行配置'], impact: '<strong>影响范围：</strong>历史数据和设置可能不可恢复；正式产品必须再次显示实际范围。', confirmLabel: '确认重置', needsRecipient: false, success: '原型已确认，未重置任何本地数据' });
       });
 
       document.addEventListener('click', function (event) {
@@ -3612,7 +3612,7 @@
       });
 
       document.getElementById('projectSwitcher').addEventListener('click', function () { openFeature('project-manager'); });
-      document.getElementById('notifyButton').addEventListener('click', function () { showToast('2 项工作需要你处理'); });
+      document.getElementById('notifyButton').addEventListener('click', function () { showToast('2 项任务需要你处理'); });
       document.getElementById('searchButton').addEventListener('click', openCommandPalette);
 
       document.addEventListener('keydown', function (event) {

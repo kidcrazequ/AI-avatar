@@ -647,8 +647,11 @@
 
     .file-row { display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--line); }
     .file-icon { width: 28px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 5px; background: white; color: var(--secondary); font: 650 8px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .file-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .file-row > span:last-child { min-width: 0; display: grid; gap: 4px; }
     .file-name { font-size: 11px; font-weight: 590; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-meta { margin-top: 3px; color: var(--tertiary); font-size: 9px; }
+    .file-name, .file-meta { display: block; }
+    .file-meta { margin: 0; color: var(--tertiary); font-size: 9px; }
 
     .workspace-page {
       display: grid;
@@ -1546,6 +1549,11 @@
   </style>
 </head>
 <body>
+  <!-- Lucide FileText and FileArchive icons, ISC License: https://lucide.dev -->
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="lucide-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="lucide-file-archive" viewBox="0 0 24 24"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></symbol>
+  </svg>
   <div class="app" id="appRoot">
     <header class="titlebar">
       <div class="window-controls" aria-label="窗口控制">
@@ -1748,7 +1756,7 @@
                 <section class="detail-section"><div class="permission-row"><span>权限模式</span><span class="permission-value">智能确认</span></div></section>
               </div>
               <div class="tab-panel" data-panel="result"><section class="detail-section"><h3 class="detail-title">结论与成果</h3><div class="empty-state">工作完成后，将在这里显示可审阅结论与成果文件。</div></section></div>
-              <div class="tab-panel" data-panel="context"><section class="detail-section"><h3 class="detail-title">所属项目</h3><div class="permission-row"><span>项目</span><span class="permission-value">工商储方案</span></div></section><section class="detail-section"><h3 class="detail-title">工作资料</h3><div class="file-row"><span class="file-icon">PDF</span><span><span class="file-name">客户需求说明.pdf</span><span class="file-meta">用户上传 · 当前 Work</span></span></div><div class="file-row"><span class="file-icon">ZIP</span><span><span class="file-name">场地资料.zip</span><span class="file-meta">用户上传 · 当前 Work</span></span></div></section></div>
+              <div class="tab-panel" data-panel="context"><section class="detail-section"><h3 class="detail-title">所属项目</h3><div class="permission-row"><span>项目</span><span class="permission-value">工商储方案</span></div></section><section class="detail-section"><h3 class="detail-title">工作资料</h3><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><span class="file-name">客户需求说明.pdf</span><span class="file-meta">用户上传 · 当前 Work</span></span></div><div class="file-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span><span><span class="file-name">场地资料.zip</span><span class="file-meta">用户上传 · 当前 Work</span></span></div></section></div>
             </div>
           </aside>
 
@@ -1783,7 +1791,7 @@
                 <div class="state-hero"><span class="state-symbol success"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/></svg></span><div><h2 class="state-title">工作已完成</h2><p class="state-lead">已将现有资料整理为客户沟通结构，并明确列出仍需确认的信息；未计算收益，也未生成缺失参数。</p></div></div>
                 <div class="state-grid">
                   <div><section class="state-section"><h3 class="state-section-title">成果文件</h3><button class="artifact-card" id="openCompletedArtifact" type="button"><span class="artifact-icon">MD</span><span><span class="artifact-title">客户沟通提纲.md</span><span class="artifact-meta">小堵 + 财研 · 当前运行 · 成果正本</span></span><svg class="icon" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button></section><section class="state-section"><h3 class="state-section-title">执行边界</h3><div class="state-note"><strong>仍需用户确认</strong>并网条件、电价口径和现场约束尚未获得可核验输入，成果中已作为缺口列出。</div></section></div>
-                  <aside><section class="state-section"><h3 class="state-section-title">来源</h3><div class="source-stack"><span class="source-chip"><span class="file-icon">PDF</span>客户需求说明.pdf</span><span class="source-chip"><span class="file-icon">ZIP</span>场地资料.zip</span></div></section></aside>
+                  <aside><section class="state-section"><h3 class="state-section-title">来源</h3><div class="source-stack"><span class="source-chip"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span>客户需求说明.pdf</span><span class="source-chip"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span>场地资料.zip</span></div></section></aside>
                 </div>
                 <div class="state-actions"><button class="secondary-button close-work-state" type="button">返回执行记录</button><button class="primary-button" id="continueFromCompleted" type="button">继续新工作</button></div>
               </div>
@@ -1830,8 +1838,8 @@
                   <div class="page-column">
                     <section class="flat-section">
                       <div class="flat-section-head"><h2 class="flat-section-title">项目文件</h2><button class="flat-section-note" type="button" data-project-tab="files">管理文件</button></div>
-                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">客户需求说明.pdf</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">PDF</span></button>
-                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">场地资料.zip</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon">ZIP</span></button>
+                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">客户需求说明.pdf</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span></button>
+                      <button class="entity-row" type="button" data-feature-open="project-file"><span><span class="entity-title">场地资料.zip</span><span class="entity-meta">项目共享文件</span></span><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span></button>
                     </section>
                     <section class="flat-section">
                       <div class="flat-section-head"><h2 class="flat-section-title">专家组</h2><button class="flat-section-note" type="button" data-project-tab="experts">管理专家组</button></div>
@@ -1846,8 +1854,8 @@
                 <header class="functional-head"><div><h2>项目文件</h2><p>项目下的新 Work 可按权限引用，渲染层不显示本地绝对路径。</p></div><button class="primary-button" type="button" data-modal="补充现场资料">上传文件</button></header>
                 <div class="project-file-table">
                   <div class="project-table-head"><span>名称</span><span>来源</span><span>更新时间</span><span></span></div>
-                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon">PDF</span>客户需求说明.pdf</span><span>用户上传</span><span>今天</span><span>•••</span></button>
-                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon">ZIP</span>场地资料.zip</span><span>用户上传</span><span>今天</span><span>•••</span></button>
+                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span>客户需求说明.pdf</span><span>用户上传</span><span>今天</span><span>•••</span></button>
+                  <button class="project-file-row" type="button" data-feature-open="project-file"><span><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-archive"></use></svg></span>场地资料.zip</span><span>用户上传</span><span>今天</span><span>•••</span></button>
                 </div>
               </section>
 

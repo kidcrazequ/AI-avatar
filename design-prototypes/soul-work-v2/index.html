@@ -1704,6 +1704,26 @@
     .chat-work-hint-copy strong { display: block; margin: 0 0 2px; color: var(--ink); font-size: 13px; }
     .chat-work-hint-copy span { display: block; }
     .chat-work-hint-arrow { color: #99979d; font-size: 18px; }
+    .task-flow { width: min(760px, calc(100% - 44px)); margin: 2px 0 42px 44px; border-top: 1px solid #e2e0db; border-bottom: 1px solid #e2e0db; }
+    .task-flow-head { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 2px; }
+    .task-flow-title { min-width: 0; }
+    .task-flow-title strong { display: block; color: #29282d; font-size: 15px; font-weight: 650; line-height: 1.45; }
+    .task-flow-title span { display: block; margin-top: 4px; color: #89888f; font-size: 12px; line-height: 1.45; }
+    .task-flow-state { flex: 0 0 auto; color: #6f6e75; font-size: 12px; }
+    .task-flow-steps { border-top: 1px solid #eceae6; }
+    .task-flow-step { min-height: 46px; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid #eceae6; color: #414047; font-size: 13px; }
+    .task-flow-step:last-child { border-bottom: 0; }
+    .task-flow-step-icon { width: 18px; height: 18px; display: grid; place-items: center; color: #727178; }
+    .task-flow-step-icon .icon { width: 15px; height: 15px; }
+    .task-flow-step-status { color: #94939a; font-size: 12px; }
+    .task-flow-result { margin: 0 2px 12px; padding: 11px 12px; border-radius: 9px; background: #f5f4f1; color: #4b4a50; font-size: 13px; line-height: 1.55; }
+    .task-flow-foot { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 10px 2px; border-top: 1px solid #eceae6; }
+    .task-flow-meta { color: #89888f; font-size: 12px; }
+    .task-flow-actions { display: flex; align-items: center; gap: 6px; }
+    .task-flow-action { height: 32px; padding: 0 11px; border: 1px solid #d8d5cf; border-radius: 8px; background: #fff; color: #4c4b52; font-size: 12px; cursor: pointer; }
+    .task-flow-action:hover { border-color: #bdbab4; background: #f8f7f4; color: #242329; }
+    .task-flow-action.primary { border-color: #25262b; background: #25262b; color: #fff; }
+    .task-flow-action.primary:hover { background: #17181c; }
     .chat-compose-wrap { padding: 10px max(30px, calc((100% - 860px) / 2)) 18px; border-top: 0; background: linear-gradient(to bottom, rgba(250,249,247,0), rgba(250,249,247,.96) 24%); }
     .chat-compose { padding: 11px 11px 10px 14px; border-color: #d8d4cc; border-radius: 16px; box-shadow: 0 6px 22px rgba(24,22,26,.08), 0 1px 2px rgba(24,22,26,.05); }
     .chat-compose textarea { height: 48px; padding: 5px 0; font-size: 15px; line-height: 1.6; }
@@ -1821,7 +1841,7 @@
 
         <section class="nav-projects" aria-label="项目"><div class="nav-projects-title">项目</div><button class="nav-item nav-project-item" type="button" data-view="project" title="打开工商储方案"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">工商储方案</span><span class="nav-project-actions" aria-hidden="true"><span class="nav-project-more">•••</span></span></button></section>
 
-        <section class="nav-conversations" aria-label="对话"><div class="nav-conversations-title"><span>对话</span><button class="nav-conversation-add" id="addConversation" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="nav-conversation-list"><button class="nav-item nav-work-thread open-work" type="button" data-project-thread="work"><span class="nav-label">客户沟通初步方案</span><span class="nav-thread-status">执行中</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="materials"><span class="nav-label">客户沟通材料</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="boundary"><span class="nav-label">方案边界讨论</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="source"><span class="nav-label">来源引用方式</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button></div></section>
+        <section class="nav-conversations" aria-label="对话"><div class="nav-conversations-title"><span>对话</span><button class="nav-conversation-add" id="addConversation" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div><div class="nav-conversation-list"><button class="nav-item nav-conversation-item nav-work-thread" type="button" data-chat="task"><span class="nav-label">客户沟通初步方案</span><span class="nav-thread-status">执行中</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="materials"><span class="nav-label">客户沟通材料</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="boundary"><span class="nav-label">方案边界讨论</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="source"><span class="nav-label">来源引用方式</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button></div></section>
 
         <div class="nav-spacer"></div>
         <button class="nav-item" type="button" data-view="settings">
@@ -2387,6 +2407,7 @@
           <div class="chat-layout">
             <aside class="chat-thread-list">
               <div class="chat-thread-list-head"><div class="collection-label">对话项目</div><div class="chat-project-filter"><select id="chatProjectFilter" aria-label="筛选对话项目"><option value="all">全部项目</option><option value="storage">工商储方案</option><option value="none">未绑定项目</option></select><button id="manageChatProjects" type="button" aria-label="管理对话项目">•••</button></div><input class="chat-thread-search" id="chatThreadSearch" type="search" placeholder="搜索标题或消息" aria-label="搜索对话"><span class="chat-search-note" id="chatSearchNote">1–2 字搜索标题，3 字以上搜索消息全文</span></div>
+              <button class="chat-thread" type="button" data-chat="task"><div class="chat-thread-line"><span class="chat-thread-title">客户沟通初步方案</span><span class="chat-thread-time">执行中</span></div><div class="chat-thread-preview">正在归并资料并整理缺失项…</div></button>
               <button class="chat-thread active" type="button" data-chat="materials"><div class="chat-thread-line"><span class="chat-thread-title">客户沟通材料</span><span class="chat-thread-time">刚刚</span></div><div class="chat-thread-preview">把现有资料整理成沟通提纲…</div></button>
               <button class="chat-thread" type="button" data-chat="boundary"><div class="chat-thread-line"><span class="chat-thread-title">方案边界讨论</span><span class="chat-thread-time">今天</span></div><div class="chat-thread-preview">缺失信息应如何向客户说明…</div></button>
               <button class="chat-thread" type="button" data-chat="source"><div class="chat-thread-line"><span class="chat-thread-title">来源引用方式</span><span class="chat-thread-time">昨天</span></div><div class="chat-thread-preview">专业判断如何保留文件来源…</div></button>
@@ -2398,13 +2419,13 @@
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
                   <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
                   <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-feature-open="chat-events"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-feature-open="distill-skill"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-md"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-html"><span>导出 HTML</span><span>.html</span></button></div></div>
-                  <button class="secondary-button" id="chatToWork" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>转为任务</span></button>
+                  <button class="secondary-button" id="chatToWork" type="button"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>设为任务</span></button>
                 </div>
               </header>
               <div class="chat-messages" id="chatMessages">
                 <div class="message-row user"><div class="message-copy">把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。</div></div>
                 <div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true">S</span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div></div>
-                <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为任务</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>
+                <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>
               </div>
               <div class="chat-compose-wrap"><div class="chat-compose"><div class="chat-command-popover" id="chatCommandPopover" hidden></div><div class="chat-attachments" id="chatAttachments"></div><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" id="chatAttach" type="button">＋ 附件</button><button class="chat-mini-tool" id="chatVoice" type="button">语音</button><button class="chat-mini-tool" id="chatSkill" type="button">/ 技能</button><button class="chat-mini-tool" id="chatContext" type="button">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button" aria-label="发送"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button></div></div></div>
             </div>
@@ -3814,15 +3835,42 @@
       });
 
       var chatThreads = {
-        materials: { title: '客户沟通材料', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。' },
-        boundary: { title: '方案边界讨论', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '缺失信息应该怎么向客户说明？', reply: '可以把已知事实、缺失信息和需要客户确认的事项分开列出，避免把假设写成结论。' },
-        source: { title: '来源引用方式', projectKey: 'storage', project: '工商储方案 · 保留原对话', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
+        task: { title: '客户沟通初步方案', projectKey: 'storage', project: '工商储方案 · 任务执行中', user: '根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。', reply: '目标已设为任务。我已匹配小堵负责、财研协作，并会在这段对话中持续同步计划、执行状态和可审阅结果。', isTask: true, taskState: 'running' },
+        waiting: { title: '需求参数缺口整理', projectKey: 'storage', project: '工商储方案 · 等待你确认', user: '先整理现有资料中的参数缺口，无法核验的内容不要补全。', reply: '已完成资料归并。当前有两项现场信息无法从项目文件中核验，需要你确认后再继续生成沟通方案。', isTask: true, taskState: 'waiting' },
+        draft: { title: '客户沟通提纲', projectKey: 'storage', project: '工商储方案 · 任务草稿', user: '把客户沟通提纲先保存为任务，稍后补充资料再开始。', reply: '任务草稿已保存在当前对话中，目标、项目和专家范围都可以在开始前继续调整。', isTask: true, taskState: 'draft' },
+        completed: { title: '项目资料来源清单', projectKey: 'storage', project: '工商储方案 · 已完成', user: '整理这次沟通方案使用过的项目资料和来源，形成可审阅清单。', reply: '任务已完成。所有引用均指向项目中的真实文件，无法核验的内容已单独标注，没有补写专业参数。', isTask: true, taskState: 'completed' },
+        materials: { title: '客户沟通材料', projectKey: 'storage', project: '工商储方案 · 对话', user: '把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。', reply: '可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以直接在当前对话中设为任务。' },
+        boundary: { title: '方案边界讨论', projectKey: 'storage', project: '工商储方案 · 对话', user: '缺失信息应该怎么向客户说明？', reply: '可以把已知事实、缺失信息和需要客户确认的事项分开列出，避免把假设写成结论。' },
+        source: { title: '来源引用方式', projectKey: 'storage', project: '工商储方案 · 对话', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
       };
+
+      function taskFlowMarkup(thread) {
+        var configs = {
+          running: { state: '执行中', summary: '小堵负责 · 财研协作', result: '', primary: '继续查看', steps: [['check', '读取并归并项目资料', '已完成'], ['progress', '整理沟通结构与参数缺口', '执行中'], ['pending', '形成可审阅结论与成果', '未开始']] },
+          waiting: { state: '等待你确认', summary: '已暂停执行并保留上下文', result: '需要补充：并网条件、现场可用容量。确认前不会自行补全。', primary: '补充资料', steps: [['check', '读取项目资料', '已完成'], ['check', '识别无法核验的参数', '已完成'], ['pending', '继续生成沟通方案', '等待确认']] },
+          draft: { state: '草稿', summary: '尚未开始，不会调用专家或工具', result: '范围：整理客户沟通提纲；边界：不补写专业参数和收益数据。', primary: '开始任务', steps: [['pending', '确认目标与项目范围', '待开始'], ['pending', '匹配负责人和协作专家', '待开始'], ['pending', '执行并形成结果', '待开始']] },
+          completed: { state: '已完成', summary: '结论和来源已可审阅', result: '结论：已形成项目资料来源清单，并标出 2 项仍待用户确认的现场输入。', primary: '查看成果', steps: [['check', '归并项目文件', '已完成'], ['check', '核对引用与知识边界', '已完成'], ['check', '生成来源清单', '已完成']] }
+        };
+        var config = configs[thread.taskState] || configs.running;
+        var icon = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7"/></svg>';
+        var pendingIcon = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>';
+        var progressIcon = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v7l4 2"/><circle cx="12" cy="12" r="8"/></svg>';
+        var steps = config.steps.map(function (step) {
+          var stepIcon = step[0] === 'check' ? icon : (step[0] === 'progress' ? progressIcon : pendingIcon);
+          return '<div class="task-flow-step"><span class="task-flow-step-icon">' + stepIcon + '</span><span>' + step[1] + '</span><span class="task-flow-step-status">' + step[2] + '</span></div>';
+        }).join('');
+        return '<section class="task-flow" data-task-state="' + thread.taskState + '">' +
+          '<div class="task-flow-head"><div class="task-flow-title"><strong>任务进度</strong><span>' + config.summary + '</span></div><span class="task-flow-state">' + config.state + '</span></div>' +
+          '<div class="task-flow-steps">' + steps + '</div>' +
+          (config.result ? '<div class="task-flow-result">' + config.result + '</div>' : '') +
+          '<div class="task-flow-foot"><span class="task-flow-meta">全部过程保留在当前对话</span><span class="task-flow-actions"><button class="task-flow-action" type="button" data-task-detail>执行详情</button><button class="task-flow-action primary" type="button" data-task-primary>' + config.primary + '</button></span></div>' +
+          '</section>';
+      }
 
       function chatMessageMarkup(thread) {
         return '<div class="message-row user"><div class="message-copy">' + thread.user + '</div></div>' +
-          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true">S</span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
-          '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>转为任务</strong><span>保留这段 Chat，只建立关联，不移动或覆盖原始内容。</span></span><span class="chat-work-hint-arrow">›</span></button>';
+          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true">S</span><div class="assistant-message"><div class="message-status">Soul · ' + (thread.isTask ? '任务状态已更新' : '已完成思考') + '</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
+          (thread.isTask ? taskFlowMarkup(thread) : '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>');
       }
 
       function renderChatThread(key) {
@@ -3833,6 +3881,8 @@
         document.getElementById('chatTitle').textContent = thread.title;
         document.getElementById('chatProject').textContent = thread.project;
         document.getElementById('chatMessages').innerHTML = chatMessageMarkup(thread);
+        document.getElementById('chatToWork').dataset.mode = thread.isTask ? 'detail' : 'promote';
+        document.querySelector('#chatToWork span').textContent = thread.isTask ? '任务详情' : '设为任务';
         document.getElementById('chatMessages').scrollTop = 0;
       }
 
@@ -3841,6 +3891,9 @@
       });
       document.querySelectorAll('.nav-conversation-item').forEach(function (button) {
         button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.chat); });
+      });
+      document.querySelectorAll('[data-open-task-thread]').forEach(function (button) {
+        button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.openTaskThread); });
       });
 
       function filterChatThreads() {

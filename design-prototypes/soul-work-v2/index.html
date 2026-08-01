@@ -890,6 +890,72 @@
     .dashboard-zero h2 { margin: 0; font-size: 18px; font-weight: 640; letter-spacing: -.02em; }
     .dashboard-zero p { margin: 9px 0 18px; color: var(--tertiary); font-size: 14px; line-height: 1.65; }
     .dashboard-zero-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .dashboard-catalog[hidden], .dashboard-detail[hidden], .dashboard-create-layer[hidden], .dashboard-list[hidden], .dashboard-card[hidden] { display: none; }
+    .dashboard-card { width: 100%; overflow: hidden; padding: 0; border: 1px solid var(--line-strong); border-radius: 16px; background: #fff; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(20,19,22,.035); transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), transform 160ms var(--ease); }
+    .dashboard-card:hover { border-color: #c8c5bf; box-shadow: 0 10px 24px rgba(20,19,22,.07); transform: translateY(-2px); }
+    .dashboard-card-preview { height: 230px; display: grid; grid-template-columns: 1.25fr .75fr; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 18px; border-bottom: 1px solid var(--line); background: #f7f7f6; }
+    .dashboard-card-preview span { display: block; border: 1px solid #dedfe3; border-radius: 10px; background: #fff; }
+    .dashboard-card-preview span:first-child { grid-row: span 2; background: linear-gradient(155deg, #f8fbff, #e9f1ff); }
+    .dashboard-card-preview span:nth-child(2) { background: #f4f1eb; }
+    .dashboard-card-preview span:nth-child(3) { background: #f0f7f4; }
+    .dashboard-card-copy { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 18px 20px 20px; }
+    .dashboard-card-copy strong { display: block; font-size: 18px; line-height: 1.35; }
+    .dashboard-card-copy small { display: block; margin-top: 6px; color: var(--tertiary); font-size: 13px; line-height: 1.45; }
+    .dashboard-card-copy > span:last-child { color: var(--tertiary); font-size: 13px; white-space: nowrap; }
+    .dashboard-detail { min-height: 0; overflow: auto; padding: 22px 28px 48px; }
+    .dashboard-detail-inner { width: min(1160px, 100%); margin: 0 auto; }
+    .dashboard-detail-head { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+    .dashboard-detail-identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+    .dashboard-back { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--secondary); cursor: pointer; }
+    .dashboard-back:hover { color: var(--ink); background: #f7f7f6; }
+    .dashboard-detail-head h2 { margin: 0; font-size: 20px; line-height: 1.35; }
+    .dashboard-detail-head p { margin: 4px 0 0; color: var(--tertiary); font-size: 13px; }
+    .dashboard-detail-actions { display: flex; align-items: center; gap: 7px; }
+    .dashboard-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense; gap: 12px; }
+    .dashboard-widget { min-width: 0; min-height: 188px; padding: 16px 17px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(20,19,22,.025); }
+    .dashboard-widget.span-2 { grid-column: span 2; }
+    .dashboard-widget-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 30px; margin-bottom: 12px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+    .dashboard-widget-head h3 { margin: 0; font-size: 14px; line-height: 1.35; }
+    .dashboard-widget-note { color: var(--tertiary); font-size: 12px; }
+    .dashboard-task-row, .dashboard-output-row, .dashboard-person-row { min-height: 44px; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 9px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .dashboard-output-row, .dashboard-person-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+    .dashboard-task-row:last-child, .dashboard-output-row:last-child, .dashboard-person-row:last-child { border-bottom: 0; }
+    .dashboard-task-row small, .dashboard-output-row small, .dashboard-person-row small { display: block; margin-top: 3px; color: var(--tertiary); font-size: 12px; }
+    .dashboard-task-row > span:last-child, .dashboard-output-row > span:last-child, .dashboard-person-row > span:last-child { color: var(--secondary); font-size: 12px; }
+    .dashboard-progress-list { display: grid; gap: 13px; }
+    .dashboard-progress-item { display: grid; gap: 7px; }
+    .dashboard-progress-copy { display: flex; justify-content: space-between; gap: 12px; color: var(--secondary); font-size: 13px; }
+    .dashboard-progress-track { height: 6px; overflow: hidden; border-radius: 4px; background: #e9e9e7; }
+    .dashboard-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
+    .dashboard-widget-empty { min-height: 104px; display: grid; place-items: center; color: var(--tertiary); font-size: 13px; line-height: 1.6; text-align: center; }
+    .dashboard-create-layer { position: absolute; inset: 104px 0 0; z-index: 8; overflow: auto; padding: 28px 32px 56px; background: rgba(247,246,243,.98); backdrop-filter: blur(14px); }
+    .dashboard-create-sheet { width: min(980px, 100%); margin: 0 auto; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; background: #fff; box-shadow: 0 20px 60px rgba(20,19,22,.12); }
+    .dashboard-create-head { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+    .dashboard-create-head h2 { margin: 0; font-size: 18px; }
+    .dashboard-create-head p { margin: 5px 0 0; color: var(--tertiary); font-size: 13px; }
+    .dashboard-create-close { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--tertiary); font-size: 20px; cursor: pointer; }
+    .dashboard-create-close:hover { background: #f1f0ed; color: var(--ink); }
+    .dashboard-create-tabs { height: 46px; display: flex; align-items: stretch; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+    .dashboard-create-tab { position: relative; padding: 0 13px; border: 0; background: transparent; color: var(--tertiary); font-size: 13px; cursor: pointer; }
+    .dashboard-create-tab.active { color: var(--ink); font-weight: 650; }
+    .dashboard-create-tab.active::after { content: ""; position: absolute; left: 13px; right: 13px; bottom: -1px; height: 2px; background: var(--blue); }
+    .dashboard-create-body { padding: 22px; }
+    .dashboard-create-panel { display: none; }
+    .dashboard-create-panel.active { display: block; animation: fadeIn 160ms var(--ease); }
+    .dashboard-template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .dashboard-template { min-height: 210px; display: grid; grid-template-rows: 112px auto; overflow: hidden; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: left; cursor: pointer; transition: border-color 150ms var(--ease), box-shadow 150ms var(--ease), transform 150ms var(--ease); }
+    .dashboard-template:hover { border-color: #bfc9da; box-shadow: 0 8px 20px rgba(20,19,22,.07); transform: translateY(-2px); }
+    .dashboard-template-preview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 12px; background: #f7f8fa; }
+    .dashboard-template-preview span { border: 1px solid #dfe2e7; border-radius: 7px; background: #fff; }
+    .dashboard-template-preview span:first-child { grid-row: span 2; background: #edf4ff; }
+    .dashboard-template-copy { padding: 13px 14px 15px; }
+    .dashboard-template-copy strong { display: block; font-size: 14px; }
+    .dashboard-template-copy small { display: block; margin-top: 6px; color: var(--tertiary); font-size: 12px; line-height: 1.5; }
+    .dashboard-dialog-create { width: min(760px, 100%); margin: 0 auto; }
+    .dashboard-dialog-message { width: fit-content; max-width: 84%; margin-bottom: 16px; padding: 11px 13px; border-radius: 12px 12px 12px 4px; background: #f0f2f6; color: #4a4a50; font-size: 14px; line-height: 1.6; }
+    .dashboard-dialog-create textarea { width: 100%; min-height: 132px; padding: 14px 15px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 12px; outline: 0; background: #fbfbfa; color: var(--ink); font-size: 14px; line-height: 1.65; }
+    .dashboard-dialog-create textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,111,221,.12); }
+    .dashboard-dialog-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
 
     .collection-rail {
       min-width: 0;
@@ -1890,17 +1956,55 @@
           <div class="dashboard-catalog">
             <div class="dashboard-catalog-inner">
               <div class="dashboard-catalog-head"><h2>我的看板</h2><span class="dashboard-count" id="dashboardCount">0 个</span></div>
-              <div class="dashboard-list" id="dashboardList" hidden></div>
+              <div class="dashboard-list" id="dashboardList" hidden>
+                <button class="dashboard-card" id="dashboardCard" type="button" hidden>
+                  <span class="dashboard-card-preview" aria-hidden="true"><span></span><span></span><span></span></span>
+                  <span class="dashboard-card-copy"><span><strong id="dashboardCardTitle">任务指挥台</strong><small>当前项目 · 5 个组件</small></span><span>刚刚更新</span></span>
+                </button>
+              </div>
               <section class="dashboard-zero" id="dashboardZero" aria-labelledby="dashboardZeroTitle">
                 <div class="dashboard-zero-content">
                   <svg class="dashboard-zero-art" viewBox="0 0 108 92" aria-hidden="true"><rect x="5" y="7" width="44" height="31" rx="7"/><rect x="59" y="7" width="44" height="31" rx="7"/><rect x="5" y="48" width="44" height="31" rx="7"/><rect x="59" y="48" width="44" height="31" rx="7"/><path d="M54 35v22M43 46h22"/></svg>
                   <h2 id="dashboardZeroTitle">建立你的个人工作台</h2>
                   <p>从任务、项目、成果和自动任务中选择组件；看板只整理信息，不改变原始数据。</p>
-                  <div class="dashboard-zero-actions"><button class="secondary-button" type="button" data-dashboard-create="dialog">用对话生成</button><button class="primary-button" type="button" data-dashboard-create="blank">从空白开始</button></div>
+                  <div class="dashboard-zero-actions"><button class="secondary-button" type="button" data-dashboard-create="dialog">用对话生成</button><button class="primary-button" type="button" data-dashboard-create="blank">从模板开始</button></div>
                 </div>
               </section>
             </div>
           </div>
+          <section class="dashboard-detail" id="dashboardDetail" hidden>
+            <div class="dashboard-detail-inner">
+              <header class="dashboard-detail-head">
+                <div class="dashboard-detail-identity"><button class="dashboard-back" id="dashboardBack" type="button" aria-label="返回我的看板"><svg class="icon" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button><div><h2 id="dashboardDetailTitle">任务指挥台</h2><p>全部项目 · 组件数据来自 Soul 任务、项目与自动任务</p></div></div>
+                <div class="dashboard-detail-actions"><button class="secondary-button" type="button" id="dashboardRefresh">刷新</button><button class="primary-button" type="button" id="dashboardEdit">编辑看板</button></div>
+              </header>
+              <div class="dashboard-grid" id="dashboardGrid">
+                <article class="dashboard-widget span-2" data-widget="tasks"><header class="dashboard-widget-head"><h3>任务状态</h3><span class="dashboard-widget-note">3 项任务</span></header><div class="dashboard-task-row"><span class="status-dot running"></span><span><strong>客户沟通初步方案</strong><small>小堵、财研 · 工商储方案</small></span><span>执行中</span></div><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>需求参数缺口整理</strong><small>等待补充现场资料</small></span><span>待确认</span></div><div class="dashboard-task-row"><span class="status-dot"></span><span><strong>客户沟通提纲</strong><small>尚未匹配专家</small></span><span>草稿</span></div></article>
+                <article class="dashboard-widget" data-widget="attention"><header class="dashboard-widget-head"><h3>待我处理</h3><span class="dashboard-widget-note">2 项</span></header><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>确认成果结构</strong><small>客户沟通初步方案</small></span><span>打开</span></div><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>补充现场资料</strong><small>缺少可核验输入</small></span><span>打开</span></div></article>
+                <article class="dashboard-widget" data-widget="project"><header class="dashboard-widget-head"><h3>项目推进</h3><span class="dashboard-widget-note">工商储方案</span></header><div class="dashboard-progress-list"><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>资料归并</span><span>已完成</span></div><div class="dashboard-progress-track"><span style="width:100%"></span></div></div><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>方案整理</span><span>进行中</span></div><div class="dashboard-progress-track"><span style="width:62%"></span></div></div><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>成果确认</span><span>未开始</span></div><div class="dashboard-progress-track"><span style="width:8%"></span></div></div></article>
+                <article class="dashboard-widget" data-widget="outputs"><header class="dashboard-widget-head"><h3>最近成果</h3><span class="dashboard-widget-note">outputs/</span></header><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><strong>客户沟通提纲.md</strong><small>当前任务 · 成果正本</small></span><span>打开</span></div><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><strong>资料缺口清单.md</strong><small>等待用户确认</small></span><span>查看</span></div></article>
+                <article class="dashboard-widget" data-widget="automation"><header class="dashboard-widget-head"><h3>自动任务</h3><span class="dashboard-widget-note">最近触发</span></header><div class="dashboard-widget-empty">暂无已启用规则<br>创建后每次触发会生成独立任务</div></article>
+              </div>
+            </div>
+          </section>
+          <section class="dashboard-create-layer" id="dashboardCreateLayer" hidden>
+            <div class="dashboard-create-sheet">
+              <header class="dashboard-create-head"><div><h2>创建个人工作台</h2><p>选择模板，或告诉 Soul 你希望长期关注什么。</p></div><button class="dashboard-create-close" id="dashboardCreateClose" type="button" aria-label="关闭创建面板">×</button></header>
+              <nav class="dashboard-create-tabs" role="tablist" aria-label="看板创建方式"><button class="dashboard-create-tab active" type="button" role="tab" aria-selected="true" data-dashboard-mode="template">模板创建</button><button class="dashboard-create-tab" type="button" role="tab" aria-selected="false" data-dashboard-mode="dialog">对话创建</button></nav>
+              <div class="dashboard-create-body">
+                <section class="dashboard-create-panel active" data-dashboard-create-panel="template">
+                  <div class="dashboard-template-grid">
+                    <button class="dashboard-template" type="button" data-dashboard-template="任务指挥台"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>任务指挥台</strong><small>任务状态、待确认事项、项目推进、成果和自动任务。</small></span></button>
+                    <button class="dashboard-template" type="button" data-dashboard-template="项目推进台"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>项目推进台</strong><small>按项目查看任务、资料边界、专家协作与交付成果。</small></span></button>
+                    <button class="dashboard-template" type="button" data-dashboard-template="自动任务监控"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>自动任务监控</strong><small>集中查看规则状态、触发记录、等待确认与独立结果。</small></span></button>
+                  </div>
+                </section>
+                <section class="dashboard-create-panel" data-dashboard-create-panel="dialog">
+                  <div class="dashboard-dialog-create"><div class="dashboard-dialog-message">你希望每天打开 Soul 时先看到哪些信息？我会先生成可编辑草案，不会执行任务或修改项目。</div><textarea id="dashboardDialogPrompt" aria-label="描述个人工作台">帮我建立一个任务指挥台，优先展示待我确认的事项、正在执行的任务、最近成果和自动任务。</textarea><div class="dashboard-dialog-actions"><button class="primary-button" id="dashboardDialogGenerate" type="button">生成看板草案</button></div></div>
+                </section>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="view workspace-page" id="projectView">
@@ -2970,9 +3074,78 @@
         navItems.forEach(function (item) { item.classList.toggle('active', item.dataset.view === name); });
       }
 
+      var dashboardCatalog = document.querySelector('#dashboardView .dashboard-catalog');
+      var dashboardZero = document.getElementById('dashboardZero');
+      var dashboardList = document.getElementById('dashboardList');
+      var dashboardCard = document.getElementById('dashboardCard');
+      var dashboardCardTitle = document.getElementById('dashboardCardTitle');
+      var dashboardCount = document.getElementById('dashboardCount');
+      var dashboardDetail = document.getElementById('dashboardDetail');
+      var dashboardDetailTitle = document.getElementById('dashboardDetailTitle');
+      var dashboardCreateLayer = document.getElementById('dashboardCreateLayer');
+
+      function setDashboardCreateMode(mode) {
+        document.querySelectorAll('[data-dashboard-mode]').forEach(function (tab) {
+          var active = tab.dataset.dashboardMode === mode;
+          tab.classList.toggle('active', active);
+          tab.setAttribute('aria-selected', String(active));
+        });
+        document.querySelectorAll('[data-dashboard-create-panel]').forEach(function (panel) {
+          panel.classList.toggle('active', panel.dataset.dashboardCreatePanel === mode);
+        });
+      }
+
+      function openDashboardCreate(mode) {
+        dashboardCreateLayer.hidden = false;
+        setDashboardCreateMode(mode === 'dialog' ? 'dialog' : 'template');
+        if (mode === 'dialog') setTimeout(function () { document.getElementById('dashboardDialogPrompt').focus(); }, 80);
+      }
+
+      function closeDashboardCreate() { dashboardCreateLayer.hidden = true; }
+
+      function showDashboardCatalog() {
+        dashboardDetail.hidden = true;
+        dashboardCatalog.hidden = false;
+      }
+
+      function showDashboardDetail(title) {
+        dashboardCatalog.hidden = true;
+        dashboardDetail.hidden = false;
+        dashboardDetailTitle.textContent = title;
+        dashboardDetail.scrollTop = 0;
+      }
+
+      function createDashboard(title) {
+        dashboardCardTitle.textContent = title;
+        dashboardDetailTitle.textContent = title;
+        dashboardZero.hidden = true;
+        dashboardList.hidden = false;
+        dashboardCard.hidden = false;
+        dashboardCount.textContent = '1 个';
+        closeDashboardCreate();
+        showDashboardDetail(title);
+        showToast('已创建看板草案「' + title + '」');
+      }
+
       document.querySelectorAll('[data-dashboard-create]').forEach(function (button) {
-        button.addEventListener('click', function () { showToast(button.dataset.dashboardCreate === 'dialog' ? '已选择对话创建方式' : '已选择空白看板'); });
+        button.addEventListener('click', function () { openDashboardCreate(button.dataset.dashboardCreate); });
       });
+      document.querySelectorAll('[data-dashboard-mode]').forEach(function (tab) {
+        tab.addEventListener('click', function () { setDashboardCreateMode(tab.dataset.dashboardMode); });
+      });
+      document.querySelectorAll('[data-dashboard-template]').forEach(function (template) {
+        template.addEventListener('click', function () { createDashboard(template.dataset.dashboardTemplate); });
+      });
+      document.getElementById('dashboardCreateClose').addEventListener('click', closeDashboardCreate);
+      document.getElementById('dashboardDialogGenerate').addEventListener('click', function () {
+        var prompt = document.getElementById('dashboardDialogPrompt').value.trim();
+        if (!prompt) { showToast('请先描述希望长期关注的信息'); return; }
+        createDashboard('我的任务工作台');
+      });
+      dashboardCard.addEventListener('click', function () { showDashboardDetail(dashboardCardTitle.textContent); });
+      document.getElementById('dashboardBack').addEventListener('click', showDashboardCatalog);
+      document.getElementById('dashboardRefresh').addEventListener('click', function () { showToast('看板数据已刷新'); });
+      document.getElementById('dashboardEdit').addEventListener('click', function () { showToast('编辑模式将在下一步启用'); });
 
       var detailRailOpen = false;
       var detailRailToggle = document.getElementById('detailRailToggle');

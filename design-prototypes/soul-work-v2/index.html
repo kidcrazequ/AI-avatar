@@ -2123,8 +2123,8 @@
                     </section>
                     <section class="flat-section">
                       <div class="flat-section-head"><h2 class="flat-section-title">最近任务</h2><button class="flat-section-note" type="button" data-project-tab="works">查看全部</button></div>
-                      <button class="entity-row project-open-work" type="button"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">负责人 小堵 · 协作 财研</span></span><span class="entity-state"><span class="status-dot running"></span>执行中</span></button>
-                      <button class="entity-row project-open-work" type="button"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">负责人 小堵</span></span><span class="entity-state"><span class="status-dot waiting"></span>等待确认</span></button>
+                      <button class="entity-row project-open-work" type="button" data-project-task="task"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">负责人 小堵 · 协作 财研</span></span><span class="entity-state">执行中</span></button>
+                      <button class="entity-row project-open-work" type="button" data-project-task="waiting"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">负责人 小堵</span></span><span class="entity-state">等待确认</span></button>
                     </section>
                   </div>
                   <div class="page-column">
@@ -2154,8 +2154,8 @@
               <section class="section-panel" data-project-panel="works">
                 <header class="functional-head"><div><h2>项目任务</h2><p>每项任务都可独立执行、验收、追踪和打开成果。</p></div><button class="primary-button project-new-work" type="button">新建任务</button></header>
                 <div class="project-work-table">
-                  <button class="entity-row project-open-work" type="button"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">今天 · 小堵、财研</span></span><span class="entity-state"><span class="status-dot running"></span>执行中</span></button>
-                  <button class="entity-row project-open-work" type="button"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">今天 · 小堵</span></span><span class="entity-state"><span class="status-dot waiting"></span>等待确认</span></button>
+                  <button class="entity-row project-open-work" type="button" data-project-task="task"><span><span class="entity-title">客户沟通初步方案</span><span class="entity-meta">今天 · 小堵、财研</span></span><span class="entity-state">执行中</span></button>
+                  <button class="entity-row project-open-work" type="button" data-project-task="waiting"><span><span class="entity-title">需求参数缺口整理</span><span class="entity-meta">今天 · 小堵</span></span><span class="entity-state">等待确认</span></button>
                   <button class="entity-row project-draft-work" type="button"><span><span class="entity-title">客户沟通提纲</span><span class="entity-meta">昨天 · 尚未路由</span></span><span class="entity-state"><span class="status-dot"></span>草稿</span></button>
                 </div>
               </section>
@@ -2330,8 +2330,8 @@
                         <div class="expert-project-use"><span><strong>工商储方案</strong><p>默认负责人 · 自动路由优先</p></span><span class="expert-installed-badge">负责人</span></div>
                       </section>
                       <section class="expert-surface">
-                        <div class="expert-card-head"><h3 class="expert-card-title">最近参与的任务</h3><button type="button" data-view="work">全部任务</button></div>
-                        <button class="expert-recent-work" type="button" data-view="work"><span class="status-dot running"></span><span><strong>客户沟通初步方案</strong><small>负责人 · 当前项目</small></span><span>执行中</span></button>
+                        <div class="expert-card-head"><h3 class="expert-card-title">最近参与的任务</h3><button type="button" data-view="tasks">全部任务</button></div>
+                        <button class="expert-recent-work" type="button" data-open-task-thread="task"><span><strong>客户沟通初步方案</strong><small>负责人 · 当前项目</small></span><span>执行中</span></button>
                       </section>
                     </div>
                   </section>
@@ -2414,7 +2414,7 @@
             </aside>
             <div class="chat-main">
               <header class="chat-head">
-                <div><div class="chat-title" id="chatTitle">客户沟通材料</div><div class="chat-project" id="chatProject">工商储方案 · 保留原对话</div></div>
+                <div><div class="chat-title" id="chatTitle">客户沟通材料</div><div class="chat-project" id="chatProject">工商储方案 · 对话</div></div>
                 <div class="chat-head-actions">
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
                   <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
@@ -2763,7 +2763,7 @@
           <div class="feature-toolbar"><div><h3>长期记忆</h3><p>只保存用户明确确认的协作事实、偏好与长期上下文。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">记忆条目</button><button type="button">MEMORY.md</button></div></div>
           <div class="feature-grid">
             <section class="feature-card"><h4>协作偏好</h4><p>结论优先；涉及专业参数时标注来源；缺数据不自行补齐。</p><div class="feature-meta-line"><span class="feature-pill ready">用户已确认</span><span>长期有效</span></div></section>
-            <section class="feature-card"><h4>当前协作方式</h4><p>任务为主，Chat 为辅；需要持续执行和验收的请求转为任务。</p><div class="feature-meta-line"><span class="feature-pill">工作台偏好</span><span>可编辑</span></div></section>
+            <section class="feature-card"><h4>当前协作方式</h4><p>对话和任务共用一条消息流；需要持续执行时，直接在当前对话中设为任务。</p><div class="feature-meta-line"><span class="feature-pill">工作台偏好</span><span>可编辑</span></div></section>
             <section class="feature-card span-2"><h4>MEMORY.md 预览</h4><div class="feature-code" id="memoryPreview"># 长期记忆\n\n- 仅记录经用户确认的事实和偏好。\n- 专业参数、政策条文和工程判断必须返回知识库查证。\n- 对话中的临时推测不自动进入长期记忆。</div></section>
           </div>`
       });
@@ -2805,7 +2805,7 @@
           <div class="feature-grid">
             <section class="feature-card"><h4>近期路线</h4><p>完善工商储方案需求澄清与交付结构，使每项结论都能回到来源。</p><div class="feature-meta-line"><span class="feature-pill ready">进行中</span><span>关联 2 项任务</span></div></section>
             <section class="feature-card"><h4>待确认承诺</h4><p>对客户材料不补充未经确认的专业参数或收益数据。</p><div class="feature-meta-line"><span class="feature-pill waiting">待用户确认</span><span>今天</span></div></section>
-            <section class="feature-card span-2"><h4>收件箱</h4><div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>任务需要补充资料</strong><small>客户沟通初步方案 · 2 个参数缺口</small></span><span class="feature-pill waiting">待处理</span></button><button class="feature-list-row" type="button" data-view="project"><span><strong>项目文件已更新</strong><small>客户需求说明.pdf · 等待知识检查</small></span><span class="feature-pill">新资料</span></button></div></section>
+            <section class="feature-card span-2"><h4>收件箱</h4><div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="chat" data-chat="waiting"><span><strong>任务需要补充资料</strong><small>客户沟通初步方案 · 2 个参数缺口</small></span><span class="feature-pill waiting">待处理</span></button><button class="feature-list-row" type="button" data-view="project"><span><strong>项目文件已更新</strong><small>客户需求说明.pdf · 等待知识检查</small></span><span class="feature-pill">新资料</span></button></div></section>
           </div>`
       });
 
@@ -2873,7 +2873,7 @@
         content: `
           <div class="feature-toolbar"><div><h3>使用概览</h3><p>数量从本地关联记录读取；不把运行数据写回专家包正本。</p></div><span class="feature-pill">当前专家</span></div>
           <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联任务</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>自动任务</span></div></div>
-          <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="work"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">任务</span></button><button class="feature-list-row" type="button" data-view="chat"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · 任务类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
+          <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="chat" data-chat="task"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">任务</span></button><button class="feature-list-row" type="button" data-view="chat" data-chat="materials"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · 任务类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
       });
 
       registerFeature('office', {
@@ -2881,7 +2881,7 @@
         actions: '<button class="quiet-button primary" type="button" data-view="home">交给该专家</button>',
         content: `
           <div class="feature-toolbar"><div><h3>今日任务</h3><p>以任务为单位组织执行，不把办公室状态混入专家知识。</p></div><span class="feature-pill ready">可接新任务</span></div>
-          <div class="feature-grid"><section class="feature-card"><h4>正在执行</h4><p>客户沟通初步方案</p><div class="feature-meta-line"><span class="feature-pill ready">Run 01</span><span>与财研协作</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">打开任务</button></section><section class="feature-card"><h4>等待用户</h4><p>2 项输入需要确认，已保留当前执行上下文。</p><div class="feature-meta-line"><span class="feature-pill waiting">待处理</span><span>不会自动补全</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="work">查看问题</button></section></div>`
+          <div class="feature-grid"><section class="feature-card"><h4>正在执行</h4><p>客户沟通初步方案</p><div class="feature-meta-line"><span class="feature-pill ready">Run 01</span><span>与财研协作</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="chat" data-chat="task">打开任务</button></section><section class="feature-card"><h4>等待用户</h4><p>2 项输入需要确认，已保留当前执行上下文。</p><div class="feature-meta-line"><span class="feature-pill waiting">待处理</span><span>不会自动补全</span></div><button class="quiet-button" style="margin-top:14px" type="button" data-view="chat" data-chat="waiting">查看问题</button></section></div>`
       });
 
       registerFeature('packages', {
@@ -2987,7 +2987,11 @@
         var linkedFeature = event.target.closest('[data-feature-open]');
         if (linkedFeature) { openFeature(linkedFeature.dataset.featureOpen); return; }
         var linkedView = event.target.closest('[data-view]');
-        if (linkedView) { switchView(linkedView.dataset.view); return; }
+        if (linkedView) {
+          switchView(linkedView.dataset.view);
+          if (linkedView.dataset.chat) renderChatThread(linkedView.dataset.chat);
+          return;
+        }
         var segmentedButton = event.target.closest('[data-segmented] button');
         if (segmentedButton) {
           segmentedButton.parentElement.querySelectorAll('button').forEach(function (button) { button.classList.toggle('active', button === segmentedButton); });
@@ -3394,18 +3398,29 @@
         });
       });
 
-      document.querySelectorAll('[data-task-filter]').forEach(function (button) {
-        button.addEventListener('click', function () {
-          var filter = button.dataset.taskFilter;
-          document.querySelectorAll('[data-task-filter]').forEach(function (item) { item.classList.toggle('active', item === button); });
+      tasksView.addEventListener('click', function (event) {
+        var filterButton = event.target.closest('[data-task-filter]');
+        if (filterButton) {
+          var filter = filterButton.dataset.taskFilter;
+          document.querySelectorAll('[data-task-filter]').forEach(function (item) { item.classList.toggle('active', item === filterButton); });
           document.querySelectorAll('.task-overview-row').forEach(function (row) { row.hidden = filter !== 'all' && row.dataset.taskState !== filter; });
-        });
+          return;
+        }
+        var taskButton = event.target.closest('[data-open-task-thread]');
+        if (taskButton) { switchView('chat'); renderChatThread(taskButton.dataset.openTaskThread); }
       });
       document.getElementById('tasksNewButton').addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').focus(); });
 
       document.getElementById('startWork').addEventListener('click', function () {
-        switchView('work');
-        showToast('已匹配小堵为负责人、财研为协作专家，任务开始执行');
+        var goal = document.getElementById('goalInput').value.trim();
+        chatThreads.task.user = goal || '整理当前项目资料，形成一项可独立验收的任务。';
+        chatThreads.task.reply = '目标已设为任务。我已匹配小堵负责、财研协作，接下来会在这段对话中持续同步计划、执行状态和可审阅结果。';
+        chatThreads.task.taskState = 'running';
+        chatThreads.task.project = '工商储方案 · 任务执行中';
+        syncTaskThreadSurfaces('task', chatThreads.task);
+        switchView('chat');
+        renderChatThread('task');
+        showToast('任务已在当前对话中开始执行');
       });
 
       document.getElementById('homeAttach').addEventListener('click', function () {
@@ -3425,16 +3440,8 @@
         button.addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').value = '继续完善客户沟通提纲，并在开始前重新确认项目、专家和资料范围。'; document.getElementById('goalInput').focus(); showToast('草稿已载入，新执行不会覆盖历史内容'); });
       });
 
-      document.querySelectorAll('.open-work').forEach(function (button) {
-        button.addEventListener('click', function () {
-          switchView('work');
-          var projectThread = document.querySelector('[data-project-thread="work"]');
-          if (projectThread) projectThread.classList.add('active');
-        });
-      });
-
       document.querySelectorAll('.project-open-work').forEach(function (button) {
-        button.addEventListener('click', function () { switchView('work'); });
+        button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.projectTask || 'task'); });
       });
 
       var workSelection = {
@@ -3783,7 +3790,7 @@
         showToast(workTarget ? '已触发并创建独立任务' : '已触发 Chat 辅助提醒');
       });
       document.querySelector('.automation-panel-scroll').addEventListener('click', function (event) {
-        if (event.target.closest('[data-automation-open-work]')) switchView('work');
+        if (event.target.closest('[data-automation-open-work]')) { switchView('chat'); renderChatThread('task'); }
         if (event.target.closest('[data-automation-open-chat]')) switchView('chat');
         if (event.target.closest('[data-automation-open-result]')) setAutomationTab('results');
       });
@@ -3811,6 +3818,9 @@
 
       document.querySelectorAll('#expertsView [data-view]').forEach(function (button) {
         button.addEventListener('click', function () { switchView(button.dataset.view); });
+      });
+      document.querySelectorAll('#expertsView [data-open-task-thread]').forEach(function (button) {
+        button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.openTaskThread); });
       });
 
       document.getElementById('startWithExpert').addEventListener('click', function () {
@@ -3844,6 +3854,69 @@
         source: { title: '来源引用方式', projectKey: 'storage', project: '工商储方案 · 对话', user: '专业判断如何保留文件来源？', reply: '关键数据和判断应指向实际来源文件；如果没有可核验来源，就明确标为待确认。' }
       };
 
+      function taskStateCopy(state) {
+        return { running: '执行中', waiting: '待你确认', draft: '草稿', completed: '已完成' }[state] || '任务';
+      }
+
+      function updateTaskSummary() {
+        var rows = Array.from(document.querySelectorAll('.task-overview-row[data-dynamic-task="true"]'));
+        var counts = {
+          running: 1 + rows.filter(function (row) { return row.dataset.taskState === 'running'; }).length,
+          waiting: 2 + rows.filter(function (row) { return row.dataset.taskState === 'waiting'; }).length,
+          completed: 4 + rows.filter(function (row) { return row.dataset.taskState === 'completed'; }).length
+        };
+        var summaries = document.querySelectorAll('.task-summary-item strong');
+        if (summaries[0]) summaries[0].textContent = counts.running;
+        if (summaries[1]) summaries[1].textContent = counts.waiting;
+        if (summaries[2]) summaries[2].textContent = counts.completed;
+      }
+
+      function syncTaskThreadSurfaces(key, thread) {
+        var state = taskStateCopy(thread.taskState);
+        var overviewState = thread.taskState === 'draft' ? 'waiting' : thread.taskState;
+        var navButton = document.querySelector('.nav-conversation-list [data-chat="' + key + '"]');
+        if (!navButton) {
+          navButton = document.createElement('button');
+          navButton.className = 'nav-item nav-conversation-item nav-work-thread';
+          navButton.type = 'button';
+          navButton.dataset.chat = key;
+          var navList = document.querySelector('.nav-conversation-list');
+          navList.insertBefore(navButton, navList.querySelector('.nav-conversation-item:not(.nav-work-thread)'));
+          navButton.addEventListener('click', function () { switchView('chat'); renderChatThread(key); });
+        }
+        navButton.classList.add('nav-work-thread');
+        navButton.innerHTML = '<span class="nav-label">' + thread.title + '</span><span class="nav-thread-status">' + state + '</span>';
+
+        var listButton = document.querySelector('.chat-thread-list [data-chat="' + key + '"]');
+        if (!listButton) {
+          listButton = document.createElement('button');
+          listButton.className = 'chat-thread';
+          listButton.type = 'button';
+          listButton.dataset.chat = key;
+          var threadList = document.querySelector('.chat-thread-list');
+          threadList.insertBefore(listButton, threadList.querySelector('.chat-thread:not([data-task-thread="true"])'));
+          listButton.addEventListener('click', function () { renderChatThread(key); });
+        }
+        listButton.dataset.taskThread = 'true';
+        listButton.innerHTML = '<div class="chat-thread-line"><span class="chat-thread-title">' + thread.title + '</span><span class="chat-thread-time">' + state + '</span></div><div class="chat-thread-preview">任务与对话共用同一条消息流</div>';
+
+        var overviewRow = document.querySelector('.task-overview-row[data-open-task-thread="' + key + '"]');
+        if (!overviewRow) {
+          overviewRow = document.createElement('button');
+          overviewRow.className = 'task-overview-row';
+          overviewRow.type = 'button';
+          overviewRow.dataset.openTaskThread = key;
+          overviewRow.dataset.dynamicTask = 'true';
+          overviewRow.innerHTML = '<span class="task-overview-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h8M8 10h8M8 15h5"/><path d="M5 3h14v18H5z"/></svg></span><span class="task-overview-copy"><strong></strong><small></small></span><span class="task-overview-state"></span>';
+          document.querySelector('.task-overview-list').prepend(overviewRow);
+        }
+        overviewRow.dataset.taskState = overviewState;
+        overviewRow.querySelector('strong').textContent = thread.title;
+        overviewRow.querySelector('small').textContent = '工商储方案 · 当前对话 · 刚刚更新';
+        overviewRow.querySelector('.task-overview-state').textContent = state;
+        updateTaskSummary();
+      }
+
       function taskFlowMarkup(thread) {
         var configs = {
           running: { state: '执行中', summary: '小堵负责 · 财研协作', result: '', primary: '继续查看', steps: [['check', '读取并归并项目资料', '已完成'], ['progress', '整理沟通结构与参数缺口', '执行中'], ['pending', '形成可审阅结论与成果', '未开始']] },
@@ -3875,6 +3948,7 @@
 
       function renderChatThread(key) {
         var thread = chatThreads[key];
+        if (!thread) return;
         activeChatKey = key;
         document.querySelectorAll('.chat-thread').forEach(function (button) { button.classList.toggle('active', button.dataset.chat === key); });
         document.querySelectorAll('.nav-conversation-item').forEach(function (button) { button.classList.toggle('active', chatView.classList.contains('active') && button.dataset.chat === key); });
@@ -3892,9 +3966,8 @@
       document.querySelectorAll('.nav-conversation-item').forEach(function (button) {
         button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.chat); });
       });
-      document.querySelectorAll('[data-open-task-thread]').forEach(function (button) {
-        button.addEventListener('click', function () { switchView('chat'); renderChatThread(button.dataset.openTaskThread); });
-      });
+
+      ['task', 'waiting', 'draft', 'completed'].forEach(function (key) { syncTaskThreadSurfaces(key, chatThreads[key]); });
 
       function filterChatThreads() {
         var value = document.getElementById('chatThreadSearch').value.trim().toLowerCase();
@@ -3918,17 +3991,54 @@
         document.getElementById('chatTitle').textContent = '新对话';
         document.getElementById('chatProject').textContent = '工商储方案 · 新对话';
         document.getElementById('chatMessages').innerHTML = '<div class="chat-empty">从一个问题开始，需要持续执行时可直接在当前对话中设为任务。</div>';
+        document.getElementById('chatToWork').dataset.mode = 'promote';
+        document.querySelector('#chatToWork span').textContent = '设为任务';
         document.getElementById('chatInput').value = '';
         document.getElementById('chatInput').focus();
       });
 
+      function promoteActiveChatToTask() {
+        var key = activeChatKey;
+        var thread = key ? chatThreads[key] : null;
+        if (!thread) {
+          var prompt = document.getElementById('chatInput').value.trim();
+          if (!prompt) { showToast('先输入任务目标，再设为任务'); document.getElementById('chatInput').focus(); return; }
+          key = 'conversation-task';
+          thread = { title: '新任务', projectKey: 'storage', project: '工商储方案 · 任务草稿', user: prompt, reply: '这段对话已设为任务草稿。原消息、项目上下文和附件都保留在同一条消息流中。', isTask: true, taskState: 'draft' };
+          chatThreads[key] = thread;
+        } else {
+          thread.isTask = true;
+          thread.taskState = 'draft';
+          thread.project = '工商储方案 · 任务草稿';
+          thread.reply = '这段对话已设为任务草稿。原消息、项目上下文和附件都保留在同一条消息流中，开始前仍可调整目标和范围。';
+        }
+        syncTaskThreadSurfaces(key, thread);
+        switchView('chat');
+        renderChatThread(key);
+        showToast('已在当前对话中设为任务，没有创建重复记录');
+      }
+
       document.getElementById('chatToWork').addEventListener('click', function () {
-        document.getElementById('goalInput').value = '把当前对话中的目标整理为一项可独立验收的任务，保留原对话和来源。';
-        switchView('home');
-        showToast('已从 Chat 创建任务草稿，原对话保持不变');
+        if (document.getElementById('chatToWork').dataset.mode === 'detail') {
+          switchView('work');
+          showToast('已打开任务执行详情');
+          return;
+        }
+        promoteActiveChatToTask();
       });
       document.getElementById('chatMessages').addEventListener('click', function (event) {
-        if (event.target.closest('[data-chat-to-work]')) document.getElementById('chatToWork').click();
+        if (event.target.closest('[data-chat-to-work]')) { document.getElementById('chatToWork').click(); return; }
+        if (event.target.closest('[data-task-detail]')) { switchView('work'); showToast('已打开任务执行详情'); return; }
+        var primaryAction = event.target.closest('[data-task-primary]');
+        if (!primaryAction) return;
+        var thread = chatThreads[activeChatKey];
+        if (!thread || thread.taskState === 'running' || thread.taskState === 'completed') { switchView('work'); return; }
+        thread.taskState = 'running';
+        thread.project = '工商储方案 · 任务执行中';
+        thread.reply = '已收到你的确认，任务现在开始执行。后续计划、进度、待确认事项和结果仍会继续出现在这段对话中。';
+        syncTaskThreadSurfaces(activeChatKey, thread);
+        renderChatThread(activeChatKey);
+        showToast('任务已恢复执行');
       });
 
       var chatToolsButton = document.getElementById('chatToolsButton');

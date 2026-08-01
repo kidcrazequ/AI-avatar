@@ -687,6 +687,8 @@
       background: var(--work);
     }
 
+    .chat-workspace-page { grid-template-rows: minmax(0, 1fr); }
+
     .workspace-header {
       min-height: 104px;
       display: flex;
@@ -2173,15 +2175,7 @@
           </div>
         </section>
 
-        <section class="view workspace-page" id="chatView">
-          <header class="workspace-header">
-            <div class="workspace-heading">
-              <p class="eyebrow">Chat</p>
-              <h1>对话</h1>
-              <p class="lead">用于交流、澄清和探索；需要持续执行时，可以非破坏性转为任务。</p>
-            </div>
-            <div class="workspace-actions"><button class="secondary-button" id="newChat" type="button">新对话</button></div>
-          </header>
+        <section class="view workspace-page chat-workspace-page" id="chatView">
           <div class="chat-layout">
             <aside class="chat-thread-list">
               <div class="chat-thread-list-head"><div class="collection-label">对话项目</div><div class="chat-project-filter"><select id="chatProjectFilter" aria-label="筛选对话项目"><option value="all">全部项目</option><option value="storage">工商储方案</option><option value="none">未绑定项目</option></select><button id="manageChatProjects" type="button" aria-label="管理对话项目">•••</button></div><input class="chat-thread-search" id="chatThreadSearch" type="search" placeholder="搜索标题或消息" aria-label="搜索对话"><span class="chat-search-note" id="chatSearchNote">1–2 字搜索标题，3 字以上搜索消息全文</span></div>
@@ -2193,6 +2187,7 @@
               <header class="chat-head">
                 <div><div class="chat-title" id="chatTitle">客户沟通材料</div><div class="chat-project" id="chatProject">工商储方案 · 保留原对话</div></div>
                 <div class="chat-head-actions">
+                  <button class="secondary-button" id="newChat" type="button">新对话</button>
                   <select class="chat-mode-select" id="chatModel" aria-label="模型位置"><option>端云 · 默认</option><option>端侧 · 本地</option></select>
                   <select class="chat-mode-select" id="chatMode" aria-label="对话模式"><option>Agent</option><option>Plan</option><option>Ask</option></select>
                   <div class="chat-tools-anchor"><button class="chat-mode-button" id="chatToolsButton" type="button" aria-haspopup="menu" aria-expanded="false">对话工具</button><div class="chat-tools-menu" id="chatToolsMenu" role="menu"><button class="chat-tool-row" type="button" data-feature-open="chat-events"><span>事件流</span><span>查看</span></button><button class="chat-tool-row" type="button" data-feature-open="distill-skill"><span>沉淀为技能</span><span>草案</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-md"><span>导出 Markdown</span><span>.md</span></button><button class="chat-tool-row" type="button" data-demo-chat="export-html"><span>导出 HTML</span><span>.html</span></button></div></div>

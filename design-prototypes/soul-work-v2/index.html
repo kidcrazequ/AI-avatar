@@ -863,6 +863,22 @@
       grid-template-columns: 286px minmax(0, 1fr);
     }
 
+    .automation-layout.is-empty,
+    .automation-layout.is-editing { grid-template-columns: minmax(0, 1fr); }
+    .automation-zero-state { min-height: 0; display: grid; place-items: center; padding: 48px; background: var(--work); }
+    .automation-zero-state[hidden] { display: none; }
+    .automation-zero-content { display: grid; justify-items: center; max-width: 420px; text-align: center; transform: translateY(-24px); }
+    .automation-zero-art { width: 112px; height: 112px; margin-bottom: 20px; color: #b7bcc5; animation: automation-zero-float 3.2s ease-in-out infinite; }
+    .automation-zero-art .calendar-page { fill: #f6f8fb; stroke: #b7bcc5; }
+    .automation-zero-art .clock-face { fill: #fff; stroke: #9ea5b0; }
+    .automation-zero-art .clock-hand { transform-box: fill-box; transform-origin: 0 100%; animation: automation-zero-tick 2.4s var(--ease) infinite; }
+    .automation-zero-content h2 { margin: 0; color: #4f535b; font-size: 18px; font-weight: 620; letter-spacing: -.02em; }
+    .automation-zero-content p { margin: 9px 0 16px; color: #92969f; font-size: 14px; line-height: 1.65; }
+    .automation-zero-action { min-height: 36px; padding: 0 6px; border: 0; background: transparent; color: var(--blue); font-size: 15px; font-weight: 590; cursor: pointer; }
+    .automation-zero-action:hover { color: #174fca; text-decoration: underline; text-underline-offset: 4px; }
+    @keyframes automation-zero-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+    @keyframes automation-zero-tick { 0%, 45% { transform: rotate(0); } 55%, 100% { transform: rotate(35deg); } }
+
     .collection-rail {
       min-width: 0;
       overflow: auto;
@@ -1938,14 +1954,14 @@
             </div>
             <div class="workspace-actions"><button class="primary-button" id="newAutomation" type="button">创建自动任务</button></div>
           </header>
-          <div class="automation-layout">
-            <aside class="collection-rail">
+          <div class="automation-layout is-empty" id="automationLayout">
+            <aside class="collection-rail" id="automationCollectionRail" hidden>
               <div class="collection-label">规则</div>
-              <button class="collection-item active automation-item" type="button" data-rule="weekly"><span class="status-dot"></span><span><span class="collection-title">整理项目待确认事项</span><span class="collection-meta">未启用 · 工商储方案</span></span></button>
-              <button class="collection-item automation-item" type="button" data-rule="file"><span class="status-dot waiting"></span><span><span class="collection-title">资料更新后检查缺失项</span><span class="collection-meta">草稿 · 工商储方案</span></span></button>
+              <button class="collection-item active automation-item" type="button" data-rule="weekly" hidden><span class="status-dot"></span><span><span class="collection-title">整理项目待确认事项</span><span class="collection-meta">未启用 · 工商储方案</span></span></button>
+              <button class="collection-item automation-item" type="button" data-rule="file" hidden><span class="status-dot waiting"></span><span><span class="collection-title">资料更新后检查缺失项</span><span class="collection-meta">草稿 · 工商储方案</span></span></button>
               <button class="collection-item automation-item" id="customAutomationItem" type="button" data-rule="custom" hidden><span class="status-dot"></span><span><span class="collection-title">新自动任务</span><span class="collection-meta">草稿 · 工商储方案</span></span></button>
             </aside>
-            <div class="detail-workspace automation-detail-workspace">
+            <div class="detail-workspace automation-detail-workspace" id="automationDetailWorkspace" hidden>
               <article class="automation-detail-sheet">
                 <header class="automation-detail-head">
                   <div><h2 id="automationTitle">整理项目待确认事项</h2><p class="detail-sheet-sub" id="automationSubtitle">将项目中需要用户处理的事项整理成独立 Work。</p></div>
@@ -1992,6 +2008,20 @@
                 </div>
               </form>
             </div>
+            <section class="automation-zero-state" id="automationZeroState" aria-labelledby="automationZeroTitle">
+              <div class="automation-zero-content">
+                <svg class="automation-zero-art" viewBox="0 0 120 120" aria-hidden="true">
+                  <path class="calendar-page" d="M32 34h56l6 58H27z" stroke-width="2.5" stroke-linejoin="round"/>
+                  <path d="M32 47h56M43 27v14M59 27v14M75 27v14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                  <path d="M48 61h24M48 72h17" fill="none" stroke="#d2d6dc" stroke-width="2.5" stroke-linecap="round"/>
+                  <circle class="clock-face" cx="39" cy="83" r="21" stroke-width="2.5"/>
+                  <path class="clock-hand" d="M39 72v12l8-5" fill="none" stroke="#89919d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <h2 id="automationZeroTitle">暂无自动任务</h2>
+                <p>Soul 可以按计划创建独立任务，并保留每次运行、专家路由与结果。</p>
+                <button class="automation-zero-action" id="emptyNewAutomation" type="button">创建第一个自动任务 →</button>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -3205,6 +3235,19 @@
       var currentAutomationRule = 'weekly';
       var automationEditor = document.getElementById('automationEditor');
       var automationEnabled = document.getElementById('automationEnabled');
+      var automationLayout = document.getElementById('automationLayout');
+      var automationCollectionRail = document.getElementById('automationCollectionRail');
+      var automationDetailWorkspace = document.getElementById('automationDetailWorkspace');
+      var automationZeroState = document.getElementById('automationZeroState');
+
+      function syncAutomationEmptyState() {
+        var hasRules = Array.from(document.querySelectorAll('.automation-item')).some(function (item) { return !item.hidden; });
+        automationLayout.classList.toggle('is-empty', !hasRules);
+        if (automationLayout.classList.contains('is-editing')) return;
+        automationCollectionRail.hidden = !hasRules;
+        automationDetailWorkspace.hidden = !hasRules;
+        automationZeroState.hidden = hasRules;
+      }
 
       function setAutomationTab(name) {
         document.querySelectorAll('.automation-section-tab').forEach(function (tab) {
@@ -3249,10 +3292,21 @@
         button.addEventListener('click', function () { setAutomationTab(button.dataset.automationTab); });
       });
 
-      function closeAutomationEditor() { automationEditor.hidden = true; }
+      function closeAutomationEditor() {
+        automationEditor.hidden = true;
+        automationLayout.classList.remove('is-editing');
+        syncAutomationEmptyState();
+      }
 
       function openAutomationEditor(mode) {
         var rule = mode === 'new' ? automationRules.custom : automationRules[currentAutomationRule];
+        if (automationLayout.classList.contains('is-empty')) {
+          automationLayout.classList.remove('is-empty');
+          automationLayout.classList.add('is-editing');
+          automationCollectionRail.hidden = true;
+          automationDetailWorkspace.hidden = false;
+          automationZeroState.hidden = true;
+        }
         automationEditor.dataset.mode = mode;
         document.getElementById('automationEditorTitle').textContent = mode === 'new' ? '创建自动任务' : '编辑自动任务';
         document.getElementById('automationEditorName').value = rule.title;
@@ -3264,6 +3318,7 @@
       }
 
       document.getElementById('newAutomation').addEventListener('click', function () { openAutomationEditor('new'); });
+      document.getElementById('emptyNewAutomation').addEventListener('click', function () { openAutomationEditor('new'); });
       document.getElementById('editAutomation').addEventListener('click', function () { openAutomationEditor('edit'); });
       document.getElementById('closeAutomationEditor').addEventListener('click', closeAutomationEditor);
       document.getElementById('cancelAutomationEditor').addEventListener('click', closeAutomationEditor);
@@ -3289,6 +3344,8 @@
         renderAutomationRule(key);
         showToast('自动任务草稿已保存，尚未启用或执行');
       });
+
+      syncAutomationEmptyState();
 
       document.getElementById('triggerAutomation').addEventListener('click', function () {
         var rule = automationRules[currentAutomationRule];

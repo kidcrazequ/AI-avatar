@@ -1567,6 +1567,27 @@
       box-shadow: 0 1px 2px rgba(20,20,23,.18), inset 0 1px 0 rgba(255,255,255,.08);
     }
     .primary-button:hover { background: #121317; box-shadow: 0 2px 6px rgba(20,20,23,.2); }
+    .home-hero { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
+    .home-hero-logo { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #dfe6f2; border-radius: 16px; background: #f3f7ff; box-shadow: 0 5px 18px rgba(37,99,235,.08); }
+    .home-hero-logo .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
+    .home-hero-logo .brand-mark::before { width: 8px; height: 8px; left: 6px; top: 6px; }
+    .home-hero-logo .brand-mark::after { width: 6px; height: 6px; right: 5px; bottom: 5px; }
+    .home-hero h1 { font-size: 32px; line-height: 1.2; }
+    .home-work-badge { display: inline-flex; margin-top: 6px; padding: 3px 7px; border-radius: 6px; background: #edf3ff; color: #2563eb; font-size: 11px; font-weight: 650; }
+    .home-lead { margin-top: 16px; text-align: center; }
+    .home-inner > .composer { width: min(900px, 100%); margin: 34px auto 0; border-color: #d9d7d2; border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
+    .home-inner .goal-input { height: 156px; padding: 24px 30px 14px; font-size: 16px; line-height: 1.75; }
+    .home-inner .composer-tools { min-height: 64px; padding: 10px 16px 12px; border-top: 0; background: #fff; }
+    .home-inner .tool-button { height: 38px; border-radius: 10px; }
+    .home-add-button { width: 38px; justify-content: center; padding: 0 !important; color: #323238; }
+    .home-add-button .icon { width: 20px; height: 20px; stroke-width: 1.8; }
+    .home-model-button { color: #34343a; }
+    .home-inner .home-start { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
+    .home-start .icon { width: 19px; height: 19px; stroke-width: 2; }
+    .home-project-strip { width: 100%; height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border: 0; border-top: 1px solid #ebe9e5; background: #f6f5f3; color: #66656c; font-size: 14px; text-align: left; cursor: pointer; }
+    .home-project-strip:hover { background: #f1f0ed; color: var(--ink); }
+    .home-project-strip .icon { width: 19px; height: 19px; }
+    .home-project-strip .chevron { margin-left: 2px; color: #8f8e95; font-size: 18px; transform: rotate(90deg); }
     .secondary-button { height: 34px; padding: 0 12px; border-radius: 7px; font-size: 13px; box-shadow: 0 1px 1px rgba(20,19,22,.025); }
     .section-tab, .expert-section-tab, .detail-tab { font-size: 13px; }
     .work-action-title, .row-sub, .entity-meta, .entity-state, .collection-meta,
@@ -1711,7 +1732,7 @@
     .dashboard-card:active, .dashboard-template:active, .dashboard-widget-option:active { transform: translateY(0) scale(.995); }
 
     @media (max-width: 1280px) {
-      .home-inner { width: calc(100% - 46px); padding-top: 38px; }
+      .home-inner { width: calc(100% - 46px); padding-top: 42px; }
       .home-lower { gap: 28px; grid-template-columns: minmax(0,1fr) 250px; }
       .work-view { grid-template-columns: 220px minmax(350px, 1fr) 0; }
       .work-view.details-open { grid-template-columns: 220px minmax(350px, 1fr) 278px; }
@@ -1719,7 +1740,7 @@
       .work-state-screen { padding-left: 34px; padding-right: 34px; }
       .detail-rail > * { width: 278px; }
       .execution-scroll { padding-left: 26px; padding-right: 26px; }
-      .goal-input { height: 136px; }
+      .home-inner .goal-input { height: 142px; }
       .expert-profile-head { padding-left: 22px; padding-right: 22px; }
       .expert-panel-scroll { padding-left: 22px; padding-right: 22px; }
       .dashboard-catalog { padding: 26px 28px 48px; }
@@ -1738,9 +1759,9 @@
     }
 
     @media (max-height: 760px) {
-      .home-inner { padding-top: 28px; }
-      .composer { margin-top: 22px; }
-      .goal-input { height: 120px; }
+      .home-inner { padding-top: 26px; }
+      .home-inner > .composer { margin-top: 22px; }
+      .home-inner .goal-input { height: 120px; }
       .home-lower { margin-top: 28px; }
       .work-row, .attention-row { min-height: 58px; }
       .execution-head { min-height: 84px; padding-top: 16px; padding-bottom: 14px; }
@@ -1820,19 +1841,15 @@
       <main class="stage">
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
-            <p class="eyebrow">New task</p>
-            <h1>开始一项任务</h1>
-            <p class="lead">说清目标，Soul 会匹配专家、制定计划并交付可审阅结果。</p>
+            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
+            <p class="lead home-lead">提出目标，Soul 会匹配专家、制定计划并交付可审阅结果。</p>
 
             <div class="composer">
-              <textarea class="goal-input" id="goalInput" aria-label="任务目标">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
+              <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
               <div class="chat-attachments" id="homeAttachments"></div>
               <div class="composer-tools">
-                <button class="tool-button" id="homeAttach" type="button">
-                  <svg class="icon" viewBox="0 0 24 24"><path d="m8 12.5 5.2-5.2a3.2 3.2 0 0 1 4.5 4.5l-7 7a4.8 4.8 0 0 1-6.8-6.8l7.4-7.4"/></svg><span>添加附件</span>
-                </button>
-                <button class="tool-button" type="button" data-feature-open="project-manager">
-                  <svg class="icon" viewBox="0 0 24 24"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span>工商储方案</span>
+                <button class="tool-button home-add-button" id="homeAttach" type="button" aria-label="添加附件" title="添加附件">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
                 <button class="tool-button" type="button" data-feature-open="project-expert-picker">
                   <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8M17 8v6M14 11h6"/></svg><span>自动匹配</span>
@@ -1840,12 +1857,13 @@
                 <button class="tool-button" id="homePermission" type="button">
                   <svg class="icon" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.7 2.8 8 7 10 4.2-2 7-5.3 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>智能确认</span>
                 </button>
-                <button class="tool-button" type="button" data-settings-open="chat">
-                  <svg class="icon" viewBox="0 0 24 24"><path d="M5 7h14M8 12h8M10 17h4"/></svg><span>端云 · 默认模型</span>
-                </button>
                 <span class="push"></span>
-                <button class="primary-button" id="startWork" type="button"><span>开始任务</span><span class="shortcut">⌘↵</span></button>
+                <button class="tool-button home-model-button" type="button" data-settings-open="chat">
+                  <span>端云 · 默认</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+                </button>
+                <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
               </div>
+              <button class="home-project-strip" type="button" data-feature-open="project-manager"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span>工商储方案</span><span class="chevron">›</span></button>
             </div>
 
             <div class="home-lower">

@@ -1423,6 +1423,19 @@
     .chat-compose { border-radius: 10px; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
     .feature-card, .feature-list, .settings-surface { border-radius: 10px; }
     button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #676971; outline-offset: 2px; }
+    .automation-editor { background: #f8f7f4; }
+    .automation-editor-head { min-height: 82px; padding: 16px 30px; background: #fff; }
+    .automation-editor-head h2 { font-size: 20px; letter-spacing: -.025em; }
+    .automation-editor-head p { margin-top: 6px; font-size: 13px; line-height: 1.5; }
+    .automation-editor-head button { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--secondary); font-size: 20px; }
+    .automation-editor-fields { width: min(860px, calc(100% - 56px)); margin: 30px auto; padding: 30px 32px 36px; gap: 24px 20px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
+    .automation-editor-fields label { gap: 9px; color: #55545b; font-size: 13px; font-weight: 560; }
+    .automation-editor-fields input, .automation-editor-fields select, .automation-editor-fields textarea { min-height: 44px; padding: 10px 13px; border-color: #d8d5cf; border-radius: 8px; background-color: #fff; color: var(--ink); font-size: 14px; line-height: 1.5; box-shadow: 0 1px 1px rgba(20,19,22,.025); transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease), background 140ms var(--ease); }
+    .automation-editor-fields select { appearance: none; padding-right: 42px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4.5 6.25 3.5 3.5 3.5-3.5' stroke='%2366666f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; }
+    .automation-editor-fields textarea { min-height: 132px; padding-top: 12px; resize: vertical; }
+    .automation-editor-fields input:hover, .automation-editor-fields select:hover, .automation-editor-fields textarea:hover { border-color: #bdb9b2; background-color: #fff; }
+    .automation-editor-fields input:focus, .automation-editor-fields select:focus, .automation-editor-fields textarea:focus, .automation-editor-fields input:focus-visible, .automation-editor-fields select:focus-visible, .automation-editor-fields textarea:focus-visible { border-color: #7c7980; outline: 2px solid rgba(37,38,43,.12); outline-offset: 0; background-color: #fff; box-shadow: none; }
+    .automation-editor-actions { min-height: 70px; padding: 12px 30px; gap: 9px; background: #fff; }
 
     @media (max-width: 1280px) {
       .home-inner { width: calc(100% - 46px); padding-top: 38px; }

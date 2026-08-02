@@ -2035,7 +2035,7 @@
             <span class="nav-project-actions nav-project-row-actions"><button class="nav-project-action" id="currentProjectMore" type="button" aria-label="工商储方案项目选项" title="项目选项" aria-haspopup="menu" aria-expanded="false" aria-controls="currentProjectMenu"><span class="nav-project-more">•••</span></button><button class="nav-project-action" id="currentProjectAdd" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span>
           </div>
           <section class="nav-conversations" aria-label="工商储方案下的任务和对话">
-            <div class="nav-conversations-title"><button class="nav-conversations-toggle" id="conversationToggle" type="button" aria-expanded="true" aria-controls="projectThreadList"><span>对话</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><button class="nav-conversation-add" id="addConversation" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
+            <div class="nav-conversations-title"><button class="nav-conversations-toggle" id="conversationToggle" type="button" aria-expanded="true" aria-controls="projectThreadList"><span>对话</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><button class="nav-conversation-add" id="addConversation" type="button" aria-label="新建未绑定项目的对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
             <div class="nav-conversation-list" id="projectThreadList"><button class="nav-item nav-conversation-item nav-work-thread" type="button" data-chat="task"><span class="nav-label">客户沟通初步方案</span><span class="nav-thread-status">执行中</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="materials"><span class="nav-label">客户沟通材料</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="boundary"><span class="nav-label">方案边界讨论</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="source"><span class="nav-label">来源引用方式</span></button></div>
           </section>
         </section>
@@ -2100,9 +2100,6 @@
               </div>
               <div class="home-popover home-model-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
               <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
-            </div>
-
-          </div>
               <div class="home-popover home-add-popover" id="homeAddPopover" role="menu" aria-label="添加" hidden>
                 <section class="home-menu-section">
                   <span class="home-menu-label">添加</span>
@@ -2146,6 +2143,9 @@
                   <button class="home-menu-row skill-row" type="button" role="option" data-home-skill="browser"><span class="home-menu-icon cube"><svg class="icon" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9"/></svg></span><span class="home-menu-title">Browser</span><span class="home-menu-note">打开并控制应用内浏览器</span><span class="home-menu-meta">个人</span></button>
                 </section>
               </div>
+            </div>
+
+          </div>
         </section>
 
         <section class="view workspace-page" id="tasksView">
@@ -4306,10 +4306,10 @@
       document.getElementById('chatProjectFilter').addEventListener('change', filterChatThreads);
       document.getElementById('manageChatProjects').addEventListener('click', function () { openFeature('chat-projects'); });
       document.getElementById('addConversation').addEventListener('click', function () {
-        resetHomeComposer('工商储方案');
+        resetHomeComposer();
         switchView('home');
         goalInput.focus();
-        showToast('已绑定项目「工商储方案」');
+        showToast('已新建对话，可按需选择项目');
       });
       var projectCreateMenu = document.getElementById('projectCreateMenu');
       function closeProjectCreateMenu() {
@@ -4374,7 +4374,10 @@
       document.addEventListener('click', function (event) { if (!event.target.closest('#currentProjectMenu')) closeCurrentProjectMenu(); });
       document.getElementById('currentProjectAdd').addEventListener('click', function () {
         closeCurrentProjectMenu();
-        document.getElementById('addConversation').click();
+        resetHomeComposer('工商储方案');
+        switchView('home');
+        goalInput.focus();
+        showToast('已绑定项目「工商储方案」');
       });
       document.getElementById('conversationToggle').addEventListener('click', function () {
         var section = document.querySelector('.nav-conversations');

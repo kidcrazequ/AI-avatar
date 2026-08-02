@@ -175,23 +175,14 @@
     }
 
     .brand-mark {
-      position: relative;
       width: 23px;
       height: 23px;
-      border-radius: 7px;
-      background: var(--ink);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
     }
 
-    .brand-mark::before,
-    .brand-mark::after {
-      content: "";
-      position: absolute;
-      border-radius: 2px;
-    }
-
-    .brand-mark::before { width: 7px; height: 7px; left: 5px; top: 5px; background: var(--pink); }
-    .brand-mark::after { width: 5px; height: 5px; right: 4px; bottom: 4px; background: var(--mint); }
+    .soul-avatar { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 2px 3px rgba(24,26,29,.16)); }
 
     .brand-name { font-size: 15px; font-weight: 680; letter-spacing: -.02em; }
     .brand-edition { margin-top: 2px; color: var(--tertiary); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
@@ -1584,10 +1575,8 @@
     .primary-button:hover { background: #121317; box-shadow: 0 2px 6px rgba(20,20,23,.2); }
     .home-inner { padding-top: clamp(150px, 20vh, 180px); }
     .home-hero { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
-    .home-hero-logo { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #dfe6f2; border-radius: 16px; background: #f3f7ff; box-shadow: 0 5px 18px rgba(37,99,235,.08); }
-    .home-hero-logo .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
-    .home-hero-logo .brand-mark::before { width: 8px; height: 8px; left: 6px; top: 6px; }
-    .home-hero-logo .brand-mark::after { width: 6px; height: 6px; right: 5px; bottom: 5px; }
+    .home-hero-logo { width: 54px; height: 54px; display: grid; place-items: center; border: 1px solid #d9ddd9; border-radius: 17px; background: linear-gradient(145deg, #f8f7f3, #eef3ef); box-shadow: 0 6px 20px rgba(36,39,43,.09); }
+    .home-hero-logo .brand-mark { width: 38px; height: 38px; }
     .home-hero h1 { font-size: 32px; line-height: 1.2; }
     .home-work-badge { display: inline-flex; margin-top: 6px; padding: 3px 7px; border-radius: 6px; background: #edf3ff; color: #2563eb; font-size: 11px; font-weight: 650; }
     .home-inner > .composer { position: relative; width: min(900px, 100%); margin: 64px auto 0; overflow: visible; border-color: #d9d7d2; border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
@@ -1597,9 +1586,9 @@
     .home-add-button { width: 38px; justify-content: center; padding: 0 !important; color: #323238; }
     .home-add-button .icon { width: 20px; height: 20px; stroke-width: 1.8; }
     .home-model-button, .home-project-strip { position: relative; }
-    .home-model-button { color: #34343a; }
+    .home-inner .home-model-button { height: 42px; padding: 0 15px; border-color: transparent; border-radius: 999px; background: #f2f2f1; color: #2e2e33; font-size: 14px; }
+    .home-inner .home-model-button:hover { border-color: transparent; background: #ececeb; }
     .home-model-button .icon, .home-project-strip .chevron { transition: transform 150ms var(--ease); }
-    .home-model-button[aria-expanded="true"] .icon { transform: rotate(180deg); }
     .home-inner .home-start { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
     .home-start .icon { width: 19px; height: 19px; stroke-width: 2; }
     .home-start:disabled { border-color: #d7d7d8; background: #d7d7d8; color: #fff; box-shadow: none; cursor: default; }
@@ -1617,6 +1606,11 @@
     .home-popover-check { color: var(--blue); font-size: 17px; opacity: 0; }
     .home-popover-option.selected .home-popover-check { opacity: 1; }
     .home-popover-separator { height: 1px; margin: 5px 8px; background: #eceae6; }
+    .home-model-popover { width: 330px; padding: 10px; border-radius: 18px; }
+    .home-model-popover .home-popover-option { min-height: 72px; padding: 11px 14px 11px 16px; border-radius: 12px; }
+    .home-model-popover .home-popover-option strong { font-size: 15px; font-weight: 540; }
+    .home-model-popover .home-popover-option small { margin-top: 6px; font-size: 13px; }
+    .home-model-popover .home-popover-check { font-size: 20px; }
     .home-project-popover { width: 300px; padding: 10px; border-radius: 18px; }
     .home-project-popover .home-popover-option { min-height: 50px; display: flex; gap: 11px; padding: 0 12px; font-size: 15px; }
     .home-project-popover .home-popover-option.selected { background: #f5f4f2; }
@@ -1776,7 +1770,8 @@
     .message-row.user { justify-content: flex-end; margin-bottom: 44px; }
     .message-row.user .message-copy { width: fit-content; max-width: min(72%, 660px); padding: 12px 16px; border: 0; border-radius: 15px; background: #f3f3f1; color: #29282d; font-size: 16px; line-height: 1.65; }
     .message-row.assistant { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 14px; margin-bottom: 18px; }
-    .assistant-avatar { width: 28px; height: 28px; display: grid; place-items: center; margin-top: 1px; border-radius: 9px; background: linear-gradient(145deg, #34353b, #1d1e22); color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 1px 2px rgba(20,20,23,.18); }
+    .assistant-avatar { width: 28px; height: 28px; display: grid; place-items: center; margin-top: 1px; border: 1px solid #dfe2de; border-radius: 9px; background: #f5f6f3; box-shadow: 0 1px 3px rgba(20,20,23,.08); }
+    .assistant-avatar .soul-avatar { width: 22px; height: 22px; }
     .assistant-message { min-width: 0; }
     .message-status { margin-bottom: 12px; color: #8a8990; font-size: 13px; line-height: 1.4; }
     .message-row.assistant .message-copy { max-width: 760px; padding: 0; color: #2d2c31; font-size: 16px; line-height: 1.82; }
@@ -1886,6 +1881,19 @@
   <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
     <symbol id="lucide-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
     <symbol id="lucide-file-archive" viewBox="0 0 24 24"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></symbol>
+    <symbol id="soul-avatar" viewBox="0 0 48 48">
+      <g fill="#a8d8c3" opacity=".72">
+        <ellipse cx="30" cy="13" rx="7.8" ry="9.5"/>
+        <path d="M22.2 29.1c0-5.5 3.1-8.8 7.8-8.8s7.8 3.3 7.8 8.8L36 45H24z"/>
+      </g>
+      <g fill="#24272b">
+        <ellipse cx="19" cy="14" rx="7.8" ry="9.5"/>
+        <path d="M11.2 30.1c0-5.5 3.1-8.8 7.8-8.8s7.8 3.3 7.8 8.8L25 46H13z"/>
+      </g>
+      <path d="m15.7 13.4 2-1.1M20.3 12.3l2 1.1" fill="none" stroke="#f2d4ad" stroke-width="1.35" stroke-linecap="round"/>
+      <circle cx="19" cy="29" r="3.1" fill="#16181b" stroke="#4b4e50" stroke-width="1"/>
+      <circle cx="19" cy="29" r="1.65" fill="#d89a55"/>
+    </symbol>
   </svg>
   <div class="app" id="appRoot">
     <header class="titlebar">
@@ -1902,7 +1910,7 @@
     <div class="body-grid">
       <aside class="global-nav">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-mark" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span>
           <div><div class="brand-name">Soul</div><div class="brand-edition">Task console</div></div>
         </div>
 
@@ -1942,7 +1950,7 @@
       <main class="stage">
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
-            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
+            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
 
             <div class="composer">
               <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…"></textarea>
@@ -1964,7 +1972,7 @@
                 <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
               </div>
               <button class="home-project-strip home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
-              <div class="home-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
+              <div class="home-popover home-model-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
               <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
             </div>
 
@@ -2472,7 +2480,7 @@
               </header>
               <div class="chat-messages" id="chatMessages">
                 <div class="message-row user"><div class="message-copy">把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。</div></div>
-                <div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true">S</span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div></div>
+                <div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div></div>
                 <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>
               </div>
               <div class="chat-compose-wrap"><div class="chat-compose"><div class="chat-command-popover" id="chatCommandPopover" hidden></div><div class="chat-attachments" id="chatAttachments"></div><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" id="chatAttach" type="button">＋ 附件</button><button class="chat-mini-tool" id="chatVoice" type="button">语音</button><button class="chat-mini-tool" id="chatSkill" type="button">/ 技能</button><button class="chat-mini-tool" id="chatContext" type="button">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button" aria-label="发送"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button></div></div></div>
@@ -4010,7 +4018,7 @@
 
       function chatMessageMarkup(thread) {
         return '<div class="message-row user"><div class="message-copy">' + thread.user + '</div></div>' +
-          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true">S</span><div class="assistant-message"><div class="message-status">Soul · ' + (thread.isTask ? '任务状态已更新' : '已完成思考') + '</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
+          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span><div class="assistant-message"><div class="message-status">Soul · ' + (thread.isTask ? '任务状态已更新' : '已完成思考') + '</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
           (thread.isTask ? taskFlowMarkup(thread) : '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>');
       }
 

@@ -3662,8 +3662,11 @@
       document.getElementById('tasksNewButton').addEventListener('click', function () { resetHomeComposer(); switchView('home'); document.getElementById('goalInput').focus(); });
 
       var goalInput = document.getElementById('goalInput');
+      var homeAttach = document.getElementById('homeAttach');
       var homeModelPicker = document.getElementById('homeModelPicker');
       var homeProjectPicker = document.getElementById('homeProjectPicker');
+      var homeAddPopover = document.getElementById('homeAddPopover');
+      var homeCommandPopover = document.getElementById('homeCommandPopover');
       var homeModelPopover = document.getElementById('homeModelPopover');
       var homeProjectPopover = document.getElementById('homeProjectPopover');
 
@@ -3681,8 +3684,8 @@
         updateHomeSendState();
       }
       function closeHomePickers() {
-        [homeModelPopover, homeProjectPopover].forEach(function (popover) { popover.hidden = true; });
-        [homeModelPicker, homeProjectPicker].forEach(function (picker) { picker.setAttribute('aria-expanded', 'false'); });
+        [homeAddPopover, homeCommandPopover, homeModelPopover, homeProjectPopover].forEach(function (popover) { popover.hidden = true; });
+        [homeAttach, homeModelPicker, homeProjectPicker].forEach(function (picker) { picker.setAttribute('aria-expanded', 'false'); });
       }
       function positionHomePopover(picker, popover, alignLeft) {
         popover.hidden = false;
@@ -3701,8 +3704,43 @@
         if (opening) { positionHomePopover(picker, popover, alignLeft); picker.setAttribute('aria-expanded', 'true'); }
       }
 
-      goalInput.addEventListener('input', updateHomeSendState);
+      function openHomeCommandPopover() {
+        closeHomePickers();
+        positionHomePopover(goalInput, homeCommandPopover, true);
+        var firstCommand = homeCommandPopover.querySelector('.home-menu-row');
+        homeCommandPopover.querySelectorAll('.home-menu-row').forEach(function (item) { item.setAttribute('aria-selected', String(item === firstCommand)); });
+      }
+      function setHomePrompt(value) {
+        goalInput.value = value;
+        updateHomeSendState();
+        goalInput.focus();
+      }
+      function addHomeContext(id, label) {
+        var attachments = document.getElementById('homeAttachments');
+        if (!document.getElementById(id)) attachments.insertAdjacentHTML('beforeend', '<span class="chat-attachment" id="' + id + '"><span></span><button type="button" aria-label="移除">×</button></span>');
+        document.querySelector('#' + id + ' span').textContent = label;
+      }
+
+      goalInput.addEventListener('input', function () {
+        updateHomeSendState();
+        if (goalInput.value.trim().startsWith('/')) openHomeCommandPopover();
+        else homeCommandPopover.hidden = true;
+      });
+      goalInput.addEventListener('keydown', function (event) {
+        if (homeCommandPopover.hidden) return;
+        var options = Array.from(homeCommandPopover.querySelectorAll('.home-menu-row'));
+        var activeIndex = options.findIndex(function (item) { return item.getAttribute('aria-selected') === 'true'; });
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          activeIndex = (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+          options.forEach(function (item, index) { item.setAttribute('aria-selected', String(index === activeIndex)); });
+          options[activeIndex].scrollIntoView({ block: 'nearest' });
+        }
+        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); options[Math.max(0, activeIndex)].click(); }
+        if (event.key === 'Escape') { event.preventDefault(); closeHomePickers(); }
+      });
       updateHomeSendState();
+      homeAttach.addEventListener('click', function (event) { event.stopPropagation(); toggleHomePicker(homeAttach, homeAddPopover, true); });
       homeModelPicker.addEventListener('click', function (event) { event.stopPropagation(); toggleHomePicker(homeModelPicker, homeModelPopover, false); });
       homeProjectPicker.addEventListener('click', function (event) { event.stopPropagation(); toggleHomePicker(homeProjectPicker, homeProjectPopover, true); });
       homeModelPopover.addEventListener('click', function (event) {
@@ -3717,6 +3755,43 @@
         if (!option) return;
         setHomeProject(option.dataset.homeProject);
         closeHomePickers();
+      });
+      homeAddPopover.addEventListener('click', function (event) {
+        var item = event.target.closest('[data-home-add], [data-home-plugin]');
+        if (!item) return;
+        var action = item.dataset.homeAdd;
+        var plugin = item.dataset.homePlugin;
+        closeHomePickers();
+        if (action === 'files') { addHomeContext('homeAttachmentDemo', 'PDF · 客户需求说明.pdf'); showToast('已添加文件预览'); }
+        if (action === 'browser') { addHomeContext('homeBrowserContext', '网页 · 当前浏览器页面'); showToast('已附加当前浏览器页面'); }
+        if (action === 'goal') openModal('设置目标', '说明这项任务需要持续追求的结果；确认后会加入输入框。', '加入目标', '目标已加入任务', function () { setHomePrompt('目标：' + (modalTextarea.value.trim() || '请补充目标')); });
+        if (action === 'plan') openModal('开启计划模式', '补充期望的步骤或约束；确认后会以计划模式开始任务。', '使用计划模式', '计划模式已开启', function () { setHomePrompt('计划：' + (modalTextarea.value.trim() || '请先制定执行计划')); });
+        if (action === 'skill') openFeature('distill-skill');
+        if (plugin) { addHomeContext('homePlugin-' + plugin, '插件 · ' + item.querySelector('.home-menu-title').textContent); showToast('已启用插件「' + item.querySelector('.home-menu-title').textContent + '」'); }
+      });
+      homeCommandPopover.addEventListener('click', function (event) {
+        var item = event.target.closest('[data-home-command], [data-home-skill]');
+        if (!item) return;
+        var command = item.dataset.homeCommand;
+        var skill = item.dataset.homeSkill;
+        var label = item.querySelector('.home-menu-title').textContent;
+        closeHomePickers();
+        if (skill) { addHomeContext('homeSkill-' + skill, '技能 · ' + label); setHomePrompt(''); showToast('已启用技能「' + label + '」'); return; }
+        if (command === 'goal') { setHomePrompt('目标：'); return; }
+        if (command === 'plan') { setHomePrompt('请先制定执行计划：'); return; }
+        if (command === 'memory') { setHomePrompt(''); openFeature('memory'); return; }
+        if (command === 'mcp') { setHomePrompt(''); switchView('settings'); setSettingsTab('tools'); return; }
+        if (command === 'review') { setHomePrompt('请审查当前项目未提交的更改，并按风险优先级给出结论。'); return; }
+        if (command === 'feedback') { setHomePrompt(''); openModal('发送反馈', '反馈只用于改进当前原型体验，不会加入任务上下文。', '提交反馈', '反馈已记录'); return; }
+        if (command === 'continue') { var currentProject = document.getElementById('homeProjectLabel').textContent; resetHomeComposer(currentProject === '选择项目' ? '' : currentProject); goalInput.focus(); showToast('已在当前工作空间开启新对话'); return; }
+        if (command === 'new') { resetHomeComposer(); goalInput.focus(); showToast('已开启空白对话'); return; }
+        if (command === 'model') { setHomePrompt(''); positionHomePopover(homeModelPicker, homeModelPopover, false); homeModelPicker.setAttribute('aria-expanded', 'true'); return; }
+        setHomePrompt('');
+        if (command === 'status') showToast('尚未开始任务：上下文用量 0%，无运行中工具');
+        if (command === 'side') showToast('已创建临时侧边对话草稿');
+        if (command === 'compact') showToast('当前为空白对话，无需压缩上下文');
+        if (command === 'fast') showToast('已切换为标准速度');
+        if (command === 'reasoning') showToast('推理强度保持为极高');
       });
       document.addEventListener('click', function (event) { if (!event.target.closest('.home-picker') && !event.target.closest('.home-popover')) closeHomePickers(); });
       window.addEventListener('resize', closeHomePickers);
@@ -3736,11 +3811,6 @@
         showToast('任务已在当前对话中开始执行');
       });
 
-      document.getElementById('homeAttach').addEventListener('click', function () {
-        var attachments = document.getElementById('homeAttachments');
-        if (!document.getElementById('homeAttachmentDemo')) attachments.insertAdjacentHTML('beforeend', '<span class="chat-attachment" id="homeAttachmentDemo"><span>PDF · 客户需求说明.pdf</span><button type="button" aria-label="移除附件">×</button></span>');
-        showToast('已添加附件预览；正式产品支持文件、图片、粘贴和拖放');
-      });
       document.getElementById('homeAttachments').addEventListener('click', function (event) { if (event.target.closest('button')) { event.target.closest('.chat-attachment').remove(); showToast('附件已移除'); } });
       var permissionModes = ['智能确认', '每步确认', '只读'];
       document.getElementById('homePermission').addEventListener('click', function (event) {

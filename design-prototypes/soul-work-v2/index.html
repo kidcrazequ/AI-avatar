@@ -298,7 +298,9 @@
     .nav-conversation-item, .nav-work-thread { height: 40px; padding: 0 10px 0 28px; border-radius: 12px; color: #48474e; font-size: 15px; font-weight: 480; }
     .nav-conversation-item:hover, .nav-conversation-item.active, .nav-work-thread:hover, .nav-work-thread.active { background: #f4f3f1; color: var(--ink); font-weight: 480; }
     .nav-conversation-item .nav-label, .nav-work-thread .nav-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .nav-thread-status { flex: 0 0 auto; margin-left: auto; color: #8c8b92; font-size: 12px; font-weight: 500; }
+    .nav-thread-status { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; margin-left: auto; color: #8c8b92; }
+    .nav-thread-status .icon { width: 16px; height: 16px; stroke-width: 1.8; }
+    .nav-thread-status.running .nav-work-progress { stroke-dasharray: 5; animation: nav-work-progress 1.8s ease-in-out infinite; }
     .nav-conversation-more { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; margin-left: auto; border-radius: 8px; color: #89888f; font-size: 14px; letter-spacing: 1px; opacity: 0; transform: translateY(-2px); transition: opacity 160ms var(--ease), background 140ms var(--ease); }
     .nav-conversation-item:hover .nav-conversation-more, .nav-conversation-item:focus-visible .nav-conversation-more { opacity: 1; }
     .nav-conversation-more:hover { background: #e9e8e5; color: var(--ink); }
@@ -3969,6 +3971,16 @@
         if (summaries[2]) summaries[2].textContent = counts.completed;
       }
 
+      function taskStateIconMarkup(state, label) {
+        var icons = {
+          running: '<path class="nav-work-progress" d="M19 8a7 7 0 1 0 .2 7.7"/><path d="M19 4v4h-4"/>',
+          waiting: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.7 1.6"/>',
+          draft: '<path d="M5 19h4l9.5-9.5-4-4L5 15zM13.5 6.5l4 4"/>',
+          completed: '<circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.3 2.3 4.8-5"/>'
+        };
+        return '<span class="nav-thread-status ' + state + '" role="img" aria-label="' + label + '" title="' + label + '"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[state] + '</svg></span>';
+      }
+
       function syncTaskThreadSurfaces(key, thread) {
         var state = taskStateCopy(thread.taskState);
         var overviewState = thread.taskState === 'draft' ? 'waiting' : thread.taskState;
@@ -3983,7 +3995,7 @@
           navButton.addEventListener('click', function () { switchView('chat'); renderChatThread(key); });
         }
         navButton.classList.add('nav-work-thread');
-        navButton.innerHTML = '<span class="nav-label">' + thread.title + '</span><span class="nav-thread-status">' + state + '</span><span class="nav-conversation-more" aria-hidden="true">•••</span>';
+        navButton.innerHTML = '<span class="nav-label">' + thread.title + '</span>' + taskStateIconMarkup(thread.taskState, state) + '<span class="nav-conversation-more" aria-hidden="true">•••</span>';
 
         var listButton = document.querySelector('.chat-thread-list [data-chat="' + key + '"]');
         if (!listButton) {

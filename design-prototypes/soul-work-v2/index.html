@@ -1645,6 +1645,16 @@
     .home-project-popover .home-popover-option .icon { width: 20px; height: 20px; flex: 0 0 auto; stroke-width: 1.8; }
     .home-project-popover .home-popover-option strong { font-size: 15px; font-weight: 520; }
     .home-project-popover .home-popover-separator { margin: 6px 10px; }
+
+    /* Codex-style blank task canvas: project question centered, composer anchored to the bottom. */
+    .home-view { overflow: hidden; }
+    .home-inner { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 0 32px 22px; }
+    .home-empty { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 44px 24px 52px; text-align: center; }
+    .home-empty-icon { width: 48px; height: 48px; color: #b9bcc1; stroke-width: 1.65; }
+    .home-empty h1 { max-width: 760px; font-size: 30px; font-weight: 510; line-height: 1.3; letter-spacing: -.025em; }
+    .home-empty h1 span { font-weight: inherit; }
+    .home-inner > .composer { flex: 0 0 auto; margin: 0 auto; }
+
     .secondary-button { height: 34px; padding: 0 12px; border-radius: 7px; font-size: 13px; box-shadow: 0 1px 1px rgba(20,19,22,.025); }
     .section-tab, .expert-section-tab, .detail-tab { font-size: 13px; }
     .work-action-title, .row-sub, .entity-meta, .entity-state, .collection-meta,
@@ -1985,7 +1995,10 @@
       <main class="stage">
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
-            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
+            <div class="home-empty">
+              <svg class="icon home-empty-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M16.4 36.5h16.1a9 9 0 0 0 1.6-17.8 11 11 0 0 0-20.8 2.2 7.8 7.8 0 0 0 3.1 15.6Z"/><path d="m19.5 23 4.5 4-4.5 4M27.5 31h5.5"/></svg>
+              <h1>要在 <span id="homePromptProject">工商储方案</span> 内完成什么？</h1>
+            </div>
 
             <div class="composer">
               <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…"></textarea>

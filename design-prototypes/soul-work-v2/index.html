@@ -1317,7 +1317,7 @@
       inset: 0;
       z-index: 24;
       display: grid;
-      grid-template-columns: 224px minmax(0, 1fr);
+      grid-template-columns: 246px minmax(0, 1fr);
       background: var(--work);
       opacity: 0;
       pointer-events: none;
@@ -1325,16 +1325,16 @@
       transition: opacity 160ms var(--ease), transform 180ms var(--ease);
     }
     .feature-layer.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .feature-rail { min-width: 0; overflow: auto; padding: 20px 12px; border-right: 1px solid var(--line); background: #f7f6f3; }
+    .feature-rail { min-width: 0; overflow: auto; padding: 20px 14px; border-right: 1px solid var(--line); background: #f7f6f3; }
     .feature-rail-kicker { padding: 0 10px 12px; color: var(--tertiary); font: 650 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
     .feature-rail-context { margin: 0 4px 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     .feature-rail-context strong { display: block; font-size: 13px; }
     .feature-rail-context span { display: block; margin-top: 4px; color: var(--tertiary); font-size: 11px; line-height: 1.5; }
-    .feature-rail-nav { display: grid; gap: 2px; }
-    .feature-rail-tab { width: 100%; min-height: 36px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--secondary); font-size: 13px; text-align: left; cursor: pointer; }
-    .feature-rail-tab:hover { background: #efede9; color: var(--ink); }
-    .feature-rail-tab.active { background: #e9e7e3; color: var(--ink); font-weight: 640; }
-    .feature-rail-tab .feature-tab-index { width: 18px; color: var(--tertiary); font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .feature-rail-nav { display: grid; gap: 3px; }
+    .feature-rail-tab { width: 100%; min-height: 44px; display: flex; align-items: center; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: #65656c; font-size: 15px; font-weight: 500; line-height: 1.4; letter-spacing: -.01em; text-align: left; cursor: pointer; transition: background 150ms var(--ease), color 150ms var(--ease); }
+    .feature-rail-tab:hover { background: #f0efec; color: #27282d; }
+    .feature-rail-tab.active { background: #ebeae7; color: #191a1e; font-weight: 640; }
+    .feature-rail-tab > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .feature-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fcfcfb; }
     .feature-head { min-height: 94px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
     .feature-head h2 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -.025em; }
@@ -1423,7 +1423,7 @@
       .automation-layout, .expert-layout { grid-template-columns: 260px minmax(0, 1fr); }
       .chat-layout { grid-template-columns: minmax(0, 1fr); }
       .settings-layout { grid-template-columns: 204px minmax(0, 1fr); }
-      .feature-layer { grid-template-columns: 206px minmax(0, 1fr); }
+      .feature-layer { grid-template-columns: 224px minmax(0, 1fr); }
       .feature-scroll { padding-left: 24px; padding-right: 24px; }
       .detail-workspace { padding-left: 28px; padding-right: 28px; }
     }
@@ -3050,8 +3050,8 @@
         document.getElementById('featureSubtitle').textContent = definition.subtitle;
         document.getElementById('featureContent').innerHTML = typeof definition.content === 'function' ? definition.content() : definition.content;
         var navItemsForGroup = definition.group && featureGroups[definition.group] ? featureGroups[definition.group] : [{ key: key, label: definition.title }];
-        document.getElementById('featureRailNav').innerHTML = navItemsForGroup.map(function (item, index) {
-          return '<button class="feature-rail-tab' + (item.key === key ? ' active' : '') + '" type="button" data-feature-key="' + item.key + '"><span class="feature-tab-index">' + String(index + 1).padStart(2, '0') + '</span><span>' + item.label + '</span></button>';
+        document.getElementById('featureRailNav').innerHTML = navItemsForGroup.map(function (item) {
+          return '<button class="feature-rail-tab' + (item.key === key ? ' active' : '') + '" type="button" data-feature-key="' + item.key + '"><span>' + item.label + '</span></button>';
         }).join('');
         var actionMarkup = definition.actions || '';
         document.getElementById('featureHeadActions').innerHTML = actionMarkup + '<button class="quiet-button feature-close" id="closeFeature" type="button" aria-label="关闭">×</button>';

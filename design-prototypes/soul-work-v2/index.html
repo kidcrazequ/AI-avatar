@@ -1668,6 +1668,7 @@
     .chat-compose { border-radius: 10px; box-shadow: 0 1px 2px rgba(20,19,22,.035); }
     .feature-card, .feature-list, .settings-surface { border-radius: 10px; }
     button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #676971; outline-offset: 2px; }
+    .nav-item:focus-visible { outline: 0; box-shadow: none; }
     .automation-editor { display: flex; align-items: flex-start; justify-content: center; overflow: auto; padding: 28px; background: rgba(31,31,35,.14); backdrop-filter: blur(5px); }
     .automation-editor-dialog { width: min(760px, calc(100vw - 72px)); max-height: none; flex: 0 0 auto; margin: auto 0; display: grid; grid-template-rows: auto auto auto; overflow: hidden; border: 1px solid #d8d4cd; border-radius: 18px; background: #fff; box-shadow: 0 24px 70px rgba(23,23,26,.18), 0 2px 8px rgba(23,23,26,.08); }
     .automation-editor-head { min-height: 86px; padding: 18px 24px; background: #fff; }
@@ -1717,11 +1718,16 @@
     .scheduled-task-more { width: 34px; font-size: 15px; letter-spacing: 1px; }
     .scheduled-task-card:hover .scheduled-task-action, .scheduled-task-card:hover .scheduled-task-more, .scheduled-task-action:focus-visible, .scheduled-task-more:focus-visible { opacity: 1; }
     .scheduled-task-action:hover, .scheduled-task-more:hover { background: #eae9e6; color: var(--ink); }
-    .automation-page .automation-editor { position: absolute; inset: 0; z-index: 30; padding: 22px; }
+    .automation-page .automation-editor { position: absolute; inset: 0; z-index: 30; padding: 16px 22px; }
     .automation-page .automation-editor-dialog { width: min(720px, calc(100vw - 72px)); }
-    .automation-page .automation-editor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 2px; padding-bottom: 10px; }
-    .automation-page .automation-editor-fields label { padding: 10px 0; }
-    .automation-page .automation-editor-fields textarea { min-height: 96px; resize: none; }
+    .automation-page .automation-editor-head { min-height: 70px; padding: 13px 20px; }
+    .automation-page .automation-editor-head h2 { font-size: 18px; }
+    .automation-page .automation-editor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 20px 6px; }
+    .automation-page .automation-editor-fields label { gap: 6px; padding: 8px 0; }
+    .automation-page .automation-editor-fields input, .automation-page .automation-editor-fields select { min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+    .automation-page .automation-editor-fields textarea { min-height: 80px; padding-top: 10px; resize: none; }
+    .automation-page .automation-editor-actions { min-height: 58px; padding: 8px 20px; }
+    .automation-page .automation-editor-actions .secondary-button, .automation-page .automation-editor-actions .primary-button { height: 38px; }
     .automation-schedule { min-width: 0; margin: 0; padding: 12px 0 8px; border: 0; }
     .automation-schedule.wide { grid-column: span 2; }
     .automation-schedule legend { margin-bottom: 10px; color: #55545b; font-size: 13px; font-weight: 560; }
@@ -2283,7 +2289,7 @@
             </section>
             <form class="automation-editor" id="automationEditor" hidden>
               <div class="automation-editor-dialog">
-                <header class="automation-editor-head"><div><h2 id="automationEditorTitle">新建定时任务</h2><p>所属项目会提供专家、权限和上下文。</p></div><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
+                <header class="automation-editor-head"><h2 id="automationEditorTitle">新建定时任务</h2><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
                 <div class="automation-editor-fields">
                   <label class="wide">名称<input id="automationEditorName" required maxlength="50" placeholder="输入任务名称"></label>
                   <label class="wide">需求说明<textarea id="automationEditorGoal" required placeholder="说明需要完成什么、产出什么，以及哪些内容不能自行补全。"></textarea></label>

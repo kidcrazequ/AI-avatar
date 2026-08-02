@@ -300,9 +300,6 @@
     .nav-thread-status { width: 18px; height: 18px; flex: 0 0 18px; display: grid; place-items: center; margin-left: auto; color: #8c8b92; }
     .nav-thread-status .icon { width: 16px; height: 16px; stroke-width: 1.8; }
     .nav-thread-status.running .nav-work-progress { stroke-dasharray: 5; animation: nav-work-progress 1.8s ease-in-out infinite; }
-    .nav-conversation-more { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; margin-left: auto; border-radius: 8px; color: #89888f; font-size: 14px; letter-spacing: 1px; opacity: 0; transform: translateY(-2px); transition: opacity 160ms var(--ease), background 140ms var(--ease); }
-    .nav-conversation-item:hover .nav-conversation-more, .nav-conversation-item:focus-visible .nav-conversation-more { opacity: 1; }
-    .nav-conversation-more:hover { background: #e9e8e5; color: var(--ink); }
     .nav-work-thread:hover .nav-thread-status, .nav-work-thread:focus-visible .nav-thread-status { display: none; }
     .nav-conversation-menu { position: fixed; z-index: 120; width: 252px; padding: 8px; border: 1px solid #dedbd5; border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 22px 58px rgba(25,24,28,.16), 0 3px 12px rgba(25,24,28,.07); backdrop-filter: blur(18px); }
     .nav-conversation-menu[hidden] { display: none; }
@@ -1956,7 +1953,7 @@
           </div>
           <section class="nav-conversations" aria-label="工商储方案下的任务和对话">
             <div class="nav-conversations-title"><button class="nav-conversations-toggle" id="conversationToggle" type="button" aria-expanded="true" aria-controls="projectThreadList"><span>对话</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><button class="nav-conversation-add" id="addConversation" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 1 1-4.5-7.5"/><path d="M17 3v6M14 6h6"/></svg></button></div>
-            <div class="nav-conversation-list" id="projectThreadList"><button class="nav-item nav-conversation-item nav-work-thread" type="button" data-chat="task"><span class="nav-label">客户沟通初步方案</span><span class="nav-thread-status">执行中</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="materials"><span class="nav-label">客户沟通材料</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="boundary"><span class="nav-label">方案边界讨论</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="source"><span class="nav-label">来源引用方式</span><span class="nav-conversation-more" aria-hidden="true">•••</span></button></div>
+            <div class="nav-conversation-list" id="projectThreadList"><button class="nav-item nav-conversation-item nav-work-thread" type="button" data-chat="task"><span class="nav-label">客户沟通初步方案</span><span class="nav-thread-status">执行中</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="materials"><span class="nav-label">客户沟通材料</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="boundary"><span class="nav-label">方案边界讨论</span></button><button class="nav-item nav-conversation-item" type="button" data-chat="source"><span class="nav-label">来源引用方式</span></button></div>
           </section>
         </section>
 
@@ -4025,7 +4022,7 @@
           navButton.addEventListener('click', function () { switchView('chat'); renderChatThread(key); });
         }
         navButton.classList.add('nav-work-thread');
-        navButton.innerHTML = '<span class="nav-label">' + thread.title + '</span>' + taskStateIconMarkup(thread.taskState, state) + '<span class="nav-conversation-more" aria-hidden="true">•••</span>';
+        navButton.innerHTML = '<span class="nav-label">' + thread.title + '</span>' + taskStateIconMarkup(thread.taskState, state);
 
         var listButton = document.querySelector('.chat-thread-list [data-chat="' + key + '"]');
         if (!listButton) {

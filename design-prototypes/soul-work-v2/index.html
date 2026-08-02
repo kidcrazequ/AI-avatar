@@ -266,15 +266,15 @@
     .nav-project-create:hover, .nav-project-create:focus-visible, .nav-project-create[aria-expanded="true"] { background: #ecebe8; color: #202126; }
     .nav-project-create:focus-visible { outline: 0; box-shadow: 0 0 0 2px rgba(37,99,235,.2); }
     .nav-project-item { position: relative; display: flex; align-items: center; border-radius: 13px; }
-    .nav-project-link { height: 42px; gap: 9px; padding: 0 68px 0 10px; background: transparent; color: #626168; font-size: 15px; font-weight: 480; }
+    .nav-project-link { height: 42px; gap: 9px; padding: 0 76px 0 10px; background: transparent; color: #626168; font-size: 15px; font-weight: 480; }
     .nav-project-link:hover, .nav-project-link.active { background: #f4f3f1; color: var(--ink); font-weight: 480; }
     .nav-project-link .nav-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
-    .nav-project-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 1px; color: #89888f; opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
+    .nav-project-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; color: #89888f; opacity: 0; pointer-events: none; transition: opacity 140ms var(--ease); }
     .nav-projects-title:hover .nav-project-actions, .nav-projects-title:focus-within .nav-project-actions { opacity: 1; pointer-events: auto; }
     .nav-project-row-actions { position: absolute; right: 6px; z-index: 1; }
     .nav-project-item:hover .nav-project-row-actions, .nav-project-item:focus-within .nav-project-row-actions { opacity: 1; pointer-events: auto; }
-    .nav-project-action { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
-    .nav-project-action:hover { background: #e9e8e5; color: var(--ink); }
+    .nav-project-action { width: 24px; height: 27px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+    .nav-project-action:hover, .nav-project-action:focus-visible, .nav-project-action[aria-expanded="true"] { background: transparent; color: inherit; outline: 0; }
     .nav-project-action .icon { width: 16px; height: 16px; stroke-width: 1.8; }
     .nav-project-more { font-size: 15px; letter-spacing: 1px; transform: translateY(-2px); }
     .nav-project-create-menu { position: fixed; z-index: 120; width: 236px; display: grid; gap: 2px; padding: 8px; border: 1px solid #e4e2de; border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 16px 38px rgba(28,27,31,.14); }
@@ -1949,7 +1949,7 @@
           <div class="nav-projects-title"><button class="nav-projects-toggle" id="projectsToggle" type="button" aria-expanded="true"><span>项目</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><button class="nav-project-create" id="addProject" type="button" aria-label="添加项目" title="添加项目" aria-haspopup="menu" aria-expanded="false" aria-controls="projectCreateMenu"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18M17 4v6M14 7h6"/></svg></button></div>
           <div class="nav-project-item">
             <button class="nav-item nav-project-link" type="button" data-view="project" title="打开工商储方案"><svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path class="nav-project-lid" d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span class="nav-label">工商储方案</span></button>
-            <span class="nav-project-actions nav-project-row-actions"><button class="nav-project-action" id="currentProjectMore" type="button" aria-label="管理工商储方案" title="更多"><span class="nav-project-more">•••</span></button><button class="nav-project-action" id="currentProjectAdd" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span>
+            <span class="nav-project-actions nav-project-row-actions"><button class="nav-project-action" id="currentProjectMore" type="button" aria-label="工商储方案项目选项" title="项目选项" aria-haspopup="menu" aria-expanded="false" aria-controls="currentProjectMenu"><span class="nav-project-more">•••</span></button><button class="nav-project-action" id="currentProjectAdd" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span>
           </div>
           <section class="nav-conversations" aria-label="工商储方案下的任务和对话">
             <div class="nav-conversations-title"><button class="nav-conversations-toggle" id="conversationToggle" type="button" aria-expanded="true" aria-controls="projectThreadList"><span>对话</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button><button class="nav-conversation-add" id="addConversation" type="button" aria-label="在工商储方案中新建对话" title="新建对话"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.5 8.5 0 1 1-4.5-7.5"/><path d="M17 3v6M14 6h6"/></svg></button></div>
@@ -1970,6 +1970,12 @@
         <button type="button" role="menuitem" data-conversation-action="rename"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="m16.5 3.5 4 4L8 20H4v-4z"/></svg><span>重命名</span></button>
         <button type="button" role="menuitem" data-conversation-action="archive"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 3h18v4H3zM9 11h6"/></svg><span>归档</span></button>
         <button class="danger" type="button" role="menuitem" data-conversation-action="delete"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>删除</span></button>
+      </div>
+
+      <div class="nav-conversation-menu nav-project-menu" id="currentProjectMenu" role="menu" hidden>
+        <button type="button" role="menuitem" data-current-project-action="finder"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span>在“访达”中打开</span></button>
+        <button type="button" role="menuitem" data-current-project-action="rename"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="m16.5 3.5 4 4L8 20H4v-4z"/></svg><span>重命名项目</span></button>
+        <button type="button" role="menuitem" data-current-project-action="archive"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 3h18v4H3zM9 11h6"/></svg><span>归档</span></button>
       </div>
 
       <div class="nav-project-create-menu" id="projectCreateMenu" role="menu" hidden>
@@ -4206,8 +4212,38 @@
         closeProjectCreateMenu();
       });
       document.addEventListener('click', function (event) { if (!event.target.closest('#projectCreateMenu')) closeProjectCreateMenu(); });
-      document.getElementById('currentProjectMore').addEventListener('click', function () { openFeature('project-manager'); });
-      document.getElementById('currentProjectAdd').addEventListener('click', function () { document.getElementById('addConversation').click(); });
+      var currentProjectMenu = document.getElementById('currentProjectMenu');
+      var currentProjectMore = document.getElementById('currentProjectMore');
+      function closeCurrentProjectMenu() {
+        currentProjectMenu.hidden = true;
+        currentProjectMore.setAttribute('aria-expanded', 'false');
+      }
+      currentProjectMore.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var shouldOpen = currentProjectMenu.hidden;
+        closeCurrentProjectMenu();
+        if (!shouldOpen) return;
+        currentProjectMenu.hidden = false;
+        this.setAttribute('aria-expanded', 'true');
+        var triggerRect = this.getBoundingClientRect();
+        var menuRect = currentProjectMenu.getBoundingClientRect();
+        currentProjectMenu.style.left = Math.min(triggerRect.right + 10, window.innerWidth - menuRect.width - 12) + 'px';
+        currentProjectMenu.style.top = Math.min(triggerRect.bottom + 8, window.innerHeight - menuRect.height - 12) + 'px';
+      });
+      currentProjectMenu.addEventListener('click', function (event) {
+        var actionButton = event.target.closest('[data-current-project-action]');
+        if (!actionButton) return;
+        event.stopPropagation();
+        closeCurrentProjectMenu();
+        if (actionButton.dataset.currentProjectAction === 'finder') showToast('已定位到“工商储方案”项目目录');
+        if (actionButton.dataset.currentProjectAction === 'rename') showToast('已进入项目重命名状态');
+        if (actionButton.dataset.currentProjectAction === 'archive') showToast('项目已归档，可从项目管理中恢复');
+      });
+      document.addEventListener('click', function (event) { if (!event.target.closest('#currentProjectMenu')) closeCurrentProjectMenu(); });
+      document.getElementById('currentProjectAdd').addEventListener('click', function () {
+        closeCurrentProjectMenu();
+        document.getElementById('addConversation').click();
+      });
       document.getElementById('conversationToggle').addEventListener('click', function () {
         var section = document.querySelector('.nav-conversations');
         var collapsed = section.classList.toggle('is-collapsed');

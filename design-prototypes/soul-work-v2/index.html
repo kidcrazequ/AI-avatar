@@ -1650,9 +1650,9 @@
     .home-project-popover .home-popover-option strong { font-size: 15px; font-weight: 520; }
     .home-project-popover .home-popover-separator { margin: 6px 10px; }
 
-    /* Codex-style blank task canvas: project question centered, composer anchored to the bottom. */
+    /* Kimi-style task entrance: brand header and composer centered as one group. */
     .home-view { overflow: hidden; }
-    .home-inner { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; padding: 0 32px 22px; }
+    .home-inner { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 48px; padding: 0 32px 22px; }
     /* Codex-style composer menus: grouped add actions and slash commands. */
     .home-add-popover,
     .home-command-popover {
@@ -1712,9 +1712,12 @@
       .home-command-popover .skill-row .home-menu-meta { display: block; }
     }
 
-    .home-empty { min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 44px 24px 52px; text-align: center; }
+    .home-empty { min-height: 0; flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 0 24px; text-align: left; }
     .home-empty-icon { width: 48px; height: 48px; color: #b9bcc1; stroke-width: 1.65; }
-    .home-empty h1 { max-width: 760px; font-size: 30px; font-weight: 510; line-height: 1.3; letter-spacing: -.025em; }
+    .home-empty .home-hero-logo { width: 68px; height: 68px; border-radius: 20px; }
+    .home-empty .home-hero-logo .brand-mark { width: 100%; height: 100%; border-radius: inherit; }
+    .home-empty-copy { display: flex; flex-direction: column; align-items: flex-start; }
+    .home-empty h1 { max-width: 760px; font-size: 32px; font-weight: 510; line-height: 1.3; letter-spacing: -.025em; }
     .home-empty h1 span { font-weight: inherit; }
     .home-inner > .composer { flex: 0 0 auto; margin: 0 auto; }
 
@@ -2070,8 +2073,8 @@
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
             <div class="home-empty">
-              <svg class="icon home-empty-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M16.4 36.5h16.1a9 9 0 0 0 1.6-17.8 11 11 0 0 0-20.8 2.2 7.8 7.8 0 0 0 3.1 15.6Z"/><path d="m19.5 23 4.5 4-4.5 4M27.5 31h5.5"/></svg>
-              <h1 id="homePromptTitle">想完成什么？</h1>
+              <span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span></span>
+              <div class="home-empty-copy"><h1 id="homePromptTitle">让 Soul 来帮你完成任务</h1><span class="home-work-badge">Work</span></div>
             </div>
 
             <div class="composer">
@@ -3668,7 +3671,7 @@
       function setHomeProject(project) {
         var boundProject = project && project !== '不使用项目' ? project : '';
         document.getElementById('homeProjectLabel').textContent = boundProject || '选择项目';
-        document.getElementById('homePromptTitle').textContent = boundProject ? '要在 ' + boundProject + ' 内完成什么？' : '想完成什么？';
+        document.getElementById('homePromptTitle').textContent = boundProject ? '让 Soul 在 ' + boundProject + ' 中帮你完成任务' : '让 Soul 来帮你完成任务';
         homeProjectPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item.dataset.homeProject === project); });
       }
       function resetHomeComposer(project) {

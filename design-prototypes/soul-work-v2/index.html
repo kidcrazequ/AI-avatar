@@ -235,6 +235,7 @@
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(2) { transform: translate(1px, -1px); }
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(3) { transform: translate(-1px, 1px); }
     .nav-item[data-view="dashboard"]:hover .nav-dashboard-tile:nth-child(4) { transform: translate(1px, 1px); }
+    .nav-item[data-view="dashboard"]:hover .nav-dashboard-plus { transform: rotate(90deg) scale(1.08); }
     .nav-item[data-view="project"]:hover .nav-project-lid { transform: translateY(-1.5px); }
     .nav-item[data-view="automation"]:hover .nav-auto-hand { transform: rotate(38deg); }
     .nav-item[data-view="experts"]:hover .nav-expert-front { transform: translateY(-1px); }
@@ -1902,10 +1903,10 @@
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
           <button class="nav-item" type="button" data-view="dashboard">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-dashboard-tile" x="4" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="4" y="13.5" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4"/></svg><span class="nav-label">看板</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-dashboard-tile" x="3" y="3" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="14" y="3" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="3" y="14" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="14" y="14" width="7" height="7" rx="1.6"/><path class="nav-dashboard-plus" d="M12 9.5v5M9.5 12h5"/></svg><span class="nav-label">看板</span>
           </button>
           <button class="nav-item" type="button" data-view="automation">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 5.8 3.5 7.6M18.7 5.8l1.8 1.8"/><circle cx="12" cy="13" r="7"/><path class="nav-auto-hand" d="M12 9v4l2.6 1.6"/><path d="m8 20-1 1m9-1 1 1"/></svg><span class="nav-label">定时任务</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 2v4M8 2v4M3 10h5M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3.5"/><circle cx="16" cy="16" r="6"/><path class="nav-auto-hand" d="M16 13.5v2.7l1.8 1.1"/></svg><span class="nav-label">定时任务</span>
           </button>
           <button class="nav-item" type="button" data-view="experts">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><g class="nav-expert-front"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/></g><g class="nav-expert-back"><path d="M16 8.3a2.6 2.6 0 0 1 0 5.1M17 15.3c2 .5 3.1 1.7 3.5 3.7"/></g></svg><span class="nav-label">专家</span>
@@ -2127,7 +2128,7 @@
               </div>
               <section class="dashboard-zero" id="dashboardZero" aria-labelledby="dashboardZeroTitle">
                 <div class="dashboard-zero-content">
-                  <svg class="dashboard-zero-art" viewBox="0 0 108 92" aria-hidden="true"><rect x="5" y="7" width="44" height="31" rx="7"/><rect x="59" y="7" width="44" height="31" rx="7"/><rect x="5" y="48" width="44" height="31" rx="7"/><rect x="59" y="48" width="44" height="31" rx="7"/><path d="M54 35v22M43 46h22"/></svg>
+                  <svg class="dashboard-zero-art" viewBox="0 0 108 92" aria-hidden="true"><rect x="12" y="10" width="34" height="44" rx="8"/><rect x="57" y="10" width="39" height="25" rx="8"/><rect x="12" y="65" width="34" height="17" rx="7"/><rect x="57" y="46" width="39" height="36" rx="8"/></svg>
                   <h2 id="dashboardZeroTitle">建立你的个人工作台</h2>
                   <p>从任务、项目、成果和定时任务中选择组件；看板只整理信息，不改变原始数据。</p>
                   <div class="dashboard-zero-actions"><button class="secondary-button" type="button" data-dashboard-create="dialog">用对话生成</button><button class="primary-button" type="button" data-dashboard-create="blank">从模板开始</button></div>
@@ -2281,7 +2282,7 @@
             </section>
             <section class="automation-zero-state" id="automationZeroState" aria-labelledby="automationZeroTitle">
               <div class="automation-zero-content">
-                <svg class="automation-zero-art" viewBox="0 0 120 120" aria-hidden="true"><path class="calendar-page" d="M32 34h56l6 58H27z" stroke-width="2.5" stroke-linejoin="round"/><path d="M32 47h56M43 27v14M59 27v14M75 27v14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M48 61h24M48 72h17" fill="none" stroke="#d2d6dc" stroke-width="2.5" stroke-linecap="round"/><circle class="clock-face" cx="39" cy="83" r="21" stroke-width="2.5"/><path class="clock-hand" d="M39 72v12l8-5" fill="none" stroke="#89919d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg class="automation-zero-art" viewBox="0 0 120 120" aria-hidden="true"><rect class="calendar-page" x="24" y="25" width="72" height="69" rx="13" stroke-width="2.5"/><path d="M24 45h72M43 18v16M77 18v16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M39 59h17M39 70h12" fill="none" stroke="#d2d6dc" stroke-width="2.5" stroke-linecap="round"/><circle class="clock-face" cx="82" cy="84" r="22" stroke-width="2.5"/><path class="clock-hand" d="M82 72v13l9 5" fill="none" stroke="#89919d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <h2 id="automationZeroTitle">暂无定时任务</h2>
                 <p><button class="automation-zero-action" id="emptyNewAutomation" type="button">手动添加</button><span>或</span><button class="automation-zero-action" id="chatNewAutomation" type="button">通过会话创建</button></p>
               </div>

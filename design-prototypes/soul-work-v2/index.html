@@ -182,7 +182,7 @@
       place-items: center;
     }
 
-    .soul-avatar { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 2px 3px rgba(24,26,29,.16)); }
+    .soul-avatar { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; filter: drop-shadow(0 2px 3px rgba(24,26,29,.12)); }
 
     .brand-name { font-size: 15px; font-weight: 680; letter-spacing: -.02em; }
     .brand-edition { margin-top: 2px; color: var(--tertiary); font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
@@ -285,9 +285,16 @@
     .nav-conversation-item:hover, .nav-conversation-item.active, .nav-work-thread:hover, .nav-work-thread.active { background: #f4f3f1; color: var(--ink); font-weight: 480; }
     .nav-conversation-item .nav-label, .nav-work-thread .nav-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .nav-thread-status { flex: 0 0 auto; margin-left: auto; color: #8c8b92; font-size: 12px; font-weight: 500; }
-    .nav-conversation-more { flex: 0 0 auto; margin-left: auto; color: #89888f; font-size: 14px; letter-spacing: 1px; opacity: 0; transform: translateY(-2px); transition: opacity 160ms var(--ease); }
+    .nav-conversation-more { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; margin-left: auto; border-radius: 8px; color: #89888f; font-size: 14px; letter-spacing: 1px; opacity: 0; transform: translateY(-2px); transition: opacity 160ms var(--ease), background 140ms var(--ease); }
     .nav-conversation-item:hover .nav-conversation-more, .nav-conversation-item:focus-visible .nav-conversation-more { opacity: 1; }
+    .nav-conversation-more:hover { background: #e9e8e5; color: var(--ink); }
     .nav-work-thread:hover .nav-thread-status, .nav-work-thread:focus-visible .nav-thread-status { display: none; }
+    .nav-conversation-menu { position: fixed; z-index: 120; width: 252px; padding: 8px; border: 1px solid #dedbd5; border-radius: 18px; background: rgba(255,255,255,.98); box-shadow: 0 22px 58px rgba(25,24,28,.16), 0 3px 12px rgba(25,24,28,.07); backdrop-filter: blur(18px); }
+    .nav-conversation-menu[hidden] { display: none; }
+    .nav-conversation-menu button { width: 100%; height: 48px; display: flex; align-items: center; gap: 13px; padding: 0 13px; border: 0; border-radius: 11px; background: transparent; color: #27272c; font-size: 15px; text-align: left; cursor: pointer; }
+    .nav-conversation-menu button:hover { background: #f3f2f0; }
+    .nav-conversation-menu .icon { width: 20px; height: 20px; flex: 0 0 auto; stroke-width: 1.8; }
+    .nav-conversation-menu .danger { color: #ff3b45; }
 
     .stage { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--work); }
     .view { position: absolute; inset: 0; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity 180ms var(--ease), transform 180ms var(--ease); }
@@ -1881,19 +1888,6 @@
   <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
     <symbol id="lucide-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
     <symbol id="lucide-file-archive" viewBox="0 0 24 24"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></symbol>
-    <symbol id="soul-avatar" viewBox="0 0 48 48">
-      <g fill="#a8d8c3" opacity=".72">
-        <ellipse cx="30" cy="13" rx="7.8" ry="9.5"/>
-        <path d="M22.2 29.1c0-5.5 3.1-8.8 7.8-8.8s7.8 3.3 7.8 8.8L36 45H24z"/>
-      </g>
-      <g fill="#24272b">
-        <ellipse cx="19" cy="14" rx="7.8" ry="9.5"/>
-        <path d="M11.2 30.1c0-5.5 3.1-8.8 7.8-8.8s7.8 3.3 7.8 8.8L25 46H13z"/>
-      </g>
-      <path d="m15.7 13.4 2-1.1M20.3 12.3l2 1.1" fill="none" stroke="#f2d4ad" stroke-width="1.35" stroke-linecap="round"/>
-      <circle cx="19" cy="29" r="3.1" fill="#16181b" stroke="#4b4e50" stroke-width="1"/>
-      <circle cx="19" cy="29" r="1.65" fill="#d89a55"/>
-    </symbol>
   </svg>
   <div class="app" id="appRoot">
     <header class="titlebar">
@@ -1910,7 +1904,7 @@
     <div class="body-grid">
       <aside class="global-nav">
         <div class="brand">
-          <span class="brand-mark" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span>
+          <span class="brand-mark" aria-hidden="true"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span>
           <div><div class="brand-name">Soul</div><div class="brand-edition">Task console</div></div>
         </div>
 
@@ -1947,10 +1941,19 @@
         </button>
       </aside>
 
+      <div class="nav-conversation-menu" id="conversationMenu" role="menu" hidden>
+        <button type="button" role="menuitem" data-conversation-action="pin"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 4 6 6-4 2-4 4-2 4-6-6 4-2 4-4z"/><path d="m4 20 5-5"/></svg><span>置顶</span></button>
+        <button type="button" role="menuitem" data-conversation-action="window"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9"/><path d="M19 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></svg><span>在新窗口打开</span></button>
+        <button type="button" role="menuitem" data-conversation-action="finder"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><span>在“访达”中打开</span></button>
+        <button type="button" role="menuitem" data-conversation-action="rename"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="m16.5 3.5 4 4L8 20H4v-4z"/></svg><span>重命名</span></button>
+        <button type="button" role="menuitem" data-conversation-action="archive"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM3 3h18v4H3zM9 11h6"/></svg><span>归档</span></button>
+        <button class="danger" type="button" role="menuitem" data-conversation-action="delete"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg><span>删除</span></button>
+      </div>
+
       <main class="stage">
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
-            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
+            <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
 
             <div class="composer">
               <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…"></textarea>
@@ -2480,7 +2483,7 @@
               </header>
               <div class="chat-messages" id="chatMessages">
                 <div class="message-row user"><div class="message-copy">把现有资料整理成客户沟通提纲，缺的参数单独列出来，不要自行补齐。</div></div>
-                <div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div></div>
+                <div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span><div class="assistant-message"><div class="message-status">Soul · 已完成思考</div><div class="message-copy">可以。我会先归并已有资料并标出缺失项。如果需要持续执行、保留过程和交付成果，可以把这段对话转成一项任务。</div></div></div>
                 <button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>
               </div>
               <div class="chat-compose-wrap"><div class="chat-compose"><div class="chat-command-popover" id="chatCommandPopover" hidden></div><div class="chat-attachments" id="chatAttachments"></div><textarea id="chatInput" aria-label="输入消息" placeholder="继续对话…"></textarea><div class="chat-compose-actions"><div class="chat-compose-tools"><button class="chat-mini-tool" id="chatAttach" type="button">＋ 附件</button><button class="chat-mini-tool" id="chatVoice" type="button">语音</button><button class="chat-mini-tool" id="chatSkill" type="button">/ 技能</button><button class="chat-mini-tool" id="chatContext" type="button">@ 上下文</button></div><button class="primary-button" id="sendChat" type="button" aria-label="发送"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg></button></div></div></div>
@@ -4018,7 +4021,7 @@
 
       function chatMessageMarkup(thread) {
         return '<div class="message-row user"><div class="message-copy">' + thread.user + '</div></div>' +
-          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><svg class="soul-avatar"><use href="#soul-avatar"></use></svg></span><div class="assistant-message"><div class="message-status">Soul · ' + (thread.isTask ? '任务状态已更新' : '已完成思考') + '</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
+          '<div class="message-row assistant"><span class="assistant-avatar" aria-hidden="true"><img class="soul-avatar" src="./assets/soul-avatar.png" alt=""></span><div class="assistant-message"><div class="message-status">Soul · ' + (thread.isTask ? '任务状态已更新' : '已完成思考') + '</div><div class="message-copy">' + thread.reply + '</div></div></div>' +
           (thread.isTask ? taskFlowMarkup(thread) : '<button class="chat-work-hint" type="button" data-chat-to-work><span class="chat-work-hint-icon">↗</span><span class="chat-work-hint-copy"><strong>设为任务</strong><span>在当前对话中继续执行，保留全部上下文和消息，不创建第二条记录。</span></span><span class="chat-work-hint-arrow">›</span></button>');
       }
 
@@ -4044,6 +4047,46 @@
       });
 
       ['task', 'waiting', 'draft', 'completed'].forEach(function (key) { syncTaskThreadSurfaces(key, chatThreads[key]); });
+
+      var conversationMenu = document.getElementById('conversationMenu');
+      var conversationMenuKey = '';
+      function closeConversationMenu() { conversationMenu.hidden = true; conversationMenuKey = ''; }
+      document.getElementById('projectThreadList').addEventListener('click', function (event) {
+        var trigger = event.target.closest('.nav-conversation-more');
+        if (!trigger) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var item = trigger.closest('[data-chat]');
+        conversationMenuKey = item.dataset.chat;
+        conversationMenu.hidden = false;
+        var triggerRect = trigger.getBoundingClientRect();
+        var menuRect = conversationMenu.getBoundingClientRect();
+        conversationMenu.style.left = Math.min(triggerRect.right + 8, window.innerWidth - menuRect.width - 12) + 'px';
+        conversationMenu.style.top = Math.max(12, Math.min(triggerRect.top - 8, window.innerHeight - menuRect.height - 12)) + 'px';
+      }, true);
+      conversationMenu.addEventListener('click', function (event) {
+        var actionButton = event.target.closest('[data-conversation-action]');
+        if (!actionButton || !conversationMenuKey) return;
+        event.stopPropagation();
+        var key = conversationMenuKey;
+        var thread = chatThreads[key];
+        var navItem = document.querySelector('#projectThreadList [data-chat="' + key + '"]');
+        closeConversationMenu();
+        if (actionButton.dataset.conversationAction === 'pin') { navItem.parentElement.prepend(navItem); showToast('已置顶「' + thread.title + '」'); }
+        if (actionButton.dataset.conversationAction === 'window') showToast('将在新窗口打开「' + thread.title + '」');
+        if (actionButton.dataset.conversationAction === 'finder') showToast('已定位到「' + thread.title + '」的项目目录');
+        if (actionButton.dataset.conversationAction === 'rename') {
+          thread.title = thread.title.replace(/（已重命名）$/, '') + '（已重命名）';
+          navItem.querySelector('.nav-label').textContent = thread.title;
+          var listTitle = document.querySelector('.chat-thread[data-chat="' + key + '"] .chat-thread-title');
+          if (listTitle) listTitle.textContent = thread.title;
+          if (activeChatKey === key) document.getElementById('chatTitle').textContent = thread.title;
+          showToast('对话标题已更新');
+        }
+        if (actionButton.dataset.conversationAction === 'archive') { navItem.hidden = true; showToast('对话已归档，可在历史记录中恢复'); }
+        if (actionButton.dataset.conversationAction === 'delete') openRisk('high', { badge: '高风险 · 删除对话', title: '确认删除「' + thread.title + '」', copy: '删除后该对话将从当前项目移除。原型只演示确认，不会删除真实数据。', plan: ['移除当前项目下的对话入口', '保留任务与成果的审计说明', '不影响其他项目内容'], impact: '<strong>影响范围：</strong>该对话及其关联入口；原型不会执行真实删除。', confirmLabel: '确认删除对话', needsRecipient: false, success: '原型已确认，未删除任何真实数据' });
+      });
+      document.addEventListener('click', function (event) { if (!event.target.closest('#conversationMenu')) closeConversationMenu(); });
 
       function filterChatThreads() {
         var value = document.getElementById('chatThreadSearch').value.trim().toLowerCase();

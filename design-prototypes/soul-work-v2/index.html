@@ -1955,7 +1955,7 @@
 
         <nav class="nav-section" aria-label="主导航">
           <button class="nav-item active" type="button" data-view="home">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0Z"/><path class="nav-new-plus" d="M12.5 8.2v6.6M9.2 11.5h6.6"/></svg><span class="nav-label">新建任务</span><span class="nav-shortcut" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
           <button class="nav-item" type="button" data-view="dashboard">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-dashboard-tile" x="3" y="3" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="14" y="3" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="3" y="14" width="7" height="7" rx="1.6"/><rect class="nav-dashboard-tile" x="14" y="14" width="7" height="7" rx="1.6"/><path class="nav-dashboard-plus" d="M12 9.5v5M9.5 12h5"/></svg><span class="nav-label">看板</span>
@@ -2011,12 +2011,12 @@
           <div class="home-inner">
             <div class="home-empty">
               <svg class="icon home-empty-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M16.4 36.5h16.1a9 9 0 0 0 1.6-17.8 11 11 0 0 0-20.8 2.2 7.8 7.8 0 0 0 3.1 15.6Z"/><path d="m19.5 23 4.5 4-4.5 4M27.5 31h5.5"/></svg>
-              <h1>要在 <span id="homePromptProject">工商储方案</span> 内完成什么？</h1>
+              <h1 id="homePromptTitle">想完成什么？</h1>
             </div>
 
             <div class="composer">
               <div class="home-context-bar" aria-label="当前任务上下文">
-                <button class="home-context-project home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
+                <button class="home-context-project home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">选择项目</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
                 <span class="home-context-item"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>本地</span></span>
                 <span class="home-context-item"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.7 7.1 10.8 16M16.3 7.1 13.2 16M8 6h8"/></svg><span>共享上下文</span></span>
               </div>
@@ -2039,7 +2039,7 @@
                 <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
               </div>
               <div class="home-popover home-model-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
-              <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
+              <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
             </div>
 
           </div>
@@ -2048,7 +2048,7 @@
         <section class="view workspace-page" id="tasksView">
           <header class="workspace-header">
             <div class="workspace-heading"><h1>任务</h1><p class="lead">跨项目查看需要持续执行、独立验收或等待你处理的对话。</p></div>
-            <div class="workspace-actions"><button class="primary-button" id="tasksNewButton" type="button">新建</button></div>
+            <div class="workspace-actions"><button class="primary-button" id="tasksNewButton" type="button">新建任务</button></div>
           </header>
           <div class="workspace-scroll">
             <div class="task-overview">
@@ -3562,9 +3562,16 @@
       var homeProjectPopover = document.getElementById('homeProjectPopover');
 
       function updateHomeSendState() { document.getElementById('startWork').disabled = !goalInput.value.trim(); }
-      function resetHomeComposer() {
+      function setHomeProject(project) {
+        var boundProject = project && project !== '不使用项目' ? project : '';
+        document.getElementById('homeProjectLabel').textContent = boundProject || '选择项目';
+        document.getElementById('homePromptTitle').textContent = boundProject ? '要在 ' + boundProject + ' 内完成什么？' : '想完成什么？';
+        homeProjectPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item.dataset.homeProject === project); });
+      }
+      function resetHomeComposer(project) {
         goalInput.value = '';
         document.getElementById('homeAttachments').innerHTML = '';
+        setHomeProject(project || '');
         updateHomeSendState();
       }
       function closeHomePickers() {
@@ -3602,9 +3609,7 @@
       homeProjectPopover.addEventListener('click', function (event) {
         var option = event.target.closest('[data-home-project]');
         if (!option) return;
-        document.getElementById('homeProjectLabel').textContent = option.dataset.homeProject;
-        document.getElementById('homePromptProject').textContent = option.dataset.homeProject === '不使用项目' ? '当前对话' : option.dataset.homeProject;
-        homeProjectPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item === option); });
+        setHomeProject(option.dataset.homeProject);
         closeHomePickers();
       });
       document.addEventListener('click', function (event) { if (!event.target.closest('.home-picker') && !event.target.closest('.home-popover')) closeHomePickers(); });
@@ -3618,7 +3623,7 @@
         chatThreads.task.reply = '目标已设为任务。我已匹配小堵负责、财研协作，接下来会在这段对话中持续同步计划、执行状态和可审阅结果。';
         chatThreads.task.taskState = 'running';
         chatThreads.task.projectKey = project === '工商储方案' ? 'storage' : 'none';
-        chatThreads.task.project = (project === '不使用项目' ? '未绑定项目' : project) + ' · 任务执行中';
+        chatThreads.task.project = (project === '选择项目' ? '未绑定项目' : project) + ' · 任务执行中';
         syncTaskThreadSurfaces('task', chatThreads.task);
         switchView('chat');
         renderChatThread('task');
@@ -3680,8 +3685,7 @@
       });
 
       document.getElementById('projectNewWork').addEventListener('click', function () {
-        goalInput.value = '';
-        updateHomeSendState();
+        resetHomeComposer('工商储方案');
         switchView('home');
         goalInput.focus();
         showToast('已绑定项目「工商储方案」');
@@ -4199,16 +4203,10 @@
       document.getElementById('chatProjectFilter').addEventListener('change', filterChatThreads);
       document.getElementById('manageChatProjects').addEventListener('click', function () { openFeature('chat-projects'); });
       document.getElementById('addConversation').addEventListener('click', function () {
-        activeChatKey = '';
-        switchView('chat');
-        document.querySelectorAll('.chat-thread, .nav-conversation-item, .nav-work-thread').forEach(function (button) { button.classList.remove('active'); });
-        document.getElementById('chatTitle').textContent = '新对话';
-        document.getElementById('chatProject').textContent = '工商储方案 · 新对话';
-        document.getElementById('chatMessages').innerHTML = '<div class="chat-empty">从一个问题开始，需要持续执行时可直接在当前对话中设为任务。</div>';
-        document.getElementById('chatToWork').dataset.mode = 'promote';
-        document.querySelector('#chatToWork span').textContent = '设为任务';
-        document.getElementById('chatInput').value = '';
-        document.getElementById('chatInput').focus();
+        resetHomeComposer('工商储方案');
+        switchView('home');
+        goalInput.focus();
+        showToast('已绑定项目「工商储方案」');
       });
       var projectCreateMenu = document.getElementById('projectCreateMenu');
       function closeProjectCreateMenu() {

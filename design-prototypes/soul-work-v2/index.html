@@ -935,6 +935,16 @@
     .dashboard-zero h2 { margin: 0; font-size: 18px; font-weight: 640; letter-spacing: -.02em; }
     .dashboard-zero p { margin: 9px 0 18px; color: var(--tertiary); font-size: 14px; line-height: 1.65; }
     .dashboard-zero-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .dashboard-header-create { position: relative; }
+    .dashboard-header-create[hidden], .dashboard-create-menu[hidden] { display: none; }
+    .dashboard-create-trigger { gap: 8px; }
+    .dashboard-create-trigger .icon { width: 15px; height: 15px; transition: transform 150ms var(--ease); }
+    .dashboard-create-trigger[aria-expanded="true"] .icon { transform: rotate(180deg); }
+    .dashboard-create-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: 216px; display: grid; gap: 2px; padding: 8px; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.98); box-shadow: 0 16px 40px rgba(20,19,22,.13); backdrop-filter: blur(16px); }
+    .dashboard-create-option { display: grid; gap: 3px; width: 100%; min-height: 58px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+    .dashboard-create-option:hover { background: #f4f4f2; }
+    .dashboard-create-option strong { font-size: 14px; font-weight: 640; line-height: 1.35; }
+    .dashboard-create-option small { color: var(--tertiary); font-size: 12px; line-height: 1.4; }
     .dashboard-catalog[hidden], .dashboard-detail[hidden], .dashboard-create-layer[hidden], .dashboard-list[hidden], .dashboard-card[hidden] { display: none; }
     .dashboard-card { width: 100%; overflow: hidden; padding: 0; border: 1px solid var(--line-strong); border-radius: 16px; background: #fff; text-align: left; cursor: pointer; box-shadow: 0 1px 2px rgba(20,19,22,.035); transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), transform 160ms var(--ease); }
     .dashboard-card:hover { border-color: #c8c5bf; box-shadow: 0 10px 24px rgba(20,19,22,.07); transform: translateY(-2px); }
@@ -2153,9 +2163,12 @@
               <h1>看板</h1>
               <p class="lead">把任务、项目和定时任务整理成适合自己的个人工作台。</p>
             </div>
-            <div class="workspace-actions">
-              <button class="secondary-button" type="button" data-dashboard-create="dialog">对话创建</button>
-              <button class="primary-button" type="button" data-dashboard-create="blank">新建看板</button>
+            <div class="workspace-actions dashboard-header-create" id="dashboardHeaderCreate" hidden>
+              <button class="primary-button dashboard-create-trigger" id="dashboardCreateTrigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="dashboardCreateMenu"><span>新建看板</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"/></svg></button>
+              <div class="dashboard-create-menu" id="dashboardCreateMenu" role="menu" hidden>
+                <button class="dashboard-create-option" type="button" role="menuitem" data-dashboard-create="dialog"><strong>对话生成</strong><small>描述想关注的信息，由 Soul 生成草案</small></button>
+                <button class="dashboard-create-option" type="button" role="menuitem" data-dashboard-create="template"><strong>从模板开始</strong><small>选择预设组件并继续编辑</small></button>
+              </div>
             </div>
           </header>
           <div class="dashboard-catalog">
@@ -3254,6 +3267,9 @@
       var dashboardDetail = document.getElementById('dashboardDetail');
       var dashboardDetailTitle = document.getElementById('dashboardDetailTitle');
       var dashboardCreateLayer = document.getElementById('dashboardCreateLayer');
+      var dashboardHeaderCreate = document.getElementById('dashboardHeaderCreate');
+      var dashboardCreateTrigger = document.getElementById('dashboardCreateTrigger');
+      var dashboardCreateMenu = document.getElementById('dashboardCreateMenu');
       var dashboardGrid = document.getElementById('dashboardGrid');
       var dashboardEditButton = document.getElementById('dashboardEdit');
       var dashboardEditBar = document.getElementById('dashboardEditBar');
@@ -3279,12 +3295,18 @@
       }
 
       function openDashboardCreate(mode) {
+        closeDashboardCreateMenu();
         dashboardCreateLayer.hidden = false;
         setDashboardCreateMode(mode === 'dialog' ? 'dialog' : 'template');
         if (mode === 'dialog') setTimeout(function () { document.getElementById('dashboardDialogPrompt').focus(); }, 80);
       }
 
       function closeDashboardCreate() { dashboardCreateLayer.hidden = true; }
+
+      function closeDashboardCreateMenu() {
+        dashboardCreateMenu.hidden = true;
+        dashboardCreateTrigger.setAttribute('aria-expanded', 'false');
+      }
 
       function showDashboardCatalog() {
         dashboardDetail.hidden = true;
@@ -3305,6 +3327,7 @@
         dashboardZero.hidden = true;
         dashboardList.hidden = false;
         dashboardCard.hidden = false;
+        dashboardHeaderCreate.hidden = false;
         dashboardCount.textContent = '1 个';
         closeDashboardCreate();
         showDashboardDetail(title);
@@ -3371,6 +3394,14 @@
       document.querySelectorAll('[data-dashboard-create]').forEach(function (button) {
         button.addEventListener('click', function () { openDashboardCreate(button.dataset.dashboardCreate); });
       });
+      dashboardCreateTrigger.addEventListener('click', function (event) {
+        event.stopPropagation();
+        var open = dashboardCreateMenu.hidden;
+        dashboardCreateMenu.hidden = !open;
+        dashboardCreateTrigger.setAttribute('aria-expanded', String(open));
+      });
+      dashboardCreateMenu.addEventListener('click', function (event) { event.stopPropagation(); });
+      document.addEventListener('click', closeDashboardCreateMenu);
       document.querySelectorAll('[data-dashboard-mode]').forEach(function (tab) {
         tab.addEventListener('click', function () { setDashboardCreateMode(tab.dataset.dashboardMode); });
       });

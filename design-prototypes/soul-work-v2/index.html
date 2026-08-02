@@ -1875,7 +1875,9 @@
     .dashboard-card:active, .dashboard-template:active, .dashboard-widget-option:active { transform: translateY(0) scale(.995); }
 
     @media (max-width: 1280px) {
-      .home-inner { width: calc(100% - 46px); padding-top: clamp(130px, 18vh, 150px); }
+      .home-inner { width: 100%; padding: 0 24px 18px; }
+      .home-inner > .composer { width: min(860px, 100%); }
+      .home-empty { padding-left: 20px; padding-right: 20px; }
       .home-lower { gap: 28px; grid-template-columns: minmax(0,1fr) 250px; }
       .work-view { grid-template-columns: 220px minmax(350px, 1fr) 0; }
       .work-view.details-open { grid-template-columns: 220px minmax(350px, 1fr) 278px; }
@@ -1883,7 +1885,7 @@
       .work-state-screen { padding-left: 34px; padding-right: 34px; }
       .detail-rail > * { width: 278px; }
       .execution-scroll { padding-left: 26px; padding-right: 26px; }
-      .home-inner .goal-input { height: 142px; }
+      .home-inner .goal-input { height: 96px; }
       .expert-profile-head { padding-left: 22px; padding-right: 22px; }
       .expert-panel-scroll { padding-left: 22px; padding-right: 22px; }
       .dashboard-catalog { padding: 26px 28px 48px; }
@@ -1897,6 +1899,11 @@
     }
 
     @media (max-height: 820px) {
+      .home-inner { padding-bottom: 16px; }
+      .home-empty { gap: 14px; padding-top: 28px; padding-bottom: 30px; }
+      .home-empty-icon { width: 42px; height: 42px; }
+      .home-empty h1 { font-size: 27px; }
+      .home-inner .goal-input { height: 88px; }
       .dashboard-zero { min-height: 410px; }
       .dashboard-create-layer { padding-top: 18px; }
       .dashboard-template { min-height: 196px; grid-template-rows: 102px auto; }
@@ -1904,9 +1911,13 @@
     }
 
     @media (max-height: 760px) {
-      .home-inner { padding-top: 94px; }
-      .home-inner > .composer { margin-top: 42px; }
-      .home-inner .goal-input { height: 120px; }
+      .home-inner { padding: 0 24px 12px; }
+      .home-empty { gap: 12px; padding-top: 18px; padding-bottom: 18px; }
+      .home-empty-icon { width: 38px; height: 38px; }
+      .home-empty h1 { font-size: 25px; }
+      .home-context-bar { min-height: 40px; }
+      .home-inner .goal-input { height: 78px; }
+      .home-inner .composer-tools { min-height: 54px; }
       .home-lower { margin-top: 28px; }
       .work-row, .attention-row { min-height: 58px; }
       .execution-head { min-height: 84px; padding-top: 16px; padding-bottom: 14px; }
@@ -3525,6 +3536,7 @@
 
       navItems.forEach(function (item) {
         item.addEventListener('click', function () {
+          if (item.dataset.view === 'home') resetHomeComposer();
           if (item.dataset.view) switchView(item.dataset.view);
           if (item.dataset.toast) showToast(item.dataset.toast);
         });
@@ -3541,7 +3553,7 @@
         var taskButton = event.target.closest('[data-open-task-thread]');
         if (taskButton) { switchView('chat'); renderChatThread(taskButton.dataset.openTaskThread); }
       });
-      document.getElementById('tasksNewButton').addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').focus(); });
+      document.getElementById('tasksNewButton').addEventListener('click', function () { resetHomeComposer(); switchView('home'); document.getElementById('goalInput').focus(); });
 
       var goalInput = document.getElementById('goalInput');
       var homeModelPicker = document.getElementById('homeModelPicker');
@@ -3550,6 +3562,11 @@
       var homeProjectPopover = document.getElementById('homeProjectPopover');
 
       function updateHomeSendState() { document.getElementById('startWork').disabled = !goalInput.value.trim(); }
+      function resetHomeComposer() {
+        goalInput.value = '';
+        document.getElementById('homeAttachments').innerHTML = '';
+        updateHomeSendState();
+      }
       function closeHomePickers() {
         [homeModelPopover, homeProjectPopover].forEach(function (popover) { popover.hidden = true; });
         [homeModelPicker, homeProjectPicker].forEach(function (picker) { picker.setAttribute('aria-expanded', 'false'); });

@@ -1607,23 +1607,26 @@
     .home-hero-logo .brand-mark { width: 38px; height: 38px; }
     .home-hero h1 { font-size: 32px; line-height: 1.2; }
     .home-work-badge { display: inline-flex; margin-top: 6px; padding: 3px 7px; border-radius: 6px; background: #edf3ff; color: #2563eb; font-size: 11px; font-weight: 650; }
-    .home-inner > .composer { position: relative; width: min(900px, 100%); margin: 64px auto 0; overflow: visible; border-color: #d9d7d2; border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
-    .home-inner .goal-input { height: 156px; padding: 24px 30px 14px; font-size: 16px; line-height: 1.75; }
-    .home-inner .composer-tools { min-height: 64px; padding: 10px 16px 12px; border-top: 0; background: #fff; }
+    .home-inner > .composer { position: relative; width: min(900px, 100%); margin: 64px auto 0; overflow: visible; border-color: #d9d7d2; border-radius: 22px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
+    .home-context-bar { min-height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 22px; border-bottom: 1px solid #ebe9e5; border-radius: 22px 22px 0 0; background: #f6f6f5; color: #66656c; font-size: 13px; }
+    .home-context-project, .home-context-item { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: inherit; white-space: nowrap; }
+    .home-context-project { height: 32px; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
+    .home-context-project:hover { color: #25262b; }
+    .home-context-bar .icon { width: 16px; height: 16px; flex: 0 0 auto; stroke-width: 1.75; }
+    .home-context-project .chevron { width: 14px; height: 14px; color: #96959b; }
+    .home-inner .goal-input { height: 96px; padding: 18px 24px 10px; font-size: 15px; line-height: 1.7; }
+    .home-inner #homeAttachments:not(:empty) { padding: 0 24px 8px; }
+    .home-inner .composer-tools { min-height: 58px; padding: 8px 13px 10px; border-top: 0; border-radius: 0 0 22px 22px; background: #fff; }
     .home-inner .tool-button { height: 38px; border-radius: 10px; }
     .home-add-button { width: 38px; justify-content: center; padding: 0 !important; color: #323238; }
     .home-add-button .icon { width: 20px; height: 20px; stroke-width: 1.8; }
-    .home-model-button, .home-project-strip { position: relative; }
+    .home-model-button, .home-context-project { position: relative; }
     .home-inner .home-model-button { height: 42px; padding: 0 15px; border-color: transparent; border-radius: 999px; background: #f2f2f1; color: #2e2e33; font-size: 14px; }
     .home-inner .home-model-button:hover { border-color: transparent; background: #ececeb; }
-    .home-model-button .icon, .home-project-strip .chevron { transition: transform 150ms var(--ease); }
+    .home-model-button .icon, .home-context-project .chevron { transition: transform 150ms var(--ease); }
     .home-inner .home-start { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
     .home-start .icon { width: 19px; height: 19px; stroke-width: 2; }
     .home-start:disabled { border-color: #d7d7d8; background: #d7d7d8; color: #fff; box-shadow: none; cursor: default; }
-    .home-project-strip { width: 100%; height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border: 0; border-top: 1px solid #ebe9e5; background: #f6f5f3; color: #66656c; font-size: 14px; text-align: left; cursor: pointer; }
-    .home-project-strip:hover { background: #f1f0ed; color: var(--ink); }
-    .home-project-strip .icon { width: 19px; height: 19px; }
-    .home-project-strip .chevron { width: 16px; height: 16px; margin-left: 1px; color: #8f8e95; }
     .home-popover { position: fixed; z-index: 80; width: 284px; padding: 7px; border: 1px solid #e1dfda; border-radius: 16px; background: rgba(255,255,255,.98); box-shadow: 0 18px 48px rgba(25,24,28,.14), 0 3px 12px rgba(25,24,28,.07); backdrop-filter: blur(18px); }
     .home-popover[hidden] { display: none; }
     .home-popover-option { width: 100%; min-height: 58px; display: grid; grid-template-columns: minmax(0,1fr) 22px; align-items: center; gap: 12px; padding: 9px 11px; border: 0; border-radius: 11px; background: transparent; color: #2d2d32; text-align: left; cursor: pointer; }
@@ -2001,7 +2004,12 @@
             </div>
 
             <div class="composer">
-              <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…"></textarea>
+              <div class="home-context-bar" aria-label="当前任务上下文">
+                <button class="home-context-project home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
+                <span class="home-context-item"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>本地</span></span>
+                <span class="home-context-item"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7.7 7.1 10.8 16M16.3 7.1 13.2 16M8 6h8"/></svg><span>共享上下文</span></span>
+              </div>
+              <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="随心输入，或交代一项任务…"></textarea>
               <div class="chat-attachments" id="homeAttachments"></div>
               <div class="composer-tools">
                 <button class="tool-button home-add-button" id="homeAttach" type="button" aria-label="添加附件" title="添加附件">
@@ -2019,7 +2027,6 @@
                 </button>
                 <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
               </div>
-              <button class="home-project-strip home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
               <div class="home-popover home-model-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
               <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
             </div>
@@ -3549,12 +3556,6 @@
       }
       function positionHomePopover(picker, popover, alignLeft) {
         popover.hidden = false;
-        if (popover === homeProjectPopover) {
-          popover.style.position = 'absolute';
-          popover.style.left = '0';
-          popover.style.top = 'calc(100% + 8px)';
-          return;
-        }
         popover.style.position = 'fixed';
         var trigger = picker.getBoundingClientRect();
         var menu = popover.getBoundingClientRect();
@@ -3585,6 +3586,7 @@
         var option = event.target.closest('[data-home-project]');
         if (!option) return;
         document.getElementById('homeProjectLabel').textContent = option.dataset.homeProject;
+        document.getElementById('homePromptProject').textContent = option.dataset.homeProject === '不使用项目' ? '当前对话' : option.dataset.homeProject;
         homeProjectPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item === option); });
         closeHomePickers();
       });

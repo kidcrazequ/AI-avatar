@@ -1579,6 +1579,7 @@
       box-shadow: 0 1px 2px rgba(20,20,23,.18), inset 0 1px 0 rgba(255,255,255,.08);
     }
     .primary-button:hover { background: #121317; box-shadow: 0 2px 6px rgba(20,20,23,.2); }
+    .home-inner { padding-top: clamp(150px, 20vh, 180px); }
     .home-hero { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
     .home-hero-logo { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid #dfe6f2; border-radius: 16px; background: #f3f7ff; box-shadow: 0 5px 18px rgba(37,99,235,.08); }
     .home-hero-logo .brand-mark { width: 28px; height: 28px; border-radius: 8px; }
@@ -1586,20 +1587,33 @@
     .home-hero-logo .brand-mark::after { width: 6px; height: 6px; right: 5px; bottom: 5px; }
     .home-hero h1 { font-size: 32px; line-height: 1.2; }
     .home-work-badge { display: inline-flex; margin-top: 6px; padding: 3px 7px; border-radius: 6px; background: #edf3ff; color: #2563eb; font-size: 11px; font-weight: 650; }
-    .home-lead { margin-top: 16px; text-align: center; }
-    .home-inner > .composer { width: min(900px, 100%); margin: 34px auto 0; border-color: #d9d7d2; border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
+    .home-inner > .composer { position: relative; width: min(900px, 100%); margin: 64px auto 0; overflow: visible; border-color: #d9d7d2; border-radius: 24px; background: #fff; box-shadow: 0 16px 42px rgba(28,27,31,.07); }
     .home-inner .goal-input { height: 156px; padding: 24px 30px 14px; font-size: 16px; line-height: 1.75; }
     .home-inner .composer-tools { min-height: 64px; padding: 10px 16px 12px; border-top: 0; background: #fff; }
     .home-inner .tool-button { height: 38px; border-radius: 10px; }
     .home-add-button { width: 38px; justify-content: center; padding: 0 !important; color: #323238; }
     .home-add-button .icon { width: 20px; height: 20px; stroke-width: 1.8; }
+    .home-model-button, .home-project-strip { position: relative; }
     .home-model-button { color: #34343a; }
+    .home-model-button .icon, .home-project-strip .chevron { transition: transform 150ms var(--ease); }
+    .home-model-button[aria-expanded="true"] .icon, .home-project-strip[aria-expanded="true"] .chevron { transform: rotate(180deg); }
     .home-inner .home-start { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
     .home-start .icon { width: 19px; height: 19px; stroke-width: 2; }
+    .home-start:disabled { border-color: #d7d7d8; background: #d7d7d8; color: #fff; box-shadow: none; cursor: default; }
     .home-project-strip { width: 100%; height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 24px; border: 0; border-top: 1px solid #ebe9e5; background: #f6f5f3; color: #66656c; font-size: 14px; text-align: left; cursor: pointer; }
     .home-project-strip:hover { background: #f1f0ed; color: var(--ink); }
     .home-project-strip .icon { width: 19px; height: 19px; }
-    .home-project-strip .chevron { margin-left: 2px; color: #8f8e95; font-size: 18px; transform: rotate(90deg); }
+    .home-project-strip .chevron { width: 16px; height: 16px; margin-left: 1px; color: #8f8e95; }
+    .home-popover { position: fixed; z-index: 80; width: 284px; padding: 7px; border: 1px solid #e1dfda; border-radius: 16px; background: rgba(255,255,255,.98); box-shadow: 0 18px 48px rgba(25,24,28,.14), 0 3px 12px rgba(25,24,28,.07); backdrop-filter: blur(18px); }
+    .home-popover[hidden] { display: none; }
+    .home-popover-option { width: 100%; min-height: 58px; display: grid; grid-template-columns: minmax(0,1fr) 22px; align-items: center; gap: 12px; padding: 9px 11px; border: 0; border-radius: 11px; background: transparent; color: #2d2d32; text-align: left; cursor: pointer; }
+    .home-popover-option:hover { background: #f3f2f0; }
+    .home-popover-option strong, .home-popover-option small { display: block; }
+    .home-popover-option strong { font-size: 14px; font-weight: 590; line-height: 1.35; }
+    .home-popover-option small { margin-top: 4px; color: #929198; font-size: 12px; line-height: 1.35; }
+    .home-popover-check { color: var(--blue); font-size: 17px; opacity: 0; }
+    .home-popover-option.selected .home-popover-check { opacity: 1; }
+    .home-popover-separator { height: 1px; margin: 5px 8px; background: #eceae6; }
     .secondary-button { height: 34px; padding: 0 12px; border-radius: 7px; font-size: 13px; box-shadow: 0 1px 1px rgba(20,19,22,.025); }
     .section-tab, .expert-section-tab, .detail-tab { font-size: 13px; }
     .work-action-title, .row-sub, .entity-meta, .entity-state, .collection-meta,
@@ -1767,7 +1781,7 @@
     .dashboard-card:active, .dashboard-template:active, .dashboard-widget-option:active { transform: translateY(0) scale(.995); }
 
     @media (max-width: 1280px) {
-      .home-inner { width: calc(100% - 46px); padding-top: 42px; }
+      .home-inner { width: calc(100% - 46px); padding-top: clamp(130px, 18vh, 150px); }
       .home-lower { gap: 28px; grid-template-columns: minmax(0,1fr) 250px; }
       .work-view { grid-template-columns: 220px minmax(350px, 1fr) 0; }
       .work-view.details-open { grid-template-columns: 220px minmax(350px, 1fr) 278px; }
@@ -1794,8 +1808,8 @@
     }
 
     @media (max-height: 760px) {
-      .home-inner { padding-top: 26px; }
-      .home-inner > .composer { margin-top: 22px; }
+      .home-inner { padding-top: 94px; }
+      .home-inner > .composer { margin-top: 42px; }
       .home-inner .goal-input { height: 120px; }
       .home-lower { margin-top: 28px; }
       .work-row, .attention-row { min-height: 58px; }
@@ -1869,10 +1883,9 @@
         <section class="view home-view active" id="homeView">
           <div class="home-inner">
             <div class="home-hero"><span class="home-hero-logo" aria-hidden="true"><span class="brand-mark"></span></span><div><h1>让 Soul 帮你完成任务</h1><span class="home-work-badge">Work</span></div></div>
-            <p class="lead home-lead">提出目标，Soul 会匹配专家、制定计划并交付可审阅结果。</p>
 
             <div class="composer">
-              <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…">根据现有资料，为 261kWh 工商业储能项目整理一份客户沟通初步方案。不整理缺失参数，不编造收益数据。</textarea>
+              <textarea class="goal-input" id="goalInput" aria-label="任务目标" placeholder="尽管问，或交代一项任务…"></textarea>
               <div class="chat-attachments" id="homeAttachments"></div>
               <div class="composer-tools">
                 <button class="tool-button home-add-button" id="homeAttach" type="button" aria-label="添加附件" title="添加附件">
@@ -1885,12 +1898,14 @@
                   <svg class="icon" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.7 2.8 8 7 10 4.2-2 7-5.3 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span>智能确认</span>
                 </button>
                 <span class="push"></span>
-                <button class="tool-button home-model-button" type="button" data-settings-open="chat">
-                  <span>端云 · 默认</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+                <button class="tool-button home-model-button home-picker" id="homeModelPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeModelPopover">
+                  <span id="homeModelLabel">端云 · 默认</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
                 </button>
-                <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
+                <button class="primary-button home-start" id="startWork" type="button" aria-label="开始任务" title="开始任务 · ⌘↵" disabled><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 18V6"/></svg></button>
               </div>
-              <button class="home-project-strip" type="button" data-feature-open="project-manager"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span>工商储方案</span><span class="chevron">›</span></button>
+              <button class="home-project-strip home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
+              <div class="home-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
+              <div class="home-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><span><strong>工商储方案</strong><small>使用项目文件、专家组和历史上下文</small></span><span class="home-popover-check">✓</span></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><span><strong>新建空白项目</strong><small>创建不含历史资料的新项目</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><span><strong>使用现有文件夹</strong><small>把本地文件夹作为项目工作区</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><span><strong>不使用项目</strong><small>仅在当前对话中完成这项任务</small></span><span class="home-popover-check">✓</span></button></div>
             </div>
 
           </div>
@@ -3427,12 +3442,63 @@
       });
       document.getElementById('tasksNewButton').addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').focus(); });
 
+      var goalInput = document.getElementById('goalInput');
+      var homeModelPicker = document.getElementById('homeModelPicker');
+      var homeProjectPicker = document.getElementById('homeProjectPicker');
+      var homeModelPopover = document.getElementById('homeModelPopover');
+      var homeProjectPopover = document.getElementById('homeProjectPopover');
+
+      function updateHomeSendState() { document.getElementById('startWork').disabled = !goalInput.value.trim(); }
+      function closeHomePickers() {
+        [homeModelPopover, homeProjectPopover].forEach(function (popover) { popover.hidden = true; });
+        [homeModelPicker, homeProjectPicker].forEach(function (picker) { picker.setAttribute('aria-expanded', 'false'); });
+      }
+      function positionHomePopover(picker, popover, alignLeft) {
+        popover.hidden = false;
+        var trigger = picker.getBoundingClientRect();
+        var menu = popover.getBoundingClientRect();
+        var left = alignLeft ? trigger.left : trigger.right - menu.width;
+        var top = trigger.bottom + 8;
+        if (top + menu.height > window.innerHeight - 12) top = trigger.top - menu.height - 8;
+        popover.style.left = Math.max(12, Math.min(left, window.innerWidth - menu.width - 12)) + 'px';
+        popover.style.top = Math.max(12, top) + 'px';
+      }
+      function toggleHomePicker(picker, popover, alignLeft) {
+        var opening = popover.hidden;
+        closeHomePickers();
+        if (opening) { positionHomePopover(picker, popover, alignLeft); picker.setAttribute('aria-expanded', 'true'); }
+      }
+
+      goalInput.addEventListener('input', updateHomeSendState);
+      updateHomeSendState();
+      homeModelPicker.addEventListener('click', function (event) { event.stopPropagation(); toggleHomePicker(homeModelPicker, homeModelPopover, false); });
+      homeProjectPicker.addEventListener('click', function (event) { event.stopPropagation(); toggleHomePicker(homeProjectPicker, homeProjectPopover, true); });
+      homeModelPopover.addEventListener('click', function (event) {
+        var option = event.target.closest('[data-home-model]');
+        if (!option) return;
+        document.getElementById('homeModelLabel').textContent = option.dataset.homeModel;
+        homeModelPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item === option); });
+        closeHomePickers();
+      });
+      homeProjectPopover.addEventListener('click', function (event) {
+        var option = event.target.closest('[data-home-project]');
+        if (!option) return;
+        document.getElementById('homeProjectLabel').textContent = option.dataset.homeProject;
+        homeProjectPopover.querySelectorAll('.home-popover-option').forEach(function (item) { item.classList.toggle('selected', item === option); });
+        closeHomePickers();
+      });
+      document.addEventListener('click', function (event) { if (!event.target.closest('.home-picker') && !event.target.closest('.home-popover')) closeHomePickers(); });
+      window.addEventListener('resize', closeHomePickers);
+
       document.getElementById('startWork').addEventListener('click', function () {
-        var goal = document.getElementById('goalInput').value.trim();
-        chatThreads.task.user = goal || '整理当前项目资料，形成一项可独立验收的任务。';
+        var goal = goalInput.value.trim();
+        if (!goal) { updateHomeSendState(); return; }
+        var project = document.getElementById('homeProjectLabel').textContent;
+        chatThreads.task.user = goal;
         chatThreads.task.reply = '目标已设为任务。我已匹配小堵负责、财研协作，接下来会在这段对话中持续同步计划、执行状态和可审阅结果。';
         chatThreads.task.taskState = 'running';
-        chatThreads.task.project = '工商储方案 · 任务执行中';
+        chatThreads.task.projectKey = project === '工商储方案' ? 'storage' : 'none';
+        chatThreads.task.project = (project === '不使用项目' ? '未绑定项目' : project) + ' · 任务执行中';
         syncTaskThreadSurfaces('task', chatThreads.task);
         switchView('chat');
         renderChatThread('task');
@@ -3453,7 +3519,7 @@
         showToast('权限模式已切换为' + permissionModes[next]);
       });
       document.querySelectorAll('.home-draft-work, .project-draft-work').forEach(function (button) {
-        button.addEventListener('click', function () { switchView('home'); document.getElementById('goalInput').value = '继续完善客户沟通提纲，并在开始前重新确认项目、专家和资料范围。'; document.getElementById('goalInput').focus(); showToast('草稿已载入，新执行不会覆盖历史内容'); });
+        button.addEventListener('click', function () { switchView('home'); goalInput.value = '继续完善客户沟通提纲，并在开始前重新确认项目、专家和资料范围。'; updateHomeSendState(); goalInput.focus(); showToast('草稿已载入，新执行不会覆盖历史内容'); });
       });
 
       document.querySelectorAll('.project-open-work').forEach(function (button) {
@@ -3494,9 +3560,10 @@
       });
 
       document.getElementById('projectNewWork').addEventListener('click', function () {
-        document.getElementById('goalInput').value = '';
+        goalInput.value = '';
+        updateHomeSendState();
         switchView('home');
-        document.getElementById('goalInput').focus();
+        goalInput.focus();
         showToast('已绑定项目「工商储方案」');
       });
 
@@ -3664,9 +3731,10 @@
       document.getElementById('openCompletedArtifact').addEventListener('click', function () { showToast('原型：打开成果正本「客户沟通提纲.md」'); });
       document.getElementById('continueFromCompleted').addEventListener('click', function () {
         hideWorkState();
-        document.getElementById('goalInput').value = '';
+        goalInput.value = '';
+        updateHomeSendState();
         switchView('home');
-        document.getElementById('goalInput').focus();
+        goalInput.focus();
         showToast('已保留本次成果，可继续创建新任务');
       });
 
@@ -4221,6 +4289,7 @@
           setDetailRail(!detailRailOpen);
         }
         if (event.key === 'Escape') {
+          closeHomePickers();
           closeCommandPalette();
           closeFeatureLayer();
           closeModal();

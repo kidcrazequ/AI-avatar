@@ -1687,6 +1687,49 @@
     .automation-editor-actions .secondary-button, .automation-editor-actions .primary-button { height: 42px; padding: 0 17px; border-radius: 10px; font-size: 14px; }
     .automation-editor-actions .primary-button { border-color: #25262b; background: #25262b; color: #fff; box-shadow: 0 1px 2px rgba(23,23,26,.16); }
     .automation-editor-actions .primary-button:hover { background: #17181c; }
+    .automation-editor-actions .primary-button:disabled { border-color: #d7d7d8; background: #d7d7d8; box-shadow: none; cursor: default; }
+    .automation-page { grid-template-rows: auto minmax(0, 1fr); }
+    .scheduled-header { min-height: 176px; display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; padding: 56px 72px 24px; }
+    .scheduled-header h1 { margin: 0; font-size: 30px; font-weight: 680; letter-spacing: -.035em; }
+    .scheduled-header p { margin: 14px 0 0; color: #77767d; font-size: 16px; line-height: 1.55; }
+    .scheduled-create { height: 44px; display: inline-flex; align-items: center; gap: 8px; padding: 0 17px; border: 0; border-radius: 12px; background: #18181b; color: #fff; font-size: 15px; font-weight: 620; cursor: pointer; }
+    .scheduled-create:hover { background: #292a2f; }
+    .scheduled-create .icon { width: 17px; height: 17px; }
+    .automation-page .automation-layout { position: relative; height: 100%; min-height: 0; display: block; }
+    .automation-page .automation-zero-state { height: 100%; padding: 24px 48px 72px; }
+    .automation-page .automation-zero-content { transform: translateY(-18px); }
+    .automation-page .automation-zero-art { width: 104px; height: 104px; margin-bottom: 18px; color: #c6c6c8; animation: none; }
+    .automation-page .automation-zero-content h2 { color: #8d8d92; font-size: 18px; font-weight: 520; }
+    .automation-page .automation-zero-content p { display: flex; align-items: center; gap: 5px; margin: 8px 0 0; color: #96969b; font-size: 15px; }
+    .automation-page .automation-zero-action { min-height: auto; padding: 0; color: var(--blue); font-size: 15px; font-weight: 500; }
+    .scheduled-list { width: min(900px, calc(100% - 112px)); margin: 14px auto 0; overflow: hidden; border: 1px solid #e2dfda; border-radius: 16px; background: #fff; }
+    .scheduled-list[hidden] { display: none; }
+    .scheduled-task-card { min-height: 88px; display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto auto; align-items: center; gap: 14px; padding: 14px 16px; }
+    .scheduled-task-card:hover { background: #f7f6f4; }
+    .scheduled-task-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #f1f1f2; color: #55555c; }
+    .scheduled-task-icon .icon { width: 21px; height: 21px; }
+    .scheduled-task-copy strong, .scheduled-task-copy small { display: block; }
+    .scheduled-task-copy strong { font-size: 15px; font-weight: 620; line-height: 1.4; }
+    .scheduled-task-copy small { margin-top: 5px; color: #919097; font-size: 13px; line-height: 1.4; }
+    .scheduled-task-state { color: #85848b; font-size: 13px; }
+    .scheduled-task-action, .scheduled-task-more { height: 34px; border: 0; border-radius: 9px; background: transparent; color: #66656c; cursor: pointer; opacity: 0; transition: opacity 140ms var(--ease), background 140ms var(--ease); }
+    .scheduled-task-action { padding: 0 10px; font-size: 13px; }
+    .scheduled-task-more { width: 34px; font-size: 15px; letter-spacing: 1px; }
+    .scheduled-task-card:hover .scheduled-task-action, .scheduled-task-card:hover .scheduled-task-more, .scheduled-task-action:focus-visible, .scheduled-task-more:focus-visible { opacity: 1; }
+    .scheduled-task-action:hover, .scheduled-task-more:hover { background: #eae9e6; color: var(--ink); }
+    .automation-page .automation-editor { position: absolute; inset: 0; z-index: 30; padding: 22px; }
+    .automation-page .automation-editor-dialog { width: min(720px, calc(100vw - 72px)); }
+    .automation-page .automation-editor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 2px; padding-bottom: 10px; }
+    .automation-page .automation-editor-fields label { padding: 10px 0; }
+    .automation-page .automation-editor-fields textarea { min-height: 96px; resize: none; }
+    .automation-schedule { min-width: 0; margin: 0; padding: 12px 0 8px; border: 0; }
+    .automation-schedule.wide { grid-column: span 2; }
+    .automation-schedule legend { margin-bottom: 10px; color: #55545b; font-size: 13px; font-weight: 560; }
+    .automation-schedule-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .automation-schedule-grid > *, .automation-interval { min-width: 0; }
+    .automation-interval { display: grid; grid-template-columns: minmax(0,1fr) 108px; gap: 8px; }
+    .automation-interval[hidden], .automation-schedule-grid > [hidden] { display: none; }
+    .automation-page .automation-editor-fields input[type="date"], .automation-page .automation-editor-fields input[type="time"], .automation-page .automation-editor-fields input[type="number"] { color-scheme: light; }
     .expert-test-list { display: grid; gap: 6px; overflow: visible; border: 0; border-radius: 0; background: transparent; counter-reset: expert-test; }
     .expert-test-row { min-height: 64px; grid-template-columns: 32px minmax(0, 1fr) auto auto; gap: 14px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 1px 1px rgba(20,19,22,.025); counter-increment: expert-test; transition: border-color 140ms var(--ease), background 140ms var(--ease), transform 140ms var(--ease); }
     .expert-test-row:last-child { border-bottom: 1px solid var(--line); }
@@ -1798,6 +1841,8 @@
       .dashboard-grid { gap: 10px; }
       .dashboard-widget { padding: 14px 16px; }
       .dashboard-widget-options { gap: 7px; }
+      .scheduled-header { padding-left: 52px; padding-right: 52px; }
+      .scheduled-list { width: min(900px, calc(100% - 80px)); }
     }
 
     @media (max-height: 820px) {
@@ -1854,7 +1899,7 @@
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect class="nav-dashboard-tile" x="4" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="4" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="4" y="13.5" width="6.5" height="6.5" rx="1.4"/><rect class="nav-dashboard-tile" x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4"/></svg><span class="nav-label">看板</span>
           </button>
           <button class="nav-item" type="button" data-view="automation">
-            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 5.8 3.5 7.6M18.7 5.8l1.8 1.8"/><circle cx="12" cy="13" r="7"/><path class="nav-auto-hand" d="M12 9v4l2.6 1.6"/><path d="m8 20-1 1m9-1 1 1"/></svg><span class="nav-label">自动任务</span>
+            <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.3 5.8 3.5 7.6M18.7 5.8l1.8 1.8"/><circle cx="12" cy="13" r="7"/><path class="nav-auto-hand" d="M12 9v4l2.6 1.6"/><path d="m8 20-1 1m9-1 1 1"/></svg><span class="nav-label">定时任务</span>
           </button>
           <button class="nav-item" type="button" data-view="experts">
             <svg class="icon nav-icon" viewBox="0 0 24 24" aria-hidden="true"><g class="nav-expert-front"><circle cx="9" cy="9" r="3"/><path d="M3.5 19c.6-3 2.4-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/></g><g class="nav-expert-back"><path d="M16 8.3a2.6 2.6 0 0 1 0 5.1M17 15.3c2 .5 3.1 1.7 3.5 3.7"/></g></svg><span class="nav-label">专家</span>
@@ -2059,7 +2104,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Personal workspace</p>
               <h1>看板</h1>
-              <p class="lead">把任务、项目和自动任务整理成适合自己的个人工作台。</p>
+              <p class="lead">把任务、项目和定时任务整理成适合自己的个人工作台。</p>
             </div>
             <div class="workspace-actions">
               <button class="secondary-button" type="button" data-dashboard-create="dialog">对话创建</button>
@@ -2079,7 +2124,7 @@
                 <div class="dashboard-zero-content">
                   <svg class="dashboard-zero-art" viewBox="0 0 108 92" aria-hidden="true"><rect x="5" y="7" width="44" height="31" rx="7"/><rect x="59" y="7" width="44" height="31" rx="7"/><rect x="5" y="48" width="44" height="31" rx="7"/><rect x="59" y="48" width="44" height="31" rx="7"/><path d="M54 35v22M43 46h22"/></svg>
                   <h2 id="dashboardZeroTitle">建立你的个人工作台</h2>
-                  <p>从任务、项目、成果和自动任务中选择组件；看板只整理信息，不改变原始数据。</p>
+                  <p>从任务、项目、成果和定时任务中选择组件；看板只整理信息，不改变原始数据。</p>
                   <div class="dashboard-zero-actions"><button class="secondary-button" type="button" data-dashboard-create="dialog">用对话生成</button><button class="primary-button" type="button" data-dashboard-create="blank">从模板开始</button></div>
                 </div>
               </section>
@@ -2088,7 +2133,7 @@
           <section class="dashboard-detail" id="dashboardDetail" hidden>
             <div class="dashboard-detail-inner">
               <header class="dashboard-detail-head">
-                <div class="dashboard-detail-identity"><button class="dashboard-back" id="dashboardBack" type="button" aria-label="返回我的看板"><svg class="icon" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button><div><h2 id="dashboardDetailTitle">任务指挥台</h2><p>全部项目 · 组件数据来自 Soul 任务、项目与自动任务</p></div></div>
+                <div class="dashboard-detail-identity"><button class="dashboard-back" id="dashboardBack" type="button" aria-label="返回我的看板"><svg class="icon" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button><div><h2 id="dashboardDetailTitle">任务指挥台</h2><p>全部项目 · 组件数据来自 Soul 任务、项目与定时任务</p></div></div>
                 <div class="dashboard-detail-actions"><button class="secondary-button" type="button" id="dashboardRefresh">刷新</button><button class="primary-button" type="button" id="dashboardEdit">编辑看板</button></div>
               </header>
               <div class="dashboard-edit-bar" id="dashboardEditBar" hidden><span class="dashboard-edit-copy"><strong>编辑模式</strong>　调整组件顺序和大小，变更只影响当前看板。</span><span class="dashboard-edit-actions"><button class="secondary-button" id="dashboardReset" type="button">恢复默认</button><button class="primary-button" id="dashboardAddWidget" type="button">添加组件</button></span></div>
@@ -2098,7 +2143,7 @@
                 <article class="dashboard-widget" data-widget="attention"><header class="dashboard-widget-head"><h3>待我处理</h3><span class="dashboard-widget-note">2 项</span></header><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>确认成果结构</strong><small>客户沟通初步方案</small></span><span>打开</span></div><div class="dashboard-task-row"><span class="status-dot waiting"></span><span><strong>补充现场资料</strong><small>缺少可核验输入</small></span><span>打开</span></div></article>
                 <article class="dashboard-widget" data-widget="project"><header class="dashboard-widget-head"><h3>项目推进</h3><span class="dashboard-widget-note">工商储方案</span></header><div class="dashboard-progress-list"><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>资料归并</span><span>已完成</span></div><div class="dashboard-progress-track"><span style="width:100%"></span></div></div><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>方案整理</span><span>进行中</span></div><div class="dashboard-progress-track"><span style="width:62%"></span></div></div><div class="dashboard-progress-item"><div class="dashboard-progress-copy"><span>成果确认</span><span>未开始</span></div><div class="dashboard-progress-track"><span style="width:8%"></span></div></div></article>
                 <article class="dashboard-widget" data-widget="outputs"><header class="dashboard-widget-head"><h3>最近成果</h3><span class="dashboard-widget-note">outputs/</span></header><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><strong>客户沟通提纲.md</strong><small>当前任务 · 成果正本</small></span><span>打开</span></div><div class="dashboard-output-row"><span class="file-icon" aria-hidden="true"><svg><use href="#lucide-file-text"></use></svg></span><span><strong>资料缺口清单.md</strong><small>等待用户确认</small></span><span>查看</span></div></article>
-                <article class="dashboard-widget" data-widget="automation"><header class="dashboard-widget-head"><h3>自动任务</h3><span class="dashboard-widget-note">最近触发</span></header><div class="dashboard-widget-empty">暂无已启用规则<br>创建后每次触发会生成独立任务</div></article>
+                <article class="dashboard-widget" data-widget="automation"><header class="dashboard-widget-head"><h3>定时任务</h3><span class="dashboard-widget-note">最近触发</span></header><div class="dashboard-widget-empty">暂无已启用规则<br>创建后每次触发会生成独立任务</div></article>
               </div>
             </div>
           </section>
@@ -2109,13 +2154,13 @@
               <div class="dashboard-create-body">
                 <section class="dashboard-create-panel active" data-dashboard-create-panel="template">
                   <div class="dashboard-template-grid">
-                    <button class="dashboard-template" type="button" data-dashboard-template="任务指挥台"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>任务指挥台</strong><small>任务状态、待确认事项、项目推进、成果和自动任务。</small></span></button>
+                    <button class="dashboard-template" type="button" data-dashboard-template="任务指挥台"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>任务指挥台</strong><small>任务状态、待确认事项、项目推进、成果和定时任务。</small></span></button>
                     <button class="dashboard-template" type="button" data-dashboard-template="项目推进台"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>项目推进台</strong><small>按项目查看任务、资料边界、专家协作与交付成果。</small></span></button>
-                    <button class="dashboard-template" type="button" data-dashboard-template="自动任务监控"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>自动任务监控</strong><small>集中查看规则状态、触发记录、等待确认与独立结果。</small></span></button>
+                    <button class="dashboard-template" type="button" data-dashboard-template="定时任务监控"><span class="dashboard-template-preview" aria-hidden="true"><span></span><span></span><span></span></span><span class="dashboard-template-copy"><strong>定时任务监控</strong><small>集中查看规则状态、触发记录、等待确认与独立结果。</small></span></button>
                   </div>
                 </section>
                 <section class="dashboard-create-panel" data-dashboard-create-panel="dialog">
-                  <div class="dashboard-dialog-create"><div class="dashboard-dialog-message">你希望每天打开 Soul 时先看到哪些信息？我会先生成可编辑草案，不会执行任务或修改项目。</div><textarea id="dashboardDialogPrompt" aria-label="描述个人工作台">帮我建立一个任务指挥台，优先展示待我确认的事项、正在执行的任务、最近成果和自动任务。</textarea><div class="dashboard-dialog-actions"><button class="primary-button" id="dashboardDialogGenerate" type="button">生成看板草案</button></div></div>
+                  <div class="dashboard-dialog-create"><div class="dashboard-dialog-message">你希望每天打开 Soul 时先看到哪些信息？我会先生成可编辑草案，不会执行任务或修改项目。</div><textarea id="dashboardDialogPrompt" aria-label="描述个人工作台">帮我建立一个任务指挥台，优先展示待我确认的事项、正在执行的任务、最近成果和定时任务。</textarea><div class="dashboard-dialog-actions"><button class="primary-button" id="dashboardDialogGenerate" type="button">生成看板草案</button></div></div>
                 </section>
               </div>
             </div>
@@ -2214,83 +2259,40 @@
           </div>
         </section>
 
-        <section class="view workspace-page" id="automationView">
-          <header class="workspace-header">
-            <div class="workspace-heading">
-              <p class="eyebrow">Automations</p>
-              <h1>自动任务</h1>
-              <p class="lead">每次触发都创建一项独立任务，保留专家路由、运行记录与成果。</p>
-            </div>
-            <div class="workspace-actions"><button class="primary-button" id="newAutomation" type="button">创建自动任务</button></div>
+        <section class="view workspace-page automation-page" id="automationView">
+          <header class="scheduled-header">
+            <div><h1>定时任务</h1><p>让 Soul 按计划自动执行任务，并把结果定时送达</p></div>
+            <button class="scheduled-create" id="newAutomation" type="button">创建<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
           </header>
           <div class="automation-layout is-empty" id="automationLayout">
-            <aside class="collection-rail" id="automationCollectionRail" hidden>
-              <div class="collection-label">规则</div>
-              <button class="collection-item active automation-item" type="button" data-rule="weekly" hidden><span class="status-dot"></span><span><span class="collection-title">整理项目待确认事项</span><span class="collection-meta">未启用 · 工商储方案</span></span></button>
-              <button class="collection-item automation-item" type="button" data-rule="file" hidden><span class="status-dot waiting"></span><span><span class="collection-title">资料更新后检查缺失项</span><span class="collection-meta">草稿 · 工商储方案</span></span></button>
-              <button class="collection-item automation-item" id="customAutomationItem" type="button" data-rule="custom" hidden><span class="status-dot"></span><span><span class="collection-title">新自动任务</span><span class="collection-meta">草稿 · 工商储方案</span></span></button>
-            </aside>
-            <div class="detail-workspace automation-detail-workspace" id="automationDetailWorkspace" hidden>
-              <article class="automation-detail-sheet">
-                <header class="automation-detail-head">
-                  <div><h2 id="automationTitle">整理项目待确认事项</h2><p class="detail-sheet-sub" id="automationSubtitle">将项目中需要用户处理的事项整理成独立任务。</p></div>
-                  <div class="automation-head-actions">
-                    <label class="automation-toggle"><input id="automationEnabled" type="checkbox"><span class="automation-toggle-mark"></span><span id="automationEnableLabel">未启用</span></label>
-                    <button class="secondary-button" id="triggerAutomation" type="button">立即触发</button>
-                    <button class="secondary-button" id="editAutomation" type="button">编辑规则</button>
-                  </div>
-                </header>
-                <nav class="section-tabs" role="tablist" aria-label="自动任务详情">
-                  <button class="section-tab automation-section-tab active" type="button" role="tab" aria-selected="true" data-automation-tab="rule">规则</button>
-                  <button class="section-tab automation-section-tab" type="button" role="tab" aria-selected="false" data-automation-tab="history">触发历史</button>
-                  <button class="section-tab automation-section-tab" type="button" role="tab" aria-selected="false" data-automation-tab="results">任务结果</button>
-                </nav>
-                <div class="automation-panel-scroll">
-                  <section class="automation-panel active" data-automation-panel="rule">
-                    <div class="automation-rule-grid">
-                      <section class="automation-rule-card"><h3>触发与范围</h3><div class="rule-line"><span class="rule-key">触发方式</span><span id="automationTrigger">每周一，由用户启用后生效</span></div><div class="rule-line"><span class="rule-key">所属项目</span><span>工商储方案</span></div><div class="rule-line"><span class="rule-key">目标类型</span><span id="automationTarget">任务 · 每次独立创建</span></div></section>
-                      <section class="automation-rule-card"><h3>执行方式</h3><div class="rule-line"><span class="rule-key">专家路由</span><span>项目专家组优先</span></div><div class="rule-line"><span class="rule-key">权限</span><span>智能确认</span></div><div class="rule-line"><span class="rule-key">副作用</span><span>中高风险仍需确认</span></div></section>
-                      <section class="automation-rule-card span-2"><h3>每次触发的任务目标</h3><div class="rule-line"><span class="rule-key">任务目标</span><span id="automationGoal">归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。</span></div></section>
-                      <section class="automation-rule-card span-2"><h3>与现有能力兼容</h3><div class="rule-line"><span class="rule-key">专家自检</span><span>沿用现有测试触发与质量报告</span></div><div class="rule-line"><span class="rule-key">记忆整理</span><span>沿用现有记忆归并任务</span></div><div class="rule-line"><span class="rule-key">知识检查</span><span>沿用现有知识索引与检查任务</span></div></section>
-                    </div>
-                  </section>
-                  <section class="automation-panel" data-automation-panel="history">
-                    <div class="automation-empty" id="automationHistoryEmpty">规则尚未启用，因此没有触发记录。启用后，每次触发会保留时间、状态和关联任务。</div>
-                  </section>
-                  <section class="automation-panel" data-automation-panel="results">
-                    <div class="automation-empty" id="automationResultsEmpty">还没有由该规则创建的任务。规则触发后，可在这里打开独立运行记录与成果。</div>
-                  </section>
-                </div>
+            <section class="scheduled-list" id="scheduledTaskList" hidden>
+              <article class="scheduled-task-card" id="customAutomationItem">
+                <span class="scheduled-task-icon"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M6 3 3.5 5.5M18 3l2.5 2.5"/></svg></span>
+                <span class="scheduled-task-copy"><strong id="scheduledTaskName">整理项目待确认事项</strong><small><span id="scheduledTaskTime">每天 09:00</span> · <span id="scheduledTaskProject">工商储方案</span></small></span>
+                <span class="scheduled-task-state">已开启</span>
+                <button class="scheduled-task-action" id="triggerAutomation" type="button">立即执行</button>
+                <button class="scheduled-task-more" id="editAutomation" type="button" aria-label="编辑定时任务">•••</button>
               </article>
-              <form class="automation-editor" id="automationEditor" hidden>
-                <div class="automation-editor-dialog">
-                  <header class="automation-editor-head"><div><h2 id="automationEditorTitle">创建自动任务</h2><p>保存后只创建草稿，不会立即执行。</p></div><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
-                  <div class="automation-editor-fields">
-                    <label class="wide">规则名称<input id="automationEditorName" required value="新自动任务"></label>
-                    <label>触发方式<select id="automationEditorTrigger"><option>每周</option><option>项目文件更新后</option><option>手动</option></select></label>
-                    <label>所属项目<select><option>工商储方案</option><option>不绑定项目</option></select></label>
-                    <label>目标类型<select id="automationEditorTarget"><option>任务 · 独立运行</option><option>Chat · 辅助提醒</option></select></label>
-                    <label>权限模式<select id="automationEditorPermission"><option>智能确认</option><option>每步确认</option><option>只读</option></select></label>
-                    <label class="wide">每次触发的任务目标<textarea id="automationEditorGoal">说明需要完成什么、产出什么，以及哪些内容不能自行补全。</textarea></label>
-                  </div>
-                  <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit">保存草稿</button></footer>
-                </div>
-              </form>
-            </div>
+            </section>
             <section class="automation-zero-state" id="automationZeroState" aria-labelledby="automationZeroTitle">
               <div class="automation-zero-content">
-                <svg class="automation-zero-art" viewBox="0 0 120 120" aria-hidden="true">
-                  <path class="calendar-page" d="M32 34h56l6 58H27z" stroke-width="2.5" stroke-linejoin="round"/>
-                  <path d="M32 47h56M43 27v14M59 27v14M75 27v14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-                  <path d="M48 61h24M48 72h17" fill="none" stroke="#d2d6dc" stroke-width="2.5" stroke-linecap="round"/>
-                  <circle class="clock-face" cx="39" cy="83" r="21" stroke-width="2.5"/>
-                  <path class="clock-hand" d="M39 72v12l8-5" fill="none" stroke="#89919d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <h2 id="automationZeroTitle">暂无自动任务</h2>
-                <p>Soul 可以按计划创建独立任务，并保留每次运行、专家路由与结果。</p>
-                <button class="automation-zero-action" id="emptyNewAutomation" type="button">创建第一个自动任务 →</button>
+                <svg class="automation-zero-art" viewBox="0 0 120 120" aria-hidden="true"><path class="calendar-page" d="M32 34h56l6 58H27z" stroke-width="2.5" stroke-linejoin="round"/><path d="M32 47h56M43 27v14M59 27v14M75 27v14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M48 61h24M48 72h17" fill="none" stroke="#d2d6dc" stroke-width="2.5" stroke-linecap="round"/><circle class="clock-face" cx="39" cy="83" r="21" stroke-width="2.5"/><path class="clock-hand" d="M39 72v12l8-5" fill="none" stroke="#89919d" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <h2 id="automationZeroTitle">暂无定时任务</h2>
+                <p><button class="automation-zero-action" id="emptyNewAutomation" type="button">手动添加</button><span>或</span><button class="automation-zero-action" id="chatNewAutomation" type="button">通过会话创建</button></p>
               </div>
             </section>
+            <form class="automation-editor" id="automationEditor" hidden>
+              <div class="automation-editor-dialog">
+                <header class="automation-editor-head"><div><h2 id="automationEditorTitle">新建定时任务</h2><p>所属项目会提供专家、权限和上下文。</p></div><button id="closeAutomationEditor" type="button" aria-label="关闭编辑器">×</button></header>
+                <div class="automation-editor-fields">
+                  <label class="wide">名称<input id="automationEditorName" required maxlength="50" placeholder="输入任务名称"></label>
+                  <label class="wide">需求说明<textarea id="automationEditorGoal" required placeholder="说明需要完成什么、产出什么，以及哪些内容不能自行补全。"></textarea></label>
+                  <label class="wide">所属项目<select id="automationEditorProject"><option>工商储方案</option><option>不绑定项目</option></select></label>
+                  <fieldset class="automation-schedule wide"><legend>执行时间</legend><div class="automation-schedule-grid"><select id="automationScheduleType" aria-label="执行周期"><option value="once">仅一次</option><option value="daily" selected>每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="interval">自定义间隔</option></select><input id="automationScheduleDate" data-schedule-field="once" type="date" aria-label="执行日期" hidden><select id="automationScheduleWeekday" data-schedule-field="weekly" aria-label="星期" hidden><option value="一">星期一</option><option value="二">星期二</option><option value="三">星期三</option><option value="四">星期四</option><option value="五">星期五</option><option value="六">星期六</option><option value="日">星期日</option></select><input id="automationScheduleMonthDay" data-schedule-field="monthly" type="number" min="1" max="31" value="1" aria-label="每月日期" hidden><span class="automation-interval" data-schedule-field="interval" hidden><input id="automationScheduleInterval" type="number" min="1" value="2" aria-label="间隔数值"><select id="automationScheduleUnit" aria-label="间隔单位"><option>小时</option><option>天</option><option>周</option></select></span><input id="automationScheduleTime" type="time" value="09:00" aria-label="执行时间"></div></fieldset>
+                </div>
+                <footer class="automation-editor-actions"><button class="secondary-button" id="cancelAutomationEditor" type="button">取消</button><button class="primary-button" id="saveAutomation" type="submit" disabled>保存</button></footer>
+              </div>
+            </form>
           </div>
         </section>
 
@@ -2417,7 +2419,7 @@
                     <header class="expert-panel-head"><div><h3>轨迹与台账</h3><p>区分一次运行的执行轨迹和专家长期关联记录。</p></div><button class="secondary-button" type="button" data-feature-open="dashboard">打开台账</button></header>
                     <div class="expert-module-grid two">
                       <article class="expert-module-card"><span class="expert-module-kicker">Trace</span><h4>执行轨迹</h4><p>按任务查看工具、检索、技能调用、事件和耗时。</p><button type="button" data-feature-open="traces">查看轨迹 →</button></article>
-                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、自动任务和任务关联记录。</p><button type="button" data-feature-open="dashboard">查看台账 →</button></article>
+                      <article class="expert-module-card"><span class="expert-module-kicker">Ledger</span><h4>专家台账</h4><p>查看记忆、会话、定时任务和任务关联记录。</p><button type="button" data-feature-open="dashboard">查看台账 →</button></article>
                     </div>
                   </section>
 
@@ -2468,7 +2470,7 @@
             <div class="workspace-heading">
               <p class="eyebrow">Settings</p>
               <h1>设置</h1>
-              <p class="lead">管理模型、知识、记忆、自动任务、工具集成、文件目录与诊断日志。</p>
+              <p class="lead">管理模型、知识、记忆、定时任务、工具集成、文件目录与诊断日志。</p>
             </div>
           </header>
           <div class="settings-layout">
@@ -2577,10 +2579,10 @@
               <section class="settings-panel" data-settings-panel="cron">
                 <header class="settings-panel-head"><h2>定时任务</h2><p>设置调度时区、错过触发处理和后台运行策略。</p></header>
                 <section class="settings-section"><h3 class="settings-section-title">调度</h3><div class="settings-surface">
-                  <div class="settings-row"><span><strong>默认时区</strong><p>新建自动任务时使用，单条规则仍可覆盖。</p></span><select class="settings-control"><option>Asia/Shanghai</option><option>跟随系统</option></select></div>
+                  <div class="settings-row"><span><strong>默认时区</strong><p>新建定时任务时使用，单条规则仍可覆盖。</p></span><select class="settings-control"><option>Asia/Shanghai</option><option>跟随系统</option></select></div>
                   <div class="settings-row"><span><strong>错过触发</strong><p>设备恢复在线后是否补跑已错过的规则。</p></span><select class="settings-control"><option>询问后补跑</option><option>跳过</option><option>自动补跑</option></select></div>
                   <div class="settings-row"><span><strong>后台调度</strong><p>应用运行时保持调度；关机状态不会触发。</p></span><label class="setting-switch"><input type="checkbox" checked><span class="setting-switch-mark"></span><span>已开启</span></label></div>
-                  <div class="settings-row"><span><strong>自动任务中心</strong><p>创建规则、查看触发历史和独立任务结果。</p></span><button class="secondary-button" type="button" data-settings-action="open-automation">打开</button></div>
+                  <div class="settings-row"><span><strong>定时任务中心</strong><p>创建规则、查看触发历史和独立任务结果。</p></span><button class="secondary-button" type="button" data-settings-action="open-automation">打开</button></div>
                 </div></section>
               </section>
 
@@ -2689,7 +2691,7 @@
         { label: '任务', meta: '跨项目查看执行和待处理事项', icon: 'T', view: 'tasks', group: '工作台' },
         { label: '看板', meta: '自定义个人工作台与组件', icon: 'B', view: 'dashboard', group: '工作台' },
         { label: '项目', meta: '共享上下文、文件和专家组', icon: 'P', view: 'project', group: '工作台' },
-        { label: '自动任务', meta: '管理定时触发与独立任务', icon: 'A', view: 'automation', group: '工作台' },
+        { label: '定时任务', meta: '管理定时触发与独立任务', icon: 'A', view: 'automation', group: '工作台' },
         { label: '专家', meta: '管理分身能力与专家包', icon: 'E', view: 'experts', group: '工作台' },
         { label: 'Chat', meta: '历史对话与辅助交流', icon: 'C', view: 'chat', group: '工作台' },
         { label: '设置', meta: '模型、工具、文件和日志', icon: 'S', view: 'settings', group: '工作台' }
@@ -2766,7 +2768,7 @@
             <div class="feature-list-row"><span><strong>文档深度阅读</strong><small>shared · 公共技能 · 需要用户提供可访问文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
             <div class="feature-list-row"><span><strong>社区技能目录</strong><small>community · 由 soul-sync 管理，安装前展示来源和版本</small></span><span class="feature-row-actions"><span class="feature-pill">未安装</span><button class="quiet-button" type="button" data-demo-action="install-skill">浏览</button></span></div>
           </div>
-          <div class="feature-callout"><strong>技能不会扩大权限。</strong> 写文件、创建自动任务、发布或外部发送仍遵循三级风险确认。</div>`
+          <div class="feature-callout"><strong>技能不会扩大权限。</strong> 写文件、创建定时任务、发布或外部发送仍遵循三级风险确认。</div>`
       });
 
       registerFeature('knowledge', {
@@ -2879,8 +2881,8 @@
       });
 
       registerFeature('schedules', {
-        title: '定时任务', subtitle: '查看当前专家关联的 Chat 提醒和自动任务。', icon: '定', group: 'expert-core',
-        actions: '<button class="quiet-button primary" type="button" data-view="automation">打开自动任务中心</button>',
+        title: '定时任务', subtitle: '查看当前专家关联的 Chat 提醒和定时任务。', icon: '定', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-view="automation">打开定时任务中心</button>',
         content: `
           <div class="feature-toolbar"><div><h3>专家定时任务</h3><p>每次任务类型触发都会创建独立运行；Chat 类型只发送辅助提醒。</p></div><span class="feature-pill">1 条规则</span></div>
           <div class="feature-list"><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>每周一 · 工商储方案 · 独立任务</small></span><span class="feature-pill waiting">未启用</span></button></div>`
@@ -2903,7 +2905,7 @@
         actions: '<button class="quiet-button" type="button" data-demo-action="export-ledger">导出台账</button>',
         content: `
           <div class="feature-toolbar"><div><h3>使用概览</h3><p>数量从本地关联记录读取；不把运行数据写回专家包正本。</p></div><span class="feature-pill">当前专家</span></div>
-          <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联任务</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>自动任务</span></div></div>
+          <div class="feature-grid three"><div class="feature-metric"><strong>2</strong><span>关联任务</span></div><div class="feature-metric"><strong>3</strong><span>历史 Chat</span></div><div class="feature-metric"><strong>1</strong><span>定时任务</span></div></div>
           <div class="feature-list" style="margin-top:12px"><button class="feature-list-row" type="button" data-view="chat" data-chat="task"><span><strong>客户沟通初步方案</strong><small>负责人 · 执行中 · Run 01</small></span><span class="feature-pill ready">任务</span></button><button class="feature-list-row" type="button" data-view="chat" data-chat="materials"><span><strong>客户沟通材料</strong><small>历史对话 · 已关联当前项目</small></span><span class="feature-pill">对话</span></button><button class="feature-list-row" type="button" data-view="automation"><span><strong>整理项目待确认事项</strong><small>未启用 · 任务类型</small></span><span class="feature-pill waiting">定时</span></button></div>`
       });
 
@@ -3742,141 +3744,101 @@
         if (!workActionMenu.contains(event.target) && event.target !== workMoreButton) closeWorkMenu();
       });
 
-      var automationRules = {
-        weekly: { title: '整理项目待确认事项', subtitle: '将项目中需要用户处理的事项整理成独立任务。', triggerType: '每周', trigger: '每周一，由用户启用后生效', target: '任务 · 每次独立创建', goal: '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。', enabled: false },
-        file: { title: '资料更新后检查缺失项', subtitle: '项目资料发生变化时，重新检查输入缺口并生成独立任务。', triggerType: '项目文件更新后', trigger: '项目文件更新后，由用户启用后生效', target: '任务 · 每次独立创建', goal: '检查新增或更新资料带来的输入缺口，列明来源和仍需用户确认的内容。', enabled: false },
-        custom: { title: '新自动任务', subtitle: '尚未启用的自动任务草稿。', triggerType: '手动', trigger: '仅手动触发', target: '任务 · 每次独立创建', goal: '说明需要完成什么、产出什么，以及哪些内容不能自行补全。', enabled: false }
-      };
-
-      var currentAutomationRule = 'weekly';
+      var automationRule = null;
       var automationEditor = document.getElementById('automationEditor');
-      var automationEnabled = document.getElementById('automationEnabled');
       var automationLayout = document.getElementById('automationLayout');
-      var automationCollectionRail = document.getElementById('automationCollectionRail');
-      var automationDetailWorkspace = document.getElementById('automationDetailWorkspace');
       var automationZeroState = document.getElementById('automationZeroState');
+      var scheduledTaskList = document.getElementById('scheduledTaskList');
+      var automationScheduleType = document.getElementById('automationScheduleType');
+      var automationScheduleTime = document.getElementById('automationScheduleTime');
+      var automationEditorName = document.getElementById('automationEditorName');
+      var automationEditorGoal = document.getElementById('automationEditorGoal');
+      var automationEditorProject = document.getElementById('automationEditorProject');
+      var saveAutomation = document.getElementById('saveAutomation');
 
       function syncAutomationEmptyState() {
-        var hasRules = Array.from(document.querySelectorAll('.automation-item')).some(function (item) { return !item.hidden; });
-        automationLayout.classList.toggle('is-empty', !hasRules);
-        if (automationLayout.classList.contains('is-editing')) return;
-        automationCollectionRail.hidden = !hasRules;
-        automationDetailWorkspace.hidden = !hasRules;
-        automationZeroState.hidden = hasRules;
+        var hasRule = Boolean(automationRule);
+        automationLayout.classList.toggle('is-empty', !hasRule);
+        automationZeroState.hidden = hasRule;
+        scheduledTaskList.hidden = !hasRule;
       }
 
-      function setAutomationTab(name) {
-        document.querySelectorAll('.automation-section-tab').forEach(function (tab) {
-          var active = tab.dataset.automationTab === name;
-          tab.classList.toggle('active', active);
-          tab.setAttribute('aria-selected', String(active));
-        });
-        document.querySelectorAll('.automation-panel').forEach(function (panel) {
-          panel.classList.toggle('active', panel.dataset.automationPanel === name);
-        });
-        document.querySelector('.automation-panel-scroll').scrollTop = 0;
+      function updateAutomationScheduleFields() {
+        var type = automationScheduleType.value;
+        document.querySelectorAll('[data-schedule-field]').forEach(function (field) { field.hidden = field.dataset.scheduleField !== type; });
+        automationScheduleTime.hidden = type === 'interval';
+        updateAutomationSaveState();
       }
 
-      function renderAutomationRule(key) {
-        currentAutomationRule = key;
-        var rule = automationRules[key];
-        document.querySelectorAll('.automation-item').forEach(function (item) { item.classList.toggle('active', item.dataset.rule === key); });
-        document.getElementById('automationTitle').textContent = rule.title;
-        document.getElementById('automationSubtitle').textContent = rule.subtitle;
-        document.getElementById('automationTrigger').textContent = rule.trigger;
-        document.getElementById('automationTarget').textContent = rule.target;
-        document.getElementById('automationGoal').textContent = rule.goal;
-        automationEnabled.checked = rule.enabled;
-        document.getElementById('automationEnableLabel').textContent = rule.enabled ? '已启用' : '未启用';
-        document.querySelectorAll('.automation-item').forEach(function (item) {
-          var itemRule = automationRules[item.dataset.rule];
-          if (!itemRule) return;
-          item.querySelector('.collection-title').textContent = itemRule.title;
-          item.querySelector('.collection-meta').textContent = (itemRule.enabled ? '已启用' : item.dataset.rule === 'file' ? '草稿' : '未启用') + ' · 工商储方案';
-          var dot = item.querySelector('.status-dot');
-          dot.classList.toggle('running', itemRule.enabled);
-          dot.classList.toggle('waiting', !itemRule.enabled && item.dataset.rule === 'file');
-        });
-        setAutomationTab('rule');
+      function updateAutomationSaveState() {
+        var valid = automationEditorName.value.trim() && automationEditorGoal.value.trim();
+        if (automationScheduleType.value === 'once') valid = valid && document.getElementById('automationScheduleDate').value;
+        if (automationScheduleType.value === 'interval') valid = valid && Number(document.getElementById('automationScheduleInterval').value) > 0;
+        saveAutomation.disabled = !valid;
       }
-
-      document.querySelectorAll('.automation-item').forEach(function (button) {
-        button.addEventListener('click', function () { renderAutomationRule(button.dataset.rule); });
-      });
-
-      document.querySelectorAll('.automation-section-tab').forEach(function (button) {
-        button.addEventListener('click', function () { setAutomationTab(button.dataset.automationTab); });
-      });
 
       function closeAutomationEditor() {
         automationEditor.hidden = true;
-        automationLayout.classList.remove('is-editing');
         syncAutomationEmptyState();
       }
 
       function openAutomationEditor(mode) {
-        var rule = mode === 'new' ? automationRules.custom : automationRules[currentAutomationRule];
-        if (automationLayout.classList.contains('is-empty')) {
-          automationLayout.classList.remove('is-empty');
-          automationLayout.classList.add('is-editing');
-          automationCollectionRail.hidden = true;
-          automationDetailWorkspace.hidden = false;
-          automationZeroState.hidden = true;
-        }
+        var existing = mode === 'edit' ? automationRule : null;
         automationEditor.dataset.mode = mode;
-        document.getElementById('automationEditorTitle').textContent = mode === 'new' ? '创建自动任务' : '编辑自动任务';
-        document.getElementById('automationEditorName').value = rule.title;
-        document.getElementById('automationEditorTrigger').value = rule.triggerType;
-        document.getElementById('automationEditorTarget').value = rule.target.includes('Chat') ? 'Chat · 辅助提醒' : '任务 · 独立运行';
-        document.getElementById('automationEditorGoal').value = rule.goal;
+        document.getElementById('automationEditorTitle').textContent = mode === 'edit' ? '编辑定时任务' : mode === 'chat' ? '通过会话创建定时任务' : '新建定时任务';
+        automationEditorName.value = mode === 'chat' ? '整理项目待确认事项' : existing ? existing.title : '';
+        automationEditorGoal.value = mode === 'chat' ? '归并项目中仍需用户处理的事项，形成可审阅清单，并保留来源。' : existing ? existing.goal : '';
+        automationEditorProject.value = existing ? existing.project : '工商储方案';
+        automationScheduleType.value = existing ? existing.scheduleType : 'daily';
+        automationScheduleTime.value = existing ? existing.time : '09:00';
+        document.getElementById('automationScheduleDate').value = existing ? existing.date : '2026-08-03';
+        document.getElementById('automationScheduleWeekday').value = existing ? existing.weekday : '一';
+        document.getElementById('automationScheduleMonthDay').value = existing ? existing.monthDay : '1';
+        document.getElementById('automationScheduleInterval').value = existing ? existing.interval : '2';
+        document.getElementById('automationScheduleUnit').value = existing ? existing.unit : '小时';
+        updateAutomationScheduleFields();
         automationEditor.hidden = false;
-        document.getElementById('automationEditorName').focus();
+        automationZeroState.hidden = true;
+        scheduledTaskList.hidden = true;
+        setTimeout(function () { (mode === 'chat' ? automationScheduleTime : automationEditorName).focus(); }, 60);
       }
 
       document.getElementById('newAutomation').addEventListener('click', function () { openAutomationEditor('new'); });
       document.getElementById('emptyNewAutomation').addEventListener('click', function () { openAutomationEditor('new'); });
+      document.getElementById('chatNewAutomation').addEventListener('click', function () { openAutomationEditor('chat'); });
       document.getElementById('editAutomation').addEventListener('click', function () { openAutomationEditor('edit'); });
       document.getElementById('closeAutomationEditor').addEventListener('click', closeAutomationEditor);
       document.getElementById('cancelAutomationEditor').addEventListener('click', closeAutomationEditor);
-      automationEnabled.addEventListener('change', function () {
-        automationRules[currentAutomationRule].enabled = automationEnabled.checked;
-        renderAutomationRule(currentAutomationRule);
-        showToast(automationEnabled.checked ? '自动任务已启用；正式触发时将创建独立任务' : '自动任务已停用，不会产生新的触发');
-      });
+      automationScheduleType.addEventListener('change', updateAutomationScheduleFields);
+      automationEditor.addEventListener('input', updateAutomationSaveState);
+      automationEditor.addEventListener('change', updateAutomationSaveState);
+
+      function automationScheduleCopy(rule) {
+        if (rule.scheduleType === 'once') return rule.date + ' ' + rule.time;
+        if (rule.scheduleType === 'weekly') return '每周' + rule.weekday + ' ' + rule.time;
+        if (rule.scheduleType === 'monthly') return '每月' + rule.monthDay + '日 ' + rule.time;
+        if (rule.scheduleType === 'interval') return '每' + rule.interval + rule.unit;
+        return '每天 ' + rule.time;
+      }
 
       automationEditor.addEventListener('submit', function (event) {
         event.preventDefault();
-        var key = automationEditor.dataset.mode === 'new' ? 'custom' : currentAutomationRule;
-        var triggerType = document.getElementById('automationEditorTrigger').value;
-        var triggerCopy = { '每周': '每周一，由用户启用后生效', '项目文件更新后': '项目文件更新后，由用户启用后生效', '手动': '仅手动触发' };
-        automationRules[key].title = document.getElementById('automationEditorName').value.trim() || '未命名自动任务';
-        automationRules[key].subtitle = document.getElementById('automationEditorGoal').value.trim() || '尚未补充任务目标。';
-        automationRules[key].goal = automationRules[key].subtitle;
-        automationRules[key].triggerType = triggerType;
-        automationRules[key].trigger = triggerCopy[triggerType];
-        automationRules[key].target = document.getElementById('automationEditorTarget').value.includes('Chat') ? 'Chat · 辅助提醒' : '任务 · 每次独立创建';
-        if (key === 'custom') document.getElementById('customAutomationItem').hidden = false;
+        if (saveAutomation.disabled) return;
+        automationRule = { title: automationEditorName.value.trim(), goal: automationEditorGoal.value.trim(), project: automationEditorProject.value, scheduleType: automationScheduleType.value, time: automationScheduleTime.value, date: document.getElementById('automationScheduleDate').value, weekday: document.getElementById('automationScheduleWeekday').value, monthDay: document.getElementById('automationScheduleMonthDay').value, interval: document.getElementById('automationScheduleInterval').value, unit: document.getElementById('automationScheduleUnit').value };
+        document.getElementById('scheduledTaskName').textContent = automationRule.title;
+        document.getElementById('scheduledTaskTime').textContent = automationScheduleCopy(automationRule);
+        document.getElementById('scheduledTaskProject').textContent = automationRule.project;
+        document.querySelector('.scheduled-task-state').textContent = '已开启';
         closeAutomationEditor();
-        renderAutomationRule(key);
-        showToast('自动任务草稿已保存，尚未启用或执行');
+        showToast('定时任务已保存，将按计划执行');
       });
 
       syncAutomationEmptyState();
 
       document.getElementById('triggerAutomation').addEventListener('click', function () {
-        var rule = automationRules[currentAutomationRule];
-        var workTarget = !rule.target.includes('Chat');
-        document.getElementById('automationHistoryEmpty').className = 'project-work-table';
-        document.getElementById('automationHistoryEmpty').innerHTML = '<button class="entity-row" type="button" data-automation-open-result><span><span class="entity-title">刚刚 · 手动触发</span><span class="entity-meta">运行已完成 · 专家路由已保留</span></span><span class="entity-state"><span class="status-dot running"></span>成功</span></button>';
-        document.getElementById('automationResultsEmpty').className = 'project-work-table';
-        document.getElementById('automationResultsEmpty').innerHTML = workTarget ? '<button class="entity-row" type="button" data-automation-open-work><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">独立任务 · Run 01 · 工商储方案</span></span><span class="entity-state">打开任务 →</span></button>' : '<button class="entity-row" type="button" data-automation-open-chat><span><span class="entity-title">' + rule.title + '</span><span class="entity-meta">Chat 辅助提醒 · 未创建任务</span></span><span class="entity-state">打开对话 →</span></button>';
-        setAutomationTab('history');
-        showToast(workTarget ? '已触发并创建独立任务' : '已触发 Chat 辅助提醒');
-      });
-      document.querySelector('.automation-panel-scroll').addEventListener('click', function (event) {
-        if (event.target.closest('[data-automation-open-work]')) { switchView('chat'); renderChatThread('task'); }
-        if (event.target.closest('[data-automation-open-chat]')) switchView('chat');
-        if (event.target.closest('[data-automation-open-result]')) setAutomationTab('results');
+        if (!automationRule) return;
+        document.querySelector('.scheduled-task-state').textContent = '刚刚执行';
+        showToast('已立即执行，并在项目下生成独立任务');
       });
 
       var expertProfiles = {
@@ -4267,7 +4229,7 @@
         if (action === 'tool-audit') openFeature('traces');
         if (action === 'perf-logs') showToast('已打开性能日志视图：模型、IPC 与渲染耗时');
         if (action === 'check-update') showToast('正在检查可用更新；不会自动覆盖安装');
-        if (action === 'reset-data') openRisk('high', { badge: '高风险 · 重置本地数据', title: '确认重置 Soul 本地数据', copy: '这会影响项目、任务、专家运行数据和设置。原型不会执行重置。', plan: ['停止新的自动任务触发', '生成可导出数据摘要', '重置项目、任务和运行配置'], impact: '<strong>影响范围：</strong>历史数据和设置可能不可恢复；正式产品必须再次显示实际范围。', confirmLabel: '确认重置', needsRecipient: false, success: '原型已确认，未重置任何本地数据' });
+        if (action === 'reset-data') openRisk('high', { badge: '高风险 · 重置本地数据', title: '确认重置 Soul 本地数据', copy: '这会影响项目、任务、专家运行数据和设置。原型不会执行重置。', plan: ['停止新的定时任务触发', '生成可导出数据摘要', '重置项目、任务和运行配置'], impact: '<strong>影响范围：</strong>历史数据和设置可能不可恢复；正式产品必须再次显示实际范围。', confirmLabel: '确认重置', needsRecipient: false, success: '原型已确认，未重置任何本地数据' });
       });
 
       document.addEventListener('click', function (event) {

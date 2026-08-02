@@ -1599,7 +1599,7 @@
     .home-model-button, .home-project-strip { position: relative; }
     .home-model-button { color: #34343a; }
     .home-model-button .icon, .home-project-strip .chevron { transition: transform 150ms var(--ease); }
-    .home-model-button[aria-expanded="true"] .icon, .home-project-strip[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .home-model-button[aria-expanded="true"] .icon { transform: rotate(180deg); }
     .home-inner .home-start { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
     .home-start .icon { width: 19px; height: 19px; stroke-width: 2; }
     .home-start:disabled { border-color: #d7d7d8; background: #d7d7d8; color: #fff; box-shadow: none; cursor: default; }
@@ -1617,6 +1617,12 @@
     .home-popover-check { color: var(--blue); font-size: 17px; opacity: 0; }
     .home-popover-option.selected .home-popover-check { opacity: 1; }
     .home-popover-separator { height: 1px; margin: 5px 8px; background: #eceae6; }
+    .home-project-popover { width: 300px; padding: 10px; border-radius: 18px; }
+    .home-project-popover .home-popover-option { min-height: 50px; display: flex; gap: 11px; padding: 0 12px; font-size: 15px; }
+    .home-project-popover .home-popover-option.selected { background: #f5f4f2; }
+    .home-project-popover .home-popover-option .icon { width: 20px; height: 20px; flex: 0 0 auto; stroke-width: 1.8; }
+    .home-project-popover .home-popover-option strong { font-size: 15px; font-weight: 520; }
+    .home-project-popover .home-popover-separator { margin: 6px 10px; }
     .secondary-button { height: 34px; padding: 0 12px; border-radius: 7px; font-size: 13px; box-shadow: 0 1px 1px rgba(20,19,22,.025); }
     .section-tab, .expert-section-tab, .detail-tab { font-size: 13px; }
     .work-action-title, .row-sub, .entity-meta, .entity-state, .collection-meta,
@@ -1959,7 +1965,7 @@
               </div>
               <button class="home-project-strip home-picker" id="homeProjectPicker" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="homeProjectPopover"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7.5h6l1.7 2H20v8.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/></svg><span id="homeProjectLabel">工商储方案</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg></button>
               <div class="home-popover" id="homeModelPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-model="端云 · 默认"><span><strong>端云 · 默认</strong><small>适合专业分析、联网检索和复杂任务</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-model="端侧 · 本地"><span><strong>端侧 · 本地</strong><small>数据保留在本机，能力取决于本地模型</small></span><span class="home-popover-check">✓</span></button></div>
-              <div class="home-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><span><strong>工商储方案</strong><small>使用项目文件、专家组和历史上下文</small></span><span class="home-popover-check">✓</span></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><span><strong>新建空白项目</strong><small>创建不含历史资料的新项目</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><span><strong>使用现有文件夹</strong><small>把本地文件夹作为项目工作区</small></span><span class="home-popover-check">✓</span></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><span><strong>不使用项目</strong><small>仅在当前对话中完成这项任务</small></span><span class="home-popover-check">✓</span></button></div>
+              <div class="home-popover home-project-popover" id="homeProjectPopover" role="menu" hidden><button class="home-popover-option selected" type="button" data-home-project="工商储方案"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5h6l1.7 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.3z"/><path d="M4 9V5.8A1.8 1.8 0 0 1 5.8 4h4.5l1.8 2H18a2 2 0 0 1 2 2"/></svg><strong>工商储方案</strong></button><div class="home-popover-separator"></div><button class="home-popover-option" type="button" data-home-project="新建空白项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><strong>新建空白项目</strong></button><button class="home-popover-option" type="button" data-home-project="使用现有文件夹"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="M16 6v4M14 8h4"/></svg><strong>使用现有文件夹</strong></button><button class="home-popover-option" type="button" data-home-project="不使用项目"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5h6l1.8 2H20v7.8a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z"/><path d="m15 14 4 4M19 14l-4 4"/></svg><strong>不使用项目</strong></button></div>
             </div>
 
           </div>
@@ -3466,6 +3472,13 @@
       }
       function positionHomePopover(picker, popover, alignLeft) {
         popover.hidden = false;
+        if (popover === homeProjectPopover) {
+          popover.style.position = 'absolute';
+          popover.style.left = '0';
+          popover.style.top = 'calc(100% + 8px)';
+          return;
+        }
+        popover.style.position = 'fixed';
         var trigger = picker.getBoundingClientRect();
         var menu = popover.getBoundingClientRect();
         var left = alignLeft ? trigger.left : trigger.right - menu.width;

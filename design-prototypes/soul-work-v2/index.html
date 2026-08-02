@@ -288,10 +288,10 @@
     .nav-conversations.is-collapsed .nav-conversations-toggle .icon { transform: rotate(-90deg); }
     .nav-conversations.is-collapsed .nav-conversation-list { display: none; }
     .nav-conversations-title .nav-conversation-add { margin-left: auto; }
-    .nav-conversation-add { width: 24px; height: 24px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: #77767d; cursor: pointer; opacity: 0; transform: scale(.94); transition: opacity 140ms var(--ease), transform 140ms var(--ease), background 140ms var(--ease); }
+    .nav-conversation-add { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #8c8b91; cursor: pointer; opacity: 0; transition: opacity 140ms var(--ease); }
     .nav-conversation-add .icon { width: 16px; height: 16px; stroke-width: 1.8; }
-    .nav-conversations-title:hover .nav-conversation-add, .nav-conversation-add:focus-visible { opacity: 1; transform: scale(1); }
-    .nav-conversation-add:hover { background: #ebeae7; color: var(--ink); }
+    .nav-conversations-title:hover .nav-conversation-add, .nav-conversation-add:focus-visible { opacity: 1; }
+    .nav-conversation-add:hover, .nav-conversation-add:focus-visible { background: transparent; color: inherit; outline: 0; box-shadow: none; }
     .nav-conversation-list { display: grid; gap: 2px; }
     .nav-conversation-item, .nav-work-thread { height: 40px; padding: 0 10px 0 28px; border-radius: 12px; color: #48474e; font-size: 15px; font-weight: 480; }
     .nav-conversation-item:hover, .nav-conversation-item.active, .nav-work-thread:hover, .nav-work-thread.active { background: #f4f3f1; color: var(--ink); font-weight: 480; }

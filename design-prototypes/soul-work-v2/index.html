@@ -1313,7 +1313,7 @@
       inset: 0;
       z-index: 24;
       display: grid;
-      grid-template-columns: 246px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       background: var(--work);
       opacity: 0;
       pointer-events: none;
@@ -1321,16 +1321,7 @@
       transition: opacity 160ms var(--ease), transform 180ms var(--ease);
     }
     .feature-layer.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .feature-rail { min-width: 0; overflow: auto; padding: 20px 14px; border-right: 1px solid var(--line); background: #f7f6f3; }
-    .feature-rail-kicker { padding: 0 10px 12px; color: var(--tertiary); font: 650 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
-    .feature-rail-context { margin: 0 4px 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-    .feature-rail-context strong { display: block; font-size: 13px; }
-    .feature-rail-context span { display: block; margin-top: 4px; color: var(--tertiary); font-size: 11px; line-height: 1.5; }
-    .feature-rail-nav { display: grid; gap: 3px; }
-    .feature-rail-tab { width: 100%; min-height: 44px; display: flex; align-items: center; padding: 0 14px; border: 0; border-radius: 10px; background: transparent; color: #65656c; font-size: 15px; font-weight: 500; line-height: 1.4; letter-spacing: -.01em; text-align: left; cursor: pointer; transition: background 150ms var(--ease), color 150ms var(--ease); }
-    .feature-rail-tab:hover { background: #f0efec; color: #27282d; }
-    .feature-rail-tab.active { background: #ebeae7; color: #191a1e; font-weight: 640; }
-    .feature-rail-tab > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .feature-layer.expert-context { left: 224px; }
     .feature-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fcfcfb; }
     .feature-head { min-height: 94px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
     .feature-head h2 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -.025em; }
@@ -1419,7 +1410,7 @@
       .automation-layout, .expert-layout { grid-template-columns: 260px minmax(0, 1fr); }
       .chat-layout { grid-template-columns: minmax(0, 1fr); }
       .settings-layout { grid-template-columns: 204px minmax(0, 1fr); }
-      .feature-layer { grid-template-columns: 224px minmax(0, 1fr); }
+      .feature-layer { grid-template-columns: minmax(0, 1fr); }
       .feature-scroll { padding-left: 24px; padding-right: 24px; }
       .detail-workspace { padding-left: 28px; padding-right: 28px; }
     }
@@ -1740,8 +1731,7 @@
     .settings-tab { height: 38px; font-size: 14px; }
     .brand-edition, .eyebrow, .meta, .row-time, .rail-kicker, .rail-work-meta,
     .collection-label, .settings-section-title, .block-label,
-    .step-stamp, .log-key, .state-crumb, .feature-rail-kicker,
-    .feature-rail-context span, .feature-tab-index, .feature-pill,
+    .step-stamp, .log-key, .state-crumb, .feature-tab-index, .feature-pill,
     .feature-meta-line, .feature-timeline-item time, .chat-search-note,
     .chat-attachment, .chat-command-label, .chat-command-option span,
     .command-key, .command-group-label, .command-result small,
@@ -2056,7 +2046,7 @@
     .expert-more-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
     .expert-more-item strong { overflow: hidden; font-size: 13px; font-weight: 590; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* Management shell — mirrors the installed Waker management hierarchy. */
+    /* Management shell — one navigation hierarchy for installed Soul experts. */
     #expertsView { grid-template-rows: minmax(0, 1fr); }
     #expertsView .expert-layout { grid-template-columns: 224px minmax(0, 1fr); min-height: 0; }
     .expert-management-rail { min-height: 0; overflow: auto; padding: 12px 10px 20px; border-right: 1px solid #e7e5e1; background: #fbfaf8; }
@@ -2064,6 +2054,7 @@
     .expert-rail-back:hover { background: #f0efec; color: #292a2f; }
     .expert-rail-back svg, .expert-rail-link svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
     .expert-rail-nav { display: grid; gap: 2px; margin-top: 8px; }
+    .expert-rail-group { padding: 11px 11px 5px; color: #99979e; font-size: 11px; font-weight: 650; letter-spacing: .04em; }
     .expert-rail-link { width: 100%; min-height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent; color: #626168; font-size: 13px; text-align: left; cursor: pointer; }
     .expert-rail-link:hover, .expert-rail-link.active { background: #efeeeb; color: #222328; }
     .expert-rail-link.active { font-weight: 620; }
@@ -2106,6 +2097,7 @@
     .expert-memory-timeline p { margin: 5px 0 0; color: #929097; font-size: 11px; }
     @media (max-width: 1280px) {
       #expertsView .expert-layout { grid-template-columns: 202px minmax(0, 1fr); }
+      .feature-layer.expert-context { left: 202px; }
       .expert-management-rail { padding-left: 8px; padding-right: 8px; }
       .expert-home-content { padding: 28px 28px 60px; }
       .expert-home-hero { grid-template-columns: 72px minmax(0, 1fr); }
@@ -2116,6 +2108,7 @@
     }
     @media (max-width: 1060px) {
       #expertsView .expert-layout { grid-template-columns: 188px minmax(0, 1fr); }
+      .feature-layer.expert-context { left: 188px; }
       .expert-home-content { padding-left: 20px; padding-right: 20px; }
       .expert-record-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .expert-home-activity-grid, .expert-about-grid { grid-template-columns: 1fr; }
@@ -2736,16 +2729,30 @@
           <div class="expert-layout">
             <aside class="expert-management-rail" aria-label="专家管理导航">
               <button class="expert-rail-back" type="button" data-view="experts"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg><span>我的专家</span></button>
-              <nav class="expert-rail-nav" aria-label="专家主页功能">
+              <nav class="expert-rail-nav" aria-label="专家主页功能" data-ued-node="expert.navigation">
                 <button class="expert-rail-link active" type="button" data-expert-scroll="expertHomeTop" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9H4z"/><path d="M9 20v-6h6v6"/></svg><span>首页</span></button>
                 <button class="expert-rail-link" type="button" data-view="publicProjectsHub"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg><span>项目</span></button>
                 <button class="expert-rail-link" type="button" data-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M8 3h8"/></svg><span>定时任务</span></button>
                 <button class="expert-rail-link" type="button" data-view="expertChatHub"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h6"/></svg><span>对话任务</span></button>
                 <button class="expert-rail-link" type="button" data-view="workflowHub"><svg viewBox="0 0 24 24"><path d="M4 7h5v5H4zM15 12h5v5h-5zM9 9h4a4 4 0 0 1 4 4"/></svg><span>工作流</span></button>
-                <button class="expert-rail-link" type="button" data-expert-scroll="expertMemorySection"><svg viewBox="0 0 24 24"><path d="M8 4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4M16 4a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4M8 8h8M8 12h8M8 16h8"/></svg><span>记忆</span></button>
-                <button class="expert-rail-link" type="button" data-expert-scroll="expertCapabilitiesSection"><svg viewBox="0 0 24 24"><path d="m12 3 2.3 4.7L19 10l-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8L5 10l4.7-2.3z"/></svg><span>技能</span></button>
-                <button class="expert-rail-link" type="button" data-view="knowledgeHub"><svg viewBox="0 0 24 24"><path d="M4 5h7a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H4zM20 5h-3a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h3z"/></svg><span>知识库</span></button>
-                <button class="expert-rail-link" type="button" data-expert-scroll="expertConnectorsSection"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg><span>连接器</span></button>
+                <div class="expert-rail-group">专家能力</div>
+                <button class="expert-rail-link" type="button" data-expert-feature="soul-editor" data-feature-open="soul-editor"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg><span>人设</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="skills" data-feature-open="skills"><svg viewBox="0 0 24 24"><path d="m12 3 2.3 4.7L19 10l-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8L5 10l4.7-2.3z"/></svg><span>技能</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="connectors" data-feature-open="connectors"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg><span>连接器</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="knowledge" data-feature-open="knowledge"><svg viewBox="0 0 24 24"><path d="M4 5h7a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H4zM20 5h-3a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h3z"/></svg><span>知识库</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="memory" data-feature-open="memory"><svg viewBox="0 0 24 24"><path d="M8 4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4M16 4a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4M8 8h8M8 12h8M8 16h8"/></svg><span>记忆</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="palace" data-feature-open="palace"><svg viewBox="0 0 24 24"><path d="M4 20V8l8-4 8 4v12M9 20v-6h6v6"/></svg><span>职场</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="life" data-feature-open="life"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg><span>人生</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="profile" data-feature-open="profile"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M7 18a5 5 0 0 1 10 0"/></svg><span>画像</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="prompts" data-feature-open="prompts"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 4z"/></svg><span>话术</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="schedules" data-feature-open="schedules"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M8 3h8"/></svg><span>定时</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="traces" data-feature-open="traces"><svg viewBox="0 0 24 24"><path d="M4 18h4l3-8 3 6 2-4h4"/></svg><span>轨迹</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="dashboard" data-feature-open="dashboard"><svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/></svg><span>台账</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="tests" data-feature-open="tests"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a3 3 0 0 0 2.6 4h8.8a3 3 0 0 0 2.6-4l-5-9V3"/><path d="M8 15h8"/></svg><span>测试</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="batch-regression" data-feature-open="batch-regression"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h12M4 17h8"/></svg><span>批量回归</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="office" data-feature-open="office"><svg viewBox="0 0 24 24"><path d="M5 20V5h10v15M15 10h4v10M9 9h2M9 13h2M9 17h2"/></svg><span>办公室</span></button>
+                <button class="expert-rail-link" type="button" data-expert-feature="packages" data-feature-open="packages"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg><span>专家包</span></button>
+                <div class="expert-rail-group">管理</div>
                 <button class="expert-rail-link" type="button" data-view="imHub"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg><span>IM</span></button>
                 <button class="expert-rail-link" type="button" data-feature-open="soul-editor"><svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/><path d="m9 12 2 2 4-4"/></svg><span>权限</span></button>
               </nav>
@@ -3038,11 +3045,11 @@
         </section>
 
         <section class="view workspace-page management-replica" id="workflowHubView">
-          <header class="management-replica-head"><div><h1>WakerFlow 管理</h1><p>用可复用流程编排多个专家协同处理复杂任务，并为流程配置定时或 API 触发方式。</p></div><div class="management-replica-actions"><button class="primary-button" type="button" data-management-action="new-workflow">＋ 新建 WakerFlow</button></div></header>
+          <header class="management-replica-head"><div><h1>工作流管理</h1><p>用可复用流程编排多个专家协同处理复杂任务，并为流程配置定时或 API 触发方式。</p></div><div class="management-replica-actions"><button class="primary-button" type="button" data-management-action="new-workflow">＋ 新建工作流</button></div></header>
           <div class="workflow-replica-body">
-            <aside class="workflow-list-pane"><strong>WakerFlow</strong><button class="workflow-list-card active" type="button"><strong>未命名 WakerFlow</strong><small>该 WakerFlow 暂无描述</small></button></aside>
+            <aside class="workflow-list-pane"><strong>工作流</strong><button class="workflow-list-card active" type="button"><strong>未命名工作流</strong><small>该工作流暂无描述</small></button></aside>
             <section class="workflow-stage">
-              <header class="workflow-stage-head"><div class="workflow-stage-tabs" role="tablist"><button class="workflow-stage-tab active" type="button">WakerFlow</button><button class="workflow-stage-tab" type="button">执行记录</button><button class="workflow-stage-tab" type="button">详情配置</button></div><button class="secondary-button" type="button" data-management-action="add-trigger">＋ 添加触发方式</button></header>
+              <header class="workflow-stage-head"><div class="workflow-stage-tabs" role="tablist"><button class="workflow-stage-tab active" type="button">工作流</button><button class="workflow-stage-tab" type="button">执行记录</button><button class="workflow-stage-tab" type="button">详情配置</button></div><button class="secondary-button" type="button" data-management-action="add-trigger">＋ 添加触发方式</button></header>
               <div class="workflow-canvas"><div class="workflow-node"><strong>说出来，就能跑起来</strong><small>从想法生成自动化流程</small></div><div class="workflow-prompt"><textarea id="workflowPrompt" placeholder="输入你的想法"></textarea><footer><button class="primary-button" type="button" data-management-action="generate-workflow" aria-label="生成流程">↑</button></footer></div></div>
             </section>
           </div>
@@ -3075,11 +3082,6 @@
         </section>
 
         <section class="feature-layer" id="featureLayer" aria-hidden="true">
-          <aside class="feature-rail">
-            <div class="feature-rail-kicker" id="featureRailKicker">Expert workspace</div>
-            <div class="feature-rail-context"><strong id="featureContextTitle">小堵</strong><span id="featureContextMeta">工商储产品解决方案专家</span></div>
-            <nav class="feature-rail-nav" id="featureRailNav" aria-label="功能页面"></nav>
-          </aside>
           <div class="feature-main">
             <header class="feature-head">
               <div><h2 id="featureTitle">功能页面</h2><p id="featureSubtitle">按现有分身逻辑展示完整页面与操作。</p></div>
@@ -3154,7 +3156,7 @@
         { label: '专家', meta: '管理分身能力与专家包', icon: 'E', view: 'experts', group: '工作台' },
         { label: 'Chat', meta: '历史对话与辅助交流', icon: 'C', view: 'chat', group: '工作台' },
         { label: '专家对话任务', meta: '打开专家对话工作区', icon: 'D', view: 'expertChatHub', group: '管理端' },
-        { label: 'WakerFlow 管理', meta: '编排可复用的专家协作流程', icon: 'W', view: 'workflowHub', group: '管理端' },
+        { label: '工作流管理', meta: '编排可复用的专家协作流程', icon: '流', view: 'workflowHub', group: '管理端' },
         { label: '任务看板', meta: '查看任务推进与审批事项', icon: 'B', view: 'boardHub', group: '管理端' },
         { label: '公开项目', meta: '管理所有专家可用的项目上下文', icon: 'P', view: 'publicProjectsHub', group: '管理端' },
         { label: 'IM 渠道管理', meta: '配置会话配对和即时通讯渠道', icon: 'I', view: 'imHub', group: '管理端' },
@@ -3460,16 +3462,15 @@
         var definition = featureRegistry[key];
         if (!definition) return;
         activeFeatureKey = key;
-        document.getElementById('featureRailKicker').textContent = definition.kicker || 'Expert workspace';
-        document.getElementById('featureContextTitle').textContent = definition.contextTitle || document.getElementById('expertName').textContent || '当前专家';
-        document.getElementById('featureContextMeta').textContent = definition.contextMeta || document.getElementById('expertRole').textContent || '分身功能';
         document.getElementById('featureTitle').textContent = definition.title;
         document.getElementById('featureSubtitle').textContent = definition.subtitle;
         document.getElementById('featureContent').innerHTML = typeof definition.content === 'function' ? definition.content() : definition.content;
-        var navItemsForGroup = definition.group && featureGroups[definition.group] ? featureGroups[definition.group] : [{ key: key, label: definition.title }];
-        document.getElementById('featureRailNav').innerHTML = navItemsForGroup.map(function (item) {
-          return '<button class="feature-rail-tab' + (item.key === key ? ' active' : '') + '" type="button" data-feature-key="' + item.key + '"><span>' + item.label + '</span></button>';
-        }).join('');
+        document.querySelectorAll('#expertsView .expert-rail-link').forEach(function (item) {
+          var isSelected = featureLayer.classList.contains('expert-context') && item.dataset.expertFeature === key;
+          item.classList.toggle('active', isSelected);
+          if (isSelected) item.setAttribute('aria-current', 'page');
+          else item.removeAttribute('aria-current');
+        });
         var actionMarkup = definition.actions || '';
         document.getElementById('featureHeadActions').innerHTML = actionMarkup + '<button class="quiet-button feature-close" id="closeFeature" type="button" aria-label="关闭">×</button>';
         document.getElementById('closeFeature').addEventListener('click', closeFeatureLayer);
@@ -3480,20 +3481,29 @@
         if (!featureRegistry[key]) return;
         if (typeof closeWorkMenu === 'function') closeWorkMenu();
         if (typeof closeChatTools === 'function') closeChatTools();
+        featureLayer.classList.toggle('expert-context', expertsView.classList.contains('active'));
         renderFeature(key);
         featureLayer.classList.add('open');
         featureLayer.setAttribute('aria-hidden', 'false');
       }
 
       function closeFeatureLayer() {
+        var wasExpertContext = featureLayer.classList.contains('expert-context');
         featureLayer.classList.remove('open');
+        featureLayer.classList.remove('expert-context');
         featureLayer.setAttribute('aria-hidden', 'true');
         activeFeatureKey = '';
+        if (wasExpertContext) {
+          document.querySelectorAll('#expertsView .expert-rail-link').forEach(function (item) {
+            var isHome = item.dataset.expertScroll === 'expertHomeTop';
+            item.classList.toggle('active', isHome);
+            if (isHome) item.setAttribute('aria-current', 'page');
+            else item.removeAttribute('aria-current');
+          });
+        }
       }
 
       featureLayer.addEventListener('click', function (event) {
-        var featureButton = event.target.closest('[data-feature-key]');
-        if (featureButton) { renderFeature(featureButton.dataset.featureKey); return; }
         var linkedFeature = event.target.closest('[data-feature-open]');
         if (linkedFeature) { openFeature(linkedFeature.dataset.featureOpen); return; }
         var linkedView = event.target.closest('[data-view]');
@@ -3727,7 +3737,7 @@
           }
           var messages = {
             'new-group': '新建群组入口已打开',
-            'new-workflow': '已新建 WakerFlow 草稿',
+            'new-workflow': '已新建工作流草稿',
             'add-trigger': '已打开触发方式配置',
             'generate-workflow': '已根据输入生成流程草稿',
             'pending-pair': '当前没有待处理配对申请',

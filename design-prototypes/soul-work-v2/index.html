@@ -2039,6 +2039,16 @@
     .expert-connector-empty strong { display: block; font-size: 14px; }
     .expert-connector-empty p { margin: 5px 0 0; color: #89878e; font-size: 13px; line-height: 1.55; }
     .expert-connector-empty[hidden] { display: none; }
+    .expert-archive-list { overflow: hidden; border: 1px solid #e5e2dc; border-radius: 16px; background: #fff; }
+    .expert-archive-row { width: 100%; min-height: 62px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 14px; border: 0; border-bottom: 1px solid #eeece8; background: transparent; color: #3f3e45; text-align: left; cursor: pointer; }
+    .expert-archive-row:last-child { border-bottom: 0; }
+    .expert-archive-row:hover { background: #f6f5f2; }
+    .expert-archive-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #f4f3f0; color: #737178; }
+    .expert-archive-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .expert-archive-copy { min-width: 0; }
+    .expert-archive-copy strong { display: block; overflow: hidden; font-size: 13px; font-weight: 630; text-overflow: ellipsis; white-space: nowrap; }
+    .expert-archive-copy small { display: block; margin-top: 3px; overflow: hidden; color: #929097; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .expert-archive-action { color: #85838a; font-size: 12px; }
     .expert-more-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
     .expert-more-item { min-width: 0; min-height: 64px; display: flex; align-items: center; gap: 10px; padding: 12px; border: 0; border-radius: 12px; background: transparent; color: #44434a; text-align: left; cursor: pointer; }
     .expert-more-item:hover { background: #f3f2ef; }
@@ -2628,7 +2638,18 @@
                     <div class="expert-home-section-head"><div><h3>连接器</h3><p>仅展示外部系统连接；知识文件与本地技能不计入连接器。</p></div><button class="expert-home-link" type="button" data-feature-open="connectors">管理连接器</button></div>
                     <div class="expert-connector-empty" data-ued-node="expert.home.connectors.list"><span class="expert-connector-icon"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg></span><span><strong>未配置外部连接器</strong><p>当前专家包没有外部连接器声明；添加后才会显示连接状态与能力范围。</p></span><button class="secondary-button" type="button" data-feature-open="connectors">添加连接器</button></div>
                   </section>
-                  <section class="expert-home-section" id="expertArchiveSection"></section>
+                  <section class="expert-home-section" id="expertArchiveSection" data-ued-node="expert.home.raw-files.tree">
+                    <div class="expert-home-section-head"><div><h3>原始档案</h3><p>专家包真实结构；只展示相对位置，不暴露本机绝对路径。</p></div><button class="expert-home-link" type="button" data-feature-open="packages">查看专家包</button></div>
+                    <div class="expert-archive-list">
+                      <button class="expert-archive-row" type="button" data-feature-open="soul-editor"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="expert-archive-copy"><strong>soul.md</strong><small>专家人格、身份、原则与表达方式</small></span><span class="expert-archive-action">查看</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="packages"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="expert-archive-copy"><strong>AGENTS.md</strong><small>知识约束、工作流程与执行规则</small></span><span class="expert-archive-action">查看</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="packages"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="expert-archive-copy"><strong>expert-pack.json</strong><small>专家包清单、版本与可移植内容声明</small></span><span class="expert-archive-action">查看</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="knowledge"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M4 8h6l2 2h8v10H4zM4 8V5h7l2 3"/></svg></span><span class="expert-archive-copy"><strong>knowledge/</strong><small>专业知识文件与知识索引</small></span><span class="expert-archive-action">打开</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="skills"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M4 8h6l2 2h8v10H4zM4 8V5h7l2 3"/></svg></span><span class="expert-archive-copy"><strong>skills/</strong><small>专属技能及共享、社区技能引用</small></span><span class="expert-archive-action">打开</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="tests"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M4 8h6l2 2h8v10H4zM4 8V5h7l2 3"/></svg></span><span class="expert-archive-copy"><strong>tests/</strong><small>红线、知识约束、溯源、人格与能力测试</small></span><span class="expert-archive-action">打开</span></button>
+                      <button class="expert-archive-row" type="button" data-feature-open="memory"><span class="expert-archive-icon"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM14 3v4h4M9 12h6M9 16h6"/></svg></span><span class="expert-archive-copy"><strong>memory/MEMORY.md</strong><small>专家长期记忆；与任务运行记录分离</small></span><span class="expert-archive-action">查看</span></button>
+                    </div>
+                  </section>
 
                   <section class="expert-home-section" data-ued-node="expert.home.more-capabilities.nav">
                     <div class="expert-home-section-head"><div><h3>更多能力</h3><p>原有人格、知识、记忆、测试、轨迹和办公室入口继续保留。</p></div></div>
@@ -3154,7 +3175,7 @@
         actions: '<button class="quiet-button" type="button" data-feature-open="import-pack">导入</button><button class="quiet-button primary" type="button" data-demo-action="export-pack">导出专家包</button>',
         content: `
           <div class="feature-toolbar"><div><h3>当前专家包</h3><p>本地安装 · 运行时数据与专家包正本分离。</p></div><span class="feature-pill ready">结构可读取</span></div>
-          <div class="feature-split"><section class="feature-card"><h4>结构检查</h4><div class="feature-code">expert-pack/\n├─ soul.md\n├─ AGENTS.md\n├─ knowledge/README.md\n├─ skills/\n├─ tests/cases/\n└─ memory/MEMORY.md</div><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="check-pack">重新检查</button></section><aside class="feature-stack"><section class="feature-card"><h4>可移植内容</h4><p>人格、知识、技能、测试与空记忆结构。</p><span class="feature-pill ready" style="margin-top:10px">允许导出</span></section><section class="feature-card"><h4>默认排除</h4><p>会话、任务运行、成果、凭据和未授权用户数据。</p><span class="feature-pill waiting" style="margin-top:10px">不会打包</span></section></aside></div>`
+          <div class="feature-split"><section class="feature-card"><h4>结构检查</h4><div class="feature-code">expert-pack/\n├─ soul.md\n├─ AGENTS.md\n├─ expert-pack.json\n├─ knowledge/\n├─ skills/\n├─ tests/\n└─ memory/MEMORY.md</div><button class="quiet-button" style="margin-top:12px" type="button" data-demo-action="check-pack">重新检查</button></section><aside class="feature-stack"><section class="feature-card"><h4>可移植内容</h4><p>人格、知识、技能、测试与空记忆结构。</p><span class="feature-pill ready" style="margin-top:10px">允许导出</span></section><section class="feature-card"><h4>默认排除</h4><p>会话、任务运行、成果、凭据和未授权用户数据。</p><span class="feature-pill waiting" style="margin-top:10px">不会打包</span></section></aside></div>`
       });
 
       registerFeatureGroup('expert-library', [{ key: 'create-expert', label: '新建专家' }, { key: 'import-pack', label: '导入专家包' }, { key: 'expert-library', label: '专家包市场' }]);

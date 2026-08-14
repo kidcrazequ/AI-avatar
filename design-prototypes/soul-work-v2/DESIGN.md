@@ -66,21 +66,21 @@ tokens:
       status-positive: "#24a36a"
       status-danger: "#cf4b54"
   typography:
-    font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif
+    font-sans: '"DM Sans", -apple-system, system-ui, "Segoe UI", sans-serif'
     font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace
-    body-size: 14px
-    body-line-height: 1.57
-    heading-weight: 650
+    body-size: 13px
+    body-line-height: 20px
+    heading-weight: 500
   spacing:
     base-unit: 4px
-    page-x-wide: 32px
-    page-x-compact: 24px
-    section-gap: 24px
-    card-padding: 20px
-    content-max: 1120px
+    page-x-wide: 0px
+    page-x-compact: 0px
+    section-gap: 16px
+    card-padding: 16px
+    content-max: 960px
   radius:
-    control: 8px
-    card: 10px
+    control: 6px
+    card: 6px
     avatar: 18px
     modal: 14px
   shadow:
@@ -91,13 +91,13 @@ tokens:
     standard: 180ms
 components:
   expert-identity:
-    avatar-size: 80px
-    padding: 28px
-    radius: 10px
+    avatar-size: 162px
+    padding: 11px
+    radius: 4px
   expert-section:
     gap: 16px
-    padding: 20px
-    radius: 10px
+    padding: 16px
+    radius: 6px
   control:
     min-height: 36px
     radius: 8px
@@ -111,7 +111,7 @@ source_mapping:
 
 # Overview
 
-Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，当前页面对象为工商储产品解决方案专家“小堵”。页面的核心任务不是展示虚构的人效数据，而是让用户快速确认“这个专家是谁、能做什么、依据什么工作、当前是否可用”，并能直接发起任务或进入能力管理。设计以用户提供的 Waker 管理页截图作为信息架构参考，以 Codex / Kimi 的克制桌面质感作为交互密度参考，但只呈现 Soul 专家包中可验证的内容。该页面属于 V2 HTML 原型，不代表正式 Electron 已完成实现。
+Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，当前页面对象为工商储产品解决方案专家“小堵”。本页以用户指定的参考管理端专家主页作为唯一视觉基线：页面骨架、几何尺寸、字体、字重、行高、图标、间距、边框、圆角、默认态、折叠态和纵向节奏必须逐项复刻；仅将产品语义与数据替换为 Soul 的“专家 / 工作流 / 定时任务”和小堵专家包中的可验证内容。该页面属于 V2 HTML 原型，不代表正式 Electron 已完成实现。
 
 ## Verified Facts
 
@@ -131,23 +131,21 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 | --- | --- | --- | --- |
 | Soul 原型头像 | `assets/soul-avatar.png` | available | 仅作 Soul 品牌或头像占位；不得暗示为小堵真人照片 |
 | 小堵头像引用 | `expert-packs/小堵-工商储专家/avatar.txt` | verified-reference | 通过资源标识解析；UI 不显示本地绝对路径 |
-| Waker 管理页参考截图 | 用户在当前任务提供的截图 | reference-only | 只借鉴结构、密度和留白，不复制名称、指标或绿色品牌视觉 |
+| 参考管理端专家主页 | 用户在当前任务提供的截图及本地参考页 | visual-baseline | 页面样式、字体、图标、尺寸与交互状态的唯一验收基线；不可见文案不得出现外部产品名 |
 | 图标 | 原型现有内联 SVG 图标集 | available | 统一 18–20px、1.75px 描边；不混用字母方块代替图标 |
 
 ## Design Thesis
 
-**纵向专家档案，而不是横向功能标签堆叠。** 首页沿“身份与任务入口 → 工作记录 → 记忆与积累 → 关于我 → 能力与工具 → 连接器 → 原始档案 → 更多专家能力”的顺序组织，让用户先建立信任，再进入配置。首页只展示可验证状态和真实内容；加入天数、虚构通过率、虚构工作量、空知识库的“已连接”等装饰性指标一律禁止。原有 15 项能力保留在次级专家工作区中，主页负责总览和分流，不重复实现每个深层功能。
+**纵向专家档案，严格复刻参考页节奏。** 首页沿“身份 → 工作记录 → 记忆与积累 → 关于我 → 能力与工具 / 连接器 → 原始档案”的顺序组织。零值统计和浅色热力图仅作为参考页一致的空数据结构出现，不得伪装真实业绩；内容、连接状态和能力数量仍必须来自 Soul 专家包。原有能力统一并入左侧专家导航，不再在主页追加“更多能力”大卡片。
 
 ### 页面结构
 
-1. **专家身份区**：头像、姓名、角色、领域、来源、可用状态、简短介绍，以及“交给小堵”“管理专家”操作。
-2. **工作记录区**：真实任务、对话和定时任务记录；无数据时使用缺省页，不用伪造 0 指标或热力图。
+1. **专家身份区**：参考页相同的倾斜头像卡、姓名、角色徽标、在线状态、元数据、简短介绍和右侧弱化图标。
+2. **工作记录区**：参考页相同的标题、时间线视图、任务切换、四项零值统计与浅色年度热力图结构；零值明确表示暂无数据。
 3. **记忆与积累区**：仅展示真实记忆事件、学习记录或能力更新；每条必须有类型、来源与时间。
 4. **关于我区**：固定三栏“擅长领域 / 工作原则 / 工作模式”，内容从专家包归纳。
-5. **能力与工具区**：技能按 local / shared / community 分组并显示启用、覆盖和不可用状态。
-6. **连接器区**：与能力区分离，显示真实连接状态、授权范围和管理入口；知识文件不得伪装成连接器。
-7. **原始档案区**：展示安全的专家包相对结构和查看入口，不暴露绝对路径。
-8. **更多专家能力**：承接人设、记忆、测试、办公室等原有 15 项入口。
+5. **能力与工具区**：在同一参考卡片中先展示技能标签，再以分隔线展示连接器数量和管理入口；知识文件不得伪装成连接器。
+6. **原始档案区**：参考页相同的三列文件行，展示安全的专家包相对结构和查看入口，不暴露绝对路径。
 
 ### “关于我”内容边界
 
@@ -159,7 +157,7 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 
 ## Tokens
 
-本页复用 V2 中性桌面令牌，数值正本位于 YAML frontmatter。页面使用 4px 基础网格、白色内容面与浅灰导航面，模块之间依靠间距和 `border-subtle` 分层，不用大面积阴影。交互蓝只用于焦点、链接和确认选择；Soul 粉只用于品牌细节；成功绿仅表示已经从真实状态确认的“在线 / 已连接 / 已通过”。
+本页数值以参考页实测为正本。页面使用白色内容面、`#e6e6e6` 1px 边框和 6px 模块圆角，模块间固定 16px；除头像纸卡与浮层外不增加阴影。成功绿只用于已确认的在线/连接状态和热力图图例。
 
 ## Colors
 
@@ -173,16 +171,17 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 
 | Role | Size / Line height | Weight | Usage |
 | --- | --- | --- | --- |
-| 专家姓名 / 页面标题 | 24px / 32px | 680 | 每页仅一个主标题 |
-| 模块标题 | 18px / 26px | 650 | 工作记录、关于我、能力与工具等 |
-| 卡片标题 | 15px / 22px | 620 | 能力名、文件名、连接器名 |
-| 正文 | 14px / 22px | 450 | 描述、工作原则和工作模式 |
-| 元数据 | 13px / 20px | 450 | 来源、时间、状态与范围 |
-| 辅助标签 | 12px / 18px | 520 | 文件类型、技能来源、小型徽标 |
-| 路径 / 标识 | 12px / 18px | 500 mono | 安全相对路径与专家包标识 |
+| 专家姓名 | 26px / 32px | 500 | 身份区唯一主标题 |
+| 模块标题 | 16px / 24px | 500 | 工作记录、关于我、能力与工具等 |
+| 关于我栏名 / 条目名 | 14px / 18px | 500 | 三栏标题与每项标题 |
+| 专家摘要 | 13px / 20px | 400 | 身份区介绍 |
+| 关于我说明 | 12px / 18px | 400 | 每项说明 |
+| 技能标签 | 12px / 20px | 500 | 技能名称 |
+| 档案文件名 | 13px / 20px | 500 | 安全相对文件名 |
+| 元数据 / 小型控件 | 10–13px / 15–20px | 400–500 | 时间、状态、热力图刻度和标签 |
 
-- 中文优先使用系统字体栈；不单独加载网络字体。
-- 可见文字下限为 12px，禁止以 9–11px 承载功能名称或状态。
+- 字体栈固定为 `"DM Sans", -apple-system, system-ui, "Segoe UI", sans-serif`，不得混入额外中文字体导致字宽漂移。
+- 9–11px 仅允许参考页中的热力图刻度、紧凑标签和辅助控件；功能名称和正文不得低于 12px。
 - 标题不使用全大写英文；“专家工作区”等辅助英文仅在确有必要时出现。
 - 长描述最多三行；名称和路径单行截断后必须提供完整 tooltip 或详情查看入口。
 
@@ -195,9 +194,9 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 
 ## Shapes
 
-- 模块卡片圆角 10px，控件 8px，弹层 14px；避免 20px 以上的胶囊卡片。
-- 专家头像容器 80×80px、18px 圆角；头像不足时使用中性占位，不用字母方块伪装完整头像。
-- 图标统一 18–20px，描边 1.75px；状态图标最多 16px，并配文本或可访问名称。
+- 模块卡片圆角 6px、1px `#e6e6e6` 边框；文件行圆角 6px；控件按参考页实测 4–6px。
+- 专家头像纸卡为 184×210px，内部图像 162×162px，轻微逆时针旋转并保留底部 ID 区。
+- 图标尺寸和描边逐组件匹配参考页，不用 Emoji、字母方块或临时几何图形替代。
 - 标签只用于来源、文件类型和已验证状态，不把整句描述放进胶囊。
 
 ## Components
@@ -206,13 +205,13 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 | --- | --- | --- | --- | --- |
 | Expert identity | installed expert | loading, ready, unavailable, error | `expert.identity` | 始终展示真实名称、角色和来源 |
 | Task launcher | primary / secondary | default, hover, focus, disabled | `expert.create-task` | 进入统一任务/对话消息流 |
-| Work records | list / empty | loading, populated, empty, error | `expert.work-records` | 无真实数据时不显示伪造热力图 |
+| Work records | timeline / task / scheduled | loading, populated, zero-data, error | `expert.work-records` | 零值与空热力图仅作为中性空数据结构 |
 | Memory timeline | event timeline / empty | loading, populated, empty | `expert.memory-timeline` | 事件必须含来源和时间 |
 | About grid | expertise / principles / workflow | default, collapsed | `expert.about` | 1280px 以上保持三栏 |
 | Skill directory | local / shared / community | enabled, overridden, disabled, missing | `expert.capabilities` | 显示来源与覆盖关系 |
-| Connector list | local / external | connected, disconnected, permission-needed, error | `expert.connectors` | 与知识文件分区显示 |
+| Connector list | local / external | connected, disconnected, permission-needed, error | `expert.connectors` | 与技能同卡分区、与知识文件分语义 |
 | Raw archive | file / directory | available, empty, unreadable | `expert.raw-files` | 只展示相对路径和安全查看入口 |
-| Legacy capability nav | 15 existing features | default, hover, selected, unavailable | `expert.more-capabilities` | 不显示 01、02 等装饰编号 |
+| Expert capability nav | existing features | default, hover, selected, unavailable | `expert.capability-nav` | 并入左侧专家导航，不显示额外大卡片或 01、02 编号 |
 
 ### 必需子节点
 
@@ -236,12 +235,14 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 
 ### Desktop grid
 
-- 保留 Soul V2 全局主导航，不在专家主页内再复制一套全局导航。
-- 深层专家功能使用 246px 次级导航栏；专家主页本身采用单列纵向内容，内容最大宽度 1120px。
-- `1440×900`：主内容左右内边距 32px；身份区为“身份信息 + 右侧操作”；“关于我”固定三栏；能力与连接器可双栏。
-- `1280×800`：主内容左右内边距 24px；身份区仍保持操作可见；“关于我”保持三栏但每栏最小 220px；能力与连接器改为单列时不得遮挡入口。
-- 主页纵向区块间距 24px，卡片内边距 20px，内部网格间距 16px。
-- 页面使用主内容区单一垂直滚动；工作记录、关于我、能力、连接器和档案均直接展开，不创建模块内滚动。
+- 保留 Soul V2 64px 全局导航和 240px 专家导航；专家主页工作区从 x=304 开始，顶栏高 50px。
+- `1440×900`：主页内容 x=392、宽 960px；纵向间距固定 16px；身份区 x=402、y=54、宽 950px、高 210px。
+- 工作记录 x=392、y=280、960×348px；标题内容 x=409、y=293、宽 926px、高 36px；统计区 y=337、高 66px、间距 10px；热力图 x=409、y=415、926×200px、内边距 16px。
+- 记忆区 x=392、y=644、960×318px；关于我 x=392、y=978、960×452px；能力与工具 x=392、y=1446、960×249px；原始档案 x=392、y=1711、960×138px。
+- 关于我内容 x=409、y=1023、宽 926px、高 394px，三列各 295.33px，列间距 20px。
+- 档案文件行从 x=409、y=1756 开始，三列、单项约 306×38px、间距 5px。
+- `1280×800` 保持相同信息层级，内容按可用宽度收缩；不得出现横向滚动、关键按钮遮挡或模块内部二次滚动。
+- 页面仅在主内容区纵向滚动；所有模块默认直接展开。
 
 ### Breakpoints
 
@@ -263,7 +264,7 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 | State | UI rule |
 | --- | --- |
 | Loading | 使用与最终布局同尺寸的骨架，不闪烁虚构内容 |
-| Empty work records | 中性图标 + “暂无工作记录” + “交给小堵”操作，不显示 0 天、0 任务热力图 |
+| Empty work records | 按参考页保留四项 0 值统计和浅色年度热力图骨架，颜色不得暗示存在真实活动 |
 | Empty memory | 显示“暂无可展示的记忆事件”，保留查看完整记忆入口 |
 | Expert unavailable | 身份区显示中性不可用图标与原因，主任务按钮 disabled，提供修复或切换入口 |
 | Connected | 仅当真实连接探测成功时显示绿色图标和“已连接” |
@@ -297,7 +298,7 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 | 用纵向专家主页建立身份、工作、能力和证据的连续阅读路径 | 恢复密集横向 Tab 或编号为 01–15 的装饰列表 |
 | 将技能、连接器、知识文件和原始档案分清语义 | 把知识文件伪装成外部连接器或已连接状态 |
 | 保留 15 项旧能力并放入次级工作区 | 为了页面简洁删除人格、知识、记忆、测试、轨迹或办公室 |
-| 无数据时使用诚实缺省页 | 用 0、彩色点和空热力图制造“有数据”的感觉 |
+| 以中性 0 值和浅色热力图复刻参考空结构 | 用非零数字、彩色活动格或成功率制造真实业绩 |
 | 只展示安全相对路径，并通过受控查看器打开 | 在渲染层展示或复制本地绝对路径 |
 | 使用 12px 以上的系统字体和舒展行高 | 使用 9–11px 字体承载功能名称、状态和说明 |
 | 让主页面承担唯一长滚动 | 在每个卡片内增加独立滚动条 |
@@ -307,7 +308,7 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 - 本契约当前只约束 `design-prototypes/soul-work-v2/index.html` 的专家主页原型，不授权修改正式 Electron 页面。
 - 实施前必须读取 `expert-packs/小堵-工商储专家/expert-pack.json`、`soul.md`、`skills/skill-index.yaml` 和安全目录结构；不得从参考截图复制业务数据。
 - 专家主页使用本契约的纵向区块顺序；页面专属规则优先于本文件后续“Existing V2 Coverage”中的通用说明。
-- 未来子任务分别处理“关于我”“能力与工具 / 连接器”“原始档案”，每次只修改约定范围并单独提交。
+- 后续任何视觉修改必须先以参考页同尺寸截图实测，不得凭印象重新设计已锁定区块。
 - 为上述必需节点添加 `data-ued-node`，保证截图反馈可以映射到具体源节点。
 - 视觉实现需验证 1440×900 与 1280×800，记录首屏、完整纵向页、空状态、错误状态和 hover/focus 状态截图。
 - 运行设计契约校验：`python3 /Users/kian/.codex/skills/ued-agent/scripts/ued_design_contract.py lint DESIGN.md`。
@@ -484,13 +485,12 @@ Soul 专家主页是用户理解、选择和管理 AI 分身的可信入口，�
 
 ## Management Surface Replication Contract — 管理端完整复刻合同
 
-本节是 V2 管理端页面的强制验收基线。“完整复刻”不等于仅保留相同模块或相似布局，而是逐页复现参考管理端的页面骨架、视觉密度、排版、图标、组件状态、空态和可点击路径；只把产品语义从 Waker / WakerFlow 替换为 Soul 的专家 / 工作流 / 定时任务。
+本节是 V2 管理端页面的强制验收基线。“完整复刻”不等于仅保留相同模块或相似布局，而是逐页复现参考管理端的页面骨架、视觉密度、排版、图标、组件状态、空态和可点击路径；页面统一使用 Soul 的专家 / 工作流 / 定时任务语义，不出现来源产品文案。
 
 ### 全局规格
 
-- 字体栈：`"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif`。
-- 正文：16px / 24px；说明文字：14px / 22px；辅助信息：12px / 18px。
-- 页面标题：28px / 38px，字重 650；模块标题：18px / 26px，字重 620。
+- 字体栈：`"DM Sans", -apple-system, system-ui, "Segoe UI", sans-serif`；专家主页必须使用本文件 Typography 表中的实测字号。
+- 管理列表页的标题、正文、说明和辅助信息按各参考页同尺寸实测，不用一套放大的通用字号覆盖所有页面。
 - 普通管理页：左侧 64px 图标栏，内容起点 x=104px；专家主页：64px 全局栏 + 240px 专家栏，内容起点 x=304px。
 - 主背景为白色，侧栏 `#f3f3f3`；分隔线 `#e8e8e8`；选中态 `#ededed`；主按钮 `#171717`。
 - 图标统一使用 20px Lucide 线性图标，描边 1.7；不得用文字、Emoji 或临时几何图形替代。

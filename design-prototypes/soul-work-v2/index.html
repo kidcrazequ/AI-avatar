@@ -2024,6 +2024,21 @@
     .expert-about-card ul { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
     .expert-about-card li { position: relative; padding-left: 13px; color: #66656c; font-size: 13px; line-height: 1.55; }
     .expert-about-card li::before { content: ""; position: absolute; left: 0; top: .7em; width: 4px; height: 4px; border-radius: 50%; background: #8d8a83; }
+    .expert-capability-groups { display: grid; gap: 10px; }
+    .expert-capability-group { padding: 16px 18px; border: 1px solid #e6e3dd; border-radius: 15px; background: #fff; }
+    .expert-capability-group-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+    .expert-capability-group-head strong { font-size: 14px; font-weight: 650; }
+    .expert-capability-group-head span { color: #929097; font-size: 12px; }
+    .expert-skill-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .expert-skill-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 6px 10px; border: 1px solid #e2dfd9; border-radius: 9px; background: #faf9f7; color: #4e4d54; font-size: 12px; line-height: 1.35; }
+    .expert-skill-chip svg { width: 14px; height: 14px; fill: none; stroke: #77757c; stroke-width: 1.8; }
+    .expert-capability-empty { color: #949299; font-size: 13px; line-height: 1.55; }
+    .expert-connector-empty { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 15px; min-height: 104px; padding: 18px; border: 1px solid #e5e2dc; border-radius: 16px; background: #faf9f7; }
+    .expert-connector-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #dfdcd6; border-radius: 13px; background: #fff; color: #77757c; }
+    .expert-connector-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .expert-connector-empty strong { display: block; font-size: 14px; }
+    .expert-connector-empty p { margin: 5px 0 0; color: #89878e; font-size: 13px; line-height: 1.55; }
+    .expert-connector-empty[hidden] { display: none; }
     .expert-more-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
     .expert-more-item { min-width: 0; min-height: 64px; display: flex; align-items: center; gap: 10px; padding: 12px; border: 0; border-radius: 12px; background: transparent; color: #44434a; text-align: left; cursor: pointer; }
     .expert-more-item:hover { background: #f3f2ef; }
@@ -2041,6 +2056,8 @@
     @media (max-width: 1060px) {
       .expert-home-activity-grid, .expert-about-grid { grid-template-columns: 1fr; }
       .expert-more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .expert-connector-empty { grid-template-columns: 44px minmax(0, 1fr); }
+      .expert-connector-empty .secondary-button { grid-column: 1 / -1; justify-self: start; }
     }
   </style>
 </head>
@@ -2598,8 +2615,19 @@
                     <p id="expertKnowledge" hidden>知识文件从已安装专家包读取</p><p id="expertBoundary" hidden>涉及专业参数、收益与工程判断时必须引用知识文件；缺少资料时明确说明，不自行补全。</p>
                   </section>
 
-                  <section class="expert-home-section" id="expertCapabilitiesSection"></section>
-                  <section class="expert-home-section" id="expertConnectorsSection"></section>
+                  <section class="expert-home-section" id="expertCapabilitiesSection">
+                    <div class="expert-home-section-head"><div><h3>能力与工具</h3><p>技能名称、来源和启用状态来自当前已安装专家包。</p></div><button class="expert-home-link" type="button" data-feature-open="skills">管理技能</button></div>
+                    <div class="expert-capability-groups" data-storage-expert-only>
+                      <article class="expert-capability-group" data-ued-node="expert.home.capabilities.local"><div class="expert-capability-group-head"><strong>分身专属</strong><span>5 项 · 已启用</span></div><div class="expert-skill-chips"><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>query-product-quality</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>decision-trace</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>roi-consult</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>draw-chart</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>chart-from-knowledge</span></div></article>
+                      <article class="expert-capability-group" data-ued-node="expert.home.capabilities.shared"><div class="expert-capability-group-head"><strong>自有公共</strong><span>5 项 · 已启用</span></div><div class="expert-skill-chips"><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>draw-mermaid</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>draw-infographic</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>grill-against-knowledge</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>grill-me</span><span class="expert-skill-chip"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg>agent-reach</span></div></article>
+                      <article class="expert-capability-group" data-ued-node="expert.home.capabilities.community"><div class="expert-capability-group-head"><strong>社区开源</strong><span>0 项</span></div><div class="expert-capability-empty">当前专家包未声明社区技能，不展示未安装能力。</div></article>
+                    </div>
+                    <div class="expert-connector-empty" data-other-expert-state hidden><span class="expert-connector-icon"><svg viewBox="0 0 24 24"><path d="M7 12h10M12 7v10"/><circle cx="12" cy="12" r="8"/></svg></span><span><strong>能力详情从所选专家包读取</strong><p>当前原型只展示小堵专家包中已核验的技能来源。</p></span></div>
+                  </section>
+                  <section class="expert-home-section" id="expertConnectorsSection">
+                    <div class="expert-home-section-head"><div><h3>连接器</h3><p>仅展示外部系统连接；知识文件与本地技能不计入连接器。</p></div><button class="expert-home-link" type="button" data-feature-open="connectors">管理连接器</button></div>
+                    <div class="expert-connector-empty" data-ued-node="expert.home.connectors.list"><span class="expert-connector-icon"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg></span><span><strong>未配置外部连接器</strong><p>当前专家包没有外部连接器声明；添加后才会显示连接状态与能力范围。</p></span><button class="secondary-button" type="button" data-feature-open="connectors">添加连接器</button></div>
+                  </section>
                   <section class="expert-home-section" id="expertArchiveSection"></section>
 
                   <section class="expert-home-section" data-ued-node="expert.home.more-capabilities.nav">
@@ -2914,6 +2942,7 @@
       registerFeatureGroup('expert-core', [
         { key: 'soul-editor', label: '人设' },
         { key: 'skills', label: '技能' },
+        { key: 'connectors', label: '连接器' },
         { key: 'knowledge', label: '知识库' },
         { key: 'memory', label: '记忆' },
         { key: 'palace', label: '职场' },
@@ -2953,14 +2982,25 @@
         title: '技能', subtitle: '管理分身专属、自有公共和社区技能，保留同名优先级。', icon: '/', group: 'expert-core',
         actions: '<button class="quiet-button primary" type="button" data-demo-action="install-skill">安装技能</button>',
         content: `
-          <div class="feature-toolbar"><div><h3>已加载技能</h3><p>local › shared › community；关闭后新对话和新任务不再加载。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">全部</button><button type="button">专属</button><button type="button">共享</button><button type="button">社区</button></div></div>
+          <div class="feature-toolbar"><div><h3>已加载技能</h3><p>数据来自小堵 skill-index.yaml；local › shared › community。</p></div><div class="feature-segmented" data-segmented><button class="active" type="button">全部</button><button type="button">专属</button><button type="button">共享</button><button type="button">社区</button></div></div>
           <div class="feature-list" id="skillFeatureList">
-            <div class="feature-list-row"><span><strong>工商储需求澄清</strong><small>local · 小堵专属 · 读取真实项目资料后形成参数缺口</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
-            <div class="feature-list-row"><span><strong>可追溯方案结构</strong><small>local · 产出结论、依据、待确认项和成果文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
-            <div class="feature-list-row"><span><strong>文档深度阅读</strong><small>shared · 公共技能 · 需要用户提供可访问文件</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
-            <div class="feature-list-row"><span><strong>社区技能目录</strong><small>community · 由 soul-sync 管理，安装前展示来源和版本</small></span><span class="feature-row-actions"><span class="feature-pill">未安装</span><button class="quiet-button" type="button" data-demo-action="install-skill">浏览</button></span></div>
+            <div class="feature-list-row"><span><strong>query-product-quality</strong><small>local · 产品质量数据查询 · priority 0</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>decision-trace</strong><small>local · 决策回溯 · priority 0</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>roi-consult</strong><small>local · 收益测算 · priority 0</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>draw-chart / chart-from-knowledge</strong><small>local override · 工商储领域增强</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>5 项共享技能</strong><small>shared · draw-mermaid、draw-infographic、grill-against-knowledge、grill-me、agent-reach</small></span><span class="feature-row-actions"><span class="feature-pill ready">已启用</span><button class="quiet-button" type="button" data-demo-action="toggle-row">停用</button></span></div>
+            <div class="feature-list-row"><span><strong>社区技能</strong><small>community · 当前专家包未声明</small></span><span class="feature-row-actions"><span class="feature-pill">0 项</span><button class="quiet-button" type="button" data-demo-action="install-skill">浏览</button></span></div>
           </div>
           <div class="feature-callout"><strong>技能不会扩大权限。</strong> 写文件、创建定时任务、发布或外部发送仍遵循三级风险确认。</div>`
+      });
+
+      registerFeature('connectors', {
+        title: '连接器', subtitle: '管理专家明确声明的外部系统连接，不混入知识文件或本地技能。', icon: '⌁', group: 'expert-core',
+        actions: '<button class="quiet-button primary" type="button" data-demo-action="add-connector">添加连接器</button>',
+        content: `
+          <div class="feature-toolbar"><div><h3>外部连接器</h3><p>连接状态、授权范围和可用能力必须来自真实配置。</p></div><span class="feature-pill">0 个</span></div>
+          <div class="feature-card" style="min-height:180px;display:grid;place-items:center;text-align:center"><div><h4>未配置外部连接器</h4><p style="margin-top:8px">小堵专家包没有外部连接器声明；knowledge/ 与 skills/ 不会显示在这里。</p><button class="quiet-button" style="margin-top:16px" type="button" data-demo-action="add-connector">添加连接器</button></div></div>
+          <div class="feature-callout"><strong>连接前确认。</strong> 新连接器必须说明数据范围、读写权限和外部副作用；授权发生前不会显示为已连接。</div>`
       });
 
       registerFeature('knowledge', {
@@ -3243,6 +3283,11 @@
           showToast('已打开技能安装草稿');
         }
         if (action === 'confirm-skill') { actionButton.textContent = '已选择'; actionButton.disabled = true; showToast('已记录技能来源，正式安装前仍需确认'); }
+        if (action === 'add-connector') {
+          var connectorCard = document.querySelector('#featureContent .feature-card');
+          if (connectorCard) connectorCard.innerHTML = '<div style="width:min(520px,100%);text-align:left"><h4>新连接器草稿</h4><p style="margin-top:8px">选择连接器后需要确认数据范围、读写权限与外部副作用。</p><label class="feature-field" style="margin-top:16px"><span>连接器类型</span><select class="feature-select"><option>请选择</option><option>企业协作工具</option><option>文件与知识系统</option><option>业务数据系统</option></select></label><span class="feature-pill waiting" style="margin-top:14px">尚未授权</span></div>';
+          showToast('已创建连接器草稿，尚未授权或连接');
+        }
         if (action === 'inspect-knowledge') {
           var inspector = document.getElementById('knowledgeInspector');
           inspector.innerHTML = '<h4>' + actionButton.querySelector('strong').textContent + '</h4><p>来源位于当前专家包允许访问的知识目录；引用时保留相对文件名，不向渲染层暴露绝对路径。</p><div class="feature-meta-line"><span class="feature-pill ready">索引可用</span><span>点击“深度阅读”可生成结构化阅读任务</span></div>';
@@ -4157,6 +4202,9 @@
         button.addEventListener('click', function () {
           document.querySelectorAll('.expert-item').forEach(function (item) { item.classList.toggle('active', item === button); });
           var profile = expertProfiles[button.dataset.expert];
+          var isStorageExpert = button.dataset.expert === 'storage';
+          document.querySelectorAll('[data-storage-expert-only]').forEach(function (element) { element.hidden = !isStorageExpert; });
+          document.querySelectorAll('[data-other-expert-state]').forEach(function (element) { element.hidden = isStorageExpert; });
           document.getElementById('expertAvatar').setAttribute('aria-label', profile.name + '专家头像');
           document.getElementById('expertName').textContent = profile.name;
           document.getElementById('expertRole').textContent = profile.role;

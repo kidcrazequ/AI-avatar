@@ -1323,7 +1323,7 @@
       transition: opacity 160ms var(--ease), transform 180ms var(--ease);
     }
     .feature-layer.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
-    .feature-layer.expert-context { left: 224px; }
+    .feature-layer.expert-context { left: 64px; }
     .feature-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fcfcfb; }
     .feature-head { min-height: 94px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px 28px 18px; border-bottom: 1px solid var(--line); }
     .feature-head h2 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -.025em; }
@@ -2100,7 +2100,7 @@
     .expert-memory-timeline p { margin: 5px 0 0; color: #929097; font-size: 11px; }
     @media (max-width: 1280px) {
       #expertProfileView .expert-layout { grid-template-columns: 202px minmax(0, 1fr); }
-      .feature-layer.expert-context { left: 202px; }
+      .feature-layer.expert-context { left: 58px; }
       .expert-management-rail { padding-left: 8px; padding-right: 8px; }
       .expert-home-content { padding: 28px 28px 60px; }
       .expert-home-hero { grid-template-columns: 72px minmax(0, 1fr); }
@@ -2111,7 +2111,7 @@
     }
     @media (max-width: 1060px) {
       #expertProfileView .expert-layout { grid-template-columns: 188px minmax(0, 1fr); }
-      .feature-layer.expert-context { left: 188px; }
+      .feature-layer.expert-context { left: 56px; }
       .expert-home-content { padding-left: 20px; padding-right: 20px; }
       .expert-record-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .expert-home-activity-grid, .expert-about-grid { grid-template-columns: 1fr; }
@@ -2201,6 +2201,8 @@
     .workflow-shell-head { display: grid; grid-template-columns: minmax(200px,1fr) auto minmax(200px,1fr); align-items: center; padding: 0 18px; border-bottom: 1px solid #e6e6e6; }
     .workflow-shell-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 650; }
     .workflow-shell-title svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .workflow-back-button { width: 28px; height: 28px; display: grid; place-items: center; margin-left: -6px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #66686d; cursor: pointer; }
+    .workflow-back-button:hover { background: #f1f1f1; color: #202124; }
     .workflow-shell-actions { justify-self: end; display: flex; gap: 8px; }
     .workflow-replica-body { min-height: 0; display: grid; grid-template-columns: minmax(360px,32%) minmax(0,1fr); }
     .workflow-chat-pane { min-height: 0; display: grid; grid-template-rows: minmax(0,1fr) auto; border-right: 1px solid #e5e5e5; background: #fff; }
@@ -2282,10 +2284,12 @@
     .app.management-mode > .titlebar { display: none; }
     .app.management-mode > .body-grid { grid-template-columns: 64px minmax(0, 1fr); }
     .app.management-mode .global-nav {
-      width: 64px;
-      padding: 12px 9px 10px;
-      border-right-color: #e9e9e9;
-      background: #f7f7f7;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      padding: 12px 10px;
+      border-right: 1px solid #e8e8e8;
+      background: #f7f7f6;
     }
     .app.management-mode .brand {
       width: 44px;
@@ -2954,6 +2958,403 @@
       .app.management-mode .expert-home-actions { display: none; }
       .app.management-mode .expert-about-grid { gap: 16px; }
     }
+    /* Expert management pages share one source-aligned shell. */
+    .expert-workspace-panel[hidden] { display: none !important; }
+    .expert-workspace-panel { min-width: 0; min-height: 0; }
+    .expert-rail-divider { height: 1px; margin: 10px 6px; background: #e7e7e7; }
+    .expert-project-page,
+    .expert-automation-page,
+    .expert-conversation-task-page,
+    .expert-settings-page { height: 100%; overflow: auto; background: #fff; }
+    .expert-project-content,
+    .expert-automation-content,
+    .expert-conversation-task-content,
+    .expert-settings-content { min-height: 100%; padding: 34px 44px 40px; }
+    .expert-project-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+    .expert-project-heading h1,
+    .expert-settings-content h1 { margin: 0; color: #171717; font-size: 28px; line-height: 1.25; font-weight: 700; letter-spacing: -.02em; }
+    .expert-project-heading p,
+    .expert-settings-content > header p { margin: 12px 0 0; color: #8a8a8a; font-size: 14px; line-height: 1.65; }
+    .expert-project-create { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 17px; border: 1px solid #202020; border-radius: 6px; background: #202020; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .expert-project-create:hover { background: #111; }
+    .expert-project-create svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+    .expert-project-tabs { width: 184px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 28px; padding: 4px; border-radius: 7px; background: #f1f1f1; }
+    .expert-project-tabs button { min-height: 34px; border: 0; border-radius: 5px; background: transparent; color: #8c8c8c; font: inherit; font-size: 13px; cursor: pointer; }
+    .expert-project-tabs button.active { background: #fff; color: #222; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .expert-project-empty { min-height: 520px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8c8c8c; text-align: center; }
+    .expert-project-empty-icon { width: 76px; height: 76px; display: grid; place-items: center; margin-bottom: 20px; border: 1px dashed #bdbdbd; border-radius: 16px; color: #8f8f8f; }
+    .expert-project-empty-icon svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linejoin: round; }
+    .expert-project-empty strong { color: #292929; font-size: 16px; line-height: 1.5; font-weight: 650; }
+    .expert-project-empty p { margin: 8px 0 0; font-size: 13px; }
+    .expert-settings-content { max-width: 1120px; }
+    .expert-settings-content > header { margin-bottom: 28px; }
+    .expert-settings-section { padding-top: 22px; border-top: 1px solid #e7e7e7; }
+    .expert-settings-section h2 { margin: 0 0 20px; font-size: 16px; }
+    .expert-settings-identity { display: flex; align-items: center; gap: 12px; }
+    .expert-settings-avatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: #f2f2f2; font-weight: 700; }
+    .expert-settings-identity div { display: grid; gap: 4px; }
+    .expert-settings-identity small { color: #8a8a8a; font-size: 12px; }
+    .expert-settings-identity strong { font-size: 14px; }
+    .expert-settings-section > p { max-width: 900px; margin: 20px 0; color: #666; font-size: 13px; line-height: 1.75; }
+    .expert-settings-section > button { min-height: 34px; padding: 0 12px; border: 1px solid #dedede; border-radius: 5px; background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-automation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+    .expert-automation-heading h1 { margin: 0; color: #171717; font-size: 28px; line-height: 1.25; font-weight: 700; letter-spacing: -.02em; }
+    .expert-automation-heading p { margin: 12px 0 0; color: #8a8a8a; font-size: 14px; line-height: 1.65; }
+    .expert-automation-create { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 17px; border: 1px solid #202020; border-radius: 6px; background: #202020; color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .expert-automation-create:hover { background: #111; }
+    .expert-automation-create svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+    .expert-automation-promo { min-height: 54px; display: flex; align-items: center; gap: 12px; margin-top: 28px; padding: 0 16px; border: 1px solid #e8eee9; border-radius: 7px; background: #f7fbf8; color: #676d69; font-size: 12px; line-height: 1.5; }
+    .expert-automation-promo[hidden] { display: none; }
+    .expert-automation-promo > svg { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: #55b979; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-automation-promo strong { margin-right: 6px; color: #333; font-weight: 600; }
+    .expert-automation-promo button { width: 28px; height: 28px; display: grid; place-items: center; margin-left: auto; border: 0; border-radius: 5px; background: transparent; color: #999; font: inherit; font-size: 18px; cursor: pointer; }
+    .expert-automation-promo button:hover { background: #eef2ef; color: #555; }
+    .expert-automation-empty { min-height: 430px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #929292; text-align: center; }
+    .expert-automation-empty[hidden] { display: none; }
+    .expert-automation-empty-icon { display: none; }
+    .expert-automation-empty-icon svg { width: 39px; height: 39px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-automation-empty strong { color: #292929; font-size: 16px; line-height: 1.5; font-weight: 650; }
+    .expert-automation-empty p { max-width: 420px; margin: 8px 0 0; font-size: 13px; line-height: 1.65; }
+    .expert-automation-list { margin-top: 28px; border: 1px solid #e6e6e6; border-radius: 7px; overflow: hidden; }
+    .expert-automation-list[hidden] { display: none; }
+    .expert-automation-row { min-height: 70px; display: grid; grid-template-columns: 36px minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 0 16px; background: #fff; }
+    .expert-automation-row-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 7px; background: #f3f4f3; color: #646764; }
+    .expert-automation-row-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-automation-row-copy { min-width: 0; display: grid; gap: 4px; }
+    .expert-automation-row-copy strong { overflow: hidden; color: #222; font-size: 13px; line-height: 1.4; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .expert-automation-row-copy small { color: #999; font-size: 11px; }
+    .expert-automation-row-state { color: #777; font-size: 12px; }
+    .expert-automation-row button { min-height: 30px; padding: 0 10px; border: 1px solid #e0e0e0; border-radius: 5px; background: #fff; color: #555; font: inherit; font-size: 11px; cursor: pointer; }
+    .expert-automation-modal[hidden] { display: none !important; }
+    .expert-automation-modal { position: fixed; inset: 0; z-index: 500; display: grid; place-items: start center; padding: 32px 24px; overflow: auto; background: rgba(20,20,20,.42); }
+    .expert-automation-dialog { width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 64px); display: grid; grid-template-rows: auto minmax(0,1fr) auto; border: 1px solid #dedede; border-radius: 9px; background: #fff; box-shadow: 0 22px 60px rgba(0,0,0,.18); overflow: hidden; }
+    .expert-automation-dialog-head { min-height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #e8e8e8; }
+    .expert-automation-dialog-head h2 { margin: 0; color: #191919; font-size: 18px; line-height: 1.4; font-weight: 650; }
+    .expert-automation-dialog-head button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #888; font: inherit; font-size: 22px; cursor: pointer; }
+    .expert-automation-dialog-head button:hover { background: #f3f3f3; color: #333; }
+    .expert-automation-dialog-body { min-height: 0; padding: 22px 24px 24px; overflow: auto; }
+    .expert-automation-field { display: grid; gap: 8px; margin-bottom: 18px; }
+    .expert-automation-field > span,
+    .expert-automation-group > legend { color: #303030; font-size: 13px; line-height: 1.4; font-weight: 600; }
+    .expert-automation-required { color: #e44; }
+    .expert-automation-field input,
+    .expert-automation-field textarea,
+    .expert-automation-schedule select,
+    .expert-automation-schedule input { width: 100%; min-height: 38px; padding: 0 12px; border: 1px solid #dedede; border-radius: 6px; outline: 0; background: #fff; color: #222; font: inherit; font-size: 13px; }
+    .expert-automation-field input:focus,
+    .expert-automation-field textarea:focus,
+    .expert-automation-schedule select:focus,
+    .expert-automation-schedule input:focus { border-color: #909090; box-shadow: 0 0 0 2px rgba(0,0,0,.05); }
+    .expert-automation-field textarea { min-height: 96px; padding-top: 10px; resize: vertical; line-height: 1.6; }
+    .expert-automation-source { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; padding: 10px; border-radius: 7px; background: #f5f5f5; }
+    .expert-automation-segmented { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border-radius: 6px; background: #ececec; }
+    .expert-automation-segmented button { min-height: 30px; padding: 0 14px; border: 0; border-radius: 4px; background: transparent; color: #888; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-automation-segmented button.active { background: #fff; color: #222; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .expert-automation-directory { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid #e2e2e2; border-radius: 6px; background: #fff; color: #777; font-size: 12px; cursor: pointer; }
+    .expert-automation-directory svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .expert-automation-description-wrap { position: relative; }
+    .expert-automation-description-meta { position: absolute; right: 10px; bottom: 9px; left: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #aaa; font-size: 10px; pointer-events: none; }
+    .expert-automation-description-meta strong { padding: 2px 6px; border-radius: 4px; background: #f3f3f3; color: #777; font-weight: 500; }
+    .expert-automation-group { min-width: 0; margin: 0 0 18px; padding: 0; border: 0; }
+    .expert-automation-group > legend { margin-bottom: 9px; }
+    .expert-automation-methods { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+    .expert-automation-method { min-height: 72px; display: grid; grid-template-columns: 28px minmax(0,1fr); align-items: start; gap: 9px; padding: 12px; border: 1px solid #e1e1e1; border-radius: 7px; background: #fff; color: #777; text-align: left; font: inherit; cursor: pointer; }
+    .expert-automation-method:hover { background: #fafafa; }
+    .expert-automation-method.active { border-color: #222; box-shadow: inset 0 0 0 1px #222; }
+    .expert-automation-method svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-automation-method span { min-width: 0; display: grid; gap: 4px; }
+    .expert-automation-method strong { color: #222; font-size: 13px; line-height: 1.3; }
+    .expert-automation-method small { color: #999; font-size: 10px; line-height: 1.45; }
+    .expert-automation-schedule { padding: 14px; border: 1px solid #e3e3e3; border-radius: 7px; background: #fafafa; }
+    .expert-automation-schedule-tabs { margin-bottom: 12px; }
+    .expert-automation-schedule-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+    .expert-automation-next-run { margin: 10px 0 0; color: #999; font-size: 11px; }
+    .expert-automation-trigger-foot { display: grid; grid-template-columns: 140px minmax(0,1fr); align-items: center; gap: 12px; margin: 16px 0 0; }
+    .expert-automation-add-trigger { min-height: 32px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #d5d5d5; border-radius: 5px; background: #fff; color: #555; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-automation-add-trigger:hover { border-color: #aaa; background: #fafafa; color: #222; }
+    .expert-automation-count { margin: 0; color: #999; font-size: 10px; text-align: left; }
+    .expert-automation-advanced { width: 100%; min-height: 36px; margin-top: 14px; display: flex; align-items: center; justify-content: space-between; padding: 0; border: 0; border-top: 1px solid #eee; background: transparent; color: #666; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-automation-advanced::after { content: '⌄'; color: #999; font-size: 15px; transition: transform .16s ease; }
+    .expert-automation-advanced[aria-expanded="true"]::after { transform: rotate(180deg); }
+    .expert-automation-advanced-panel { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 4px; padding: 12px; border: 1px solid #e8e8e8; border-radius: 6px; background: #fafafa; }
+    .expert-automation-advanced-panel[hidden] { display: none; }
+    .expert-automation-advanced-panel label { display: grid; gap: 6px; color: #777; font-size: 11px; }
+    .expert-automation-advanced-panel select { width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid #dedede; border-radius: 5px; outline: 0; background: #fff; color: #333; font: inherit; font-size: 12px; }
+    .expert-automation-dialog-foot { min-height: 64px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 24px; border-top: 1px solid #e8e8e8; background: #fff; }
+    .expert-automation-dialog-foot button { min-height: 36px; padding: 0 17px; border-radius: 6px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+    .expert-automation-dialog-foot .cancel { border: 1px solid #dedede; background: #fff; color: #333; }
+    .expert-automation-dialog-foot .save { border: 1px solid #222; background: #222; color: #fff; }
+    .expert-automation-dialog-foot .save:disabled { border-color: #d9d9d9; background: #d9d9d9; color: #aaa; cursor: default; }
+
+    .app.management-mode #expertProfileView .expert-layout { grid-template-columns: 240px minmax(0, 1fr); }
+    .app.management-mode .expert-management-rail { padding: 10px 14px 18px; background: #fff; }
+    .app.management-mode .expert-rail-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 4px; }
+    .app.management-mode .expert-rail-group { margin: 12px 8px 4px; padding: 0; border: 0; color: #aaa; font-size: 11px; line-height: 18px; }
+    .app.management-mode .expert-rail-link { min-height: 36px; gap: 10px; padding: 0 9px; border-radius: 5px; color: #666; font-size: 12px; font-weight: 450; }
+    .app.management-mode .expert-rail-link:hover,
+    .app.management-mode .expert-rail-link.active { background: #f0f0f0; color: #202020; }
+    .app.management-mode .expert-rail-link.active { font-weight: 600; }
+    .app.management-mode .expert-rail-link svg { width: 16px; height: 16px; stroke-width: 1.65; }
+    .app.management-mode .expert-rail-divider { margin: 9px 6px; }
+    .app.management-mode .expert-rail-group { display: block; }
+    .app.management-mode .expert-rail-link[data-expert-feature] { display: flex; }
+    .app.management-mode .expert-management-rail { overflow-y: auto; scrollbar-width: thin; }
+    .app.management-mode .expert-detail-workspace { grid-template-rows: 48px minmax(0, 1fr); }
+    .app.management-mode .expert-page-topbar { min-height: 48px; height: 48px; padding: 0 18px; border-bottom-color: #e9e9e9; }
+    .app.management-mode .expert-page-topbar strong { font-size: 13px; line-height: 20px; font-weight: 600; }
+
+    /* Source-faithful scheduled-task page: 960px content, compact controls and 800px editor. */
+    .app.management-mode .expert-automation-content { box-sizing: border-box; width: 960px; max-width: calc(100% - 48px); min-height: 100%; margin: 0 auto; padding: 50px 0 40px; }
+    .app.management-mode .expert-automation-heading h1 { font-size: 28px; line-height: 1.35; letter-spacing: -.02em; }
+    .app.management-mode .expert-automation-heading p { margin-top: 5px; font-size: 13px; line-height: 20px; }
+    .app.management-mode .expert-automation-create { min-height: 32px; padding: 0 14px; border-radius: 4px; font-size: 12px; }
+    .app.management-mode .expert-automation-promo { min-height: 46px; margin-top: 28px; padding: 0 14px; border-radius: 5px; font-size: 12px; }
+    .app.management-mode .expert-automation-promo > svg { width: 18px; height: 18px; }
+    .app.management-mode .expert-automation-empty { min-height: 430px; }
+    .app.management-mode .expert-automation-empty strong { font-size: 15px; }
+    .app.management-mode .expert-automation-empty p { margin-top: 6px; font-size: 12px; }
+    .app.management-mode .expert-automation-list { margin-top: 24px; border-radius: 5px; }
+    .app.management-mode .expert-automation-dialog { width: min(800px, calc(100vw - 48px)); border-radius: 8px; }
+    .app.management-mode .expert-automation-dialog-head { min-height: 64px; padding: 0 24px; }
+    .app.management-mode .expert-automation-dialog-head h2 { font-size: 18px; }
+    .app.management-mode .expert-automation-dialog-body { padding: 22px 24px 28px; }
+    .app.management-mode .expert-automation-field { gap: 8px; margin-bottom: 18px; }
+    .app.management-mode .expert-automation-field input,
+    .app.management-mode .expert-automation-schedule select,
+    .app.management-mode .expert-automation-schedule input { min-height: 32px; border-radius: 5px; font-size: 12px; }
+    .app.management-mode .expert-automation-source { grid-template-columns: 190px minmax(0,1fr); padding: 12px 14px; border-radius: 6px; }
+    .app.management-mode .expert-automation-segmented button { min-height: 28px; font-size: 11px; }
+    .app.management-mode .expert-automation-directory { min-height: 32px; border-radius: 5px; }
+    .app.management-mode .expert-automation-field textarea { min-height: 142px; padding: 10px 12px 36px; border-radius: 5px; font-size: 12px; }
+    .app.management-mode .expert-automation-method { min-height: 72px; border-radius: 6px; }
+    .app.management-mode .expert-automation-schedule { padding: 14px; border-radius: 6px; }
+    .app.management-mode .expert-automation-dialog-foot { min-height: 64px; padding: 0 24px; }
+    .app.management-mode .expert-automation-dialog-foot button { min-width: 72px; min-height: 32px; padding: 0 14px; border-radius: 5px; }
+
+    /* Source-faithful conversation task management page. */
+    .app.management-mode .expert-detail-workspace.is-task-page { grid-template-rows: 0 minmax(0, 1fr); }
+    .app.management-mode .expert-detail-workspace.is-task-page .expert-page-topbar { min-height: 0; height: 0; overflow: hidden; border: 0; padding: 0; }
+    .app.management-mode .expert-conversation-task-content { box-sizing: border-box; width: 960px; max-width: calc(100% - 48px); min-height: 100%; margin: 0 auto; padding: 50px 0 40px; }
+    .expert-conversation-task-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
+    .expert-conversation-task-heading h1 { margin: 0; color: #171717; font-size: 28px; line-height: 1.35; font-weight: 700; letter-spacing: -.02em; }
+    .expert-conversation-task-heading p { margin: 5px 0 0; color: #8b8b8b; font-size: 13px; line-height: 20px; }
+    .expert-conversation-task-create { min-height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; border: 1px solid #171717; border-radius: 4px; background: #171717; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .expert-conversation-task-create:hover { background: #050505; }
+    .expert-conversation-task-toolbar { display: flex; justify-content: flex-end; margin-top: 36px; }
+    .expert-task-date-wrap { position: relative; }
+    .expert-task-date-button { min-width: 190px; min-height: 38px; display: inline-flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 12px 0 14px; border: 1px solid #dfdfdf; border-radius: 6px; background: #fff; color: #373737; font: inherit; font-size: 13px; cursor: pointer; }
+    .expert-task-date-button:hover { border-color: #c9c9c9; background: #fafafa; }
+    .expert-task-date-button svg { width: 16px; height: 16px; fill: none; stroke: #777; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-task-date-menu { position: absolute; z-index: 12; top: calc(100% + 8px); right: 0; width: 180px; padding: 6px; border: 1px solid #e2e2e2; border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(0,0,0,.12); }
+    .expert-task-date-menu[hidden] { display: none; }
+    .expert-task-date-menu button { width: 100%; min-height: 34px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: #313131; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-task-date-menu button:hover { background: #f2f2f2; }
+    .expert-task-custom-panel { position: absolute; z-index: 12; top: calc(100% + 8px); right: 0; width: 286px; box-sizing: border-box; padding: 14px; border: 1px solid #e2e2e2; border-radius: 8px; background: #fff; box-shadow: 0 12px 30px rgba(0,0,0,.12); }
+    .expert-task-custom-panel[hidden] { display: none; }
+    .expert-task-custom-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .expert-task-custom-fields label { display: grid; gap: 6px; color: #858585; font-size: 11px; line-height: 16px; }
+    .expert-task-custom-fields input { min-width: 0; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid #dedede; border-radius: 5px; background: #fff; color: #2d2d2d; font: inherit; font-size: 12px; }
+    .expert-task-custom-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    .expert-task-custom-actions button { min-height: 30px; padding: 0 12px; border: 1px solid #dedede; border-radius: 5px; background: #fff; color: #383838; font: inherit; font-size: 12px; cursor: pointer; }
+    .expert-task-custom-actions button:last-child { border-color: #171717; background: #171717; color: #fff; }
+    .expert-conversation-task-empty { min-height: 520px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #8c8c8c; text-align: center; }
+    .expert-conversation-task-empty-icon { width: 76px; height: 76px; display: grid; place-items: center; border: 1px dashed #bdbdbd; border-radius: 14px; color: #b4b4b4; }
+    .expert-conversation-task-empty-icon svg { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-conversation-task-empty strong { color: #333; font-size: 15px; line-height: 22px; font-weight: 600; }
+    .expert-conversation-task-list { margin-top: 28px; overflow: hidden; border: 1px solid #e6e6e6; border-radius: 6px; background: #fff; }
+    .expert-conversation-task-empty[hidden],
+    .expert-conversation-task-list[hidden] { display: none; }
+    .expert-conversation-task-row { width: 100%; min-height: 68px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 24px; padding: 12px 16px; border: 0; border-bottom: 1px solid #ececec; background: #fff; color: #252525; text-align: left; font: inherit; cursor: pointer; }
+    .expert-conversation-task-row:last-child { border-bottom: 0; }
+    .expert-conversation-task-row:hover { background: #fafafa; }
+    .expert-conversation-task-row strong { overflow: hidden; font-size: 13px; line-height: 20px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .expert-conversation-task-row span { color: #909090; font-size: 12px; white-space: nowrap; }
+    .expert-conversation-task-row span:last-child { color: #5f5f5f; }
+
+    @media (max-width: 1320px) {
+      .expert-project-content,
+      .expert-automation-content,
+      .expert-conversation-task-content,
+      .expert-settings-content { padding: 30px 34px 36px; }
+      .expert-project-empty { min-height: 420px; }
+      .app.management-mode .expert-automation-content { width: auto; max-width: none; padding: 38px 32px 34px; }
+      .app.management-mode .expert-conversation-task-content { width: auto; max-width: none; padding: 38px 32px 34px; }
+      .expert-conversation-task-empty { min-height: 440px; }
+      .expert-automation-empty { min-height: 360px; }
+      .expert-automation-modal { padding: 20px; }
+      .expert-automation-dialog { max-height: calc(100vh - 40px); }
+    }
+    .expert-resource-page { height: 100%; overflow: auto; background: #fff; }
+    .expert-resource-content { width: min(1040px, calc(100% - 56px)); margin: 0 auto; padding: 46px 0 72px; }
+    .expert-resource-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 26px; }
+    .expert-resource-heading h1, .expert-resource-heading h2 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; letter-spacing: -.02em; }
+    .expert-resource-heading p { margin: 0; color: #8b8b92; font-size: 13px; line-height: 1.55; }
+    .expert-resource-actions { display: flex; align-items: center; gap: 8px; }
+    .expert-resource-actions .primary-button, .expert-resource-actions .quiet-button { min-height: 38px; padding: 0 16px; border-radius: 7px; font-size: 13px; }
+    .expert-resource-tabs { display: inline-flex; margin-bottom: 18px; padding: 4px; border-radius: 8px; background: #f1f1f2; }
+    .expert-resource-tab { border: 0; border-radius: 6px; padding: 7px 18px; background: transparent; color: #8a8a91; font: 600 13px/1.2 inherit; cursor: pointer; }
+    .expert-resource-tab.active { background: #fff; color: #1e1e22; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .expert-resource-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .expert-resource-toolbar label { position: relative; display: flex; align-items: center; min-width: 260px; height: 38px; }
+    .expert-resource-toolbar label svg { position: absolute; left: 12px; z-index: 1; width: 16px; height: 16px; fill: none; stroke: #929198; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+    .expert-resource-toolbar label input { width: 100%; height: 100%; border: 1px solid #deddd9; border-radius: 7px; padding: 0 14px 0 36px; background: #fff; color: #4f4f56; font: 500 13px/1 inherit; outline: 0; }
+    .expert-resource-toolbar label input:focus { border-color: #b7b6b2; box-shadow: 0 0 0 3px rgba(35,35,38,.05); }
+    .expert-resource-toolbar > button { height: 38px; border: 1px solid #deddd9; border-radius: 7px; padding: 0 14px; background: #fff; color: #5f5f66; font: 600 13px/1 inherit; cursor: pointer; }
+    .expert-resource-toolbar > button:hover { background: #f7f7f7; }
+    .expert-resource-search, .expert-resource-filter { height: 38px; border: 1px solid #deddd9; border-radius: 7px; background: #fff; color: #5f5f66; font: 500 13px/1 inherit; }
+    .expert-resource-search { min-width: 260px; padding: 0 14px; }
+    .expert-resource-filter { padding: 0 14px; }
+    .expert-resource-list { overflow: hidden; border: 1px solid #e4e2de; border-radius: 9px; background: #fff; }
+    .expert-resource-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) 132px 94px 18px; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 14px 18px; border: 0; border-bottom: 1px solid #eceae6; background: #fff; color: #242428; font: inherit; text-align: left; cursor: pointer; }
+    .expert-resource-row:hover { background: #fafafa; }
+    .expert-resource-row.active { background: #f3f3f2; }
+    .expert-resource-row.is-hidden { display: none; }
+    .expert-resource-row:last-child { border-bottom: 0; }
+    .expert-resource-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .expert-resource-icon { display: grid; flex: 0 0 auto; place-items: center; width: 38px; height: 38px; border: 1px solid #e4e2de; border-radius: 9px; color: #6f6f75; }
+    .expert-resource-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .expert-resource-copy { min-width: 0; }
+    .expert-resource-copy strong { display: block; margin-bottom: 3px; font-size: 14px; line-height: 1.35; }
+    .expert-resource-copy span, .expert-resource-copy small, .expert-resource-meta { display: block; overflow: hidden; color: #96959b; font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+    .expert-resource-status { display: inline-flex; align-items: center; justify-self: end; gap: 7px; color: #727177; font-size: 12px; }
+    .expert-resource-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #b7b7bc; }
+    .expert-resource-status.connected::before { background: #2f78ff; }
+    .expert-resource-more { justify-self: end; color: #9b9aa0; font-size: 15px; letter-spacing: 1px; }
+    .expert-resource-row .quiet-button { justify-self: end; }
+    .expert-resource-empty { padding: 84px 20px; color: #96959b; font-size: 13px; text-align: center; }
+    .expert-resource-empty strong { display: block; margin-bottom: 7px; color: #222; font-size: 16px; }
+    .expert-resource-section-title { margin: 26px 0 10px; font-size: 13px; font-weight: 700; }
+    #expertChatHubView.active.with-expert-context-rail,
+    #workflowHubView.active.with-expert-context-rail {
+      display: grid;
+      grid-template-columns: 224px minmax(0, 1fr);
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    #expertChatHubView.active.with-expert-context-rail { grid-template-rows: minmax(0, 1fr); }
+    #workflowHubView.active.with-expert-context-rail { grid-template-rows: auto minmax(0, 1fr); }
+    #expertChatHubView > .expert-context-rail { grid-column: 1; grid-row: 1; }
+    #expertChatHubView > .expert-chat-replica { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; }
+    #workflowHubView > .expert-context-rail { grid-column: 1; grid-row: 1 / -1; }
+    #workflowHubView > .workflow-shell-head { grid-column: 2; grid-row: 1; min-width: 0; }
+    #workflowHubView > .workflow-replica-body { grid-column: 2; grid-row: 2; min-width: 0; min-height: 0; }
+    .expert-context-rail { height: 100%; min-height: 0; }
+    .expert-resource-dialog[hidden] { display: none; }
+    .expert-resource-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 160;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(31, 32, 35, .28);
+      backdrop-filter: blur(2px);
+    }
+    .expert-resource-dialog-card {
+      width: min(620px, calc(100vw - 48px));
+      max-height: min(720px, calc(100vh - 48px));
+      overflow: auto;
+      border: 1px solid #dfddd8;
+      border-radius: 20px;
+      background: #fff;
+      box-shadow: 0 24px 70px rgba(28, 29, 32, .18);
+    }
+    .expert-resource-dialog-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 22px 24px 18px;
+      border-bottom: 1px solid #eceae6;
+    }
+    .expert-resource-dialog-head h3 { margin: 0; font-size: 18px; line-height: 1.4; }
+    .expert-resource-dialog-head p { margin: 5px 0 0; color: #85848a; font-size: 13px; line-height: 1.55; }
+    .expert-resource-dialog-close {
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: #77767c;
+      font-size: 21px;
+      cursor: pointer;
+    }
+    .expert-resource-dialog-close:hover { background: #f1f0ee; color: #222; }
+    .expert-resource-dialog-body { padding: 20px 24px; }
+    .expert-resource-dialog-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .expert-resource-dialog-stat { padding: 13px 14px; border-radius: 12px; background: #f7f6f4; }
+    .expert-resource-dialog-stat span { display: block; margin-bottom: 5px; color: #929197; font-size: 11px; }
+    .expert-resource-dialog-stat strong { font-size: 14px; font-weight: 650; }
+    .expert-resource-dialog-list { border: 1px solid #e7e5e1; border-radius: 14px; overflow: hidden; }
+    .expert-resource-dialog-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 54px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #eceae6;
+      font-size: 13px;
+    }
+    .expert-resource-dialog-item:last-child { border-bottom: 0; }
+    .expert-resource-dialog-item small { color: #8c8b91; font-size: 12px; }
+    .expert-resource-dialog-form { display: grid; gap: 14px; }
+    .expert-resource-dialog-field { display: grid; gap: 7px; color: #55545a; font-size: 12px; font-weight: 650; }
+    .expert-resource-dialog-field input,
+    .expert-resource-dialog-field select,
+    .expert-resource-dialog-field textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #dcd9d4;
+      border-radius: 11px;
+      background: #fff;
+      padding: 11px 12px;
+      color: #222;
+      font: inherit;
+      font-weight: 400;
+      outline: none;
+    }
+    .expert-resource-dialog-field textarea { min-height: 92px; resize: vertical; }
+    .expert-resource-dialog-field input:focus,
+    .expert-resource-dialog-field select:focus,
+    .expert-resource-dialog-field textarea:focus { border-color: #8baef8; box-shadow: 0 0 0 3px rgba(74, 126, 244, .12); }
+    .expert-resource-dialog-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+      padding: 16px 24px 20px;
+      border-top: 1px solid #eceae6;
+    }
+    .expert-resource-dialog-button { min-height: 36px; padding: 0 15px; border: 1px solid #dedbd6; border-radius: 10px; background: #fff; color: #333; font-size: 13px; cursor: pointer; }
+    .expert-resource-dialog-button.primary { border-color: #26272b; background: #26272b; color: #fff; }
+    @media (max-width: 1280px) {
+      #expertChatHubView.active.with-expert-context-rail,
+      #workflowHubView.active.with-expert-context-rail { grid-template-columns: 202px minmax(0, 1fr); }
+    }
+    @media (max-width: 1060px) {
+      #expertChatHubView.active.with-expert-context-rail,
+      #workflowHubView.active.with-expert-context-rail { grid-template-columns: 188px minmax(0, 1fr); }
+      .expert-resource-dialog-summary { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 1280px) {
+      .expert-resource-content { width: calc(100% - 40px); padding-top: 34px; }
+      .expert-resource-row { grid-template-columns: 38px minmax(0, 1fr) 110px 88px 18px; }
+    }
+    @media (max-width: 900px) {
+      .expert-resource-content { width: calc(100% - 28px); padding-top: 26px; }
+      .expert-resource-heading { gap: 16px; }
+      .expert-resource-heading h1, .expert-resource-heading h2 { font-size: 26px; }
+      .expert-resource-toolbar { flex-wrap: wrap; }
+      .expert-resource-toolbar label { min-width: min(100%, 240px); flex: 1 1 220px; }
+      .expert-resource-row { grid-template-columns: 38px minmax(0, 1fr) 84px 18px; }
+      .expert-resource-meta { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -3482,14 +3883,14 @@
                   <span class="expert-directory-avatar"><img src="./assets/soul-avatar.png" alt="小堵"></span>
                   <span class="expert-directory-copy"><span class="expert-directory-title"><strong>小堵</strong><span class="expert-directory-role">▣ 工商储产品解决方案专家</span></span><span class="expert-directory-meta"><span class="expert-device">▣ 本机</span><span class="expert-online">在线</span></span><span class="expert-directory-summary">面向工商业储能项目的需求澄清、方案设计、收益测算与政策解读。</span></span>
                 </button>
-                <footer class="expert-directory-card-foot"><button class="expert-card-action" type="button" data-hub-view="expertChatHub"><svg viewBox="0 0 24 24"><path d="M4 6h12v11H7l-3 3z"/><path d="M18 4v5M15.5 6.5h5"/></svg>创建对话任务</button><button class="expert-card-action" type="button" data-hub-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>创建定时任务</button><button class="expert-card-action more" type="button" aria-label="更多">…</button></footer>
+                <footer class="expert-directory-card-foot"><button class="expert-card-action" type="button" data-management-action="open-expert-task-list"><svg viewBox="0 0 24 24"><path d="M4 6h12v11H7l-3 3z"/><path d="M18 4v5M15.5 6.5h5"/></svg>创建对话任务</button><button class="expert-card-action" type="button" data-hub-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>创建定时任务</button><button class="expert-card-action more" type="button" aria-label="更多">…</button></footer>
               </article>
               <article class="expert-directory-card" data-ued-node="expert-card-finance">
                 <button class="expert-directory-card-main" type="button" data-view="expertProfile">
                   <span class="expert-directory-avatar" style="background:#f4e8dc">财</span>
                   <span class="expert-directory-copy"><span class="expert-directory-title"><strong>财研</strong><span class="expert-directory-role">▣ 财务分析专家</span></span><span class="expert-directory-meta"><span class="expert-device">▣ 本机</span><span class="expert-online">在线</span></span><span class="expert-directory-summary">负责报表阅读、数据溯源和财务分析草案，关键口径必须可核验。</span></span>
                 </button>
-                <footer class="expert-directory-card-foot"><button class="expert-card-action" type="button" data-hub-view="expertChatHub"><svg viewBox="0 0 24 24"><path d="M4 6h12v11H7l-3 3z"/><path d="M18 4v5M15.5 6.5h5"/></svg>创建对话任务</button><button class="expert-card-action" type="button" data-hub-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>创建定时任务</button><button class="expert-card-action more" type="button" aria-label="更多">…</button></footer>
+                <footer class="expert-directory-card-foot"><button class="expert-card-action" type="button" data-management-action="open-expert-task-list"><svg viewBox="0 0 24 24"><path d="M4 6h12v11H7l-3 3z"/><path d="M18 4v5M15.5 6.5h5"/></svg>创建对话任务</button><button class="expert-card-action" type="button" data-hub-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>创建定时任务</button><button class="expert-card-action more" type="button" aria-label="更多">…</button></footer>
               </article>
             </div>
           </div>
@@ -3500,17 +3901,18 @@
             <aside class="expert-management-rail" aria-label="专家管理导航">
               <button class="expert-rail-back" type="button" data-view="experts"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg><span>我的专家</span></button>
               <nav class="expert-rail-nav" aria-label="专家主页功能" data-ued-node="expert.navigation">
-                <button class="expert-rail-link active" type="button" data-expert-scroll="expertHomeTop" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9H4z"/><path d="M9 20v-6h6v6"/></svg><span>首页</span></button>
-                <button class="expert-rail-link" type="button" data-view="publicProjectsHub"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg><span>项目</span></button>
-                <button class="expert-rail-link" type="button" data-view="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M8 3h8"/></svg><span>定时任务</span></button>
-                <button class="expert-rail-link" type="button" data-view="expertChatHub"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h6"/></svg><span>对话任务</span></button>
-                <button class="expert-rail-link" type="button" data-view="workflowHub"><svg viewBox="0 0 24 24"><path d="M4 7h5v5H4zM15 12h5v5h-5zM9 9h4a4 4 0 0 1 4 4"/></svg><span>工作流</span></button>
+                <button class="expert-rail-link active" type="button" data-expert-page="home" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9H4z"/><path d="M9 20v-6h6v6"/></svg><span>首页</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="project"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3z"/></svg><span>项目</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="automation"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M8 3h8"/></svg><span>定时任务</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="conversationTasks"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h6"/></svg><span>对话任务</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="workflow"><svg viewBox="0 0 24 24"><path d="M4 7h5v5H4zM15 12h5v5h-5zM9 9h4a4 4 0 0 1 4 4"/></svg><span>工作流</span></button>
+                <div class="expert-rail-group">专家资源</div>
+                <button class="expert-rail-link" type="button" data-expert-page="memory"><svg viewBox="0 0 24 24"><path d="M8 4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4M16 4a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4M8 8h8M8 12h8M8 16h8"/></svg><span>记忆</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="skills"><svg viewBox="0 0 24 24"><path d="m12 3 2.3 4.7L19 10l-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8L5 10l4.7-2.3z"/></svg><span>技能</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="knowledge"><svg viewBox="0 0 24 24"><path d="M4 5h7a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H4zM20 5h-3a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h3z"/></svg><span>知识库</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="connectors"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg><span>连接器</span></button>
                 <div class="expert-rail-group">专家能力</div>
                 <button class="expert-rail-link" type="button" data-expert-feature="soul-editor" data-feature-open="soul-editor"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg><span>人设</span></button>
-                <button class="expert-rail-link" type="button" data-expert-feature="skills" data-feature-open="skills"><svg viewBox="0 0 24 24"><path d="m12 3 2.3 4.7L19 10l-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8L5 10l4.7-2.3z"/></svg><span>技能</span></button>
-                <button class="expert-rail-link" type="button" data-expert-feature="connectors" data-feature-open="connectors"><svg viewBox="0 0 24 24"><path d="M8 12h8M9 5v4M15 5v4M7 9h10v3a5 5 0 0 1-10 0zM12 17v3"/></svg><span>连接器</span></button>
-                <button class="expert-rail-link" type="button" data-expert-feature="knowledge" data-feature-open="knowledge"><svg viewBox="0 0 24 24"><path d="M4 5h7a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H4zM20 5h-3a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h3z"/></svg><span>知识库</span></button>
-                <button class="expert-rail-link" type="button" data-expert-feature="memory" data-feature-open="memory"><svg viewBox="0 0 24 24"><path d="M8 4a4 4 0 0 0-4 4v8a4 4 0 0 0 4 4M16 4a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4M8 8h8M8 12h8M8 16h8"/></svg><span>记忆</span></button>
                 <button class="expert-rail-link" type="button" data-expert-feature="palace" data-feature-open="palace"><svg viewBox="0 0 24 24"><path d="M4 20V8l8-4 8 4v12M9 20v-6h6v6"/></svg><span>职场</span></button>
                 <button class="expert-rail-link" type="button" data-expert-feature="life" data-feature-open="life"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg><span>人生</span></button>
                 <button class="expert-rail-link" type="button" data-expert-feature="profile" data-feature-open="profile"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M7 18a5 5 0 0 1 10 0"/></svg><span>画像</span></button>
@@ -3523,13 +3925,15 @@
                 <button class="expert-rail-link" type="button" data-expert-feature="office" data-feature-open="office"><svg viewBox="0 0 24 24"><path d="M5 20V5h10v15M15 10h4v10M9 9h2M9 13h2M9 17h2"/></svg><span>办公室</span></button>
                 <button class="expert-rail-link" type="button" data-expert-feature="packages" data-feature-open="packages"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4zM4 7v10l8 4 8-4V7M12 11v10"/></svg><span>专家包</span></button>
                 <div class="expert-rail-group">管理</div>
-                <button class="expert-rail-link" type="button" data-view="imHub"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg><span>IM</span></button>
-                <button class="expert-rail-link" type="button" data-feature-open="soul-editor"><svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/><path d="m9 12 2 2 4-4"/></svg><span>权限</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="im"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg><span>IM</span></button>
+                <button class="expert-rail-link" type="button" data-expert-page="permissions"><svg viewBox="0 0 24 24"><path d="M12 3 20 7v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/><path d="m9 12 2 2 4-4"/></svg><span>权限</span></button>
+                <div class="expert-rail-divider" aria-hidden="true"></div>
+                <button class="expert-rail-link" type="button" data-expert-page="settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4.9 4.9 7 7m10-2.1L15 7m4.1 12.1L17 17M4.9 19.1 7 17M3 12h3m12 0h3M12 3v3m0 12v3"/></svg><span>设置</span></button>
               </nav>
             </aside>
             <div class="detail-workspace expert-detail-workspace">
-              <header class="expert-page-topbar"><strong>首页</strong><div class="expert-page-topbar-actions"><button class="quiet-button" type="button" data-demo-action="archive-expert" aria-label="归档专家"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12M10 10v6M14 10v6"/></svg></button></div></header>
-              <article class="expert-home-sheet" data-ued-node="expert.home">
+              <header class="expert-page-topbar" id="expertPageTopbar"><strong id="expertPageTitle">首页</strong><div class="expert-page-topbar-actions" id="expertPageActions"><button class="quiet-button" type="button" data-demo-action="archive-expert" aria-label="归档专家"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12M10 10v6M14 10v6"/></svg></button></div></header>
+              <article class="expert-home-sheet expert-workspace-panel active" data-expert-page-panel="home" data-ued-node="expert.home">
                 <div class="expert-home-content">
                   <header class="expert-home-hero" id="expertHomeTop">
                     <span class="expert-home-avatar" id="expertAvatar" data-ued-node="expert.home.identity.avatar" aria-label="小堵专家头像">
@@ -3549,7 +3953,7 @@
 
                   <section class="expert-home-section" id="expertWorkRecordsSection" data-ued-node="expert.home.work-records">
                     <div class="expert-home-section-head"><div><h3>工作记录</h3><p>按管理端结构呈现运行、任务和项目参与；没有可验证数据时不显示虚假数字。</p></div><button class="expert-home-link" type="button" data-view="boardHub">查看任务</button></div><button class="expert-section-close" type="button" aria-label="折叠工作记录"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 4 3 4 3-4M5 12l3-4 3 4"/></svg></button>
-                    <div class="expert-record-tabs" role="tablist" aria-label="工作记录类型"><button class="expert-record-tab active" type="button" role="tab" aria-selected="true">时间线视图</button><button class="expert-record-tab" type="button" role="tab" aria-selected="false" data-view="expertChatHub">对话任务</button><button class="expert-record-tab" type="button" role="tab" aria-selected="false" data-view="automation">定时任务</button></div>
+                    <div class="expert-record-tabs" role="tablist" aria-label="工作记录类型"><button class="expert-record-tab active" type="button" role="tab" aria-selected="true">时间线视图</button><button class="expert-record-tab" type="button" role="tab" aria-selected="false" data-management-action="open-expert-task-list">对话任务</button><button class="expert-record-tab" type="button" role="tab" aria-selected="false" data-view="automation">定时任务</button></div>
                     <div class="expert-record-stats" aria-label="工作统计">
                       <div class="expert-record-stat"><strong>0</strong><span>任务运行</span></div>
                       <div class="expert-record-stat"><strong>0</strong><span>定时任务</span></div>
@@ -3604,6 +4008,199 @@
                     </div>
                   </section>
 
+                </div>
+              </article>
+              <article class="expert-project-page expert-workspace-panel" data-expert-page-panel="project" hidden aria-labelledby="expertProjectTitle">
+                <div class="expert-project-content">
+                  <header class="expert-project-heading">
+                    <div>
+                      <h1 id="expertProjectTitle">项目</h1>
+                      <p>添加本地目录或 Git 仓库，组合成更丰富的上下文。可在发起任务时直接关联项目。</p>
+                    </div>
+                    <button class="expert-project-create" type="button" data-demo-action="create-expert-project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>新建</span></button>
+                  </header>
+                  <div class="expert-project-tabs" role="tablist" aria-label="项目类型">
+                    <button type="button" role="tab" aria-selected="false" data-expert-project-tab="public">公开项目</button>
+                    <button class="active" type="button" role="tab" aria-selected="true" data-expert-project-tab="private">私密项目</button>
+                  </div>
+                  <div class="expert-project-empty" data-expert-project-empty>
+                    <span class="expert-project-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h6l2 2h8v10H4z"/><path d="M7 4h6l2 2h5"/></svg></span>
+                    <strong>暂无项目</strong>
+                    <p>开始新建你的第一个项目</p>
+                  </div>
+                </div>
+              </article>
+              <article class="expert-automation-page expert-workspace-panel" data-expert-page-panel="automation" hidden aria-labelledby="expertAutomationTitle">
+                <div class="expert-automation-content">
+                  <header class="expert-automation-heading">
+                    <div>
+                      <h1 id="expertAutomationTitle">定时任务</h1>
+                      <p>让 Soul 按计划自动执行任务，并在这里查看运行结果。</p>
+                    </div>
+                    <button class="expert-automation-create" id="expertAutomationCreate" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>新建</span></button>
+                  </header>
+                  <aside class="expert-automation-promo" id="expertAutomationPromo">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M5.6 5.6l2.1 2.1M3 12h3M18 12h3M7 17h10M9 21h6"/><path d="M8 12a4 4 0 1 1 8 0c0 1.5-.8 2.4-1.7 3.3-.5.5-.8 1-.8 1.7h-3c0-.7-.3-1.2-.8-1.7C8.8 14.4 8 13.5 8 12Z"/></svg>
+                    <span><strong>错峰折扣</strong>Qwen3.8 / Qwen3.7 低峰执行更划算。</span>
+                    <button id="expertAutomationPromoClose" type="button" aria-label="关闭提示">×</button>
+                  </aside>
+                  <section class="expert-automation-empty" id="expertAutomationEmpty">
+                    <span class="expert-automation-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 6h14v13H5zM8 3v5M16 3v5M5 10h14"/><circle cx="9" cy="15" r="4"/><path d="M9 13v2l1.5 1"/></svg></span>
+                    <strong>还没有定时任务</strong>
+                    <p>创建一个定时任务，让 Soul 按计划、事件或 API 调用自动运行。</p>
+                  </section>
+                  <section class="expert-automation-list" id="expertAutomationList" hidden aria-label="定时任务列表">
+                    <article class="expert-automation-row">
+                      <span class="expert-automation-row-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M8 3h8"/></svg></span>
+                      <span class="expert-automation-row-copy"><strong id="expertAutomationSavedName">每日资料缺口检查</strong><small><span id="expertAutomationSavedTime">每天 09:00</span> · 小堵</small></span>
+                      <span class="expert-automation-row-state">已开启</span>
+                      <button type="button" data-demo-action="run-expert-automation">立即运行</button>
+                    </article>
+                  </section>
+                </div>
+                <div class="expert-automation-modal" id="expertAutomationModal" hidden>
+                  <form class="expert-automation-dialog" id="expertAutomationForm">
+                    <header class="expert-automation-dialog-head"><h2>新建定时任务</h2><button id="expertAutomationClose" type="button" aria-label="关闭">×</button></header>
+                    <div class="expert-automation-dialog-body">
+                      <label class="expert-automation-field"><span>名称 <b class="expert-automation-required">*</b></span><input id="expertAutomationName" maxlength="50" placeholder="为该定时任务起个名字" autocomplete="off"></label>
+                      <div class="expert-automation-field"><span>工作空间来源</span><div class="expert-automation-source"><div class="expert-automation-segmented" data-expert-automation-tabs="source"><button class="active" type="button" data-value="local">本地目录</button><button type="button" data-value="project">项目</button></div><button class="expert-automation-directory" id="expertAutomationDirectory" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/></svg><span>点击选择目录</span></button></div></div>
+                      <label class="expert-automation-field"><span>定时任务描述 <b class="expert-automation-required">*</b></span><span class="expert-automation-description-wrap"><textarea id="expertAutomationDescription" maxlength="10000" placeholder="描述每次任务中当前专家需要做什么"></textarea><span class="expert-automation-description-meta"><span id="expertAutomationCharacterCount">0 / 10000</span><strong>Auto</strong></span></span></label>
+                      <fieldset class="expert-automation-group"><legend>触发方式 <b class="expert-automation-required">*</b></legend><div class="expert-automation-methods" data-expert-automation-tabs="method"><button class="expert-automation-method active" type="button" data-value="schedule"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><span><strong>定时</strong><small>按计划时间运行项目任务</small></span></button><button class="expert-automation-method" type="button" data-value="event"><svg viewBox="0 0 24 24"><path d="M12 3v6l4-2M6 4v6l-3-2M18 15v5M6 15v5M3 20h18"/></svg><span><strong>事件</strong><small>由 Git 仓库事件触发</small></span></button><button class="expert-automation-method" type="button" data-value="api"><svg viewBox="0 0 24 24"><path d="M8 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M16 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M14 8l4 4-4 4"/></svg><span><strong>API</strong><small>通过 POST 请求从你自己的代码触发</small></span></button></div></fieldset>
+                      <fieldset class="expert-automation-group expert-automation-schedule" id="expertAutomationSchedule"><legend>调度类型</legend><div class="expert-automation-segmented expert-automation-schedule-tabs" data-expert-automation-tabs="schedule"><button class="active" type="button" data-value="recurring">定期</button><button type="button" data-value="once">一次性</button></div><div class="expert-automation-schedule-grid"><label class="expert-automation-field"><span>重复</span><select id="expertAutomationRepeat"><option>每天</option><option>每周</option><option>每月</option></select></label><label class="expert-automation-field"><span>执行时间</span><input id="expertAutomationTime" type="time" value="09:00"></label></div><p class="expert-automation-next-run">下次运行：2026-08-15 09:00</p></fieldset>
+                      <div class="expert-automation-trigger-foot"><button class="expert-automation-add-trigger" id="expertAutomationAddTrigger" type="button"><span aria-hidden="true">＋</span>添加触发方式</button><p class="expert-automation-count" id="expertAutomationTriggerCount">已配置 1/5 个触发方式</p></div>
+                      <button class="expert-automation-advanced" id="expertAutomationAdvanced" type="button" aria-expanded="false">高级设置</button>
+                      <div class="expert-automation-advanced-panel" id="expertAutomationAdvancedPanel" hidden><label>执行模型<select><option>跟随专家默认</option><option>端云 · 默认</option><option>端侧 · 本地</option></select></label><label>权限模式<select><option>智能确认</option><option>仅低风险自动执行</option><option>每次运行前确认</option></select></label></div>
+                    </div>
+                    <footer class="expert-automation-dialog-foot"><button class="cancel" id="expertAutomationCancel" type="button">取消</button><button class="save" id="expertAutomationSave" type="submit" disabled>保存</button></footer>
+                  </form>
+                </div>
+              </article>
+              <article class="expert-conversation-task-page expert-workspace-panel" data-expert-page-panel="conversationTasks" hidden aria-labelledby="expertConversationTaskTitle">
+                <div class="expert-conversation-task-content">
+                  <header class="expert-conversation-task-heading">
+                    <div>
+                      <h1 id="expertConversationTaskTitle">对话任务</h1>
+                      <p>任务可以按计划自动执行，也可以随时手动触发。描述你希望自动执行的事项，即可快速创建。</p>
+                    </div>
+                    <button class="expert-conversation-task-create" type="button" data-management-action="new-expert-task">＋ 新建</button>
+                  </header>
+                  <div class="expert-conversation-task-toolbar">
+                    <div class="expert-task-date-wrap">
+                      <button class="expert-task-date-button" id="expertTaskDateButton" type="button" data-management-action="toggle-expert-task-date-menu" aria-haspopup="menu" aria-expanded="false">
+                        <span>8月8日 ~ 8月14日</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v13H5zM8 3v5M16 3v5M5 10h14"/></svg>
+                      </button>
+                      <div class="expert-task-date-menu" id="expertTaskDateMenu" role="menu" hidden>
+                        <button type="button" role="menuitem" data-management-action="set-expert-task-range" data-range="today">今天</button>
+                        <button type="button" role="menuitem" data-management-action="set-expert-task-range" data-range="7">最近 7 天</button>
+                        <button type="button" role="menuitem" data-management-action="set-expert-task-range" data-range="30">最近 30 天</button>
+                        <button type="button" role="menuitem" data-management-action="set-expert-task-range" data-range="custom">自定义</button>
+                      </div>
+                      <div class="expert-task-custom-panel" id="expertTaskCustomPanel" hidden aria-label="自定义日期范围">
+                        <div class="expert-task-custom-fields">
+                          <label>开始日期<input id="expertTaskStartDate" type="date" value="2026-08-08"></label>
+                          <label>结束日期<input id="expertTaskEndDate" type="date" value="2026-08-14"></label>
+                        </div>
+                        <div class="expert-task-custom-actions">
+                          <button type="button" data-management-action="cancel-expert-task-range">取消</button>
+                          <button type="button" data-management-action="apply-expert-task-range">应用</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <section class="expert-conversation-task-empty" id="expertTaskEmptyState">
+                    <span class="expert-conversation-task-empty-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24"><path d="M5 6h14v13H5zM8 3v5M16 3v5M5 10h14"/><path d="m9 15 2 2 4-4"/></svg>
+                    </span>
+                    <strong>暂无对话任务</strong>
+                  </section>
+                  <section class="expert-conversation-task-list" id="expertConversationTaskList" hidden aria-label="对话任务列表"></section>
+                </div>
+              </article>
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="workflow" hidden aria-labelledby="expertWorkflowTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertWorkflowTitle">工作流</h2><p>把固定步骤沉淀为可复用流程，支持手动或定时触发。</p></div><button class="expert-resource-primary" type="button" data-demo-action="新建工作流">＋ 新建工作流</button></header>
+                  <div class="expert-resource-tabs" role="tablist"><button class="expert-resource-tab active" type="button">工作流</button><button class="expert-resource-tab" type="button">执行记录</button></div>
+                  <div class="expert-resource-toolbar"><button type="button">状态&nbsp;&nbsp;全部⌄</button><button type="button">触发方式&nbsp;&nbsp;全部⌄</button><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input aria-label="搜索工作流" placeholder="搜索工作流"></label></div>
+                  <div class="expert-resource-list"><button class="expert-resource-row" type="button" data-demo-action="查看客户沟通材料整理工作流"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="expert-resource-copy"><strong>客户沟通材料整理</strong><small>归并资料 → 标记缺失项 → 生成可审阅结果</small></span><span class="expert-resource-meta">手动触发</span><span class="expert-resource-status neutral">草稿</span><span class="expert-resource-more">›</span></button></div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="memory" hidden aria-labelledby="expertMemoryTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertMemoryTitle">记忆与积累</h2><p>查看专家在工作中确认的原则、偏好与可复用经验。</p></div><button class="expert-resource-secondary" type="button" data-feature-open="memory">查看完整记忆</button></header>
+                  <div class="expert-resource-tabs"><button class="expert-resource-tab active" type="button">全部记忆</button><button class="expert-resource-tab" type="button">工作原则</button><button class="expert-resource-tab" type="button">用户偏好</button></div>
+                  <div class="expert-resource-toolbar"><button type="button">来源&nbsp;&nbsp;全部⌄</button><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input aria-label="搜索记忆" placeholder="搜索记忆内容"></label></div>
+                  <div class="expert-resource-list">
+                    <button class="expert-resource-row" type="button" data-feature-open="memory"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M8 5a4 4 0 0 0-1 7.9A4 4 0 0 0 11 19V5M16 5a4 4 0 0 1 1 7.9A4 4 0 0 1 13 19V5"/></svg></span><span class="expert-resource-copy"><strong>需求参数必须指向可核验来源</strong><small>涉及专业事实、收益与工程判断时优先引用知识文件。</small></span><span class="expert-resource-meta">工作原则</span><span class="expert-resource-status neutral">专家包</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-feature-open="memory"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M8 5a4 4 0 0 0-1 7.9A4 4 0 0 0 11 19V5M16 5a4 4 0 0 1 1 7.9A4 4 0 0 1 13 19V5"/></svg></span><span class="expert-resource-copy"><strong>缺失参数单独列出，不自行补全</strong><small>无法核验的信息必须标为待确认，不编造结论或收益数据。</small></span><span class="expert-resource-meta">用户偏好</span><span class="expert-resource-status neutral">专家包</span><span class="expert-resource-more">›</span></button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="skills" hidden aria-labelledby="expertSkillsTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertSkillsTitle">技能管理</h2><p>管理专家专属、团队共享和社区技能；同名技能按专属优先。</p></div><button class="expert-resource-primary" type="button" data-demo-action="添加技能">＋ 添加技能</button></header>
+                  <div class="expert-resource-tabs"><button class="expert-resource-tab active" type="button">已启用</button><button class="expert-resource-tab" type="button">技能市场</button></div>
+                  <div class="expert-resource-toolbar"><button type="button">来源&nbsp;&nbsp;全部⌄</button><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input aria-label="搜索技能" placeholder="搜索技能"></label></div>
+                  <div class="expert-resource-list">
+                    <button class="expert-resource-row" type="button" data-feature-open="skills"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m12 3 8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/></svg></span><span class="expert-resource-copy"><strong>knowledge-boundary</strong><small>约束专业结论必须来自知识文件，缺失信息明确说明。</small></span><span class="expert-resource-meta">专家专属</span><span class="expert-resource-status">已启用</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-feature-open="skills"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m12 3 8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/></svg></span><span class="expert-resource-copy"><strong>source-verification</strong><small>记录关键事实、数据与成果的来源和核验状态。</small></span><span class="expert-resource-meta">团队共享</span><span class="expert-resource-status">已启用</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-feature-open="skills"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m12 3 8 4-8 4-8-4zM4 12l8 4 8-4M4 17l8 4 8-4"/></svg></span><span class="expert-resource-copy"><strong>artifact-delivery</strong><small>整理可审阅结论、来源与可选成果文件。</small></span><span class="expert-resource-meta">团队共享</span><span class="expert-resource-status">已启用</span><span class="expert-resource-more">›</span></button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="knowledge" hidden aria-labelledby="expertKnowledgeTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertKnowledgeTitle">知识库管理</h2><p>集中管理资料与知识文件，为小堵的专业回答提供可追溯依据。</p></div><button class="expert-resource-primary" type="button" data-demo-action="新建知识库">＋ 新建知识库</button></header>
+                  <div class="expert-resource-tabs"><button class="expert-resource-tab active" type="button">我创建的</button></div>
+                  <div class="expert-resource-list"><button class="expert-resource-row" type="button" data-feature-open="knowledge"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M4 5a3 3 0 0 1 3-2h5v16H7a3 3 0 0 0-3 2zM20 5a3 3 0 0 0-3-2h-5v16h5a3 3 0 0 1 3 2z"/></svg></span><span class="expert-resource-copy"><strong>工商储专业知识</strong><small>专家包内知识文件 · 参数、政策与方案边界</small></span><span class="expert-resource-meta">本地</span><span class="expert-resource-status">已连接</span><span class="expert-resource-more">›</span></button></div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="connectors" hidden aria-labelledby="expertConnectorsTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertConnectorsTitle">连接器</h2><p>连接本地工具、浏览器和外部渠道；知识文件仍由知识库独立管理。</p></div><button class="expert-resource-primary" type="button" data-demo-action="添加连接器">＋ 添加连接器</button></header>
+                  <div class="expert-resource-tabs"><button class="expert-resource-tab active" type="button">已配置</button><button class="expert-resource-tab" type="button">可添加</button></div>
+                  <div class="expert-resource-list">
+                    <button class="expert-resource-row" type="button" data-feature-open="tools"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4z"/></svg></span><span class="expert-resource-copy"><strong>本地文件系统</strong><small>读取项目与任务授权范围内的文件和目录。</small></span><span class="expert-resource-meta">文件</span><span class="expert-resource-status">已连接</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-feature-open="tools"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></span><span class="expert-resource-copy"><strong>浏览器</strong><small>在用户授权后打开网页并读取可见页面信息。</small></span><span class="expert-resource-meta">工具</span><span class="expert-resource-status neutral">可用</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-expert-page="im"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 4z"/></svg></span><span class="expert-resource-copy"><strong>IM 渠道</strong><small>钉钉、飞书、微信、企业微信和 QQ 的消息接入。</small></span><span class="expert-resource-meta">消息</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">›</span></button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="im" hidden aria-labelledby="expertImTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertImTitle">IM 渠道管理</h2><p>将即时通讯会话分配给专家响应，未配置的渠道不会自动收发消息。</p></div><button class="expert-resource-primary" type="button" data-demo-action="添加配对">＋ 添加配对</button></header>
+                  <div class="expert-resource-tabs"><button class="expert-resource-tab active" type="button">会话管理</button><button class="expert-resource-tab" type="button">渠道配置</button></div>
+                  <div class="expert-resource-toolbar"><label><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input aria-label="搜索渠道" placeholder="搜索会话或渠道"></label><button type="button">全部渠道⌄</button></div>
+                  <div class="expert-resource-list">
+                    <button class="expert-resource-row" type="button" data-demo-action="配置钉钉"><span class="expert-resource-icon channel">钉</span><span class="expert-resource-copy"><strong>钉钉</strong><small>通过机器人接收并回复群聊或私聊消息。</small></span><span class="expert-resource-meta">机器人</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">配置</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="配置飞书"><span class="expert-resource-icon channel">飞</span><span class="expert-resource-copy"><strong>飞书</strong><small>通过机器人接收并回复会话消息。</small></span><span class="expert-resource-meta">机器人</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">配置</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="配置微信"><span class="expert-resource-icon channel">微</span><span class="expert-resource-copy"><strong>微信</strong><small>通过授权渠道接收并回复用户消息。</small></span><span class="expert-resource-meta">机器人</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">配置</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="配置企业微信"><span class="expert-resource-icon channel">企</span><span class="expert-resource-copy"><strong>企业微信</strong><small>通过企业机器人接收并回复用户消息。</small></span><span class="expert-resource-meta">机器人</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">配置</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="配置QQ"><span class="expert-resource-icon channel">Q</span><span class="expert-resource-copy"><strong>QQ</strong><small>通过机器人接收单聊与群聊消息。</small></span><span class="expert-resource-meta">机器人</span><span class="expert-resource-status neutral">未配置</span><span class="expert-resource-more">配置</span></button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="expert-resource-page expert-workspace-panel" data-expert-page-panel="permissions" hidden aria-labelledby="expertPermissionsTitle">
+                <div class="expert-resource-content">
+                  <header class="expert-resource-heading"><div><h2 id="expertPermissionsTitle">权限</h2><p>按风险等级控制小堵可执行的操作，外部副作用必须在发生前确认。</p></div></header>
+                  <div class="expert-resource-list">
+                    <button class="expert-resource-row" type="button" data-demo-action="编辑低风险权限"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m9 12 2 2 4-5M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/></svg></span><span class="expert-resource-copy"><strong>低风险操作</strong><small>读取、分析、检索与创建新成果。</small></span><span class="expert-resource-meta">默认策略</span><span class="expert-resource-status neutral">自动允许</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="编辑中风险权限"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m9 12 2 2 4-5M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/></svg></span><span class="expert-resource-copy"><strong>中风险操作</strong><small>修改文件、运行命令与创建定时任务。</small></span><span class="expert-resource-meta">默认策略</span><span class="expert-resource-status neutral">智能确认</span><span class="expert-resource-more">›</span></button>
+                    <button class="expert-resource-row" type="button" data-demo-action="编辑高风险权限"><span class="expert-resource-icon"><svg viewBox="0 0 24 24"><path d="m9 12 2 2 4-5M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7z"/></svg></span><span class="expert-resource-copy"><strong>高风险操作</strong><small>删除、覆盖、发布、发送、安装和凭据访问。</small></span><span class="expert-resource-meta">默认策略</span><span class="expert-resource-status neutral">每次确认</span><span class="expert-resource-more">›</span></button>
+                  </div>
+                </div>
+              </article>
+
+              <article class="expert-settings-page expert-workspace-panel" data-expert-page-panel="settings" hidden aria-labelledby="expertSettingsTitle">
+                <div class="expert-settings-content">
+                  <header><h1 id="expertSettingsTitle">设置</h1><p>集中配置小堵的基础信息与角色设定。</p></header>
+                  <section class="expert-settings-section"><h2>基本设置</h2><div class="expert-settings-identity"><span class="expert-settings-avatar">小</span><div><small>称谓</small><strong>小堵</strong></div></div><p>工商储产品解决方案专家。涉及专业参数、收益与工程判断时优先引用知识文件，缺少资料时明确说明。</p><button type="button" data-feature-open="soul-editor">修改基本信息</button></section>
                 </div>
               </article>
             </div>
@@ -3802,7 +4399,7 @@
               <div class="expert-chat-list"><div class="feature-section-label">对话</div><button class="expert-chat-person active" type="button"><span><img src="assets/soul-avatar.png" alt="小堵" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></span><span><strong>小堵</strong><small>工商储产品解决方案</small></span></button><button class="expert-chat-person" type="button"><span>财</span><span><strong>财研</strong><small>财务分析与数据溯源</small></span></button></div>
             </aside>
             <div class="expert-chat-main">
-              <header class="expert-chat-topbar"><strong>小堵</strong><div class="management-replica-actions"><button class="secondary-button" type="button" data-management-action="new-expert-chat">＋ 对话任务</button><button class="secondary-button" type="button" data-hub-view="automation">＋ 定时任务</button><button class="secondary-button" type="button" data-hub-view="boardHub">任务列表</button></div></header>
+              <header class="expert-chat-topbar"><strong id="expertChatTitle">小堵</strong><div class="management-replica-actions"><button class="secondary-button" type="button" data-management-action="new-expert-chat">＋ 对话任务</button><button class="secondary-button" type="button" data-hub-view="automation">＋ 定时任务</button><button class="secondary-button" type="button" data-management-action="open-expert-task-list">任务列表</button></div></header>
               <div class="expert-chat-stage">
                 <div class="expert-chat-welcome"><div class="expert-chat-avatar"><img src="assets/soul-avatar.png" alt="小堵"></div><h2>你好，今天我能帮你什么？</h2><p>我是工商储产品解决方案专家，可以完成你指派的任务。</p><div class="expert-chat-prompts"><button class="expert-chat-prompt" type="button" data-expert-prompt="把现有需求整理成可执行的方案和验收标准">✦ 把现有需求整理成可执行的方案和验收标准</button><button class="expert-chat-prompt" type="button" data-expert-prompt="分析资料中的参数缺口，并按优先级给出待确认项">✦ 分析资料中的参数缺口，并按优先级给出待确认项</button><button class="expert-chat-prompt" type="button" data-expert-prompt="根据已核验来源整理客户沟通材料">✦ 根据已核验来源整理客户沟通材料</button></div></div>
                 <div class="expert-chat-compose"><textarea id="expertConversationInput" placeholder="输入消息，@ 选择当前任务上下文…"></textarea><footer><span>＋ 添加资料　·　选择任务目录</span><div class="management-replica-actions"><span>端云 · 默认</span><button class="primary-button" type="button" data-management-action="send-expert-chat" aria-label="发送">↑</button></div></footer></div>
@@ -3812,7 +4409,7 @@
         </section>
 
         <section class="view workspace-page workflow-replica" id="workflowHubView">
-          <header class="workflow-shell-head"><div class="workflow-shell-title"><svg viewBox="0 0 24 24"><path d="m5 12-2 2 2 2M3 14h7M13 6h8M13 12h8M13 18h8"/></svg><span>未命名工作流</span><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10z"/></svg></div><div class="workflow-stage-tabs" role="tablist"><button class="workflow-stage-tab active" type="button">工作流</button><button class="workflow-stage-tab" type="button">执行记录</button><button class="workflow-stage-tab" type="button">详情配置</button></div><div class="workflow-shell-actions"><button class="secondary-button" type="button" data-management-action="add-trigger">＋ 添加触发方式</button><button class="secondary-button" type="button" disabled>▷ 运行</button></div></header>
+          <header class="workflow-shell-head"><div class="workflow-shell-title"><button class="workflow-back-button" type="button" data-workflow-back aria-label="返回专家主页"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button><span>未命名工作流</span><svg viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10z"/></svg></div><div class="workflow-stage-tabs" role="tablist"><button class="workflow-stage-tab active" type="button">工作流</button><button class="workflow-stage-tab" type="button">执行记录</button><button class="workflow-stage-tab" type="button">详情配置</button></div><div class="workflow-shell-actions"><button class="secondary-button" type="button" data-management-action="add-trigger">＋ 添加触发方式</button><button class="secondary-button" type="button" disabled>▷ 运行</button></div></header>
           <div class="workflow-replica-body">
             <aside class="workflow-chat-pane"><div class="workflow-chat-scroll"><div class="workflow-message"><small>2026-08-14 08:06</small><p>你可以先描述希望自动完成的目标，我会把它整理成可运行的流程。</p></div><div class="workflow-message user">我想每天整理项目资料中的参数缺口，并生成待确认清单。</div><div class="workflow-error"><strong>对话异常中断</strong><span>本次生成未完成，请稍后重试或调整描述。</span></div></div><div class="workflow-chat-compose"><textarea placeholder="输入消息…"></textarea><footer style="display:flex;align-items:center;justify-content:space-between;color:#888;font-size:12px"><span>文件</span><span>端云 · 默认　●</span></footer></div></aside>
             <section class="workflow-stage">
@@ -4262,7 +4859,11 @@
         if (!featureRegistry[key]) return;
         if (typeof closeWorkMenu === 'function') closeWorkMenu();
         if (typeof closeChatTools === 'function') closeChatTools();
-        featureLayer.classList.toggle('expert-context', expertsView.classList.contains('active'));
+        var inExpertContext = expertsView.classList.contains('active') ||
+          expertProfileView.classList.contains('active') ||
+          expertChatHubView.classList.contains('active') ||
+          workflowHubView.classList.contains('active');
+        featureLayer.classList.toggle('expert-context', inExpertContext);
         renderFeature(key);
         featureLayer.classList.add('open');
         featureLayer.setAttribute('aria-hidden', 'false');
@@ -4275,10 +4876,10 @@
         featureLayer.setAttribute('aria-hidden', 'true');
         activeFeatureKey = '';
         if (wasExpertContext) {
-          document.querySelectorAll('#expertProfileView .expert-rail-link').forEach(function (item) {
-            var isHome = item.dataset.expertScroll === 'expertHomeTop';
-            item.classList.toggle('active', isHome);
-            if (isHome) item.setAttribute('aria-current', 'page');
+          document.querySelectorAll('#expertProfileView .expert-rail-link, #expertChatHubView .expert-rail-link, #workflowHubView .expert-rail-link').forEach(function (item) {
+            var isSelected = item.dataset.expertPage === (lastExpertPage || 'home');
+            item.classList.toggle('active', isSelected);
+            if (isSelected) item.setAttribute('aria-current', 'page');
             else item.removeAttribute('aria-current');
           });
         }
@@ -4470,7 +5071,7 @@
         if (name !== 'dashboard' && dashboardCreateLayer) { closeDashboardCreate(); setDashboardEditing(false); }
         closeFeatureLayer();
         closeWorkMenu();
-        navItems.forEach(function (item) { item.classList.toggle('active', item.dataset.view === name || (name === 'expertProfile' && item.dataset.view === 'experts') || (name === 'chat' && item.dataset.chat === activeChatKey)); });
+        navItems.forEach(function (item) { item.classList.toggle('active', item.dataset.view === name || ((name === 'expertProfile' || name === 'workflowHub') && item.dataset.view === 'experts') || (name === 'chat' && item.dataset.chat === activeChatKey)); });
       }
 
       document.querySelectorAll('[data-hub-view]').forEach(function (button) {
@@ -4503,17 +5104,162 @@
         });
       });
 
+      var expertConversationTasks = [];
+      var expertTaskRange = { start: '2026-08-08', end: '2026-08-14' };
+
+      function toLocalISODate(date) {
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        var day = String(date.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      }
+
+      function formatTaskRangeDate(value) {
+        var parts = value.split('-');
+        return Number(parts[1]) + '月' + Number(parts[2]) + '日';
+      }
+
+      function closeExpertTaskDatePopovers() {
+        var menu = document.getElementById('expertTaskDateMenu');
+        var custom = document.getElementById('expertTaskCustomPanel');
+        var dateButton = document.getElementById('expertTaskDateButton');
+        if (menu) menu.hidden = true;
+        if (custom) custom.hidden = true;
+        if (dateButton) dateButton.setAttribute('aria-expanded', 'false');
+      }
+
+      function renderExpertConversationTasks() {
+        var list = document.getElementById('expertConversationTaskList');
+        var empty = document.getElementById('expertTaskEmptyState');
+        if (!list) return;
+        var visibleTasks = expertConversationTasks.filter(function (task) {
+          return task.createdAt >= expertTaskRange.start && task.createdAt <= expertTaskRange.end;
+        });
+        list.innerHTML = '';
+        list.hidden = visibleTasks.length === 0;
+        if (empty) empty.hidden = visibleTasks.length > 0;
+        visibleTasks.forEach(function (task) {
+          var row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'expert-conversation-task-row';
+          row.dataset.taskId = task.id;
+          var taskTitle = document.createElement('strong');
+          taskTitle.textContent = task.title;
+          var meta = document.createElement('span');
+          meta.textContent = task.trigger + ' · ' + task.timeLabel;
+          var state = document.createElement('span');
+          state.textContent = task.state;
+          row.append(taskTitle, meta, state);
+          row.addEventListener('click', function () {
+            switchView('expertChatHub');
+            var chatTitle = document.getElementById('expertChatTitle');
+            var input = document.getElementById('expertConversationInput');
+            if (chatTitle) chatTitle.textContent = task.title;
+            if (input) {
+              input.value = '';
+              input.placeholder = '继续“' + task.title + '”…';
+              input.focus();
+            }
+            showToast('已打开对话任务');
+          });
+          list.append(row);
+        });
+      }
+
+      function setExpertTaskRange(start, end) {
+        expertTaskRange = { start: start, end: end };
+        var dateLabel = document.querySelector('#expertTaskDateButton span');
+        if (dateLabel) dateLabel.textContent = start === end ? formatTaskRangeDate(start) : formatTaskRangeDate(start) + ' ~ ' + formatTaskRangeDate(end);
+        renderExpertConversationTasks();
+        closeExpertTaskDatePopovers();
+      }
+
+      function setExpertTaskPreset(range) {
+        var endDate = new Date();
+        var startDate = new Date(endDate);
+        if (range === '7') startDate.setDate(endDate.getDate() - 6);
+        if (range === '30') startDate.setDate(endDate.getDate() - 29);
+        setExpertTaskRange(toLocalISODate(startDate), toLocalISODate(endDate));
+      }
+
+      function addExpertConversationTask(title) {
+        expertConversationTasks.unshift({
+          id: 'task-' + Date.now(),
+          title: title,
+          createdAt: toLocalISODate(new Date()),
+          trigger: '手动触发',
+          timeLabel: '刚刚',
+          state: '待执行'
+        });
+        renderExpertConversationTasks();
+      }
+
+      function openNewExpertTask() {
+        switchView('expertChatHub');
+        var chatTitle = document.getElementById('expertChatTitle');
+        var input = document.getElementById('expertConversationInput');
+        if (chatTitle) chatTitle.textContent = '小堵';
+        if (input) {
+          input.value = '';
+          input.placeholder = '输入消息，@ 选择当前任务上下文…';
+          input.focus();
+        }
+        showToast('已新建小堵对话任务');
+      }
+
+      renderExpertConversationTasks();
+
       document.querySelectorAll('[data-management-action]').forEach(function (button) {
         button.addEventListener('click', function () {
           var action = button.dataset.managementAction;
           if (action === 'send-expert-chat') {
             var input = document.getElementById('expertConversationInput');
             if (!input.value.trim()) { input.focus(); showToast('请先输入对话任务'); return; }
-            showToast('已创建小堵对话任务草稿');
+            var taskTitle = input.value.trim();
+            addExpertConversationTask(taskTitle);
             input.value = '';
+            navigateExpertPage('conversationTasks');
+            showToast('已创建小堵对话任务草稿');
             return;
           }
-          if (action === 'new-expert-chat') { document.getElementById('expertConversationInput').value = ''; document.getElementById('expertConversationInput').focus(); showToast('已新建小堵对话任务'); return; }
+          if (action === 'new-expert-chat' || action === 'new-expert-task') { openNewExpertTask(); return; }
+          if (action === 'open-expert-task-list') { navigateExpertPage('conversationTasks'); return; }
+          if (action === 'toggle-expert-task-date-menu') {
+            var dateMenu = document.getElementById('expertTaskDateMenu');
+            var customPanel = document.getElementById('expertTaskCustomPanel');
+            var dateButton = document.getElementById('expertTaskDateButton');
+            if (!dateMenu) return;
+            if (customPanel) customPanel.hidden = true;
+            dateMenu.hidden = !dateMenu.hidden;
+            if (dateButton) dateButton.setAttribute('aria-expanded', dateMenu.hidden ? 'false' : 'true');
+            return;
+          }
+          if (action === 'set-expert-task-range') {
+            var dateMenu = document.getElementById('expertTaskDateMenu');
+            if (dateMenu) dateMenu.hidden = true;
+            if (button.dataset.range === 'custom') {
+              var customPanel = document.getElementById('expertTaskCustomPanel');
+              var customStart = document.getElementById('expertTaskStartDate');
+              var customEnd = document.getElementById('expertTaskEndDate');
+              if (customStart) customStart.value = expertTaskRange.start;
+              if (customEnd) customEnd.value = expertTaskRange.end;
+              if (customPanel) customPanel.hidden = false;
+              return;
+            }
+            setExpertTaskPreset(button.dataset.range === 'today' ? 'today' : button.dataset.range);
+            showToast('已切换任务日期范围');
+            return;
+          }
+          if (action === 'cancel-expert-task-range') { closeExpertTaskDatePopovers(); return; }
+          if (action === 'apply-expert-task-range') {
+            var customStart = document.getElementById('expertTaskStartDate');
+            var customEnd = document.getElementById('expertTaskEndDate');
+            if (!customStart || !customEnd || !customStart.value || !customEnd.value) { showToast('请选择完整日期范围'); return; }
+            if (customStart.value > customEnd.value) { showToast('开始日期不能晚于结束日期'); return; }
+            setExpertTaskRange(customStart.value, customEnd.value);
+            showToast('已应用自定义日期范围');
+            return;
+          }
           if (action === 'open-board-task') { switchView('chat'); renderChatThread('task'); return; }
           if (action === 'create-public-project') {
             document.getElementById('publicProjectsBody').innerHTML = '<div class="management-table"><div class="management-table-head" style="grid-template-columns:1.7fr 1fr 1fr"><span>项目</span><span>来源</span><span>可用范围</span></div><div class="management-table-row" style="grid-template-columns:1.7fr 1fr 1fr"><span><strong>工商储方案</strong><small>项目上下文已建立</small></span><span>本地目录</span><span>当前账户下全部专家</span></div></div>';
@@ -5312,6 +6058,221 @@
         });
       });
 
+      var expertPageTitles = {
+        home: '首页',
+        project: '项目',
+        automation: '定时任务',
+        conversationTasks: '对话任务',
+        workflow: '工作流',
+        memory: '记忆',
+        skills: '技能',
+        knowledge: '知识库',
+        connectors: '连接器',
+        im: 'IM',
+        permissions: '权限',
+        settings: '设置'
+      };
+      var lastExpertPage = 'home';
+      function ensureExpertContextRail(view) {
+        var source = document.querySelector('#expertProfileView .expert-management-rail');
+        if (!view || !source || view.querySelector(':scope > .expert-context-rail')) return;
+        var rail = source.cloneNode(true);
+        rail.classList.add('expert-context-rail');
+        rail.querySelectorAll('[id]').forEach(function (node) { node.removeAttribute('id'); });
+        view.insertBefore(rail, view.firstElementChild);
+        view.classList.add('with-expert-context-rail');
+      }
+      ensureExpertContextRail(expertChatHubView);
+      ensureExpertContextRail(workflowHubView);
+
+      function showExpertPage(pageName) {
+        var page = expertPageTitles[pageName] ? pageName : 'home';
+        lastExpertPage = page;
+        document.querySelectorAll('#expertProfileView [data-expert-page-panel]').forEach(function (panel) {
+          var isSelected = panel.dataset.expertPagePanel === page;
+          panel.hidden = !isSelected;
+          panel.classList.toggle('active', isSelected);
+        });
+        document.querySelectorAll('#expertProfileView .expert-rail-link, #expertChatHubView .expert-rail-link, #workflowHubView .expert-rail-link').forEach(function (item) {
+          var isSelected = item.dataset.expertPage === page;
+          item.classList.toggle('active', isSelected);
+          if (isSelected) item.setAttribute('aria-current', 'page');
+          else item.removeAttribute('aria-current');
+        });
+        var title = document.getElementById('expertPageTitle');
+        var actions = document.getElementById('expertPageActions');
+        var workspace = document.querySelector('#expertProfileView .expert-detail-workspace');
+        if (title) title.textContent = expertPageTitles[page];
+        if (actions) actions.hidden = page !== 'home';
+        if (workspace) workspace.classList.toggle('is-task-page', page === 'conversationTasks');
+      }
+
+      function navigateExpertPage(pageName) {
+        var page = expertPageTitles[pageName] ? pageName : 'home';
+        showExpertPage(page);
+        if (page === 'conversationTasks') {
+          switchView('expertChatHub');
+          return;
+        }
+        if (page === 'workflow') {
+          switchView('workflowHub');
+          return;
+        }
+        switchView('expertProfile');
+      }
+      document.addEventListener('click', function (event) {
+        var context = event.target.closest('#expertProfileView, #expertChatHubView, #workflowHubView');
+        if (!context) return;
+        var pageButton = event.target.closest('[data-expert-page]');
+        if (pageButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          navigateExpertPage(pageButton.dataset.expertPage);
+          return;
+        }
+        var featureButton = event.target.closest('.expert-context-rail [data-feature-open]');
+        if (featureButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          openFeature(featureButton.dataset.featureOpen);
+          return;
+        }
+        var backButton = event.target.closest('.expert-context-rail .expert-rail-back');
+        if (backButton) {
+          event.preventDefault();
+          event.stopPropagation();
+          switchView('experts');
+        }
+      });
+      document.querySelectorAll('[data-workflow-back]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          navigateExpertPage('home');
+        });
+      });
+
+      var expertAutomationModal = document.getElementById('expertAutomationModal');
+      var expertAutomationForm = document.getElementById('expertAutomationForm');
+      var expertAutomationName = document.getElementById('expertAutomationName');
+      var expertAutomationDescription = document.getElementById('expertAutomationDescription');
+      var expertAutomationCharacterCount = document.getElementById('expertAutomationCharacterCount');
+      var expertAutomationSave = document.getElementById('expertAutomationSave');
+      var expertAutomationSchedule = document.getElementById('expertAutomationSchedule');
+      var expertAutomationDirectory = document.getElementById('expertAutomationDirectory');
+      var expertAutomationAddTrigger = document.getElementById('expertAutomationAddTrigger');
+      var expertAutomationTriggerCount = document.getElementById('expertAutomationTriggerCount');
+      var expertAutomationAdvanced = document.getElementById('expertAutomationAdvanced');
+      var expertAutomationAdvancedPanel = document.getElementById('expertAutomationAdvancedPanel');
+      var expertAutomationTriggerTotal = 1;
+
+      function updateExpertAutomationFormState() {
+        if (!expertAutomationName || !expertAutomationDescription || !expertAutomationSave) return;
+        var characterCount = expertAutomationDescription.value.length;
+        if (expertAutomationCharacterCount) expertAutomationCharacterCount.textContent = characterCount + ' / 10000';
+        expertAutomationSave.disabled = !expertAutomationName.value.trim() || !expertAutomationDescription.value.trim();
+      }
+
+      function setExpertAutomationModal(open) {
+        if (!expertAutomationModal) return;
+        expertAutomationModal.hidden = !open;
+        expertAutomationModal.setAttribute('aria-hidden', String(!open));
+        if (open) {
+          updateExpertAutomationFormState();
+          requestAnimationFrame(function () {
+            if (expertAutomationName) expertAutomationName.focus();
+          });
+        }
+      }
+
+      var expertAutomationCreate = document.getElementById('expertAutomationCreate');
+      if (expertAutomationCreate) expertAutomationCreate.addEventListener('click', function () { setExpertAutomationModal(true); });
+      ['expertAutomationClose', 'expertAutomationCancel'].forEach(function (id) {
+        var button = document.getElementById(id);
+        if (button) button.addEventListener('click', function () { setExpertAutomationModal(false); });
+      });
+      var expertAutomationPromoClose = document.getElementById('expertAutomationPromoClose');
+      if (expertAutomationPromoClose) expertAutomationPromoClose.addEventListener('click', function () {
+        var promo = document.getElementById('expertAutomationPromo');
+        if (promo) promo.hidden = true;
+      });
+      if (expertAutomationModal) expertAutomationModal.addEventListener('click', function (event) {
+        if (event.target === expertAutomationModal) setExpertAutomationModal(false);
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && expertAutomationModal && !expertAutomationModal.hidden) setExpertAutomationModal(false);
+      });
+      [expertAutomationName, expertAutomationDescription].forEach(function (field) {
+        if (field) field.addEventListener('input', updateExpertAutomationFormState);
+      });
+
+      document.querySelectorAll('#expertAutomationModal [data-expert-automation-tabs]').forEach(function (group) {
+        group.querySelectorAll('button').forEach(function (button) {
+          button.addEventListener('click', function () {
+            group.querySelectorAll('button').forEach(function (item) {
+              var isSelected = item === button;
+              item.classList.toggle('active', isSelected);
+              item.setAttribute('aria-selected', String(isSelected));
+            });
+            if (group.dataset.expertAutomationTabs === 'method' && expertAutomationSchedule) {
+              expertAutomationSchedule.hidden = button.dataset.value !== 'schedule';
+            }
+            if (group.dataset.expertAutomationTabs === 'source' && expertAutomationDirectory) {
+              var label = expertAutomationDirectory.querySelector('span');
+              if (label) label.textContent = button.dataset.value === 'project' ? '工商储方案' : '点击选择目录';
+            }
+          });
+        });
+      });
+
+      if (expertAutomationDirectory) expertAutomationDirectory.addEventListener('click', function () {
+        var label = expertAutomationDirectory.querySelector('span');
+        if (label) label.textContent = '工商储方案 / workspace';
+        showToast('已选择当前项目工作目录');
+      });
+
+      if (expertAutomationAddTrigger) expertAutomationAddTrigger.addEventListener('click', function () {
+        if (expertAutomationTriggerTotal >= 5) {
+          showToast('最多可配置 5 个触发方式');
+          return;
+        }
+        expertAutomationTriggerTotal += 1;
+        if (expertAutomationTriggerCount) expertAutomationTriggerCount.textContent = '已配置 ' + expertAutomationTriggerTotal + '/5 个触发方式';
+        showToast('已添加一个触发方式，可继续选择类型');
+      });
+
+      if (expertAutomationAdvanced) expertAutomationAdvanced.addEventListener('click', function () {
+        var expanded = expertAutomationAdvanced.getAttribute('aria-expanded') === 'true';
+        expertAutomationAdvanced.setAttribute('aria-expanded', String(!expanded));
+        if (expertAutomationAdvancedPanel) expertAutomationAdvancedPanel.hidden = expanded;
+      });
+
+      if (expertAutomationForm) expertAutomationForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        updateExpertAutomationFormState();
+        if (!expertAutomationSave || expertAutomationSave.disabled) return;
+        var savedName = document.getElementById('expertAutomationSavedName');
+        var savedTime = document.getElementById('expertAutomationSavedTime');
+        var repeat = document.getElementById('expertAutomationRepeat');
+        var time = document.getElementById('expertAutomationTime');
+        var emptyState = document.getElementById('expertAutomationEmpty');
+        var savedList = document.getElementById('expertAutomationList');
+        if (savedName) savedName.textContent = expertAutomationName.value.trim();
+        if (savedTime) savedTime.textContent = (repeat ? repeat.value : '每天') + ' ' + (time ? time.value : '09:00') + ' · 尚未运行';
+        if (emptyState) emptyState.hidden = true;
+        if (savedList) savedList.hidden = false;
+        setExpertAutomationModal(false);
+        showToast('定时任务已保存，将按计划执行');
+      });
+
+      document.querySelectorAll('#expertProfileView [data-expert-project-tab]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          document.querySelectorAll('#expertProfileView [data-expert-project-tab]').forEach(function (item) {
+            var isSelected = item === button;
+            item.classList.toggle('active', isSelected);
+            item.setAttribute('aria-selected', String(isSelected));
+          });
+        });
+      });
+
       document.getElementById('startWithExpert').addEventListener('click', function () {
         var name = document.getElementById('expertName').textContent;
         switchView('home');
@@ -5339,12 +6300,7 @@
           document.getElementById('expertKnowledge').textContent = profile.knowledge;
           document.getElementById('expertBoundary').textContent = profile.boundary;
           document.querySelector('.expert-home-sheet').scrollTop = 0;
-          document.querySelectorAll('#expertProfileView .expert-rail-link[data-expert-scroll]').forEach(function (item) {
-            var isHome = item.dataset.expertScroll === 'expertHomeTop';
-            item.classList.toggle('active', isHome);
-            if (isHome) item.setAttribute('aria-current', 'page');
-            else item.removeAttribute('aria-current');
-          });
+          showExpertPage('home');
         });
       });
 
@@ -5803,6 +6759,117 @@
       document.addEventListener('click', function (event) {
         if (!chatToolsMenu.contains(event.target) && event.target !== chatToolsButton) closeChatTools();
         if (!chatCommandPopover.contains(event.target) && !event.target.closest('#chatSkill') && !event.target.closest('#chatContext') && !event.target.closest('#chatInput')) closeChatCommandPopover();
+      });
+
+      function setupExpertResourcePages() {
+        document.querySelectorAll('[data-expert-page-panel]').forEach(function (page) {
+          var tabs = page.querySelectorAll('.expert-resource-tab');
+          tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+              tabs.forEach(function (item) { item.classList.remove('active'); });
+              tab.classList.add('active');
+              showToast('已切换到「' + tab.textContent.trim() + '」');
+            });
+          });
+          page.querySelectorAll('.expert-resource-search').forEach(function (input) {
+            input.addEventListener('input', function () {
+              var keyword = input.value.trim().toLowerCase();
+              page.querySelectorAll('.expert-resource-row').forEach(function (row) {
+                row.classList.toggle('is-hidden', Boolean(keyword) && !row.textContent.toLowerCase().includes(keyword));
+              });
+            });
+          });
+          page.querySelectorAll('.expert-resource-filter').forEach(function (select) {
+            select.addEventListener('change', function () {
+              showToast('已按「' + select.options[select.selectedIndex].text + '」筛选');
+            });
+          });
+          page.querySelectorAll('.expert-resource-row').forEach(function (row) {
+            row.addEventListener('click', function () {
+              page.querySelectorAll('.expert-resource-row').forEach(function (item) { item.classList.remove('active'); });
+              row.classList.add('active');
+            });
+          });
+        });
+      }
+      setupExpertResourcePages();
+
+      var expertResourceConfigs = {
+        memory: { label: '记忆', source: 'memory/MEMORY.md', status: '可读写', scope: '长期偏好与项目事实', original: 'memory', action: '新建记忆', items: ['长期记忆索引', '用户偏好', '项目事实'] },
+        skills: { label: '技能', source: '专家包与共享技能', status: '6 项启用', scope: '分析、文档与检索', original: 'skills', action: '添加技能', items: ['需求澄清', '方案结构', '知识库检索'] },
+        knowledge: { label: '知识库', source: 'knowledge/', status: '已建立索引', scope: '工商储专业资料', original: 'knowledge', action: '添加知识', items: ['知识库索引', '储能基础资料', '项目边界'] },
+        connectors: { label: '连接器', source: '本机与浏览器', status: '2 项可用', scope: '文件、网页与外部服务', original: 'tools', action: '添加连接器', items: ['本地文件系统', '浏览器', '外部服务'] },
+        im: { label: 'IM 渠道', source: '消息渠道', status: '待配置', scope: '钉钉、飞书、微信等', original: 'tools', action: '配置渠道', items: ['钉钉', '飞书', '微信', '企业微信', 'QQ'] }
+      };
+      var expertResourceDialog = document.createElement('div');
+      expertResourceDialog.className = 'expert-resource-dialog';
+      expertResourceDialog.hidden = true;
+      expertResourceDialog.innerHTML = '<section class="expert-resource-dialog-card" role="dialog" aria-modal="true" aria-labelledby="expertResourceDialogTitle"><header class="expert-resource-dialog-head"><div><small id="expertResourceDialogEyebrow">专家资源</small><h2 id="expertResourceDialogTitle">资源详情</h2></div><button class="expert-resource-dialog-close" type="button" aria-label="关闭">×</button></header><div class="expert-resource-dialog-body"><div class="expert-resource-dialog-summary" data-role="resource-summary"></div><div class="expert-resource-dialog-stats"><div class="expert-resource-dialog-stat"><small>来源</small><strong data-role="resource-source"></strong></div><div class="expert-resource-dialog-stat"><small>状态</small><strong data-role="resource-status"></strong></div><div class="expert-resource-dialog-stat"><small>能力范围</small><strong data-role="resource-scope"></strong></div></div><div class="expert-resource-dialog-list" data-role="resource-list"></div><div class="expert-resource-dialog-form" data-role="resource-form" hidden><label class="expert-resource-dialog-field"><span>名称</span><input type="text" data-role="resource-name" placeholder="输入名称"></label><label class="expert-resource-dialog-field"><span>说明</span><textarea data-role="resource-description" rows="4" placeholder="说明用途、来源和使用边界"></textarea></label></div></div><footer class="expert-resource-dialog-foot"><button class="expert-resource-dialog-button" type="button" data-resource-dialog="original">打开原功能</button><span></span><button class="expert-resource-dialog-button" type="button" data-resource-dialog="cancel">取消</button><button class="expert-resource-dialog-button primary" type="button" data-resource-dialog="save">保存</button></footer></section>';
+      document.body.appendChild(expertResourceDialog);
+      var activeResourceKind = 'memory';
+
+      function openExpertResourceDialog(kind, mode, itemTitle) {
+        var config = expertResourceConfigs[kind] || expertResourceConfigs.memory;
+        activeResourceKind = kind;
+        expertResourceDialog.hidden = false;
+        expertResourceDialog.dataset.mode = mode;
+        expertResourceDialog.querySelector('#expertResourceDialogEyebrow').textContent = config.label;
+        expertResourceDialog.querySelector('#expertResourceDialogTitle').textContent = mode === 'create' ? config.action : (itemTitle || config.label + '详情');
+        expertResourceDialog.querySelector('[data-role="resource-summary"]').innerHTML = '<strong>' + config.label + '管理</strong><p>保留专家包的真实结构、来源和使用边界，不暴露本机绝对路径。</p>';
+        expertResourceDialog.querySelector('[data-role="resource-source"]').textContent = config.source;
+        expertResourceDialog.querySelector('[data-role="resource-status"]').textContent = config.status;
+        expertResourceDialog.querySelector('[data-role="resource-scope"]').textContent = config.scope;
+        expertResourceDialog.querySelector('[data-role="resource-list"]').innerHTML = config.items.map(function (item) { return '<button class="expert-resource-dialog-item" type="button"><span>' + item + '</span><small>查看 ›</small></button>'; }).join('');
+        expertResourceDialog.querySelector('[data-role="resource-list"]').hidden = mode === 'create';
+        expertResourceDialog.querySelector('[data-role="resource-form"]').hidden = mode !== 'create';
+        expertResourceDialog.querySelector('[data-resource-dialog="original"]').hidden = mode === 'create';
+        expertResourceDialog.querySelector('[data-resource-dialog="save"]').hidden = mode !== 'create';
+        if (mode === 'create') expertResourceDialog.querySelector('[data-role="resource-name"]').focus();
+      }
+
+      function closeExpertResourceDialog() {
+        expertResourceDialog.hidden = true;
+      }
+
+      document.addEventListener('click', function (event) {
+        var panel = event.target.closest('#expertProfileView [data-expert-page-panel]');
+        if (!panel) return;
+        var kind = panel.dataset.expertPagePanel;
+        if (!expertResourceConfigs[kind]) return;
+        var action = event.target.closest('button[data-demo-action]');
+        var row = event.target.closest('.expert-resource-row');
+        if (action && action.closest('.expert-resource-actions')) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          openExpertResourceDialog(kind, 'create');
+          return;
+        }
+        if (row) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          panel.querySelectorAll('.expert-resource-row').forEach(function (node) { node.classList.toggle('active', node === row); });
+          var titleNode = row.querySelector('.expert-resource-name, strong');
+          openExpertResourceDialog(kind, 'view', titleNode ? titleNode.textContent.trim() : expertResourceConfigs[kind].label + '详情');
+        }
+      }, true);
+
+      expertResourceDialog.addEventListener('click', function (event) {
+        if (event.target === expertResourceDialog || event.target.closest('.expert-resource-dialog-close') || event.target.closest('[data-resource-dialog="cancel"]')) {
+          closeExpertResourceDialog();
+          return;
+        }
+        if (event.target.closest('[data-resource-dialog="original"]')) {
+          closeExpertResourceDialog();
+          openFeature(expertResourceConfigs[activeResourceKind].original);
+          return;
+        }
+        if (event.target.closest('[data-resource-dialog="save"]')) {
+          closeExpertResourceDialog();
+          showToast(expertResourceConfigs[activeResourceKind].label + '草案已保存');
+          return;
+        }
+        var item = event.target.closest('.expert-resource-dialog-item');
+        if (item) showToast('正在打开：' + item.querySelector('span').textContent);
       });
 
       document.addEventListener('keydown', function (event) {

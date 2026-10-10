@@ -54,7 +54,7 @@ CI 三个 job 均 success；Windows 的 elevated=true，这证明原生每用户
 
 本机 DMG：[Soul Next 0.20.0-alpha.2 arm64](/Users/kian/.codex/worktrees/desktop-v3-step1/soul/desktop-next/release/Soul-Next-0.20.0-alpha.2-mac-arm64.dmg)。实际安装应用：[Soul Next.app](</Users/kian/Applications/Soul Next Verification 1791618705594/Soul Next.app>)。
 
-Windows 安装包：[Soul Next 0.20.0-alpha.2 x64](/Users/kian/.codex/worktrees/desktop-v3-step1/soul/desktop-next/release/ci-windows-x64/Soul-Next-0.20.0-alpha.2-win-x64.exe)。Mac Intel 与其他 CI 原生包可从 [构建产物](https://github.com/kidcrazequ/AI-avatar/actions/runs/38035558749) 获取；远程 artifacts 保留 7 天，三平台证据均已保存到本机。
+Windows 安装包：[Soul Next 0.20.0-alpha.2 x64](/Users/kian/.codex/worktrees/desktop-v3-step1/soul/desktop-next/release/ci-windows-x64/soul-next-packages-windows-2022-80e9adb6b8c96d871381b652816c430a4dfed880/Soul-Next-0.20.0-alpha.2-win-x64.exe)。Mac Intel 与其他 CI 原生包可从 [构建产物](https://github.com/kidcrazequ/AI-avatar/actions/runs/38035558749) 获取；远程 artifacts 保留 7 天，三平台证据均已保存到本机。Windows 安装包已下载，SHA-256 与原生实际安装的 EXE 一致。
 
 | 安装包 | SHA-256 |
 | --- | --- |

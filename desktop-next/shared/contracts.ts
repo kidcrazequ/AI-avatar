@@ -46,6 +46,8 @@ export interface DesktopAPI {
   resources: ResourceAPI;
   tasks: TaskAPI;
   workflows: WorkflowAPI;
+  integrations: IntegrationAPI;
+  settings: SettingsAPI;
 }
 
 export interface ExpertRecord extends Expert {
@@ -134,7 +136,7 @@ export interface WireCall { id: string; type: 'function'; function: { name: stri
 export interface WireMessage { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_calls?: WireCall[]; tool_call_id?: string; reasoning_content?: string }
 export interface TaskUsage { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number }
 export interface TaskRound { id: string; member: number; kind: 'normal' | 'repair'; state: 'started' | 'done' | 'unknown' | 'failed'; text: string; reasoning?: string; calls: WireCall[]; usage?: TaskUsage }
-export interface TaskApproval { id: string; taskId: string; expertId: string; state: 'pending' | 'approved' | 'rejected' | 'cancelled'; requested: string; resolved?: string; destination: string; content: string; hash: string; note: string; callId: string; roundId: string }
+export interface TaskApproval { id: string; taskId: string; expertId: string; state: 'pending' | 'approved' | 'rejected' | 'cancelled'; requested: string; resolved?: string; destination: string; content: string; hash: string; note: string; callId: string; roundId: string; kind?: 'tool'; execution?: 'started' | 'done'; result?: string }
 export interface TaskCheckpoint { member: number; wire: WireMessage[]; calls: WireCall[]; callIndex: number; repairing: boolean; memberRounds: number }
 export interface TaskRecord { id: string; title: string; expertId: string; groupId: string; owner: string; status: TaskStatus; created: string; updated: string; project: ResourceProject | null; members: TaskMember[]; messages: TaskMessage[]; events: TaskEvent[]; approvals: TaskApproval[]; rounds: TaskRound[]; checkpoint: TaskCheckpoint; artifacts: Array<{ path: string; hash: string }>; error: string; workflow?: { id: string; runId: string; name: string; version: number } }
 export type TaskView = Omit<TaskRecord, 'checkpoint' | 'members'> & { members: Array<Pick<TaskMember, 'expertId' | 'name' | 'avatar' | 'model' | 'directory'>> };
@@ -175,3 +177,6 @@ export interface WorkflowAPI {
   apiToken(id: string): Promise<string>;
   onChanged(listener: () => void): () => void;
 }
+
+export type { IntegrationSnapshot, PermissionConfig, ConnectorInput, ConnectorView, ChannelView, IMSession, IMEvent, AppPreferences, SettingsSnapshot } from './integrations';
+import type { IntegrationAPI, SettingsAPI } from './integrations';

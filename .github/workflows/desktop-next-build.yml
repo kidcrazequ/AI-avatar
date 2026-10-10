@@ -53,6 +53,8 @@ jobs:
         run: npm run verify:tasks
       - name: Verify workflow versions, triggers and crash recovery
         run: npm run verify:workflows
+      - name: Verify connectors, IM pairing, permissions and settings
+        run: npm run verify:integrations
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
       - name: Upload installation evidence

@@ -13,6 +13,8 @@ export const taskTools = [
   tool('read_skill', '读取当前专家启用的技能原文。', { id: string }, ['id']),
   tool('read_project_file', '读取选定工作目录下的 Markdown、文本、CSV、JSON 文件，路径必须相对。', { file: string }, ['file']),
   tool('write_artifact', '申请把成果写入工作目录的 Soul-Outputs/任务ID/ 下。必须等待用户审批，只能新建文件。', { file: string, content: string }, ['file', 'content']),
+  tool('list_connector_tools', '列出当前专家已连接的外部工具，返回连接器 ID、名称与能力。', {}, []),
+  tool('call_connector_tool', '申请调用当前专家连接器的工具，必须等待用户审批。参数结构参考工具目录。', { connectorId: string, name: string, arguments: { type: 'object' } }, ['connectorId', 'name', 'arguments']),
 ];
 export function safeTaskPath(root: string, relative: string): string {
   if (!path.isAbsolute(root) || !fs.existsSync(root) || !fs.statSync(root).isDirectory() || fs.lstatSync(root).isSymbolicLink()) throw new Error('工作目录不存在或是符号链接');

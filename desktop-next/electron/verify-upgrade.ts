@@ -45,6 +45,7 @@ export async function verifyUpgrade(window: BrowserWindow, updates: UpdateManage
       try { await updates.check(); if (mode === 'corrupt') await updates.download(); }
       catch { /* This scenario intentionally exercises a rejected network response. */ }
       if (updates.read().state !== 'error') throw new Error('Failed update was reported as available or current');
+      if (mode === 'corrupt' && !updates.read().error.includes('校验')) throw new Error('Corrupt installer did not reach checksum verification');
       report.rejected = updates.read();
     }
     if (mode === 'backup') report.backup = await backupProfile(profile, 'manual-upgrade');

@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import Database from 'better-sqlite3';
 import { ExpertLibrary } from '../electron/expert-library';
 import { ResourceStore } from '../electron/resources';
 import { KnowledgeLearning } from '../electron/knowledge/learning-store';
@@ -40,6 +41,7 @@ async function main() {
       assert.equal(job.state, 'completed'); assert.equal(job.parts[0].usage!.inputTokens, 50); assert.equal(job.parts[0].notes[0].quote, text.split('\n')[1]);
       assert.equal(learning!.start(preview.token, spec.scope).id, first.id);
       assert.equal(learning!.start(learning!.preview(spec).token, spec.scope).id, first.id); assert.equal(calls, 1);
+      model.label = '仅重命名模型'; assert.equal(learning!.start(learning!.preview(spec).token, spec.scope).id, first.id); assert.equal(calls, 1); model.label = '受控协议验收';
       assert.equal(resources.readDocument(collectionId, documentId, '').content, text);
       const stored = fs.readFileSync(path.join(profile, 'soul.sqlite')); assert(!stored.includes(model.apiKey));
       assert.throws(() => learning!.read(first.id, 'hr-expert'), /范围/);
@@ -48,6 +50,12 @@ async function main() {
       assert.equal(learning!.read(first.id, spec.scope).parts[0].notes[0].quote, text.split('\n')[1]);
       learning!.close(); learning = new KnowledgeLearning(profile, resources, { resolve: () => model }, good, () => {});
       assert.equal(learning.read(first.id, spec.scope).version, preview.version); assert.equal(calls, 1);
+      learning.close();
+      const db = new Database(path.join(profile, 'soul.sqlite')); const storedJob = JSON.parse((db.prepare('SELECT value FROM knowledge_learning_v1 WHERE id=?').get(first.id) as { value: string }).value);
+      storedJob.state = 'running'; storedJob.parts[0].state = 'received'; storedJob.parts[0].notes = [];
+      db.prepare('UPDATE knowledge_learning_v1 SET value=? WHERE id=?').run(JSON.stringify(storedJob), first.id); db.close();
+      learning = new KnowledgeLearning(profile, resources, { resolve: () => model }, good, () => {});
+      assert.equal(learning.read(first.id, spec.scope).state, 'completed'); assert.equal(learning.read(first.id, spec.scope).parts[0].notes[0].quote, text.split('\n')[1]); assert.equal(calls, 1);
       resources.bind('finance-expert', []); assert.throws(() => learning!.read(first.id, spec.scope), /未绑定/); resources.bind('finance-expert', [collectionId]);
     });
     await check('Unverifiable citations are withheld and retry does not bill again', async () => {

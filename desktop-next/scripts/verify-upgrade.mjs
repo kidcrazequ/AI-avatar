@@ -39,9 +39,11 @@ const installMac = dmg => {
 };
 const executable=process.platform==='win32'?path.join(install,'Soul Next.exe'):path.join(install,'Soul Next.app/Contents/MacOS/Soul Next');
 const resources=process.platform==='win32'?path.join(install,'resources'):path.join(install,'Soul Next.app/Contents/Resources');
+// The Intel hosted runner has a virtual GPU; regular installed-app acceptance runs separately.
+const softwareRendering=process.env.GITHUB_ACTIONS==='true'&&process.platform==='darwin'&&process.arch==='x64';
 const launch=async(mode,name)=>{
  const output=path.join(evidence,`${name}.json`),log=fs.openSync(path.join(evidence,`${name}.log`),'w');
- try {await new Promise((resolve,reject)=>{const child=spawn(executable,[`--profile=${profile}`,`--verify-upgrade=${output}`,`--upgrade-mode=${mode}`,`--upgrade-feed=${feed}`],{stdio:['ignore',log,log]});const timer=setTimeout(()=>{child.kill();reject(new Error('Upgrade launch timeout'));},180000);child.once('error',e=>{clearTimeout(timer);reject(e)});child.once('exit',code=>{clearTimeout(timer);code===0?resolve():reject(new Error(`Upgrade mode ${mode} exited ${code}`))});});}
+ try {await new Promise((resolve,reject)=>{const child=spawn(executable,[...(softwareRendering?['--disable-gpu']:[]),`--profile=${profile}`,`--verify-upgrade=${output}`,`--upgrade-mode=${mode}`,`--upgrade-feed=${feed}`],{stdio:['ignore',log,log]});const timer=setTimeout(()=>{child.kill();reject(new Error('Upgrade launch timeout'));},180000);child.once('error',e=>{clearTimeout(timer);reject(e)});child.once('exit',code=>{clearTimeout(timer);code===0?resolve():reject(new Error(`Upgrade mode ${mode} exited ${code}`))});});}
  finally {fs.closeSync(log);}
  const report=JSON.parse(fs.readFileSync(output));if(!report.ok||!report.packaged)throw new Error('Installed upgrade report failed');return report;
 };
@@ -67,7 +69,7 @@ try {
  }
  const after=await launch('read','after');const restart=await launch('read','restart');if(after.version!==next||restart.version!==next)throw new Error('Updated app version did not persist');
  const artifacts=fs.readdirSync(folder).filter(n=>/\.(exe|dmg|zip)$/.test(n)).map(name=>({name,sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(folder,name))).digest('hex')}));
- const summary={ok:true,platform:process.platform,arch:process.arch,sourceSha:run('git',['rev-parse','HEAD']).trim(),from:version,to:next,before,offline,corrupt,discovered,after,restart,artifacts,automaticInstall:process.platform==='win32',scope:process.platform==='win32'?'Native Windows installed electron-updater → verified download → backup → actual NSIS replacement → two launches; unsigned internal loopback feed':'Native Mac actual updater discovery → backed up manual DMG replacement → two launches; signed automatic installation pending credentials'};
+ const summary={ok:true,platform:process.platform,arch:process.arch,softwareRendering,sourceSha:run('git',['rev-parse','HEAD']).trim(),from:version,to:next,before,offline,corrupt,discovered,after,restart,artifacts,automaticInstall:process.platform==='win32',scope:process.platform==='win32'?'Native Windows installed electron-updater → verified download → backup → actual NSIS replacement → two launches; unsigned internal loopback feed':'Native Mac actual updater discovery → backed up manual DMG replacement → two launches; signed automatic installation pending credentials'};
  fs.writeFileSync(path.join(evidence,'upgrade.json'),JSON.stringify(summary,null,2));console.log(JSON.stringify({ok:true,evidence,from:version,to:next,automaticInstall:summary.automaticInstall}));
  if(process.platform==='win32')run('powershell',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(base,'scripts/upgrade-install-win.ps1'),'-Installer',path.join(install,'Uninstall Soul Next.exe'),'-Uninstall']);
 } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

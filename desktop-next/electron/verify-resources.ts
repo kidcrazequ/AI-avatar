@@ -8,7 +8,7 @@ export async function verifyResourcePages(window: BrowserWindow, page: string, o
   const wait = async (selector: string) => window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     let attempts = 0; const poll = () => {
       if (document.querySelector(${JSON.stringify(selector)})) return document.fonts.ready.then(resolve);
-      if (++attempts > 250) return reject(new Error('Resource page did not initialize'));
+      if (++attempts > 250) return reject(new Error('Resource page did not initialize: ' + location.hash + ' selector ' + ${JSON.stringify(selector)} + ' dialogs ' + [...document.querySelectorAll('dialog')].map(item=>item.getAttribute('aria-label')).join(';') + ' alerts ' + [...document.querySelectorAll('[role="alert"],.toast')].map(item=>item.textContent).join(';')));
       setTimeout(poll, 40);
     }; poll();
   })`);
@@ -71,6 +71,9 @@ export async function verifyResourcePages(window: BrowserWindow, page: string, o
     return {collectionId:collection.id, documentId:document.id, bodySha256:resource.chunks[0].bodySha256, version:resource.chunks[0].version};
   })()`);
   await window.loadFile(page, { hash: 'expert/finance-expert/knowledge/' + encodeURIComponent(lookup.collectionId) });
+  // loadFile with only a hash change can keep the same renderer document. The
+  // fixture installed the expert via IPC, so refresh its application snapshot.
+  await new Promise<void>(resolve => { window.webContents.once('did-finish-load', () => resolve()); window.webContents.reload(); });
   await wait('.resource-filter input');
   await window.webContents.executeJavaScript(`(() => { const input = document.querySelector('.resource-filter input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'INSTALLEDLOOKUP62709'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
   await window.webContents.executeJavaScript(`new Promise((resolve,reject) => { let n=0; const poll=()=> { const rows=[...document.querySelectorAll('.resource-table tbody tr')]; if(rows.length===1 && rows[0].innerText.includes('INSTALLEDLOOKUP62709')) return resolve(); if(++n>250) return reject(new Error('Installed resource search did not render')); setTimeout(poll,40); }; poll(); })`);
@@ -80,5 +83,33 @@ export async function verifyResourcePages(window: BrowserWindow, page: string, o
   if (!preview.tail || !preview.hash || preview.overflow) throw new Error('Installed range preview lost source evidence');
   checks.push({ installedLookup: { ...lookup, run, ...preview } });
   fs.writeFileSync(path.join(path.dirname(output), 'lookup-preview-' + run + '.png'), (await window.webContents.capturePage()).toPNG());
+  await window.webContents.executeJavaScript("document.querySelector('dialog .dialog-close').click()");
+  await window.webContents.executeJavaScript("(() => {const input=document.querySelector('.resource-filter input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'');input.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  const click = async (label: string) => window.webContents.executeJavaScript(`(() => { const root = document.querySelector('dialog[open]') ?? document; const button = [...root.querySelectorAll('button')].find(item => item.textContent.trim() === ${JSON.stringify(label)}); if (!button || button.disabled) throw new Error('Installed knowledge action unavailable: ' + ${JSON.stringify(label)}); button.click(); })()`);
+  await click('导入资料'); await wait('[data-ued-node="knowledge.import"]');
+  await click('选择并导入');
+  await window.webContents.executeJavaScript(`new Promise((resolve,reject) => { let n=0; const poll=() => { if(!document.querySelector('dialog[open]') && document.body.innerText.includes('安装版来源.csv')) return resolve(); if(++n>500) return reject(new Error('Installed import did not publish')); setTimeout(poll,40); }; poll(); })`);
+  const imported = await window.webContents.executeJavaScript(`(async()=> { const api=window.soulDesktop.resources; const document=(await api.documents(${JSON.stringify(lookup.collectionId)},'finance-expert')).find(item=>item.name==='安装版来源.csv'); const versions=await api.knowledge.versions(${JSON.stringify(lookup.collectionId)},document.id.slice(8,-3),'finance-expert'); if(${run}>1 && versions.length<2) throw new Error('Imported history lost across installed launches'); return {document,versions}; })()`);
+  await click('导入记录'); await wait('[data-ued-node="knowledge.batches"]');
+  await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{let n=0;const poll=()=>{if(document.querySelector('dialog')?.innerText.includes('已完成'))return resolve();if(++n>250)return reject(new Error('Batch status not rendered'));setTimeout(poll,40)};poll()})`);
+  fs.writeFileSync(path.join(path.dirname(output), 'knowledge-batches-' + run + '.png'), (await window.webContents.capturePage()).toPNG()); await click('关闭');
+  const more = () => window.webContents.executeJavaScript("(() => {const row=[...document.querySelectorAll('.resource-table tbody tr')].find(item=>item.innerText.includes('安装版来源.csv'));const button=[...row.querySelectorAll('button')].find(item=>item.textContent==='更多');button.click();})()");
+  await more(); await wait('[data-ued-node="knowledge.document-actions"]'); await click('来源与版本'); await wait('.knowledge-hashes');
+  const diagnostic = await window.webContents.executeJavaScript(`({hash:document.querySelector('dialog').innerText.includes(${JSON.stringify(imported.versions[0].originalSha256)}), original:document.querySelector('dialog').innerText.includes('打开原件'), tables:document.querySelector('dialog').innerText.includes('物理单元格'), overflow:document.documentElement.scrollWidth>innerWidth})`);
+  if (!diagnostic.hash || !diagnostic.original || !diagnostic.tables || diagnostic.overflow) throw new Error('Installed source diagnostics incomplete');
+  if (run > 1) {
+    await window.webContents.executeJavaScript(`(() => {const select=document.querySelector('#knowledge-version'); const setter=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set; setter.call(select,${JSON.stringify(imported.versions.at(-1).version)});select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await wait('dialog .dialog-footer .primary'); await click('恢复此版本');
+    await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{let n=0;const poll=async()=>{const docs=await window.soulDesktop.resources.documents(${JSON.stringify(lookup.collectionId)},'finance-expert');if(docs.find(d=>d.id===${JSON.stringify(imported.document.id)}).sourceVersion===${JSON.stringify(imported.versions.at(-1).version)})return resolve();if(++n>250)return reject(new Error('Installed source restore failed'));setTimeout(poll,40)};poll()})`);
+  }
+  fs.writeFileSync(path.join(path.dirname(output), 'knowledge-source-' + run + '.png'), (await window.webContents.capturePage()).toPNG()); await click('关闭');
+  await more(); await wait('[data-ued-node="knowledge.document-actions"]'); await click('AI 整理'); await wait('[data-ued-node="knowledge.learning"]');
+  await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{let n=0;const poll=()=>{const button=[...document.querySelectorAll('dialog button')].find(b=>b.textContent==='预览来源与用量');if(button&&!button.disabled)return resolve();if(++n>250)return reject(new Error('Learning model not ready'));setTimeout(poll,40)};poll()})`);
+  await click('预览来源与用量'); await wait('.knowledge-learning-preview'); await click('确认用量并开始');
+  await window.webContents.executeJavaScript(`new Promise((resolve,reject)=>{let n=0;const poll=()=>{if(document.querySelector('.knowledge-learning-record')?.innerText.includes('引用已验证'))return resolve();if(++n>500)return reject(new Error('Installed independent learning did not complete'));setTimeout(poll,40)};poll()})`);
+  const learning = await window.webContents.executeJavaScript(`({source:document.querySelector('.knowledge-learning-record').innerText.includes('版本'), quote:Boolean(document.querySelector('.knowledge-learning-record blockquote')), usage:document.querySelector('.knowledge-learning-record').innerText.includes('tokens'), overflow:document.documentElement.scrollWidth>innerWidth})`);
+  if (!learning.source || !learning.quote || !learning.usage || learning.overflow) throw new Error('Installed learning lost source or usage');
+  fs.writeFileSync(path.join(path.dirname(output), 'knowledge-learning-' + run + '.png'), (await window.webContents.capturePage()).toPNG()); await click('关闭');
+  checks.push({ installedKnowledgeUI: { run, selection: 'generated CSV substituted for OS picker in isolated verification mode; real importer and renderer', diagnostic, learning, versions: imported.versions.map((item: any) => item.version), restoredHistory: run > 1 } });
   return checks;
 }

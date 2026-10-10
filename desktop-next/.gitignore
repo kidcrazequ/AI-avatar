@@ -9,3 +9,4 @@ evidence/
 build/resource-test.cjs
 build/knowledge-test.cjs
 build/lookup-test.cjs
+build/learning-test.cjs

@@ -10,7 +10,7 @@ import { ResourceStore } from './resources';
 import { verifyWorkflowPages } from './verify-workflows';
 import { verifyResourcePages } from './verify-resources';
 import { TaskRepository } from './task-repository';
-import { TaskModels } from './task-models';
+import { TaskModels, callKnowledgeModel } from './task-models';
 import { TaskRuntime } from './task-runtime';
 import { WorkflowStore } from './workflow-store';
 import { WorkflowRuntime } from './workflow-runtime';
@@ -27,6 +27,7 @@ import { migrateProfile, backupProfile } from './profile-upgrade';
 import type { UpdatePolicy } from '../shared/updates';
 import { verifyUpgrade } from './verify-upgrade';
 import { knowledgeExtensions, knowledgeLimits } from '../shared/knowledge';
+import { KnowledgeLearning } from './knowledge/learning-store';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -47,6 +48,7 @@ let resources: ResourceStore | undefined;
 let tasks: TaskRuntime | undefined;
 let taskRepository: TaskRepository | undefined;
 let models: TaskModels | undefined;
+let learning: KnowledgeLearning | undefined;
 let workflows: WorkflowRuntime | undefined;
 let permissions: Permissions | undefined;
 let connectors: ConnectorRuntime | undefined;
@@ -56,7 +58,7 @@ let wakeId: number | undefined;
 let updater: UpdateManager | undefined;
 let upgrading = false;
 let recoveringUpdate = false;
-const closeLibrary = () => { im?.close(); im = undefined; void connectors?.close(); connectors = undefined; settings?.close(); settings = undefined; permissions?.close(); permissions = undefined; workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
+const closeLibrary = () => { learning?.close(); learning = undefined; im?.close(); im = undefined; void connectors?.close(); connectors = undefined; settings?.close(); settings = undefined; permissions?.close(); permissions = undefined; workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -84,6 +86,10 @@ app.whenReady().then(async () => {
     decrypt(value) { return safeStorage.decryptString(value); },
   });
   const executionModels = verifyOutput || upgradeOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
+  learning = new KnowledgeLearning(app.getPath('userData'), resources, executionModels, verifyOutput || upgradeOutput ? async (_config, messages) => {
+    const match = /\[(\d+)\] (.+)/.exec(messages[1].content)!;
+    return { text: JSON.stringify({ notes: [{ text: '受控协议验收草案', quote: match[2], lineStart: Number(match[1]), lineEnd: Number(match[1]) }], gaps: [] }), calls: [], usage: { inputTokens: 100, outputTokens: 30 } };
+  } : callKnowledgeModel, () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:knowledge-changed'); });
   const codec = { encrypt(value: string) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); }, decrypt(value: Buffer) { return safeStorage.decryptString(value); } };
   const integrationChanged = () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:integrations-changed'); };
   permissions = new Permissions(app.getPath('userData'), id => library!.detail(id));
@@ -122,7 +128,7 @@ app.whenReady().then(async () => {
         void dialog.showMessageBox({ type: 'error', message: '更新未完成', detail: '已保留升级前备份。应用将重新启动以恢复工作；不会自动重试安装。' }).then(() => { app.relaunch(); app.exit(1); });
       }
     },
-    () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending() || resources?.knowledge.isBusy()),
+    () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending() || resources?.knowledge.isBusy() || learning?.isBusy()),
     async () => {
       upgrading = true;
       im?.close(); im = undefined;
@@ -220,8 +226,20 @@ app.whenReady().then(async () => {
   handle('resources', scope => resources!.read(scope));
   handle('knowledge-lookup', (scope, collection, request) => resources!.queryKnowledge(scope, collection, request));
   handle('knowledge-formats', () => ({ extensions: knowledgeExtensions, limits: knowledgeLimits }));
+  handle('learning-preview', input => learning!.preview(input));
+  handle('learning-start', (token, scope) => learning!.start(token, scope));
+  handle('learning-list', (collection, document, scope) => learning!.list(collection, document, scope));
+  handle('learning-read', (id, scope) => learning!.read(id, scope));
+  handle('learning-cancel', (id, scope) => learning!.cancel(id, scope));
   handle('knowledge-import', async (id, scope, kind) => {
     if (!['files', 'directory', 'zip'].includes(kind)) throw new Error('导入方式无效');
+    // Installed acceptance selects only this generated fixture. Normal mode
+    // always uses the OS picker, never renderer-supplied filesystem paths.
+    if (verifyOutput && kind === 'files') {
+      const folder = path.join(app.getPath('userData'), 'knowledge-ui-fixture'); fs.mkdirSync(folder, { recursive: true });
+      const file = path.join(folder, '安装版来源.csv'); fs.writeFileSync(file, `供应商,保修年限,验收标记\n英维克,5,IMPORTUI62709-${status.persistenceRun}\n盖鼎,2,保留原文`);
+      return resources!.knowledge.start(id, scope, [file], 'files');
+    }
     const result = await dialog.showOpenDialog(window!, kind === 'directory' ? { properties: ['openDirectory'] } : { properties: kind === 'files' ? ['openFile', 'multiSelections'] : ['openFile'], filters: [{ name: '知识资料', extensions: kind === 'zip' ? ['zip'] : knowledgeExtensions }] });
     return result.canceled ? null : resources!.knowledge.start(id, scope, result.filePaths, kind);
   });

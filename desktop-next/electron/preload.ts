@@ -78,6 +78,13 @@ const api: DesktopAPI = {
   resources: {
     lookup: { execute: (scope, collection, request) => ipcRenderer.invoke('soul-next:knowledge-lookup', scope, collection, request) },
     knowledge: {
+      learning: {
+        preview: input => ipcRenderer.invoke('soul-next:learning-preview', input),
+        start: (token, scope) => ipcRenderer.invoke('soul-next:learning-start', token, scope),
+        list: (collection, document, scope) => ipcRenderer.invoke('soul-next:learning-list', collection, document, scope),
+        read: (id, scope) => ipcRenderer.invoke('soul-next:learning-read', id, scope),
+        cancel: (id, scope) => ipcRenderer.invoke('soul-next:learning-cancel', id, scope),
+      },
       formats: () => ipcRenderer.invoke('soul-next:knowledge-formats'),
       chooseImport: (id, scope, kind) => ipcRenderer.invoke('soul-next:knowledge-import', id, scope, kind),
       batches: (id, scope) => ipcRenderer.invoke('soul-next:knowledge-batches', id, scope),

@@ -20,6 +20,7 @@ export interface SourceManifest { schema: 1; documentId: string; version: string
 export interface SourceCell { row: number; column: number; address: string; type: string; value: string | number | boolean | null; display: string; formula?: string; numberFormat?: string }
 export interface SourceTable { schema: 1; sheet: string; range: string; rows: number; columns: number; cells: SourceCell[]; merges: Array<{ startRow: number; startColumn: number; endRow: number; endColumn: number }>; blocks: Array<{ startRow: number; endRow: number; headerRow: number; columns: Array<{ column: number; key: string; title: string; dtype: string }> }>; encoding?: string; delimiter?: string }
 export interface KnowledgeAPI {
+  learning: import('./knowledge-learning').LearningAPI;
   formats(): Promise<{ extensions: string[]; limits: typeof knowledgeLimits }>;
   chooseImport(collectionId: string, scope: string, kind: 'files' | 'directory' | 'zip'): Promise<KnowledgeImportBatch | null>;
   batches(collectionId: string, scope: string): Promise<KnowledgeImportBatch[]>;

@@ -73,6 +73,12 @@ export class ResourceStore {
     this.lookup = new KnowledgeLookup(profileRoot, knowledgeWorker ? path.join(path.dirname(knowledgeWorker), 'lookup-worker.cjs') : undefined);
   }
   close(): void { this.lookup.close(); this.knowledge.close(); this.db.close(); }
+  captureKnowledgeFile(scope: string, collectionId: string, id: string): KnowledgeSource {
+    const document = this.documents(collectionId, scope).find(item => item.id === id);
+    if (!document) throw new Error('资料不存在或无权访问');
+    const file = this.readDocument(collectionId, id, scope);
+    return this.lookup.freeze(`${collectionId}/${id}`, document.name, file.source, file.content, document.sourceVersion ? this.knowledge.capture(collectionId, id, document.sourceVersion, scope) : undefined);
+  }
   captureKnowledge(scope: string, collectionId = ''): KnowledgeSource[] {
     this.scope(scope);
     const ids = collectionId ? [collectionId] : scope ? this.bindings(scope) : this.collections().map(item => item.id);

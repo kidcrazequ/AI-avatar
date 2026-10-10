@@ -62,3 +62,22 @@ export const callSoulModel: ModelCall = async (config, messages, signal, chunk) 
       reject, { tools: taskTools, signal, maxTokens: 4096 }).catch(reject);
   });
 };
+
+// One request only: a network failure can still be billable, so derived learning
+// must not inherit SDK retries or the task engine's tools and repair rounds.
+export const callKnowledgeModel: ModelCall = async (config, messages, signal) => {
+  const anthropic = config.protocol === 'anthropic';
+  const base = config.baseUrl.replace(/\/$/, '');
+  const response = await fetch(anthropic ? base.replace(/\/v1$/, '') + '/v1/messages' : base + '/chat/completions', {
+    method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(300_000)]),
+    headers: anthropic ? { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' } : { 'content-type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
+    body: JSON.stringify(anthropic ? { model: config.model, max_tokens: 2048, system: messages.filter(m => m.role === 'system').map(m => m.content).join('\n'), messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) } : { model: config.model, max_tokens: 2048, stream: false, messages }),
+  });
+  if (!response.ok) throw new Error(`整理模型请求失败 (${response.status})`);
+  const value = await response.json() as any;
+  const text = anthropic ? (value.content ?? []).filter((item: any) => item.type === 'text').map((item: any) => item.text).join('') : value.choices?.[0]?.message?.content;
+  const calls = anthropic ? (value.content ?? []).filter((item: any) => item.type === 'tool_use') : value.choices?.[0]?.message?.tool_calls ?? [];
+  if (typeof text !== 'string' || text.length > 200_000 || calls.length) throw new Error('整理模型响应无效');
+  const usage = value.usage;
+  return { text, calls: [], usage: usage ? { inputTokens: usage.input_tokens ?? usage.prompt_tokens ?? 0, outputTokens: usage.output_tokens ?? usage.completion_tokens ?? 0 } : undefined };
+};

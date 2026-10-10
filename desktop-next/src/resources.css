@@ -30,3 +30,17 @@
 [data-ued-node="resource.memory"] .resource-tabs button{font-size:12px}
 @media(max-width:1300px){.resource-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.skill-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.knowledge-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .resource-page .flex{display:flex;align-items:center;gap:8px}.resource-page .resource-error{color:var(--error);margin:16px 0}.resource-page .settings-markdown strong{font-weight:700}.settings-markdown .md-heading{display:block;font-weight:700}.resource-table .doc-actions{display:flex;gap:4px;flex-wrap:wrap}.resource-table .doc-actions .btn{padding:0 5px}.resource-table th:last-child{width:160px}.resource-restore{margin-top:16px}.project-editor-form .form-error{flex-shrink:0}.project-editor-form{overflow:auto}.resource-loading{margin-top:24px}.resource-upload-copy{overflow-wrap:anywhere}.knowledge-bound .resource-card{width:100%}.resource-page .resource-detail-header .btn{flex-shrink:0}
+.knowledge-dialog h3{font-size:14px;line-height:20px;margin:24px 0 12px;font-weight:600}
+.knowledge-dialog>p{font-size:13px;line-height:20px;margin:12px 0;overflow-wrap:anywhere}
+.knowledge-dialog .resource-table{margin:16px 0}
+.knowledge-dialog .resource-table th:last-child{width:50%}
+.knowledge-dialog .resource-table td{overflow-wrap:anywhere;vertical-align:top}
+.knowledge-dialog .field select{width:100%;min-width:0}
+.knowledge-hashes{font-size:12px;line-height:20px;margin:16px 0}
+.knowledge-hashes dt{color:var(--secondary);margin-top:8px}
+.knowledge-hashes dd{margin:0;overflow-wrap:anywhere;font-family:monospace}
+.knowledge-range{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.knowledge-range input{width:100%}
+.knowledge-learning-preview,.knowledge-learning-record{border:1px solid var(--border);border-radius:var(--card-radius);padding:16px;margin-top:16px;font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.knowledge-learning-preview p,.knowledge-learning-record p{margin:8px 0}
+.knowledge-learning-record blockquote{border-left:2px solid var(--border);margin:8px 0;padding:0 12px;color:var(--secondary);white-space:pre-wrap}

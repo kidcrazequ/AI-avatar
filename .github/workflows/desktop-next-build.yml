@@ -61,6 +61,8 @@ jobs:
         run: npm run verify:tasks
       - name: Verify unified lookup, complete tables, scope and pinned task recovery
         run: npm run verify:lookup
+      - name: Verify independent learning, provenance and billing checkpoints
+        run: npm run verify:learning
       - name: Verify workflow versions, triggers and crash recovery
         if: inputs.scope != 'knowledge'
         run: npm run verify:workflows

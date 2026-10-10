@@ -1,0 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const executable = process.platform === 'win32' ? path.join(root, 'release/win-unpacked/Soul Next.exe') : path.join(root, `release/mac${process.arch === 'arm64' ? '-arm64' : ''}/Soul Next.app/Contents/MacOS/Soul Next`);
+const resources = process.platform === 'win32' ? path.join(root, 'release/win-unpacked/resources') : path.resolve(path.dirname(executable), '../Resources');
+const worker = path.join(resources, 'app.asar.unpacked/dist-electron/knowledge-worker.cjs');
+const entry = path.join(root, 'build/learning-test.cjs');
+if (!fs.existsSync(path.join(path.dirname(worker), 'lookup-worker.cjs'))) throw new Error('Build the native lookup worker first');
+await build({ entryPoints: [path.join(root, 'tests/knowledge-learning.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: entry, external: ['better-sqlite3', './retriever.cjs', './model.cjs'] });
+const output = path.join(root, `evidence/learning-${process.platform}-${process.arch}.json`);
+const result = spawnSync(executable, [entry, path.join(resources, 'soul-resources'), output, worker, ...process.argv.slice(2)], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 10 * 60_000 });
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+if (result.error || result.status !== 0) throw result.error ?? new Error(`Knowledge lookup verification exited ${result.status}`);

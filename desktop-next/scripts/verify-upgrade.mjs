@@ -19,7 +19,7 @@ const folder = path.join(base,'release-upgrade');
 const stamp = Date.now();
 const evidence = path.join(base,'evidence',`upgrade-${process.platform}-${process.arch}-${stamp}`);
 const install = process.platform==='win32'?path.join(process.env.LOCALAPPDATA,`Soul Next Upgrade ${stamp}`):path.join(os.homedir(),'Applications',`Soul Next Upgrade ${stamp}`);
-const profile = path.join(install,'upgrade data');
+const profile = process.platform==='win32' ? path.join(process.env.LOCALAPPDATA,`Soul Next Upgrade Data ${stamp}`,'测试用户 数据') : path.join(install,'upgrade data');
 fs.mkdirSync(evidence,{recursive:true});fs.mkdirSync(profile,{recursive:true});
 let behavior='normal';
 const server = http.createServer((req,res)=>{

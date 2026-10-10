@@ -1,42 +1,51 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { DesktopAPI, RuntimeStatus } from '../shared/contracts';
+import type { ArchiveFile, DesktopAPI, ExpertDetail, LibrarySnapshot, RuntimeStatus } from '../shared/contracts';
+import { Icon } from './primitives';
+import { Management } from './management';
+import { ExpertHome } from './expert-home';
+import { ArchiveDialog } from './expert-dialogs';
 import './style.css';
 
 declare global { interface Window { soulDesktop: DesktopAPI } }
+const currentExpert = () => location.hash.startsWith('#expert/') ? decodeURIComponent(location.hash.slice(8)) : '';
+const globalItems = [['users', '专家管理'], ['chat', '任务对话'], ['bot', 'IM'], ['flow', '工作流'], ['board', '任务看板'], ['project', '公开项目'], ['book', '知识库']];
 
 function App() {
   const [status, setStatus] = useState<RuntimeStatus>();
-  const [error, setError] = useState<string>();
-  useEffect(() => { window.soulDesktop.readStatus().then(setStatus).catch(cause => setError(String(cause))); }, []);
-  return <div className="shell" data-runtime-ready={Boolean(status)} data-ued-node="soul-v3.shell">
-    <nav aria-label="主导航" data-ued-node="soul-v3.global-nav">
-      <img className="brand" src="./assets/soul-avatar.png" alt="Soul" />
-      <div className="nav-active" aria-current="page"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 5v1"/></svg>专家</div>
-      <span className="nav-bottom">S</span>
-    </nav>
-    <main data-ued-node="soul-v3.management">
-      <header><h1>专家管理</h1><span className="badge">开发验证版</span></header>
-      <p className="description">Soul 的专业能力，从每一位专家开始。</p>
-      {error && <p role="alert" data-runtime-error>{error}</p>}
-      {!status && !error && <p>正在读取专家包…</p>}
-      {status && <>
-        <div className="tabs"><span>专家包 <small>{status.experts.length}</small></span></div>
-        <div className="grid" data-ued-node="soul-v3.management.cards">
-          {status.experts.map(expert => <article key={expert.id} data-expert-id={expert.id}>
-            <div className="card-top"><div className="avatar">{expert.name.slice(0, 1)}</div><div><h2>{expert.name}</h2><p>{expert.domain}</p></div></div>
-            <p className="card-description">{expert.description}</p>
-            <footer><span>{expert.knowledgeFiles} 份知识文件</span><span>随安装包提供</span></footer>
-          </article>)}
-        </div>
-        <section className="runtime" aria-label="运行环境验证">
-          <div>Soul {status.version} · {status.platform} / {status.arch}</div>
-          <div>{status.checks.filter(check => check.ok).length} / {status.checks.length} 项运行检查通过 · {status.resources.files} 个资源文件</div>
-          {status.checks.filter(check => !check.ok).map(check => <p className="error" key={check.name}>{check.name}：{String(check.detail)}</p>)}
-        </section>
-      </>}
-    </main>
+  const [library, setLibrary] = useState<LibrarySnapshot>();
+  const [error, setError] = useState('');
+  const [id, setId] = useState(currentExpert);
+  const [expert, setExpert] = useState<ExpertDetail>();
+  const [file, setFile] = useState<ArchiveFile>();
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const notice = useCallback((message: string) => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4000); }, []);
+  useEffect(() => {
+    Promise.all([window.soulDesktop.readStatus(), window.soulDesktop.readLibrary()]).then(([runtime, snapshot]) => { setStatus(runtime); setLibrary(snapshot); }).catch(cause => setError(String(cause)));
+    const navigate = () => { setId(currentExpert()); window.scrollTo(0, 0); };
+    window.addEventListener('hashchange', navigate);
+    return () => { window.removeEventListener('hashchange', navigate); clearTimeout(toastTimer.current); };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (!id) { setExpert(undefined); return; }
+    setExpert(undefined);
+    window.soulDesktop.readExpert(id).then(detail => { if (active) setExpert(detail); }).catch(cause => { if (active) { notice(String(cause)); location.hash = ''; } });
+    return () => { active = false; };
+  }, [id, library, notice]);
+  const back = () => { location.hash = ''; };
+  const archive = async (expertId: string, path: string) => { try { setFile(await window.soulDesktop.readArchive(expertId, path)); } catch (cause) { notice(String(cause)); } };
+  const saved = (snapshot: LibrarySnapshot) => setLibrary(snapshot);
+  return <div className="shell" data-runtime-ready={Boolean(status && library)} data-ued-node="shell.desktop">
+    <aside className="rail" aria-label="主导航" data-ued-node="shell.global-nav"><div className="brand"><img src="./assets/soul-avatar.png" alt="Soul" /></div><nav>{globalItems.map(([icon, label], index) => <button key={label} className={`rail-tab ${index === 0 ? 'active' : ''}`} aria-label={label} aria-current={index === 0 ? 'page' : undefined} title={label} data-tip={label} onClick={index === 0 ? back : () => notice('该功能暂未开放')}><Icon name={icon} /></button>)}</nav><div className="rail-footer">{[['gauge', '用量'], ['settings', '设置']].map(([icon, label]) => <button key={label} className="rail-tab" aria-label={label} title={label} data-tip={label} onClick={() => notice('该功能暂未开放')}><Icon name={icon} /></button>)}</div></aside>
+    {error && <main className="management"><h1>无法读取专家资料</h1><p role="alert" data-runtime-error>{error}</p></main>}
+    {!library && !error && <main className="management"><p>正在读取专家资料…</p></main>}
+    {library && !id && <Management {...{ library, saved, notice, archive }} openExpert={expertId => { location.hash = `expert/${encodeURIComponent(expertId)}`; }} />}
+    {library && id && !expert && <main className="management"><p>正在读取专家档案…</p></main>}
+    {library && expert && <ExpertHome key={expert.id} {...{ expert, library, saved, notice, archive, back }} />}
+    {file && <ArchiveDialog file={file} onClose={() => setFile(undefined)} />}
+    {toast && <div className="toast" role="status">{toast}</div>}
   </div>;
 }
-
 createRoot(document.getElementById('root')!).render(<App />);

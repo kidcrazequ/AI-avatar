@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { probeRuntime } from './runtime-probe';
+import { ExpertLibrary } from './expert-library';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -15,6 +16,8 @@ app.setPath('userData', profile ?? path.join(app.getPath('appData'), 'SoulNextVa
 fs.mkdirSync(app.getPath('userData'), { recursive: true });
 let window: BrowserWindow | null = null;
 let timer: NodeJS.Timeout | undefined;
+let library: ExpertLibrary | undefined;
+const closeLibrary = () => { library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -31,6 +34,7 @@ process.on('unhandledRejection', fail);
 app.whenReady().then(async () => {
   const resourceRoot = app.isPackaged ? path.join(process.resourcesPath, 'soul-resources') : path.join(app.getAppPath(), 'build/resources');
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
+  library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
   const page = path.join(__dirname, '../dist/index.html');
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
@@ -38,9 +42,53 @@ app.whenReady().then(async () => {
     backgroundColor: '#ffffff', show: false, title: 'Soul Next', enableLargerThanScreen: Boolean(verifyOutput),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  ipcMain.handle('soul-next:status', event => {
-    if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url !== pageUrl) throw new Error('Untrusted IPC sender');
-    return status;
+  const handle = (channel: string, listener: (...args: any[]) => unknown) => ipcMain.handle(`soul-next:${channel}`, (event, ...args) => {
+    if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url.split('#')[0] !== pageUrl) throw new Error('Untrusted IPC sender');
+    return listener(...args);
+  });
+  handle('status', () => status);
+  handle('library', () => library!.list());
+  handle('expert', id => library!.detail(id));
+  handle('archive', (id, file) => library!.archive(id, file));
+  handle('install', id => library!.installExpert(id));
+  handle('create', input => library!.createExpert(input));
+  handle('rename', (id, name) => library!.renameExpert(id, name));
+  handle('remove', id => library!.removeExpert(id));
+  handle('restore', () => library!.restoreExperts());
+  handle('import', token => library!.importExpert(token));
+  handle('discard-import', token => library!.discardImport(token));
+  handle('save-group', input => library!.saveGroup(input));
+  handle('remove-group', id => library!.removeGroup(id));
+  handle('create-role', input => library!.createRole(input));
+  const directory = async () => {
+    const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  };
+  handle('choose-import', async () => { const source = await directory(); return source ? library!.previewImport(source) : null; });
+  handle('choose-directory', directory);
+  handle('choose-role-text', async () => {
+    const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: '角色 Markdown', extensions: ['md', 'txt'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const file = result.filePaths[0];
+    if (fs.statSync(file).size > 8000 * 4) throw new Error('角色段落过长，请控制在 8000 个字符以内');
+    return fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
+  });
+  handle('save-role-template', async () => {
+    const result = await dialog.showSaveDialog(window!, { defaultPath: 'Soul角色草案.md', filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (result.canceled || !result.filePath) return false;
+    fs.copyFileSync(path.join(resourceRoot, 'templates/soul-template.md'), result.filePath);
+    return true;
+  });
+  handle('choose-avatar', async () => {
+    const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: '头像', extensions: ['png', 'jpg', 'jpeg'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const file = result.filePaths[0];
+    if (fs.statSync(file).size > 2 * 1024 * 1024) throw new Error('头像文件不能超过 2 MB');
+    const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) throw new Error('无法读取头像图片');
+    const png = image.resize({ width: 512, height: 512 }).toPNG();
+    if (png.length > 2 * 1024 * 1024) throw new Error('头像图片不能超过 2 MB');
+    return `data:image/png;base64,${png.toString('base64')}`;
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
@@ -60,13 +108,14 @@ app.whenReady().then(async () => {
   })`);
   fs.mkdirSync(path.dirname(verifyOutput), { recursive: true });
   const renderChecks: unknown[] = [];
+  const homeRenderChecks: unknown[] = [];
   for (const [width, height] of [[1440, 900], [1280, 800]]) {
     window.setContentSize(width, height);
     await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     const rendered = await window.webContents.executeJavaScript(`({
       width: innerWidth, height: innerHeight, title: document.querySelector('h1')?.textContent,
       cards: document.querySelectorAll('[data-expert-id]').length,
-      railWidth: document.querySelector('nav')?.getBoundingClientRect().width,
+      railWidth: document.querySelector('.rail')?.getBoundingClientRect().width,
       overflow: document.documentElement.scrollWidth > innerWidth,
       ipc: typeof window.soulDesktop?.readStatus === 'function',
       nodeDisabled: typeof window.require === 'undefined',
@@ -78,14 +127,40 @@ app.whenReady().then(async () => {
     const shot = await window.webContents.capturePage();
     fs.writeFileSync(path.join(path.dirname(verifyOutput), `window-${width}x${height}-${status.persistenceRun}.png`), shot.toPNG());
   }
+  await window.loadFile(page, { hash: 'expert/finance-expert' });
+  await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+    let attempts = 0;
+    const poll = () => {
+      if (document.querySelector('[data-ued-node="expert.home"]')) return document.fonts.ready.then(resolve);
+      if (++attempts > 200) return reject(new Error('Expert library or detail IPC did not initialize'));
+      setTimeout(poll, 50);
+    }; poll();
+  })`);
+  for (const [width, height] of [[1440, 900], [1280, 800]]) {
+    window.setContentSize(width, height);
+    await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    const rendered = await window.webContents.executeJavaScript(`(() => {
+      const box = selector => { const rect = document.querySelector(selector).getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }; };
+      return { width: innerWidth, height: innerHeight, name: document.querySelector('.identity-name h2').textContent,
+        rail: box('.rail'), sidebar: box('.expert-sidebar'), page: box('.home-page'), identity: box('.identity'),
+        work: box('[data-ued-node="expert.work-record"]'), memory: box('[data-ued-node="expert.memory-summary"]'),
+        skills: document.querySelectorAll('.badges .badge').length, archives: document.querySelectorAll('.archive').length,
+        overflow: document.documentElement.scrollWidth > innerWidth, fontLoaded: document.fonts.check('13px "DM Sans"') };
+    })()`);
+    if (rendered.name !== library.detail('finance-expert').name || rendered.rail.width !== 64 || rendered.sidebar.width !== 240 || rendered.sidebar.x !== 64 || rendered.page.width !== (width === 1440 ? 960 : 896) || rendered.page.x !== (width === 1440 ? 392 : 344) || rendered.identity.height !== 210 || rendered.work.y !== 280 || rendered.work.height !== 348 || rendered.memory.y !== 644 || rendered.overflow || !rendered.fontLoaded || rendered.skills !== library.detail('finance-expert').skills.length || rendered.archives !== library.detail('finance-expert').archives.length) throw new Error(`Installed home check failed: ${JSON.stringify(rendered)}`);
+    homeRenderChecks.push(rendered);
+    fs.writeFileSync(path.join(path.dirname(verifyOutput), `home-${width}x${height}-${status.persistenceRun}.png`), (await window.webContents.capturePage()).toPNG());
+  }
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },
-    versions: process.versions, renderChecks, status,
+    versions: process.versions, renderChecks, homeRenderChecks, status,
   }, null, 2));
+  closeLibrary();
   app.exit(ok ? 0 : 1);
 }).catch(fail);
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', closeLibrary);

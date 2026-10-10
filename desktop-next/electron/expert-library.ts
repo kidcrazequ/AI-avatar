@@ -155,11 +155,12 @@ export class ExpertLibrary {
   private record(pack: Pack, instance?: Instance): ExpertRecord {
     const root = instance ? resolveUnderRoot(this.avatarsRoot, instance.id) : pack.root;
     const files = packFiles(root);
+    const config = instance ? JSON.parse(readText(resolveUnderRoot(root, 'avatar.config.json'))) : {};
     return {
       id: instance?.id ?? pack.id, templateId: pack.id, name: instance?.name ?? displayName(pack.meta.name),
       description: instance?.description ?? pack.meta.description, role: pack.meta.name.replace(/[（(][^）)]+[）)]$/, ''),
       domain: pack.meta.domain, version: pack.meta.version, author: pack.meta.author, redline: pack.meta.redline,
-      defaultModel: pack.meta.defaultModel ?? 'Auto', avatar: avatar(root), source: pack.source,
+      defaultModel: config.defaultModel ?? pack.meta.defaultModel ?? 'Auto', avatar: avatar(root), source: pack.source,
       sourceLabel: instance ? `avatars/${instance.id}` : `${pack.source === 'custom' ? 'role-drafts' : 'expert-packs'}/${pack.id}`,
       installed: Boolean(instance), installedAt: instance?.installed_at ?? null, draft: pack.meta.draft === true,
       installable: pack.meta.installable !== false, knowledgeFiles: files.filter(item => item.relative.startsWith('knowledge' + path.sep) && item.relative.endsWith('.md')).length,
@@ -190,6 +191,30 @@ export class ExpertLibrary {
     const pack = this.packs().find(item => item.id === (instance?.template_id ?? id));
     if (!pack) throw new Error('专家不存在');
     return { expert: this.record(pack, instance), root: instance ? resolveUnderRoot(this.avatarsRoot, id) : pack.root, pack };
+  }
+  resourceLocation(id: string, writable = false): { root: string; expert: ExpertRecord } {
+    portableId(id);
+    if (this.db.prepare('SELECT id FROM hidden_experts WHERE id=?').get(id)) throw new Error('专家已移除或不存在');
+    const { root, expert } = this.resolve(id);
+    if (writable && !expert.installed) throw new Error('请先安装专家，再保存独立资源与配置');
+    return { root, expert };
+  }
+  saveSettings(id: string, name: string, description: string, model: string): LibrarySnapshot {
+    const value = this.availableName(name, id);
+    const intro = field(description, '简介', 2000, true);
+    const defaultModel = field(model, '模型偏好', 120);
+    const { root } = this.resourceLocation(id, true);
+    const file = resolveUnderRoot(root, 'avatar.config.json');
+    const previous = fs.readFileSync(file);
+    const config = JSON.parse(previous.toString('utf8'));
+    const temporary = resolveUnderRoot(root, `.config-${crypto.randomUUID()}.json`);
+    try {
+      fs.writeFileSync(temporary, JSON.stringify({ ...config, name: value, description: intro, defaultModel }, null, 2));
+      fs.renameSync(temporary, file);
+      try { this.db.prepare('UPDATE experts SET name=?,description=? WHERE id=? AND archived=0').run(value, intro, id); }
+      catch (error) { fs.writeFileSync(file, previous); throw error; }
+    } finally { fs.rmSync(temporary, { force: true }); }
+    return this.list();
   }
   detail(id: string): ExpertDetail {
     const { expert, root } = this.resolve(id);

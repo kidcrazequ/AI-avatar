@@ -43,6 +43,7 @@ export interface DesktopAPI {
   chooseRoleText(): Promise<string | null>;
   saveRoleTemplate(): Promise<boolean>;
   chooseDirectory(): Promise<string | null>;
+  resources: ResourceAPI;
 }
 
 export interface ExpertRecord extends Expert {
@@ -85,3 +86,37 @@ export interface LibrarySnapshot { experts: ExpertRecord[]; groups: ExpertGroup[
 export interface CreateExpertInput { templateId: string; name: string; description: string; avatar: string | null }
 export interface ImportPreview { token: string; expert: ExpertRecord; files: number; bytes: number }
 export interface RoleInput { name: string; description: string; identity: string; style: string; workflow: string; avatar?: string | null }
+
+export interface ProjectSource { type: 'local' | 'git'; path: string }
+export interface ResourceProject { id: string; name: string; description: string; expertId: string; sources: ProjectSource[]; updated: string }
+export interface KnowledgeCollection { id: string; title: string; source: string; documents: number; builtin: boolean; writable: boolean }
+export interface ResourceDocument { id: string; name: string; path: string; bytes: number; placeholder: boolean }
+export interface ResourceFile extends ArchiveFile { revision: string }
+export interface SkillItem extends SkillReference { key: string; description: string; title: string; category: string; configured: boolean }
+export interface ResourceSnapshot { projects: ResourceProject[]; collections: KnowledgeCollection[]; bindings: string[]; skills: SkillItem[]; memory: ResourceFile | null; settings: ResourceFile | null; versions: ResourceVersion[]; quality: QualityReport | null }
+export interface ResourceVersion { id: number; at: string; reason: string; file: string; content: string }
+export interface QualityReport { at: string; checks: Array<{ name: string; ok: boolean; source: string }>; cases: ResourceDocument[]; knowledge: number; professional: '未执行' }
+export interface DocumentInput { collectionId: string; id: string; name: string; content: string; revision: string }
+export interface ResourceAPI {
+  read(expertId: string): Promise<ResourceSnapshot>;
+  saveProject(input: ResourceProject, scope: string): Promise<void>;
+  removeProject(id: string, scope: string): Promise<void>;
+  saveCollection(id: string, title: string): Promise<void>;
+  removeCollection(id: string): Promise<void>;
+  restoreTrash(scope: string): Promise<void>;
+  bind(expertId: string, ids: string[]): Promise<void>;
+  documents(collectionId: string, scope: string): Promise<ResourceDocument[]>;
+  readDocument(collectionId: string, id: string, scope: string): Promise<ResourceFile>;
+  saveDocument(input: DocumentInput, scope: string): Promise<void>;
+  removeDocument(collectionId: string, id: string, revision: string, scope: string): Promise<void>;
+  chooseText(kind: 'document' | 'skill'): Promise<{ name: string; content: string } | null>;
+  saveMemory(expertId: string, text: string, revision: string, group: string): Promise<void>;
+  restoreVersion(expertId: string, id: number, revision: string): Promise<void>;
+  readSkill(expertId: string, key: string): Promise<ResourceFile>;
+  configureSkill(expertId: string, key: string, enabled: boolean): Promise<void>;
+  uploadSkill(expertId: string, text: string): Promise<void>;
+  saveSettings(expertId: string, name: string, description: string, model: string): Promise<LibrarySnapshot>;
+  saveSoul(expertId: string, text: string, revision: string): Promise<void>;
+  checkQuality(expertId: string): Promise<QualityReport>;
+  readCase(expertId: string, file: string): Promise<ResourceFile>;
+}

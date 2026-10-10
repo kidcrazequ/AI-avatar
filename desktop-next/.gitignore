@@ -5,3 +5,4 @@ build/resources/
 build/expert-library-test.cjs
 release/
 evidence/
+build/resource-test.cjs

@@ -1,18 +1,18 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFile, type ChildProcess } from 'node:child_process';
 import { WorkflowStore, nextScheduled, workflowVersion } from './workflow-store';
 import { TaskRuntime } from './task-runtime';
 import { required, now } from './task-repository';
 import type { WorkflowConfig, WorkflowRecord, WorkflowRun, WorkflowSnapshot, WorkflowSpec } from '../shared/contracts';
-const git = promisify(execFile);
 const activeStates = ['pending', 'running', 'waiting', 'interrupted', 'queued'];
 interface SecretCodec { encrypt(value: string): Buffer; decrypt(value: Buffer): string }
 export class WorkflowRuntime {
   private timer?: NodeJS.Timeout;
   private server?: http.Server;
   private closing = false;
+  private closed?: Promise<void>;
+  private gitChildren = new Set<ChildProcess>();
   private ticking = false;
   private lastTick = Date.now();
   private api = { url: '', error: '' };
@@ -118,7 +118,7 @@ export class WorkflowRuntime {
                 catch (error) { trigger.error = error instanceof Error ? error.message : String(error); this.store.put(flow); this.recordFailure(flow, `timer:${trigger.id}:${due}`, '定时', trigger.error); }
               });
             } else if (trigger.type === 'event') {
-              const result = await git('git', ['-C', flow.config.directory, 'rev-parse', '--verify', `refs/heads/${trigger.branch}`], { timeout: 3000, maxBuffer: 4096 });
+              const result = await this.readGit(flow.config.directory, trigger.branch);
               if (this.closing) return;
               // The config may have changed while Git was being read.
               const current = this.store.get(flow.id); if (current.version !== flow.version || !current.config.enabled) continue;
@@ -170,5 +170,20 @@ export class WorkflowRuntime {
       reply(202, { runId, taskId: this.store.run(runId).taskId, status: this.read().runs.find(run => run.id === runId)?.status });
     } catch { if (!response.headersSent) reply(400, { error: '请求无效或幂等键已用于其他内容' }); } finally { if (deadline) clearTimeout(deadline); }
   }
-  close(): void { this.closing = true; if (this.timer) clearInterval(this.timer); this.server?.close(); this.server?.closeAllConnections(); }
+  private readGit(directory: string, branch: string): Promise<{ stdout: string }> {
+    return new Promise((resolve, reject) => {
+      const child = execFile('git', ['-C', directory, 'rev-parse', '--verify', `refs/heads/${branch}`], { timeout: 3000, maxBuffer: 4096 }, (error, stdout) => error ? reject(error) : resolve({ stdout }));
+      this.gitChildren.add(child);
+      child.once('close', () => this.gitChildren.delete(child));
+    });
+  }
+  close(): Promise<void> {
+    if (this.closed) return this.closed;
+    this.closing = true;
+    if (this.timer) clearInterval(this.timer);
+    const pending = [...this.gitChildren].map(child => new Promise<void>(resolve => { child.once('close', resolve); child.kill(); }));
+    if (this.server) { pending.push(new Promise<void>(resolve => this.server!.close(() => resolve()))); this.server.closeAllConnections(); }
+    this.closed = Promise.all(pending).then(() => {});
+    return this.closed;
+  }
 }

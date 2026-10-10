@@ -14,7 +14,7 @@ const resourceRoot = path.join(root, 'build/resources');
 fs.rmSync(resourceRoot, { recursive: true, force: true });
 fs.mkdirSync(resourceRoot, { recursive: true });
 // Only source-controlled pack content: runtime memories, caches and private _raw sources are not build inputs.
-const names = execFileSync('git', ['ls-files', '-z', 'expert-packs', 'shared', 'templates'], { cwd: repo, encoding: 'utf8' }).split('\0').filter(Boolean).sort();
+const names = execFileSync('git', ['ls-files', '-z', 'expert-packs', 'shared', 'templates'], { cwd: repo, encoding: 'utf8' }).split('\0').filter(name => name && path.basename(name) !== '.gitkeep').sort();
 const files = names.map(name => {
   const bytes = fs.readFileSync(path.join(repo, name));
   const target = path.join(resourceRoot, name);
@@ -30,7 +30,11 @@ const experts = fs.readdirSync(path.join(resourceRoot, 'expert-packs')).map(id =
   return { id, name: pack.name, description: pack.description, domain: pack.domain, knowledgeFiles: names.filter(name => name.startsWith(`expert-packs/${id}/knowledge/`) && name.endsWith('.md')).length };
 });
 if (experts.length !== 10) throw new Error(`Expected 10 packs; found ${experts.length}`);
-const manifest = { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), lockSha256: hash(fs.readFileSync('package-lock.json')), files, experts };
+const dictionaries = ['jieba.dict.utf8', 'hmm_model.utf8', 'user.dict.utf8', 'idf.utf8', 'stop_words.utf8'].map(name => {
+  const bytes = fs.readFileSync(path.join(root, 'node_modules/nodejieba/submodules/cppjieba/dict', name));
+  return { name, bytes: bytes.length, sha256: hash(bytes) };
+});
+const manifest = { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), lockSha256: hash(fs.readFileSync('package-lock.json')), files, experts, dictionaries };
 fs.writeFileSync(path.join(resourceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2));
 await bundle({ entryPoints: ['electron/main.ts', 'electron/preload.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outdir: 'dist-electron', outExtension: { '.js': '.cjs' }, external: ['electron', 'better-sqlite3', 'nodejieba', '@vscode/ripgrep', './retriever.cjs'] });
 const core = await bundle({ entryPoints: ['../packages/core/src/knowledge-retriever.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/retriever.cjs', external: ['nodejieba'], metafile: true });

@@ -10,6 +10,7 @@ interface ResourceManifest {
   lockSha256: string;
   files: Array<{ path: string; bytes: number; sha256: string }>;
   experts: Expert[];
+  dictionaries: Array<{ name: string; bytes: number; sha256: string }>;
 }
 
 export function probeRuntime(resourceRoot: string, profile: string, version: string): RuntimeStatus {
@@ -51,16 +52,22 @@ export function probeRuntime(resourceRoot: string, profile: string, version: str
   });
   check('nodejieba-native-and-dictionaries', () => {
     const moduleDir = path.dirname(require.resolve('nodejieba/package.json')).replace(/([/\\])app\.asar([/\\])/, '$1app.asar.unpacked$2');
-    const files = ['jieba.dict.utf8', 'hmm_model.utf8', 'user.dict.utf8', 'idf.utf8', 'stop_words.utf8'];
-    for (const name of files) if (!fs.statSync(path.join(moduleDir, 'dict', name)).isFile()) throw new Error(`Missing dictionary: ${name}`);
-    const native = require(path.join(moduleDir, 'build/Release/nodejieba.node')) as { load(options: Record<string, string>): void; cut(text: string): string[] };
+    const dictDir = path.join(moduleDir, 'submodules/cppjieba/dict');
+    const dictPaths = manifest.dictionaries.map(entry => {
+      const target = path.join(dictDir, entry.name);
+      const bytes = fs.readFileSync(target);
+      if (bytes.length !== entry.bytes || crypto.createHash('sha256').update(bytes).digest('hex') !== entry.sha256) throw new Error(`Dictionary mismatch: ${entry.name}`);
+      return target;
+    });
+    if (dictPaths.length !== 5) throw new Error('Expected five dictionaries');
+    const native = require(path.join(moduleDir, 'build/Release/nodejieba.node')) as { load(...paths: string[]): void; cut(text: string): string[] };
     // Core already guards Windows ANSI fopen. Loading a Unicode dictionary path can terminate the entire process.
     const unicodeInstall = process.platform === 'win32' && /[^\x00-\x7F]/.test(moduleDir);
-    if (unicodeInstall) return { moduleDir, dictionaries: files.length, nativeLoaded: true, tokenizer: 'core-2gram-unicode-path-fallback' };
-    native.load({ dict: path.join(moduleDir, 'dict', files[0]), hmmDict: path.join(moduleDir, 'dict', files[1]), userDict: path.join(moduleDir, 'dict', files[2]), idfDict: path.join(moduleDir, 'dict', files[3]), stopWordDict: path.join(moduleDir, 'dict', files[4]) });
+    if (unicodeInstall) return { moduleDir, dictionaries: manifest.dictionaries, nativeLoaded: true, tokenizer: 'core-2gram-unicode-path-fallback' };
+    native.load(...dictPaths);
     const words = native.cut('南京市长江大桥');
     if (!words.includes('南京市') || !words.includes('长江大桥')) throw new Error(`Chinese tokenization failed: ${words.join('/')}`);
-    return { moduleDir, dictionaries: files.length, nativeLoaded: true, tokenizer: 'nodejieba', words };
+    return { moduleDir, dictionaries: manifest.dictionaries, nativeLoaded: true, tokenizer: 'nodejieba', words };
   });
   check('ripgrep-executable', () => {
     const { rgPath } = require('@vscode/ripgrep') as { rgPath: string };

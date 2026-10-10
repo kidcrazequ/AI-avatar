@@ -47,18 +47,26 @@ jobs:
         run: npm run dist:${{ matrix.target }}
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
-      - name: Upload installation evidence and internal packages
+      - name: Upload installation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: soul-next-${{ matrix.os }}-${{ github.sha }}
+          name: soul-next-evidence-${{ matrix.os }}-${{ github.sha }}
           path: |
             desktop-next/evidence/
+            desktop-next/build/resources/build-inputs.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload internal installation packages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-next-packages-${{ matrix.os }}-${{ github.sha }}
+          path: |
             desktop-next/release/*.exe
             desktop-next/release/*.dmg
             desktop-next/release/*.zip
             desktop-next/release/*.blockmap
             desktop-next/release/builder-effective-config.yaml
-            desktop-next/build/resources/build-inputs.json
           if-no-files-found: warn
           retention-days: 7

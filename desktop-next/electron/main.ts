@@ -18,10 +18,11 @@ let timer: NodeJS.Timeout | undefined;
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
+  console.error(detail);
   if (verifyOutput) {
     fs.mkdirSync(path.dirname(verifyOutput), { recursive: true });
     fs.writeFileSync(verifyOutput, JSON.stringify({ ok: false, error: detail, execPath: process.execPath }, null, 2));
-  } else console.error(detail);
+  }
   app.exit(1);
 };
 process.on('uncaughtException', fail);
@@ -79,6 +80,7 @@ app.whenReady().then(async () => {
   }
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
+  console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },

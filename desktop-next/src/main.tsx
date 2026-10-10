@@ -49,7 +49,7 @@ function App() {
     {error && <main className="management"><h1>无法读取专家资料</h1><p role="alert" data-runtime-error>{error}</p></main>}
     {!library && !error && <main className="management"><p>正在读取专家资料…</p></main>}
     {library && !id && !['projects', 'knowledge', 'chat', 'task', 'board', 'flows', 'workflow', 'flow'].includes(page) && <Management {...{ library, saved, notice, archive }} openExpert={expertId => { location.hash = `expert/${encodeURIComponent(expertId)}`; }} />}
-    {library && ['flows', 'flow', 'workflow'].includes(page) && <WorkflowsPage key={id + detail} {...{ library, notice }} scope={id} id={page === 'workflow' ? detail : ''} initialModal={route[2] === 'triggers' ? 'trigger' : ''} />}
+    {library && ['flows', 'flow', 'workflow'].includes(page) && <WorkflowsPage key={id + detail} {...{ library, notice }} scope={id} id={['workflow', 'flow'].includes(page) ? detail : ''} initialModal={(route[2] === 'triggers' || route[4] === 'triggers') ? 'trigger' : ''} />}
     {library && ['chat', 'task', 'board'].includes(page) && <TasksPage {...{ library, saved, notice, archive, route }} />}
     {library && id && !expert && <main className="management"><p>正在读取专家档案…</p></main>}
     {library && expert && page === 'home' && <ExpertHome key={expert.id} {...{ expert, library, saved, notice, archive, back }} />}

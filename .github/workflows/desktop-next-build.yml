@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: Native gate scope
+        description: Native gate scope (upgrade diagnoses Windows only)
         type: choice
-        options: [all, knowledge]
+        options: [all, knowledge, upgrade]
         default: all
   push:
     branches: ['codex/desktop-v3-native-gate']
@@ -15,16 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-2022
-            arch: x64
-            target: win
-          - os: macos-15
-            arch: arm64
-            target: mac
-          - os: macos-15-intel
-            arch: x64
-            target: mac
+        include: ${{ fromJSON(inputs.scope == 'upgrade' && '[{"os":"windows-2022","arch":"x64","target":"win"}]' || '[{"os":"windows-2022","arch":"x64","target":"win"},{"os":"macos-15","arch":"arm64","target":"mac"},{"os":"macos-15-intel","arch":"x64","target":"mac"}]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     permissions:
@@ -52,29 +43,37 @@ jobs:
       - name: Build native installer
         run: npm run dist:${{ matrix.target }}
       - name: Verify expert persistence using the native Electron runtime
+        if: inputs.scope != 'upgrade'
         run: npm run verify:experts
       - name: Verify resource isolation, recovery and persistence
+        if: inputs.scope != 'upgrade'
         run: npm run verify:resources
       - name: Verify complete sources, bundled OCR and import crash recovery
+        if: inputs.scope != 'upgrade'
         run: npm run verify:knowledge
       - name: Verify task execution, approvals and crash recovery
+        if: inputs.scope != 'upgrade'
         run: npm run verify:tasks
       - name: Verify unified lookup, complete tables, scope and pinned task recovery
+        if: inputs.scope != 'upgrade'
         run: npm run verify:lookup
       - name: Verify independent learning, provenance and billing checkpoints
+        if: inputs.scope != 'upgrade'
         run: npm run verify:learning
       - name: Verify knowledge compatibility, backup and upgrade busy guards
+        if: inputs.scope != 'upgrade'
         run: npm run verify:migration
       - name: Verify workflow versions, triggers and crash recovery
-        if: inputs.scope != 'knowledge'
+        if: inputs.scope != 'knowledge' && inputs.scope != 'upgrade'
         run: npm run verify:workflows
       - name: Verify connectors, IM pairing, permissions and settings
-        if: inputs.scope != 'knowledge'
+        if: inputs.scope != 'knowledge' && inputs.scope != 'upgrade'
         run: npm run verify:integrations
       - name: Verify update safety and data migration
-        if: inputs.scope != 'knowledge'
+        if: inputs.scope != 'knowledge' && inputs.scope != 'upgrade'
         run: npm run verify:updates
       - name: Install and launch the installed app twice
+        if: inputs.scope != 'upgrade'
         run: npm run verify:${{ matrix.target }}
       - name: Verify native two-version installation and data preservation
         if: inputs.scope != 'knowledge'

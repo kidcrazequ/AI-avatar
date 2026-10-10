@@ -7,7 +7,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { Transform } from 'node:stream';
 const require = createRequire(import.meta.url);
-const { extractFile } = require('@electron/asar');
+const { extractFile, uncache } = require('@electron/asar');
 if (!['darwin','win32'].includes(process.platform)) throw new Error('Native Windows or Mac required');
 const { fileURLToPath } = await import('node:url');
 const base = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -60,7 +60,7 @@ try {
  const discovered=await launch(process.platform==='win32'?'install':'check','discovered');if(discovered.discovered.nextVersion!==next)throw new Error('Updater discovered incorrect version');
  if(process.platform==='win32') {
    const deadline=Date.now()+120000;let installed='';
-   while(Date.now()<deadline){try{installed=JSON.parse(extractFile(path.join(resources,'app.asar'),'package.json').toString()).version}catch{}if(installed===next)break;await new Promise(resolve=>setTimeout(resolve,500));}
+   while(Date.now()<deadline){try{const archive=path.join(resources,'app.asar');uncache(archive);installed=JSON.parse(extractFile(archive,'package.json').toString()).version}catch{}if(installed===next)break;await new Promise(resolve=>setTimeout(resolve,500));}
    if(installed!==next)throw new Error('Actual NSIS updater did not replace installed application');
    if(discovered.download.state!=='ready'||!discovered.installed.backup||!fs.existsSync(path.join(discovered.installed.backup,'manifest.json')))throw new Error('Updater skipped checksum staging or backup');
  } else {

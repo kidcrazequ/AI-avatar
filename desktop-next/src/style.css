@@ -3,6 +3,7 @@
 :root{--page:#fff;--nav:#f3f3f3;--selected:#efefef;--border:#e6e6e6;--rail-border:#ddd;--text:#141414;--secondary:#636261;--muted:#8e8c8b;--subtle:#f9f9f9;--green:#13825d;--green-bg:#effaf4;--error:#b42318;--control-radius:4px;--card-radius:6px;--modal-radius:8px;--rail:64px;--side:240px;--font:'DM Sans',-apple-system,'system-ui','Segoe UI',sans-serif}
 
 *{box-sizing:border-box}
+html{scrollbar-width:none}
 body{margin:0;background:var(--page);color:var(--text);font:13px/20px var(--font)}
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:0}

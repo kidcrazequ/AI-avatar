@@ -350,7 +350,7 @@ export class ExpertLibrary {
     const id = `role-${crypto.randomUUID()}`;
     const root = resolveUnderRoot(this.customRoot, id);
     const templates = path.join(this.resourceRoot, 'templates');
-    const template = (name: string) => readText(resolveUnderRoot(templates, name));
+    const template = (name: string) => readText(resolveUnderRoot(templates, name)).replace(/\r\n?/g, '\n');
     let soul = template('soul-template.md').replaceAll('[分身名称]', name).replaceAll('[名字]', name).replaceAll('YYYY-MM-DD', new Date().toISOString().slice(0, 10));
     for (const [chapter, content] of [[1, fields.identity], [3, fields.style], [5, fields.workflow]] as const) {
       const pattern = new RegExp(`(## ${chapter}\\. [^\\n]+\\n)([\\s\\S]*?)(?=\\n## ${chapter + 1}\\.)`);

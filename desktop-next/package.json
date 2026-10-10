@@ -1,0 +1,38 @@
+{
+  "name": "soul-desktop-next",
+  "version": "0.20.0-alpha.1",
+  "private": true,
+  "engines": { "node": ">=24.0.0 <25" },
+  "description": "Soul V3 desktop installation validation",
+  "author": "zhi.qu",
+  "license": "ISC",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --config electron-builder.cjs --mac --publish never",
+    "dist:win": "npm run build && electron-builder --config electron-builder.cjs --win --x64 --publish never",
+    "verify:mac": "node scripts/verify-install-mac.mjs",
+    "verify:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install-win.ps1"
+  },
+  "dependencies": {
+    "@vscode/ripgrep": "1.15.14",
+    "better-sqlite3": "13.0.3",
+    "nodejieba": "3.5.8",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "25.5.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.27.4",
+    "typescript": "6.0.3",
+    "vite": "8.0.10"
+  }
+}

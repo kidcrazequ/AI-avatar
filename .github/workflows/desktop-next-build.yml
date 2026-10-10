@@ -1,0 +1,62 @@
+name: Soul Next native install gate
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/desktop-v3-native-gate']
+    paths: ['desktop-next/**', '.github/workflows/desktop-next-build.yml', 'packages/core/src/**', 'expert-packs/**', 'shared/**', 'templates/**']
+jobs:
+  native-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            arch: x64
+            target: win
+          - os: macos-15
+            arch: arm64
+            target: mac
+          - os: macos-15-intel
+            arch: x64
+            target: mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop-next
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-next/package-lock.json
+      - name: Confirm native host architecture
+        run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('Non-native architecture'); console.log(process.platform, process.arch, process.version)"
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build native installer
+        run: npm run dist:${{ matrix.target }}
+      - name: Install and launch the installed app twice
+        run: npm run verify:${{ matrix.target }}
+      - name: Upload installation evidence and internal packages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-next-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            desktop-next/evidence/
+            desktop-next/release/*.exe
+            desktop-next/release/*.dmg
+            desktop-next/release/*.zip
+            desktop-next/release/*.blockmap
+            desktop-next/release/builder-effective-config.yaml
+            desktop-next/build/resources/build-inputs.json
+          if-no-files-found: warn
+          retention-days: 7

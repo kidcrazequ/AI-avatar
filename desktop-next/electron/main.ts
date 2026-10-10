@@ -54,6 +54,7 @@ let settings: AppSettings | undefined;
 let wakeId: number | undefined;
 let updater: UpdateManager | undefined;
 let upgrading = false;
+let recoveringUpdate = false;
 const closeLibrary = () => { im?.close(); im = undefined; void connectors?.close(); connectors = undefined; settings?.close(); settings = undefined; permissions?.close(); permissions = undefined; workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
@@ -105,7 +106,13 @@ app.whenReady().then(async () => {
   if (upgradeOutput && flag('upgrade-feed')) policy = { url: validateFeed(flag('upgrade-feed')!, true), channel: 'candidate', production: false };
   autoUpdater.logger = { info() {}, warn() {}, error() {} };
   updater = new UpdateManager(app.getPath('userData'), app.getVersion(), policy, autoUpdater,
-    () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:updates-changed'); },
+    () => {
+      if (!window?.isDestroyed()) window?.webContents.send('soul-next:updates-changed');
+      if (upgrading && !upgradeOutput && !recoveringUpdate && updater?.read().state === 'error') {
+        recoveringUpdate = true;
+        void dialog.showMessageBox({ type: 'error', message: '更新未完成', detail: '已保留升级前备份。应用将重新启动以恢复工作；不会自动重试安装。' }).then(() => { app.relaunch(); app.exit(1); });
+      }
+    },
     () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending()),
     async () => {
       upgrading = true;

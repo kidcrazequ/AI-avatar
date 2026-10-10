@@ -68,7 +68,7 @@ export class UpdateManager {
     if (this.installBlocked) throw new Error(this.installBlocked);
     if (this.active()) throw new Error('请先停止运行中的任务或外部发送，再安装更新');
     this.operation = true; this.patch({ state: 'installing', error: '' });
-    try { const backup = await this.prepare(); this.patch({ backup }); this.driver.quitAndInstall(test, !test); }
+    try { const backup = await this.prepare(); this.patch({ backup }); this.driver.quitAndInstall(test, !test); if (this.value.state === 'error') throw new Error('安装器未启动'); }
     catch { this.patch({ state: 'error', error: '升级前备份或准备失败，未安装更新' }); throw new Error(this.value.error); }
     finally { this.operation = false; }
   }

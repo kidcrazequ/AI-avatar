@@ -2,5 +2,6 @@ node_modules/
 dist/
 dist-electron/
 build/resources/
+build/expert-library-test.cjs
 release/
 evidence/

@@ -1,8 +1,10 @@
 {
   "name": "soul-desktop-next",
-  "version": "0.20.0-alpha.1",
+  "version": "0.20.0-alpha.2",
   "private": true,
-  "engines": { "node": ">=24.0.0 <25" },
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
   "description": "Soul V3 desktop installation validation",
   "author": "zhi.qu",
   "license": "ISC",
@@ -14,6 +16,7 @@
     "start": "npm run build && electron .",
     "dist:mac": "npm run build && electron-builder --config electron-builder.cjs --mac --publish never",
     "dist:win": "npm run build && electron-builder --config electron-builder.cjs --win --x64 --publish never",
+    "verify:experts": "node scripts/verify-experts.mjs",
     "verify:mac": "node scripts/verify-install-mac.mjs",
     "verify:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install-win.ps1"
   },
@@ -22,7 +25,8 @@
     "better-sqlite3": "13.0.3",
     "nodejieba": "3.5.8",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "yaml": "2.9.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

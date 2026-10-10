@@ -98,6 +98,14 @@ if (mode === 'crash-resume') {
   runtime.approve(repeatedId, secondApproval.id, true, '', 'second-write');
   assert.equal((await wait(repeatedId, 'completed')).artifacts.length, 2); checks.push('provider-tool-id-reuse-requires-new-round-approval');
 
+  calls = 0;
+  start(async () => { calls++; return { text: '', calls: [{ id: 'model-change', type: 'function', function: { name: 'write_artifact', arguments: JSON.stringify({ file: '模型变更检查.md', content: '独立模型变更验收' }) } }] }; });
+  const changedModel = await wait(runtime.send(input('修改模型配置不能把旧任务请求发往新服务')), 'waiting');
+  model.baseUrl = 'http://localhost:12345';
+  runtime.approve(changedModel.id, changedModel.approvals[0].id, true, '', 'model-change-approve');
+  assert.equal((await wait(changedModel.id, 'failed')).error.includes('模型配置已改变'), true); assert.equal(calls, 1);
+  model.baseUrl = 'http://127.0.0.1'; checks.push('changed-model-endpoint-blocks-resumed-model-request');
+
   let late!: () => void;
   start(async () => { await new Promise<void>(resolve => late = resolve); return { text: '不应出现在已取消任务中', calls: [] }; });
   const cancelledId = runtime.send(input('取消后的迟到回包不得覆盖已停止状态'));
@@ -105,7 +113,7 @@ if (mode === 'crash-resume') {
   assert.equal(repository.get(cancelledId).status, 'stopped'); assert.equal(repository.get(cancelledId).messages.length, 1); checks.push('cancel-rejects-late-model-results');
 
   for (const unsafe of ['../outside.md', '.env', 'CON.md', 'nested/../outside.md', '/absolute.md']) assert.throws(() => safeTaskPath(profile, unsafe));
-  const link = path.join(profile, 'link'); fs.symlinkSync(os.tmpdir(), link, process.platform === 'win32' ? 'junction' : 'dir'); assert.throws(() => safeTaskPath(profile, 'link/outside.md'), /符号链接/); checks.push('project-tools-block-path-traversal-windows-aliases-and-symlinks');
+  const link = path.join(profile, 'link'); fs.symlinkSync(os.tmpdir(), link, process.platform === 'win32' ? 'junction' : 'dir'); assert.throws(() => safeTaskPath(profile, 'link/outside.md'), /符号链接/); fs.unlinkSync(link); checks.push('project-tools-block-path-traversal-windows-aliases-and-symlinks');
 
   const task = repository.get(grouped.id), originalHash = task.members[0].knowledge[0].hash;
   resources.saveMemory('hr-expert', '之后修改的独立记忆', resources.read('hr-expert').memory!.revision, '用户偏好');
@@ -115,7 +123,7 @@ if (mode === 'crash-resume') {
   fs.writeFileSync(output, JSON.stringify({ ok: true, platform: process.platform, arch: process.arch, evidence: 'controlled-provider-runtime-tests', checks }, null, 2));
 }
 runtime!.close(); await pause(); repository.close(); resources.close(); library.close();
-if (!crashProfile) fs.rmSync(profile, { recursive: true, force: true });
+if (!crashProfile) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 console.log(JSON.stringify({ ok: true, mode, checks }));
 
 }

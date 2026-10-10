@@ -10,7 +10,7 @@ export const verificationCall = (run: number): ModelCall => async (_config, mess
   if (request.includes('安装验收：重启恢复')) {
     if (!toolResult) return { text: '', calls: [{ id: 'recovery-read', type: 'function', function: { name: 'search_knowledge', arguments: '{"query":"应收账款"}' } }], usage: { inputTokens: 7, outputTokens: 2 } };
     if (run === 1) return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('验收进程结束')), { once: true }));
-    return { text: '受控验收：从已有知识检索检查点恢复完成。', calls: [], usage: { inputTokens: 6, outputTokens: 3 } };
+    return { text: '**受控验收**：从已有知识检索检查点`恢复完成`。\n\n![远程图片](https://example.invalid/task.png)\n\n[无效链接](javascript:alert(1))\n\n<script>alert(1)</script>', calls: [], usage: { inputTokens: 6, outputTokens: 3 } };
   }
   if (!toolResult) return { text: '受控验收：申请写入验收成果。', calls: [{ id: 'approval-write', type: 'function', function: { name: 'write_artifact', arguments: JSON.stringify({ file: '安装验收.md', content: '受控安装验收成果，非真实模型产物。' }) } }], usage: { inputTokens: 4, outputTokens: 2 } };
   return { text: '受控验收：已批准的成果写入完成。', calls: [], usage: { inputTokens: 5, outputTokens: 3 } };
@@ -56,6 +56,16 @@ export async function verifyTaskPages(window: BrowserWindow, page: string, outpu
   if (run > 1) {
     const result = await window.webContents.executeJavaScript(`(async()=>{const api=window.soulDesktop.tasks;await api.resume(${JSON.stringify(marker.recoveryTask)},'installed-resume');const before=await api.read(),task=before.tasks.find(t=>t.id===${JSON.stringify(marker.approvalTask)});await api.approve(task.id,task.approvals[0].id,true,'受控安装验收批准','installed-approve');for(let n=0;n<200;n++){const after=await api.read();if([${JSON.stringify(marker.recoveryTask)},${JSON.stringify(marker.approvalTask)}].every(id=>after.tasks.find(t=>t.id===id)?.status==='completed'))return after.tasks.filter(t=>[${JSON.stringify(marker.recoveryTask)},${JSON.stringify(marker.approvalTask)}].includes(t.id)).map(t=>({id:t.id,status:t.status,rounds:t.rounds.length,artifacts:t.artifacts}));await new Promise(resolve=>setTimeout(resolve,20));}throw new Error('Installed task resume did not complete');})()`);
     checks.push({ installedResume: result, evidence: 'controlled-provider; no network model calls' });
+    await window.loadFile(page, { hash: `task/${marker.recoveryTask}` }); await wait('.task-markdown strong');
+    const answer = await window.webContents.executeJavaScript(`(()=>{const root=document.querySelector('.task-markdown');return {formatted:root?.querySelector('strong')?.textContent==='受控验收'&&root?.querySelector('code')?.textContent==='恢复完成',rawMarkers:root?.textContent.includes('**'),unsafeNodes:root?.querySelectorAll('img,script,iframe,a[href]').length};})()`);
+    if (!answer.formatted || answer.rawMarkers || answer.unsafeNodes) throw new Error('Model Markdown must render without raw markers, active HTML, navigation or remote images');
+    checks.push({ renderedAnswer: answer });
+    await window.loadFile(page, { hash: `task/${marker.approvalTask}` }); await wait('[data-ued-node="task.artifacts"]');
+    const written = await window.webContents.executeJavaScript(`document.querySelector('[data-ued-node="task.artifacts"]').textContent`);
+    const artifact = result.find((task: any) => task.id === marker.approvalTask)?.artifacts[0];
+    if (!artifact || !fs.existsSync(artifact.path) || !written.includes('已写入：安装验收.md') || !written.includes(artifact.hash)) throw new Error('The actual artifact receipt must remain visible independently of model wording');
+    checks.push({ artifactReceipt: artifact });
+    fs.writeFileSync(path.join(path.dirname(output), 'tasks-written-receipt.png'), (await window.webContents.capturePage()).toPNG());
   }
   return checks;
 }

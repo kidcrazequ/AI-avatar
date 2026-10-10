@@ -82,6 +82,13 @@ export class ConnectorRuntime {
       const base = `/repos/${owner}/${repo}`;
       const url = name === 'github_get_tree' ? `${base}/git/trees/${encodeURIComponent(ref)}?recursive=1` : `${base}/contents/${required(args.path, '资料路径', 1000).split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`;
       const data = await this.github(live.view, this.secret(id), url, signal);
+      if (name === 'github_read_file') {
+        const file = data as { encoding?: string; content?: string; sha?: string; html_url?: string };
+        if (file.encoding !== 'base64' || typeof file.content !== 'string') throw new Error('GitHub 文件没有可读取的正文，请选择文本文件');
+        const content = Buffer.from(file.content, 'base64').toString('utf8');
+        if (content.includes('\0') || content.length > 80000) throw new Error('GitHub 文件须为不超过 80000 字符的文本');
+        return JSON.stringify({ source: file.html_url ?? 'https://github.com/' + owner + '/' + repo, ref, sha: file.sha, content });
+      }
       return JSON.stringify({ source: 'https://github.com/' + owner + '/' + repo, data }).slice(0, 100000);
     }
     const result = await live.client!.callTool({ name, arguments: args }, undefined, { timeout: 30_000, signal });

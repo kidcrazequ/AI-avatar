@@ -1,0 +1,29 @@
+@font-face { font-family: 'DM Sans'; src: url('/assets/dm-sans-latin-normal.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+:root { font-family: 'DM Sans', -apple-system, system-ui, 'Segoe UI', sans-serif; font-size: 13px; line-height: 20px; color: #141414; background: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { min-height: 100vh; display: grid; grid-template-columns: 64px minmax(0, 1fr); }
+nav { background: #f3f3f3; border-right: 1px solid #e6e6e6; display: flex; align-items: center; flex-direction: column; padding: 16px 6px; gap: 26px; }
+.brand { width: 32px; height: 32px; border-radius: 8px; }
+.nav-active { width: 48px; height: 54px; border-radius: 6px; background: #e6e6e6; display: flex; align-items: center; flex-direction: column; justify-content: center; font-size: 11px; gap: 4px; }
+.nav-active span { font-size: 23px; }
+.nav-bottom { margin-top: auto; border-radius: 50%; width: 28px; height: 28px; background: #e6e6e6; text-align: center; line-height: 28px; }
+main { padding: 32px 40px; min-width: 0; }
+header { display: flex; align-items: center; gap: 16px; }
+h1 { margin: 0; font-size: 28px; font-weight: 600; line-height: 36px; }
+.badge { font-size: 11px; border: 1px solid #e6e6e6; border-radius: 4px; padding: 0 6px; color: #636261; }
+.description { margin: 10px 0 28px; color: #636261; }
+.tabs { border-bottom: 1px solid #e6e6e6; margin-bottom: 20px; height: 36px; }
+.tabs > span { height: 36px; display: inline-flex; align-items: center; gap: 8px; border-bottom: 2px solid #141414; }
+small { background: #efefef; padding: 0 5px; border-radius: 4px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+article { padding: 16px; border: 1px solid #e6e6e6; border-radius: 6px; min-height: 149px; }
+.card-top { display: flex; gap: 12px; align-items: center; }
+.avatar { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: #efefef; font-size: 17px; flex-shrink: 0; }
+h2 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; }
+.card-top p { margin: 2px 0 0; color: #636261; font-size: 12px; }
+.card-description { color: #636261; margin: 12px 0; min-height: 40px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+footer { display: flex; justify-content: space-between; font-size: 11px; color: #636261; }
+.runtime { margin-top: 24px; font-size: 12px; color: #636261; }
+.error, [data-runtime-error] { color: #b42318; overflow-wrap: anywhere; }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

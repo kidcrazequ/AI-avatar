@@ -1,0 +1,94 @@
+# roi-consult SOP 状态机卡（W5.5 试点）
+#
+# 与 roi-consult.md 配套：md 是给人读的技能说明，本文件是给 SopRunner 执行的流程图。
+# 运行期每轮只注入当前节点的 instruction + 槽位进度 + 转移选项，
+# LLM 在回复末尾（或 sop_report 工具）自报 filled / next / done，由 runner 按图校验。
+#
+# 纪律落点：expects 未收集齐的节点不允许转移——这正是为了堵住
+# "用户只说了一句『帮我算个收益』，分身就编出一份带 IRR 的报告" 这类事故。
+
+sop_version: 1
+skill: roi-consult
+goal: 基于用户真实工况与可溯源的电价/政策数据，完成工商业储能收益测算并输出带来源标注的报告
+start: collect-basics
+terminal:
+  - report
+interruption: pause # 用户中途岔开话题：保留已收集参数待续，回来时不重问
+
+nodes:
+  - id: collect-basics
+    name: 收集基础参数
+    instruction: >-
+      向用户问齐测算的三项硬输入：装机容量（MWh 或 kWh，含功率 PCS 配置若用户知道）、
+      项目所在省份/地市（决定电价机制）、计划日循环次数（一充一放=1，两充两放=2）。
+      一次把缺的项一起问完，不要挤牙膏式一轮问一个。
+      用户给的是区间或"大概"时，如实记录为区间并在后续报告注明为用户口径估值。
+      三项没齐**不得**进入下一节点，更不得自行假设一个"典型值"替用户作答。
+    expects:
+      - 装机容量
+      - 省份
+      - 日循环次数
+    tools: []
+    next:
+      - to: fetch-tariff
+        when: 装机容量、省份、日循环次数三项均已确认
+
+  - id: fetch-tariff
+    name: 查电价与政策
+    instruction: >-
+      用 search_knowledge 检索该省份的分时电价机制与工商储相关政策（峰谷时段划分、峰谷价差、
+      尖峰电价、需量电费口径、地方补贴）。每一个取到的数字必须记下**具体来源文件路径**，
+      填入槽位时按「值 [来源: knowledge/<路径>.md]」格式记录。
+      知识库中查不到该省份数据时，**不得**用邻省或全国均值顶替：如实告知用户缺口，
+      请用户提供电价单或明确授权按用户口径的价差继续，并把该授权记入槽位来源。
+    expects:
+      - 峰谷价差
+      - 电价与政策来源
+    tools:
+      - search_knowledge
+    next:
+      - to: calculate
+        when: 峰谷价差已取得且来源已标注（或用户已明确授权使用其提供的价差）
+
+  - id: calculate
+    name: 测算收益
+    instruction: >-
+      用 calculate_roi 基于已收集参数计算年收益、静态回本周期、IRR。
+      计算所依赖的每一项假设（系统效率、衰减率、可用天数、初始投资单价、运维费率）
+      必须逐条列出取值与出处；知识库无出处的一律标为「行业经验值，待用户确认」，
+      不得混进"来源：知识库"的笼统标注。工具报错或参数不足时如实说明，不得手算凑数。
+    expects:
+      - 测算结果
+      - 关键假设清单
+    tools:
+      - calculate_roi
+      - search_knowledge
+    next:
+      - to: confirm-assumptions
+        when: 测算结果与关键假设清单均已产出
+
+  - id: confirm-assumptions
+    name: 与用户确认假设
+    instruction: >-
+      把关键假设逐条摆给用户确认（标注哪些来自知识库、哪些是行业经验值待确认）。
+      用户认可 → 进入 report；用户修正了任一输入参数（容量/省份/循环次数）
+      → 回到 collect-basics 重走，**不得**在旧测算结果上口头微调数字。
+    expects:
+      - 假设确认结论
+    tools: []
+    next:
+      - to: report
+        when: 用户确认假设成立
+      - to: collect-basics
+        when: 用户修正了基础参数，需重新测算
+
+  - id: report
+    name: 输出收益报告
+    instruction: >-
+      输出结构化收益测算报告：项目输入 → 电价与政策依据（逐条带来源）→ 测算结果
+      （年收益/回本周期/IRR）→ 关键假设与风险提示。
+      每个数字后紧跟其来源标注，一个 [来源: ...] 只覆盖一个数字，禁止一行来源盖整段。
+      结尾注明本报告为 AI 草案、投资决策前需业务复核。交付完成后上报 done=true。
+    expects: []
+    tools: []
+    next: []

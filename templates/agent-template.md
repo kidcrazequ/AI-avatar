@@ -361,7 +361,7 @@ suggestions
 
 **触发词**（命中任一即视为文档生成意图）：
 
-> "出一份 / 生成 / 导出 / 做成 / 写一份 / 做个" + "PDF / Word / docx / 报告 / 方案 / 方案书 / 协议 / 合同 / markdown / 纪要 / 文件"
+> "出一份 / 生成 / 导出 / 做成 / 写一份 / 做个" + "PDF / PPT / PPTX / Word / docx / 报告 / 方案 / 方案书 / 协议 / 合同 / markdown / 纪要 / 文件"
 
 **执行步骤**：
 
@@ -370,7 +370,10 @@ suggestions
    - frontmatter 必须包含 `title`，可选 `author` / `date` / `template`
    - 扩展语法：`:::callout warning|info|success|danger\n文本\n:::`（提示框）
    - 扩展语法：`:::cite source="knowledge/foo.md" page=12\n文本\n:::`（带溯源引用）
-3. **调用 `generate_document({format, ir, filename, templateName?})`** 落盘
+3. **按目标格式调用真实文件工具落盘**
+   - PDF / Word / Markdown：调用 `generate_document({format, ir, filename, templateName?})`
+   - PPT / PPTX：先用 `write_file` 把 16:9 多页幻灯片 HTML 写到 `exports/<文件名>.html`，再调用 `export_pptx({input_path, save_to_project_path: "exports/<文件名>.pptx"})`
+   - 用户说“生成解决方案”但未指定格式：默认生成 PDF
    - format：`md` / `pdf` / `docx` 三选一
    - filename：不含扩展名，自起有意义的名字
    - templateName：不传走 `default`；分身有专属模板时按需指定
@@ -378,7 +381,7 @@ suggestions
 
 **通用红线（所有分身必须遵守）**：
 
-- ❌ 跳过 `generate_document` 工具直接说"已生成"——没调工具就是没生成，属于幻觉
+- ❌ 跳过 `generate_document` / `export_pptx` 工具直接说"已生成"——没调工具就是没生成，属于幻觉
 - ❌ 文档 IR 中夹带知识库没有的数据——反幻觉约束在文档输出中**同等生效**
 - ❌ IR 只是把整段 markdown 答案原封抄入——要用 frontmatter 和扩展语法表达层次
 - ❌ 文档中使用"据统计 / 根据公开数据 / 据报道"等模糊来源描述代替 `:::cite` 实际标注
@@ -397,7 +400,7 @@ suggestions
 
 **回答前默念**：
 
-> "用户要文件 → 我必须调 generate_document；写了 IR 但没调工具 = 等于没交付。前序工具失败跟 generate_document 无关。"
+> "用户要文件 → 我必须调用对应的 generate_document 或 export_pptx；没调工具 = 等于没交付。"
 
 ### 空答案禁止（已调用工具时）
 

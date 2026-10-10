@@ -12,7 +12,7 @@ $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $evidence = Join-Path $root "evidence\windows-x64-$stamp"
 # Keep dictionaries on an ASCII path while explicitly exercising Unicode userData.
 $installDir = Join-Path $env:LOCALAPPDATA "Soul Next Verification $stamp"
-$profile = Join-Path $installDir '测试用户 数据'
+$profile = Join-Path $env:LOCALAPPDATA "Soul Next Verification Data $stamp\测试用户 数据"
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $installerLog = Join-Path $evidence 'installer.txt'
 $process = Start-Process -FilePath $Installer -ArgumentList "/S /currentuser /D=$installDir" -Wait -PassThru
@@ -25,10 +25,27 @@ foreach ($iteration in 1, 2) {
   $output = Join-Path $evidence "launch-$iteration.json"
   $stdout = Join-Path $evidence "launch-$iteration.stdout.log"
   $stderr = Join-Path $evidence "launch-$iteration.stderr.log"
-  $process = Start-Process -FilePath $executable -ArgumentList "`"--verify-output=$output`" `"--profile=$profile`"" -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $executable
+  $startInfo.Arguments = "`"--verify-output=$output`" `"--profile=$profile`""
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  [void]$process.Start()
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
   if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Installed app timed out' }
-  $process.Refresh()
-  if ($process.ExitCode -ne 0) { throw "Installed app failed: $($process.ExitCode), see $output" }
+  $process.WaitForExit()
+  [IO.File]::WriteAllText($stdout, $stdoutTask.Result)
+  [IO.File]::WriteAllText($stderr, $stderrTask.Result)
+  $exitCode = $process.ExitCode
+  $process.Dispose()
+  if ($exitCode -ne 0) {
+    if (Test-Path $output) { Get-Content -Raw -Encoding UTF8 $output | Write-Output }
+    throw "Installed app failed: $exitCode, see $output"
+  }
   $report = Get-Content -Raw -Encoding UTF8 $output | ConvertFrom-Json
   if (-not $report.ok -or -not $report.packaged -or $report.execPath -ne $executable -or $report.status.persistenceRun -ne $iteration -or $report.status.platform -ne 'win32' -or $report.status.arch -ne 'x64') { throw "Install verification mismatch: $output" }
   $runs += $report

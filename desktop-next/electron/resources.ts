@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { isSeq, parse, parseDocument } from 'yaml';
 import { assertSafeSegment, resolveUnderRoot } from '../../packages/core/src/utils/path-security';
 import { ExpertLibrary } from './expert-library';
+import { KnowledgeImports } from './knowledge/import-store';
 import type { DocumentInput, KnowledgeCollection, QualityReport, ResourceDocument, ResourceFile, ResourceProject, ResourceSnapshot, ResourceVersion, SkillItem } from '../shared/contracts';
 
 const hash = (text: string | Buffer) => crypto.createHash('sha256').update(text).digest('hex');
@@ -54,7 +55,8 @@ interface Trash { id: number; collection_id: string; file: string; content: stri
 export class ResourceStore {
   private db: Database.Database;
   private collectionsRoot: string;
-  constructor(private resourcesRoot: string, private profileRoot: string, private library: ExpertLibrary) {
+  readonly knowledge: KnowledgeImports;
+  constructor(private resourcesRoot: string, private profileRoot: string, private library: ExpertLibrary, knowledgeWorker?: string) {
     this.collectionsRoot = path.join(profileRoot, 'knowledge');
     fs.mkdirSync(this.collectionsRoot, { recursive: true });
     this.db = new Database(path.join(profileRoot, 'soul.sqlite'));
@@ -63,8 +65,10 @@ export class ResourceStore {
       CREATE TABLE IF NOT EXISTS resource_collections (id TEXT PRIMARY KEY,title TEXT NOT NULL,archived INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS resource_versions (id INTEGER PRIMARY KEY AUTOINCREMENT,expert_id TEXT NOT NULL,file TEXT NOT NULL,at TEXT NOT NULL,reason TEXT NOT NULL,content TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_trash (id INTEGER PRIMARY KEY AUTOINCREMENT,collection_id TEXT NOT NULL,file TEXT NOT NULL,content TEXT NOT NULL,scope TEXT NOT NULL);`);
+    const parserPolicy = path.join(resourcesRoot, 'knowledge-parser.json');
+    this.knowledge = new KnowledgeImports(this.db, profileRoot, (id, scope, write) => this.collection(id, scope, write), path.join(resourcesRoot, 'ocr'), knowledgeWorker, fs.existsSync(parserPolicy) ? JSON.parse(fs.readFileSync(parserPolicy, 'utf8')).signature : undefined);
   }
-  close(): void { this.db.close(); }
+  close(): void { this.knowledge.close(); this.db.close(); }
   private scope(id: string): void { if (id) this.library.resourceLocation(id); }
   private collection(id: string, scope: string, write = false): { root: string; source: string; builtin: boolean } {
     this.scope(scope);
@@ -86,10 +90,10 @@ export class ResourceStore {
   private collections(): KnowledgeCollection[] {
     const builtins = this.library.list().experts.map(expert => {
       const root = path.join(this.library.resourceLocation(expert.id).root, 'knowledge');
-      return { id: 'expert:' + expert.id, title: expert.name + ' · 专业知识', source: expert.sourceLabel + '/knowledge', documents: files(root).length, builtin: true, writable: expert.installed };
+      return { id: 'expert:' + expert.id, title: expert.name + ' · 专业知识', source: expert.sourceLabel + '/knowledge', documents: files(root).length + (this.knowledge?.count('expert:' + expert.id) ?? 0), builtin: true, writable: expert.installed };
     });
     const shared = { id: 'shared', title: 'Soul 共享知识', source: 'shared/knowledge', documents: files(path.join(this.resourcesRoot, 'shared/knowledge')).length, builtin: true, writable: false };
-    const custom = (this.db.prepare('SELECT * FROM resource_collections WHERE archived=0 ORDER BY rowid').all() as CollectionRow[]).map(row => ({ id: row.id, title: row.title, source: `knowledge/${row.id}`, documents: files(safe(this.collectionsRoot, row.id)).length, builtin: false, writable: true }));
+    const custom = (this.db.prepare('SELECT * FROM resource_collections WHERE archived=0 ORDER BY rowid').all() as CollectionRow[]).map(row => ({ id: row.id, title: row.title, source: `knowledge/${row.id}`, documents: files(safe(this.collectionsRoot, row.id)).length + (this.knowledge?.count(row.id) ?? 0), builtin: false, writable: true }));
     return [...builtins, shared, ...custom];
   }
   private bindings(id: string): string[] {
@@ -159,15 +163,17 @@ export class ResourceStore {
     this.write(id, root, 'avatar.config.json', JSON.stringify({ ...config, knowledgeCollections: ids }, null, 2), current.revision, '绑定知识库');
   }
   documents(id: string, scope: string): ResourceDocument[] {
-    return files(this.collection(id, scope).root, '', 0, true);
+    return [...files(this.collection(id, scope).root, '', 0, true), ...this.knowledge.documents(id, scope)];
   }
   readDocument(id: string, file: string, scope: string): ResourceFile {
     const collection = this.collection(id, scope);
     if (!this.documents(id, scope).some(item => item.id === file)) throw new Error('资料不存在');
+    if (/^imports\/[a-f0-9]{32}\.md$/.test(file)) return this.knowledge.read(id, file, scope);
     return read(safe(collection.root, file), collection.source + '/' + file);
   }
   saveDocument(input: DocumentInput, scope: string): void {
     const collection = this.collection(input.collectionId, scope, true);
+    if (/^imports\//.test(input.id)) throw new Error('导入资料保留确定性正文；请重新导入原件更新，或另存知识卡片');
     const title = name(input.name);
     const content = text(input.content, '正文', 2 * 1024 * 1024);
     const file = input.id || (/\.md$/i.test(title) ? title : title.replace(/\.txt$/i, '') + '.md');
@@ -177,6 +183,7 @@ export class ResourceStore {
   }
   removeDocument(id: string, file: string, revision: string, scope: string): void {
     const collection = this.collection(id, scope, true);
+    if (/^imports\/[a-f0-9]{32}\.md$/.test(file)) { this.knowledge.remove(id, file, revision, scope); return; }
     const current = this.readDocument(id, file, scope);
     if (current.revision !== revision) throw new Error('资料已变更，请重新打开');
     this.db.transaction(() => {
@@ -189,6 +196,7 @@ export class ResourceStore {
     // Restore collections before documents; an existing file is never overwritten.
     this.db.prepare('UPDATE resource_collections SET archived=0').run();
     this.db.prepare('UPDATE resource_projects SET archived=0 WHERE scope=\'\' OR scope=?').run(scope);
+    this.knowledge.restoreRemoved(scope);
     for (const entry of this.db.prepare('SELECT * FROM resource_trash WHERE scope=? ORDER BY id DESC').all(scope) as Trash[]) {
       const collection = this.collection(entry.collection_id, scope, true);
       const target = safe(collection.root, entry.file);

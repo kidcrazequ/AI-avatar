@@ -1,6 +1,12 @@
 name: Soul Next native install gate
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Native gate scope
+        type: choice
+        options: [all, knowledge]
+        default: all
   push:
     branches: ['codex/desktop-v3-native-gate']
     paths: ['desktop-next/**', '.github/workflows/desktop-next-build.yml', 'packages/core/src/**', 'expert-packs/**', 'shared/**', 'templates/**']
@@ -49,17 +55,24 @@ jobs:
         run: npm run verify:experts
       - name: Verify resource isolation, recovery and persistence
         run: npm run verify:resources
+      - name: Verify complete sources, bundled OCR and import crash recovery
+        run: npm run verify:knowledge
       - name: Verify task execution, approvals and crash recovery
+        if: inputs.scope != 'knowledge'
         run: npm run verify:tasks
       - name: Verify workflow versions, triggers and crash recovery
+        if: inputs.scope != 'knowledge'
         run: npm run verify:workflows
       - name: Verify connectors, IM pairing, permissions and settings
+        if: inputs.scope != 'knowledge'
         run: npm run verify:integrations
       - name: Verify update safety and data migration
+        if: inputs.scope != 'knowledge'
         run: npm run verify:updates
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
       - name: Verify native two-version installation and data preservation
+        if: inputs.scope != 'knowledge'
         run: npm run verify:upgrade
       - name: Upload installation evidence
         if: always()

@@ -76,6 +76,17 @@ const api: DesktopAPI = {
     onChanged(listener) { const callback = () => listener(); ipcRenderer.on('soul-next:workflows-changed', callback); return () => ipcRenderer.removeListener('soul-next:workflows-changed', callback); },
   },
   resources: {
+    knowledge: {
+      formats: () => ipcRenderer.invoke('soul-next:knowledge-formats'),
+      chooseImport: (id, scope, kind) => ipcRenderer.invoke('soul-next:knowledge-import', id, scope, kind),
+      batches: (id, scope) => ipcRenderer.invoke('soul-next:knowledge-batches', id, scope),
+      cancel: (id, scope) => ipcRenderer.invoke('soul-next:knowledge-cancel', id, scope),
+      retry: (id, scope) => ipcRenderer.invoke('soul-next:knowledge-retry', id, scope),
+      versions: (id, document, scope) => ipcRenderer.invoke('soul-next:knowledge-versions', id, document, scope),
+      restore: (id, document, version, expected, scope) => ipcRenderer.invoke('soul-next:knowledge-restore', id, document, version, expected, scope),
+      openOriginal: (id, document, version, scope) => ipcRenderer.invoke('soul-next:knowledge-original', id, document, version, scope),
+      onChanged(listener) { const callback = () => listener(); ipcRenderer.on('soul-next:knowledge-changed', callback); return () => ipcRenderer.removeListener('soul-next:knowledge-changed', callback); },
+    },
     read: scope => ipcRenderer.invoke('soul-next:resources', scope),
     saveProject: (input, scope) => ipcRenderer.invoke('soul-next:project-save', input, scope),
     removeProject: (id, scope) => ipcRenderer.invoke('soul-next:project-remove', id, scope),

@@ -26,6 +26,7 @@ import { UpdateManager, validateFeed } from './update-manager';
 import { migrateProfile, backupProfile } from './profile-upgrade';
 import type { UpdatePolicy } from '../shared/updates';
 import { verifyUpgrade } from './verify-upgrade';
+import { knowledgeExtensions, knowledgeLimits } from '../shared/knowledge';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -76,6 +77,7 @@ app.whenReady().then(async () => {
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
   resources = new ResourceStore(resourceRoot, app.getPath('userData'), library);
+  resources.knowledge.onChanged(() => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:knowledge-changed'); });
   taskRepository = new TaskRepository(app.getPath('userData'));
   models = new TaskModels(app.getPath('userData'), {
     encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); },
@@ -120,7 +122,7 @@ app.whenReady().then(async () => {
         void dialog.showMessageBox({ type: 'error', message: '更新未完成', detail: '已保留升级前备份。应用将重新启动以恢复工作；不会自动重试安装。' }).then(() => { app.relaunch(); app.exit(1); });
       }
     },
-    () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending()),
+    () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending() || resources?.knowledge.isBusy()),
     async () => {
       upgrading = true;
       im?.close(); im = undefined;
@@ -216,6 +218,18 @@ app.whenReady().then(async () => {
     return true;
   });
   handle('resources', scope => resources!.read(scope));
+  handle('knowledge-formats', () => ({ extensions: knowledgeExtensions, limits: knowledgeLimits }));
+  handle('knowledge-import', async (id, scope, kind) => {
+    if (!['files', 'directory', 'zip'].includes(kind)) throw new Error('导入方式无效');
+    const result = await dialog.showOpenDialog(window!, kind === 'directory' ? { properties: ['openDirectory'] } : { properties: kind === 'files' ? ['openFile', 'multiSelections'] : ['openFile'], filters: [{ name: '知识资料', extensions: kind === 'zip' ? ['zip'] : knowledgeExtensions }] });
+    return result.canceled ? null : resources!.knowledge.start(id, scope, result.filePaths, kind);
+  });
+  handle('knowledge-batches', (id, scope) => resources!.knowledge.list(id, scope));
+  handle('knowledge-cancel', (id, scope) => resources!.knowledge.cancel(id, scope));
+  handle('knowledge-retry', (id, scope) => resources!.knowledge.retry(id, scope));
+  handle('knowledge-versions', (id, document, scope) => resources!.knowledge.versions(id, document, scope));
+  handle('knowledge-restore', (id, document, version, expected, scope) => resources!.knowledge.restore(id, document, version, expected, scope));
+  handle('knowledge-original', async (id, document, version, scope) => { const error = await shell.openPath(resources!.knowledge.original(id, document, version, scope)); if (error) throw new Error('原件打开失败：' + error); });
   handle('project-save', (input, scope) => resources!.saveProject(input, scope));
   handle('project-remove', (id, scope) => resources!.removeProject(id, scope));
   handle('collection-save', (id, title) => resources!.saveCollection(id, title));

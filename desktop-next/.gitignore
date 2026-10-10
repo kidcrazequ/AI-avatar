@@ -7,3 +7,4 @@ release/
 release-upgrade/
 evidence/
 build/resource-test.cjs
+build/knowledge-test.cjs

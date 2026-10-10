@@ -95,7 +95,7 @@ export interface RoleInput { name: string; description: string; identity: string
 export interface ProjectSource { type: 'local' | 'git'; path: string }
 export interface ResourceProject { id: string; name: string; description: string; expertId: string; sources: ProjectSource[]; updated: string }
 export interface KnowledgeCollection { id: string; title: string; source: string; documents: number; builtin: boolean; writable: boolean }
-export interface ResourceDocument { id: string; name: string; path: string; bytes: number; placeholder: boolean }
+export interface ResourceDocument { id: string; name: string; path: string; bytes: number; placeholder: boolean; imported?: boolean; sourceVersion?: string; sourceStatus?: 'ready' | 'partial' }
 export interface ResourceFile extends ArchiveFile { revision: string }
 export interface SkillItem extends SkillReference { key: string; description: string; title: string; category: string; configured: boolean }
 export interface ResourceSnapshot { projects: ResourceProject[]; collections: KnowledgeCollection[]; bindings: string[]; skills: SkillItem[]; memory: ResourceFile | null; settings: ResourceFile | null; versions: ResourceVersion[]; quality: QualityReport | null }
@@ -103,6 +103,7 @@ export interface ResourceVersion { id: number; at: string; reason: string; file:
 export interface QualityReport { at: string; checks: Array<{ name: string; ok: boolean; source: string }>; cases: ResourceDocument[]; knowledge: number; professional: '未执行' }
 export interface DocumentInput { collectionId: string; id: string; name: string; content: string; revision: string }
 export interface ResourceAPI {
+  knowledge: import('./knowledge').KnowledgeAPI;
   read(expertId: string): Promise<ResourceSnapshot>;
   saveProject(input: ResourceProject, scope: string): Promise<void>;
   removeProject(id: string, scope: string): Promise<void>;

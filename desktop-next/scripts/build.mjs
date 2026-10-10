@@ -47,10 +47,20 @@ if (updateUrl) {
 fs.writeFileSync(path.join(resourceRoot, 'update-policy.json'), JSON.stringify(updatePolicy));
 fs.writeFileSync(path.join(resourceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2));
 await bundle({ entryPoints: ['electron/main.ts', 'electron/preload.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outdir: 'dist-electron', outExtension: { '.js': '.cjs' }, external: ['electron', 'electron-updater', 'better-sqlite3', 'nodejieba', '@vscode/ripgrep', './retriever.cjs', './model.cjs'] });
+const knowledge = await bundle({ entryPoints: ['electron/knowledge/worker.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/knowledge-worker.cjs', nodePaths: [path.join(root, 'node_modules')], external: ['jsdom', 'pdf-parse', 'tesseract.js'], metafile: true });
+await bundle({ entryPoints: ['node_modules/pdfjs-dist/build/pdf.worker.mjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/pdf-worker.cjs' });
+const ocr = ['chi_sim', 'eng'].map(code => {
+  const from = path.join(root, `node_modules/@tesseract.js-data/${code}/4.0.0/${code}.traineddata.gz`), to = path.join(resourceRoot, `ocr/${code}.traineddata.gz`);
+  fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(from, to);
+  const bytes = fs.readFileSync(to); return { path: `ocr/${code}.traineddata.gz`, bytes: bytes.length, sha256: hash(bytes) };
+});
+const parserInputs = Object.keys(knowledge.metafile.inputs).filter(name => !name.includes('node_modules')).map(name => ({ path: path.relative(repo, path.resolve(root, name)).replaceAll(path.sep, '/'), sha256: hash(fs.readFileSync(name)) })).sort((a, b) => a.path.localeCompare(b.path, 'en'));
+const parserDependencies = Object.fromEntries(['adm-zip', 'mammoth', 'jsdom', 'turndown', 'xlsx', 'iconv-lite', 'image-size', 'pdf-parse', 'pdfjs-dist', '@napi-rs/canvas', 'tesseract.js', 'tesseract.js-core'].map(name => [name, JSON.parse(fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'))).version]));
+fs.writeFileSync(path.join(resourceRoot, 'knowledge-parser.json'), JSON.stringify({ signature: 'soul-source-v1/' + hash(JSON.stringify({ parserInputs, parserDependencies, ocr })), parserInputs, parserDependencies, ocr }, null, 2));
 const models = await bundle({ stdin: { contents: `export { OpenAICompatProvider } from '../desktop-app/src/services/llm-providers/openai-compat.ts'; export { ClaudeProvider } from '../desktop-app/src/services/llm-providers/claude.ts';`, resolveDir: root, sourcefile: 'soul-model-adapter.ts' }, bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/model.cjs', alias: { '@soul/core/browser': path.join(repo, 'packages/core/src/intent-normalizer.ts') }, nodePaths: [path.join(root, 'node_modules')], metafile: true });
 const core = await bundle({ entryPoints: ['../packages/core/src/knowledge-retriever.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/retriever.cjs', external: ['nodejieba'], metafile: true });
 const coreInputs = Object.keys(core.metafile.inputs).map(name => ({ path: path.relative(repo, path.resolve(root, name)).replaceAll(path.sep, '/'), sha256: hash(fs.readFileSync(name)) }));
 const modelInputs = Object.keys(models.metafile.inputs).filter(name => !name.includes('node_modules') && fs.existsSync(name)).map(name => ({ path: path.relative(repo, path.resolve(root, name)).replaceAll(path.sep, '/'), sha256: hash(fs.readFileSync(name)) }));
-fs.writeFileSync(path.join(resourceRoot, 'build-inputs.json'), JSON.stringify({ ...manifest, files: undefined, experts: undefined, coreInputs, modelInputs }, null, 2));
+fs.writeFileSync(path.join(resourceRoot, 'build-inputs.json'), JSON.stringify({ ...manifest, files: undefined, experts: undefined, coreInputs, modelInputs, parserInputs, parserDependencies, ocr }, null, 2));
 await viteBuild({ root, base: './', build: { outDir: 'dist', emptyOutDir: true } });
 console.log(`Resource manifest: ${files.length} files, ${experts.length} experts, ${files.reduce((sum, file) => sum + file.bytes, 0)} bytes`);

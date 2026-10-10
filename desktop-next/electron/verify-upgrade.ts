@@ -31,6 +31,7 @@ function taskRecord(profile: string, id: string): TaskRecord {
   finally { db.close(); }
 }
 export async function verifyUpgrade(window: BrowserWindow, updates: UpdateManager, library: ExpertLibrary, resources: ResourceStore, profile: string, output: string, mode: string, migration: unknown) {
+  console.log(`[upgrade-verification] ${mode} assertions-started`);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const report: Record<string, unknown> = { ok: true, version: app.getVersion(), packaged: app.isPackaged, platform: process.platform, arch: process.arch, execPath: process.execPath, migration, mode };
   if (!app.isPackaged) throw new Error('Upgrade acceptance requires an installed packaged app');
@@ -63,8 +64,10 @@ export async function verifyUpgrade(window: BrowserWindow, updates: UpdateManage
     if (JSON.stringify(before.knowledgeFiles) !== JSON.stringify(knowledgeFiles(profile))) throw new Error('Knowledge source files changed during upgrade');
     const source = taskRecord(profile, before.task.id).members[0].knowledge.find(file => file.id === before.pinnedSource.id)!;
     if (JSON.stringify(source) !== JSON.stringify(before.pinnedSource)) throw new Error('Pinned task reference changed during upgrade');
+    console.log(`[upgrade-verification] ${mode} business-files-verified`);
     const range = await resources.lookup.execute(resources.lookup.taskSources([source]), { operation: 'read', id: source.id });
     if (!('content' in range) || !range.content.includes('UPGRADEKNOWLEDGE62709-1') || range.content.includes('UPGRADEKNOWLEDGE62709-2') || range.version !== before.task.knowledge.original) throw new Error('Upgraded task reads a newer source version');
+    console.log(`[upgrade-verification] ${mode} pinned-source-verified`);
     const learning = await window.webContents.executeJavaScript(`window.soulDesktop.resources.knowledge.learning.read(${JSON.stringify(before.task.knowledge.learning.id)}, 'finance-expert')`);
     if (JSON.stringify(learning) !== JSON.stringify(before.task.knowledge.learning)) throw new Error('Learning provenance or usage changed during upgrade');
     report.preservedKnowledgeFiles = Object.keys(before.knowledgeFiles).length; report.preservedPinnedSource = range.version; report.preservedLearning = {id:learning.id,version:learning.reference.version,usage:learning.parts[0].usage,state:learning.state};

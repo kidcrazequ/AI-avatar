@@ -33,6 +33,8 @@ const flag = (name: string) => process.argv.find(item => item.startsWith(`--${na
 const verifyOutput = flag('verify-output');
 const profile = flag('profile');
 const upgradeOutput = flag('verify-upgrade');
+const upgradePhase = (value: string) => { if (upgradeOutput) console.log(`[upgrade-verification] ${flag('upgrade-mode') ?? 'read'} ${value}`); };
+upgradePhase('main-loaded');
 if (upgradeOutput && (!profile || !path.isAbsolute(upgradeOutput))) throw new Error('Upgrade verification requires isolated absolute profile and output');
 if (verifyOutput && !profile) throw new Error('Install verification requires an isolated --profile');
 if (profile && !path.isAbsolute(profile)) throw new Error('Profile must be absolute');
@@ -74,9 +76,11 @@ process.on('unhandledRejection', fail);
 
 app.whenReady().then(async () => {
   if (!ownsProfile) return;
+  upgradePhase('migration-started');
   const migration = await migrateProfile(app.getPath('userData'));
   const resourceRoot = app.isPackaged ? path.join(process.resourcesPath, 'soul-resources') : path.join(app.getAppPath(), 'build/resources');
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
+  upgradePhase('runtime-probed');
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
   resources = new ResourceStore(resourceRoot, app.getPath('userData'), library);
   resources.knowledge.onChanged(() => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:knowledge-changed'); });
@@ -109,6 +113,7 @@ app.whenReady().then(async () => {
     decrypt(value) { return safeStorage.decryptString(value); },
   }, () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:workflows-changed'); });
   await workflows.start();
+  upgradePhase('services-open');
   const policyFile = path.join(resourceRoot, 'update-policy.json');
   let policy: UpdatePolicy | null = fs.existsSync(policyFile) ? JSON.parse(fs.readFileSync(policyFile, 'utf8')) : null;
   if (upgradeOutput && policy?.production) throw new Error('正式发行包不接受内部升级验收模式');
@@ -314,6 +319,7 @@ app.whenReady().then(async () => {
   window.once('ready-to-show', () => { window?.show(); window?.focus(); });
   if (verifyOutput) timer = setTimeout(() => fail(new Error('Installed renderer timed out')), 60_000);
   await window.loadFile(page);
+  upgradePhase('renderer-loaded');
   if (upgradeOutput) { await verifyUpgrade(window, updater, library!, resources!, app.getPath('userData'), upgradeOutput, flag('upgrade-mode') ?? 'read', migration); return; }
   if (!verifyOutput) updater.start();
   if (!verifyOutput) return;

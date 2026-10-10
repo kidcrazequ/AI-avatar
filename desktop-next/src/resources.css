@@ -39,8 +39,9 @@
 .knowledge-hashes{font-size:12px;line-height:20px;margin:16px 0}
 .knowledge-hashes dt{color:var(--secondary);margin-top:8px}
 .knowledge-hashes dd{margin:0;overflow-wrap:anywhere;font-family:monospace}
-.knowledge-range{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.knowledge-range input{width:100%}
+.knowledge-range{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.knowledge-range .field{min-width:0}
+.knowledge-range input{width:100%;max-width:100%;min-width:0}
 .knowledge-learning-preview,.knowledge-learning-record{border:1px solid var(--border);border-radius:var(--card-radius);padding:16px;margin-top:16px;font-size:13px;line-height:20px;overflow-wrap:anywhere}
 .knowledge-learning-preview p,.knowledge-learning-record p{margin:8px 0}
 .knowledge-learning-record blockquote{border-left:2px solid var(--border);margin:8px 0;padding:0 12px;color:var(--secondary);white-space:pre-wrap}

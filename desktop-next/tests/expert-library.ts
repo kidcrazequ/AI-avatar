@@ -112,6 +112,24 @@ try {
     assert(library.archive(role.id, 'AGENTS.md').content.includes('知识库约束'));
     assert.throws(() => library.installExpert(role.id), /草案/);
   });
+  check('Windows line endings preserve user role content and required template guardrails', () => {
+    const windowsResources = path.join(profile, 'Windows 模板资源');
+    fs.mkdirSync(path.join(windowsResources, 'templates'), { recursive: true });
+    fs.mkdirSync(path.join(windowsResources, 'expert-packs'));
+    for (const file of ['soul-template.md', 'agent-template.md', 'knowledge-readme-template.md', 'test-case-template.md']) {
+      const source = fs.readFileSync(path.join(resourceRoot, 'templates', file), 'utf8').replace(/\r\n?/g, '\n');
+      fs.writeFileSync(path.join(windowsResources, 'templates', file), source.replaceAll('\n', '\r\n'));
+    }
+    const windowsLibrary = new ExpertLibrary(windowsResources, path.join(profile, 'Windows 角色验收'));
+    try {
+      const role = windowsLibrary.createRole({ name: 'Windows 角色', description: '换行兼容验收', identity: '保留职责 $1', style: '保留风格 $&', workflow: '保留流程' }).experts[0];
+      const soul = windowsLibrary.archive(role.id, 'soul.md').content;
+      for (const text of ['保留职责 $1', '保留风格 $&', '保留流程']) assert(soul.includes(text));
+      assert.equal(windowsLibrary.detail(role.id).testCases, 5);
+      assert(windowsLibrary.archive(role.id, 'AGENTS.md').content.includes('知识库约束'));
+      assert.throws(() => windowsLibrary.installExpert(role.id), /草案/);
+    } finally { windowsLibrary.close(); }
+  });
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify({ ok: true, platform: process.platform, arch: process.arch, electron: process.versions.electron, checks }, null, 2));
   console.log(JSON.stringify({ ok: true, checks: checks.length, output }));

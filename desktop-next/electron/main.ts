@@ -103,6 +103,7 @@ app.whenReady().then(async () => {
   await workflows.start();
   const policyFile = path.join(resourceRoot, 'update-policy.json');
   let policy: UpdatePolicy | null = fs.existsSync(policyFile) ? JSON.parse(fs.readFileSync(policyFile, 'utf8')) : null;
+  if (upgradeOutput && policy?.production) throw new Error('正式发行包不接受内部升级验收模式');
   if (upgradeOutput && flag('upgrade-feed')) policy = { url: validateFeed(flag('upgrade-feed')!, true), channel: 'candidate', production: false };
   autoUpdater.logger = { info() {}, warn() {}, error() {} };
   if (upgradeOutput && flag('upgrade-feed')) {

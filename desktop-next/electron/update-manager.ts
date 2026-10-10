@@ -72,5 +72,5 @@ export class UpdateManager {
     catch { this.patch({ state: 'error', error: '升级前备份或准备失败，未安装更新' }); throw new Error(this.value.error); }
     finally { this.operation = false; }
   }
-  close(): void { this.closed = true; this.token?.cancel(); if (this.timer) clearInterval(this.timer); this.driver.removeAllListeners(); this.db.close(); }
+  close(): void { this.closed = true; this.token?.cancel(); if (this.timer) clearInterval(this.timer); this.driver.removeAllListeners(); this.driver.on('error', () => {}); this.db.close(); }
 }

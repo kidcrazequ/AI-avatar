@@ -20,7 +20,7 @@ export async function verifyWorkflowPages(window: BrowserWindow, page: string, o
   for (const [width, height] of [[1440, 900], [1280, 800]]) {
     window.setContentSize(width, height);
     const geometry = await window.webContents.executeJavaScript(`(()=>{const r=document.querySelector('h1').getBoundingClientRect();const card=document.querySelector('.flow-card').getBoundingClientRect();return {width:innerWidth,height:innerHeight,titleX:r.x,titleY:r.y,cardHeight:card.height,railWidth:document.querySelector('.rail').getBoundingClientRect().width,overflow:document.documentElement.scrollWidth>innerWidth}})()`);
-    if (geometry.titleX !== 104 || geometry.titleY !== 32 || geometry.cardHeight !== 140 || geometry.railWidth !== 64 || geometry.overflow) throw new Error('Workflow list differs from V3');
+    if (geometry.titleX !== 104 || geometry.titleY !== 32 || geometry.cardHeight !== 140 || geometry.railWidth !== 64 || geometry.overflow) throw new Error(`Workflow list differs from V3: ${JSON.stringify(geometry)}`);
     checks.push({ surface: 'list', ...geometry });
     fs.writeFileSync(path.join(path.dirname(output), `workflows-list-${width}x${height}-${iteration}.png`), (await window.webContents.capturePage()).toPNG());
   }
@@ -42,7 +42,7 @@ export async function verifyWorkflowPages(window: BrowserWindow, page: string, o
   for (const [width, height] of [[1440, 900], [1280, 800]]) {
     window.setContentSize(width, height);
     const geometry = await window.webContents.executeJavaScript(`(()=>{const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};return {width:innerWidth,height:innerHeight,dialog:box('.automation-dialog'),footer:box('.dialog-footer'),scroll:box('.dialog-body')}})()`);
-    if (geometry.dialog.width !== 800 || geometry.dialog.height !== height - 64 || geometry.footer.y + geometry.footer.height > height || geometry.scroll.y < 0) throw new Error('Workflow automation dialog is clipped');
+    if (geometry.dialog.width !== 800 || geometry.dialog.height !== height - 64 || geometry.footer.y + geometry.footer.height > height || geometry.scroll.y < 0) throw new Error(`Workflow automation dialog is clipped: ${JSON.stringify(geometry)}`);
     checks.push({ surface: 'automation-dialog', ...geometry });
     fs.writeFileSync(path.join(path.dirname(output), `workflows-automation-${width}x${height}-${iteration}.png`), (await window.webContents.capturePage()).toPNG());
   }

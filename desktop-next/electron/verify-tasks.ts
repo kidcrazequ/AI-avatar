@@ -65,6 +65,8 @@ export async function verifyTaskPages(window: BrowserWindow, page: string, outpu
     const artifact = result.find((task: any) => task.id === marker.approvalTask)?.artifacts[0];
     if (!artifact || !fs.existsSync(artifact.path) || !written.includes('已写入：安装验收.md') || !written.includes(artifact.hash)) throw new Error('The actual artifact receipt must remain visible independently of model wording');
     checks.push({ artifactReceipt: artifact });
+    const progress = await window.webContents.executeJavaScript(`document.querySelector('.event-list').textContent`);
+    if (progress.includes('write_artifact') || progress.includes('read_knowledge') || progress.includes('"content"')) throw new Error('Conversation progress must describe expert actions instead of displaying tool payloads');
     fs.writeFileSync(path.join(path.dirname(output), 'tasks-written-receipt.png'), (await window.webContents.capturePage()).toPNG());
   }
   return checks;

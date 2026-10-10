@@ -42,7 +42,7 @@ for (const iteration of [1, 2]) {
   } finally { fs.closeSync(log); }
   const report = JSON.parse(fs.readFileSync(output, 'utf8'));
   if (!report.ok || !report.packaged || report.execPath !== executable || report.status.version !== version || report.status.persistenceRun !== iteration || report.status.arch !== process.arch || !Array.isArray(report.workflowRenderChecks) || report.workflowRenderChecks.length < 12 || (iteration === 2 && !report.workflowRenderChecks.some(check => check.installedWorkflowResume)) || !Array.isArray(report.taskRenderChecks) || report.taskRenderChecks.length < 10 || (iteration === 2 && !report.taskRenderChecks.some(check => check.installedResume))) throw new Error(`Installed app verification mismatch: ${output}`);
-  if (iteration === 1) await new Promise(resolve => setTimeout(resolve, 1500));
+  if (iteration === 1) await new Promise(resolve => setTimeout(resolve, 16000));
   runs.push(report);
 }
 const report = {

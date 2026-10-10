@@ -21,6 +21,18 @@ const api: DesktopAPI = {
   chooseRoleText: () => ipcRenderer.invoke('soul-next:choose-role-text'),
   saveRoleTemplate: () => ipcRenderer.invoke('soul-next:save-role-template'),
   chooseDirectory: () => ipcRenderer.invoke('soul-next:choose-directory'),
+  tasks: {
+    read: () => ipcRenderer.invoke('soul-next:tasks'),
+    send: input => ipcRenderer.invoke('soul-next:task-send', input),
+    resume: (id, requestId) => ipcRenderer.invoke('soul-next:task-resume', id, requestId),
+    cancel: (id, requestId) => ipcRenderer.invoke('soul-next:task-cancel', id, requestId),
+    approve: (id, approvalId, approved, note, requestId) => ipcRenderer.invoke('soul-next:task-approve', id, approvalId, approved, note, requestId),
+    saveModel: input => ipcRenderer.invoke('soul-next:task-model-save', input),
+    importModels: () => ipcRenderer.invoke('soul-next:task-model-import'),
+    chooseAttachments: () => ipcRenderer.invoke('soul-next:task-attachments'),
+    exportResult: id => ipcRenderer.invoke('soul-next:task-export', id),
+    onChanged(listener) { const callback = () => listener(); ipcRenderer.on('soul-next:tasks-changed', callback); return () => ipcRenderer.removeListener('soul-next:tasks-changed', callback); },
+  },
   resources: {
     read: scope => ipcRenderer.invoke('soul-next:resources', scope),
     saveProject: (input, scope) => ipcRenderer.invoke('soul-next:project-save', input, scope),

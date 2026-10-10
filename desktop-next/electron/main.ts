@@ -1,12 +1,18 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { probeRuntime } from './runtime-probe';
 import { ExpertLibrary } from './expert-library';
 import { ResourceStore } from './resources';
 import { verifyResourcePages } from './verify-resources';
+import { TaskRepository } from './task-repository';
+import { TaskModels } from './task-models';
+import { TaskRuntime } from './task-runtime';
+import { taskFile } from './task-tools';
+import { verificationModel, verificationCall, verifyTaskPages } from './verify-tasks';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -20,7 +26,10 @@ let window: BrowserWindow | null = null;
 let timer: NodeJS.Timeout | undefined;
 let library: ExpertLibrary | undefined;
 let resources: ResourceStore | undefined;
-const closeLibrary = () => { resources?.close(); resources = undefined; library?.close(); library = undefined; };
+let tasks: TaskRuntime | undefined;
+let taskRepository: TaskRepository | undefined;
+let models: TaskModels | undefined;
+const closeLibrary = () => { tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -39,6 +48,13 @@ app.whenReady().then(async () => {
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
   resources = new ResourceStore(resourceRoot, app.getPath('userData'), library);
+  taskRepository = new TaskRepository(app.getPath('userData'));
+  models = new TaskModels(app.getPath('userData'), {
+    encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); },
+    decrypt(value) { return safeStorage.decryptString(value); },
+  });
+  const executionModels = verifyOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
+  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined);
   const page = path.join(__dirname, '../dist/index.html');
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
@@ -64,6 +80,34 @@ app.whenReady().then(async () => {
   handle('save-group', input => library!.saveGroup(input));
   handle('remove-group', id => library!.removeGroup(id));
   handle('create-role', input => library!.createRole(input));
+  handle('tasks', () => tasks!.read());
+  handle('task-send', input => tasks!.send(input));
+  handle('task-resume', (id, requestId) => tasks!.resume(id, requestId));
+  handle('task-cancel', (id, requestId) => tasks!.cancel(id, requestId));
+  handle('task-approve', (id, approvalId, approved, note, requestId) => tasks!.approve(id, approvalId, approved, note, requestId));
+  handle('task-model-save', input => { const result = models!.save(input); window!.webContents.send('soul-next:tasks-changed'); return result; });
+  handle('task-model-import', async () => {
+    const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: '旧版 Soul 数据库', extensions: ['db', 'sqlite'] }] });
+    if (result.canceled || !result.filePaths[0]) return models!.list();
+    const entries = models!.importLegacy(result.filePaths[0]); window!.webContents.send('soul-next:tasks-changed'); return entries;
+  });
+  handle('task-attachments', async () => {
+    const result = await dialog.showOpenDialog(window!, { properties: ['openFile', 'multiSelections'], filters: [{ name: '文本资料', extensions: ['md', 'txt', 'csv', 'json'] }] });
+    if (result.canceled) return [];
+    if (result.filePaths.length > 5) throw new Error('最多添加 5 个附件');
+    return result.filePaths.map(file => {
+      if (fs.lstatSync(file).isSymbolicLink() || !fs.statSync(file).isFile() || !/\.(md|txt|csv|json)$/i.test(file) || fs.statSync(file).size > 200000) throw new Error('附件须为 200 KB 内的文本文件');
+      return taskFile(crypto.randomUUID(), path.basename(file), file, fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    });
+  });
+  handle('task-export', async id => {
+    const task = taskRepository!.get(id);
+    if (task.status !== 'completed') throw new Error('任务尚未完成');
+    const result = await dialog.showSaveDialog(window!, { defaultPath: `Soul-${task.id}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (result.canceled || !result.filePath) return false;
+    fs.writeFileSync(result.filePath, `# ${task.title}\n\n任务 ID：${task.id}\n\n${task.messages.filter(message => message.role === 'assistant').map(message => `## ${task.members.find(member => member.expertId === message.expertId)?.name}\n\n${message.text}`).join('\n\n')}`);
+    return true;
+  });
   handle('resources', scope => resources!.read(scope));
   handle('project-save', (input, scope) => resources!.saveProject(input, scope));
   handle('project-remove', (id, scope) => resources!.removeProject(id, scope));
@@ -184,13 +228,14 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(path.dirname(verifyOutput), `home-${width}x${height}-${status.persistenceRun}.png`), (await window.webContents.capturePage()).toPNG());
   }
   const resourceRenderChecks = await verifyResourcePages(window, page, verifyOutput, status.persistenceRun);
+  const taskRenderChecks = await verifyTaskPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },
-    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, status,
+    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, taskRenderChecks, status,
   }, null, 2));
   closeLibrary();
   app.exit(ok ? 0 : 1);

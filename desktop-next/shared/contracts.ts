@@ -44,6 +44,7 @@ export interface DesktopAPI {
   saveRoleTemplate(): Promise<boolean>;
   chooseDirectory(): Promise<string | null>;
   resources: ResourceAPI;
+  tasks: TaskAPI;
 }
 
 export interface ExpertRecord extends Expert {
@@ -119,4 +120,34 @@ export interface ResourceAPI {
   saveSoul(expertId: string, text: string, revision: string): Promise<void>;
   checkQuality(expertId: string): Promise<QualityReport>;
   readCase(expertId: string, file: string): Promise<ResourceFile>;
+}
+
+export type TaskStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'stopped' | 'interrupted' | 'failed';
+export interface ModelEntry { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; configured: boolean }
+export interface ModelInput { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; apiKey: string }
+export interface TaskFile { id: string; name: string; source: string; content: string; hash: string }
+export interface TaskMember { expertId: string; name: string; avatar: string; model: string; directory: string; system: string; knowledge: TaskFile[]; skills: TaskFile[] }
+export interface TaskMessage { id: string; role: 'user' | 'assistant'; text: string; expertId: string; at: string; attachments?: TaskFile[] }
+export interface TaskEvent { at: string; text: string; kind: string }
+export interface WireCall { id: string; type: 'function'; function: { name: string; arguments: string } }
+export interface WireMessage { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_calls?: WireCall[]; tool_call_id?: string; reasoning_content?: string }
+export interface TaskUsage { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number }
+export interface TaskRound { id: string; member: number; kind: 'normal' | 'repair'; state: 'started' | 'done' | 'unknown' | 'failed'; text: string; reasoning?: string; calls: WireCall[]; usage?: TaskUsage }
+export interface TaskApproval { id: string; taskId: string; expertId: string; state: 'pending' | 'approved' | 'rejected' | 'cancelled'; requested: string; resolved?: string; destination: string; content: string; hash: string; note: string; callId: string; roundId: string }
+export interface TaskCheckpoint { member: number; wire: WireMessage[]; calls: WireCall[]; callIndex: number; repairing: boolean; memberRounds: number }
+export interface TaskRecord { id: string; title: string; expertId: string; groupId: string; owner: string; status: TaskStatus; created: string; updated: string; project: ResourceProject | null; members: TaskMember[]; messages: TaskMessage[]; events: TaskEvent[]; approvals: TaskApproval[]; rounds: TaskRound[]; checkpoint: TaskCheckpoint; artifacts: Array<{ path: string; hash: string }>; error: string }
+export type TaskView = Omit<TaskRecord, 'checkpoint' | 'members'> & { members: Array<Pick<TaskMember, 'expertId' | 'name' | 'avatar' | 'model' | 'directory'>> };
+export interface TaskSnapshot { tasks: TaskView[]; models: ModelEntry[] }
+export interface TaskSendInput { requestId: string; taskId: string; expertId: string; groupId: string; model: string; directory: string; projectId: string; text: string; attachments: TaskFile[] }
+export interface TaskAPI {
+  read(): Promise<TaskSnapshot>;
+  send(input: TaskSendInput): Promise<string>;
+  resume(id: string, requestId: string): Promise<void>;
+  cancel(id: string, requestId: string): Promise<void>;
+  approve(id: string, approvalId: string, approved: boolean, note: string, requestId: string): Promise<void>;
+  saveModel(input: ModelInput): Promise<ModelEntry[]>;
+  importModels(): Promise<ModelEntry[]>;
+  chooseAttachments(): Promise<TaskFile[]>;
+  exportResult(id: string): Promise<boolean>;
+  onChanged(listener: () => void): () => void;
 }

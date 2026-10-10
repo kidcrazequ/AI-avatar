@@ -4,8 +4,9 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'Windows installation must be verified on native Windows' }
 if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') { throw 'This gate requires a native Windows x64 host' }
 $root = Split-Path -Parent $PSScriptRoot
+$version = (Get-Content -Raw -Encoding UTF8 (Join-Path $root 'package.json') | ConvertFrom-Json).version
 if (-not $Installer) {
-  $Installer = (Get-ChildItem (Join-Path $root 'release') -Filter '*win-x64.exe' | Select-Object -First 1).FullName
+  $Installer = Join-Path $root "release\Soul-Next-$version-win-x64.exe"
 }
 if (-not $Installer -or -not (Test-Path $Installer)) { throw 'NSIS installer not found' }
 $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -47,7 +48,7 @@ foreach ($iteration in 1, 2) {
     throw "Installed app failed: $exitCode, see $output"
   }
   $report = Get-Content -Raw -Encoding UTF8 $output | ConvertFrom-Json
-  if (-not $report.ok -or -not $report.packaged -or $report.execPath -ne $executable -or $report.status.persistenceRun -ne $iteration -or $report.status.platform -ne 'win32' -or $report.status.arch -ne 'x64') { throw "Install verification mismatch: $output" }
+  if (-not $report.ok -or -not $report.packaged -or $report.execPath -ne $executable -or $report.status.persistenceRun -ne $iteration -or $report.status.platform -ne 'win32' -or $report.status.arch -ne 'x64' -or $report.status.version -ne $version -or $report.taskRenderChecks.Count -lt 10 -or ($iteration -eq 2 -and -not ($report.taskRenderChecks | Where-Object { $_.PSObject.Properties.Name -contains 'installedResume' }))) { throw "Install verification mismatch: $output" }
   $runs += $report
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

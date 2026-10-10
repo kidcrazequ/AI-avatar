@@ -49,6 +49,8 @@ jobs:
         run: npm run verify:experts
       - name: Verify resource isolation, recovery and persistence
         run: npm run verify:resources
+      - name: Verify task execution, approvals and crash recovery
+        run: npm run verify:tasks
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
       - name: Upload installation evidence

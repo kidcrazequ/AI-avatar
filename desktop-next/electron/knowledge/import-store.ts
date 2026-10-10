@@ -179,7 +179,8 @@ export class KnowledgeImports {
       item.state = 'extracting'; item.version = digest(item.sha256 + this.signature).slice(0, 24) + '-' + crypto.randomUUID().slice(0, 8); this.persist(batch);
       const intake = safe(this.intakeRoot, `${batch.id}/${item.id}${path.posix.extname(item.relativePath).toLowerCase()}`);
       if (digest(fs.readFileSync(intake)) !== item.sha256) throw new Error('原件快照哈希不匹配');
-      staging = safe(this.intakeRoot, `${batch.id}/staging-${item.id}`); fs.rmSync(staging, { recursive: true, force: true });
+      // A parser orphaned by a killed app must not write into a resumed attempt.
+      staging = safe(this.intakeRoot, `${batch.id}/staging-${item.id}-${item.version}`); fs.rmSync(staging, { recursive: true, force: true });
       const workerFile = this.workerFile.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
       const result = await new Promise<SourceManifest>((resolve, reject) => {
         // Native PDF/image libraries can terminate the whole process from a thread.
@@ -215,7 +216,7 @@ export class KnowledgeImports {
       if (!this.closed && this.batch(batch.id).state !== 'cancelled') { item.state = 'failed'; item.error = cause instanceof Error ? cause.message : String(cause); this.persist(batch); }
     } finally {
       const worker = this.active?.worker; this.active = undefined;
-      if (worker && worker.exitCode === null && worker.signalCode === null) { const exited = new Promise<void>(resolve => worker.once('exit', () => resolve())); worker.kill(); await exited; }
+      if (worker?.pid && worker.exitCode === null && worker.signalCode === null) { const exited = new Promise<void>(resolve => worker.once('exit', () => resolve())); worker.kill(); await exited; }
       if (staging && !this.closed) fs.rmSync(staging, { recursive: true, force: true });
       if (!this.closed) this.schedule();
     }

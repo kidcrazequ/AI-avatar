@@ -5,6 +5,7 @@ import { RemoveDialog, type DialogActions } from './expert-dialogs';
 import { ExpertSidebar } from './expert-sidebar';
 import { useTasks, openTask, taskStatuses } from './tasks-page';
 import type { TaskView } from '../shared/contracts';
+import { useIntegrations } from './integration-ui';
 
 function Heatmap({ tasks }: { tasks: TaskView[] }) {
   const first = new Date(); first.setHours(0, 0, 0, 0); first.setDate(first.getDate() - 364 - (first.getDay() + 6) % 7);
@@ -17,6 +18,7 @@ export function ExpertHome({ expert, back, ...actions }: DialogActions & { exper
   const { notice, archive, saved } = actions;
   const [tab, setTab] = useState('timeline');
   const { tasks } = useTasks(notice);
+  const { data: integrations } = useIntegrations(expert.id);
   const records = tasks.filter(task => task.members.some(member => member.expertId === expert.id));
   const chats = records.filter(task => !task.workflow);
   const automated = records.filter(task => task.workflow);
@@ -26,7 +28,6 @@ export function ExpertHome({ expert, back, ...actions }: DialogActions & { exper
   const [remove, setRemove] = useState(false);
   const [installing, setInstalling] = useState(false);
   const memoryContent = expert.memory.text.replace(/<!--[\s\S]*?-->/g, '').replace(/^#{1,6}\s+.*$/gm, '').replace(/^长期记忆索引。分身应在用户明示偏好或被纠正后置入对应小节。\s*$/gm, '').trim();
-  const pending = () => notice('该功能暂未开放');
   return <>
     <ExpertSidebar id={expert.id} page="home" notice={notice} />
     <main className="home-main" data-ued-node="expert.home"><header className="home-topbar"><h1>首页</h1><button className="icon-button" aria-label={`移除${expert.name}`} title="移除专家" onClick={() => setRemove(true)}><Icon name="trash" small /></button></header><div className="home-page">
@@ -36,7 +37,7 @@ export function ExpertHome({ expert, back, ...actions }: DialogActions & { exper
       </Section>
       <Section title="记忆与积累" node="expert.memory-summary" extra={<button className="section-link" onClick={() => archive(expert.id, 'memory/MEMORY.md')}>查看完整记忆<Icon name="chevron" small /></button>}><div className="memory-body">{memoryContent ? <div className="memory-empty memory-present"><span className="tiny">来源：{expert.memory.source}</span><p>{memoryContent.slice(0, 350)}</p></div> : <div className="memory-empty"><Icon name="memory" /><span>尚未积累记忆</span><span className="tiny">{expert.installed ? '当前专家尚无记忆条目' : '安装后保存这位专家的独立记忆'}</span></div>}</div></Section>
       <Section title="关于我" node="expert.about" extra={<button className="section-link" onClick={() => archive(expert.id, 'soul.md')}>查看人格来源<Icon name="chevron" small /></button>}><div className="about-grid">{expert.about.map(column => <div className="about-column" key={column.title}><h3>{column.title}</h3>{column.items.map((item, index) => <div className="about-item" key={index}><h4>{item.title}</h4><p>{item.text}</p></div>)}<p className="tiny">来源：{column.source}</p></div>)}</div></Section>
-      <Section title="技能与工具" node="expert.capabilities"><div className="capability-group"><div className="capability-heading">专家技能配置（{expert.skills.length}）<span className="tiny">配置项 · {expert.draft ? '待审核' : '来源见原始文件'}</span></div><div className="badges">{expert.skills.length ? expert.skills.map(skill => <button className="badge" key={skill.id} onClick={() => archive(expert.id, skill.id)} title={`${skill.source} · ${skill.path}`}><Icon name="skill" small />{skill.name}<span>{skill.source}{skill.available ? '' : ' · 文件缺失'}</span></button>) : <span className="tiny">未配置技能</span>}</div></div><div className="capability-group"><div className="capability-heading">连接器<span className="tiny">尚未接入</span></div><p className="tiny">连接器和授权配置将在连接器页面管理。</p><button className="section-link" onClick={pending}>管理连接器</button></div></Section>
+      <Section title="技能与工具" node="expert.capabilities"><div className="capability-group"><div className="capability-heading">专家技能配置（{expert.skills.length}）<span className="tiny">配置项 · {expert.draft ? '待审核' : '来源见原始文件'}</span></div><div className="badges">{expert.skills.length ? expert.skills.map(skill => <button className="badge" key={skill.id} onClick={() => archive(expert.id, skill.id)} title={`${skill.source} · ${skill.path}`}><Icon name="skill" small />{skill.name}<span>{skill.source}{skill.available ? '' : ' · 文件缺失'}</span></button>) : <span className="tiny">未配置技能</span>}</div></div><div className="capability-group"><div className="capability-heading">连接器<span className="tiny">{integrations ? `${integrations.connectors.length} 个配置 · ${integrations.connectors.filter(c => c.state === 'connected').length} 个已连接` : '正在读取'}</span></div><p className="tiny">连接器和授权配置在连接器页面管理。</p><button className="section-link" onClick={() => { location.hash = `expert/${encodeURIComponent(expert.id)}/connectors`; }}>管理连接器</button></div></Section>
       <Section title="原始档案" node="expert.archives"><p className="tiny">{expert.installed ? '当前专家的独立安装副本' : expert.draft ? '用户填写的角色草案；尚不可运行' : '随安装包提供的专家包正本'} · {expert.knowledgeFiles} 份知识文件 · {expert.testCases} 份测试用例（未执行）</p><div>{expert.archives.map(file => <div className="archive" key={file}><div className="archive-name"><Icon name="file" small /><span>{file}</span></div><button className="btn text" onClick={() => archive(expert.id, file)}>查看<Icon name="chevron" small /></button></div>)}</div></Section>
     </div></main>
     {remove && <RemoveDialog name={expert.name} onClose={() => setRemove(false)} remove={async () => { saved(await window.soulDesktop.removeExpert(expert.id)); back(); notice('已移除，专家资料仍然保留'); }} />}

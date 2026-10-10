@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage, powerSaveBlocker, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -16,6 +16,11 @@ import { WorkflowStore } from './workflow-store';
 import { WorkflowRuntime } from './workflow-runtime';
 import { taskFile } from './task-tools';
 import { verificationModel, verificationCall, verifyTaskPages } from './verify-tasks';
+import { Permissions, defaultPermissions } from './permissions';
+import { ConnectorRuntime } from './connector-runtime';
+import { IMRuntime } from './im-runtime';
+import { AppSettings } from './app-settings';
+import { verifyIntegrationPages } from './verify-integrations';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -35,7 +40,12 @@ let tasks: TaskRuntime | undefined;
 let taskRepository: TaskRepository | undefined;
 let models: TaskModels | undefined;
 let workflows: WorkflowRuntime | undefined;
-const closeLibrary = () => { workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
+let permissions: Permissions | undefined;
+let connectors: ConnectorRuntime | undefined;
+let im: IMRuntime | undefined;
+let settings: AppSettings | undefined;
+let wakeId: number | undefined;
+const closeLibrary = () => { im?.close(); im = undefined; void connectors?.close(); connectors = undefined; settings?.close(); settings = undefined; permissions?.close(); permissions = undefined; workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -61,7 +71,20 @@ app.whenReady().then(async () => {
     decrypt(value) { return safeStorage.decryptString(value); },
   });
   const executionModels = verifyOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
-  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); queueMicrotask(() => workflows?.synchronize()); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined);
+  const codec = { encrypt(value: string) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); }, decrypt(value: Buffer) { return safeStorage.decryptString(value); } };
+  const integrationChanged = () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:integrations-changed'); };
+  permissions = new Permissions(app.getPath('userData'), id => library!.detail(id));
+  connectors = new ConnectorRuntime(app.getPath('userData'), codec, id => library!.detail(id), integrationChanged);
+  settings = new AppSettings(app.getPath('userData'), executionModels, status, {
+    encryption() { return safeStorage.isEncryptionAvailable(); },
+    setStartup(openAtLogin) { app.setLoginItemSettings({ openAtLogin, path: process.execPath }); },
+    startup() { return app.getLoginItemSettings({ path: process.execPath }).openAtLogin; },
+    wake(start) { if (start && wakeId === undefined) wakeId = powerSaveBlocker.start('prevent-app-suspension'); if (!start && wakeId !== undefined) { powerSaveBlocker.stop(wakeId); wakeId = undefined; } return wakeId !== undefined && powerSaveBlocker.isStarted(wakeId); },
+    async open(file) { const error = await shell.openPath(file); if (error) throw new Error('无法打开日志目录'); },
+  });
+  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); queueMicrotask(() => { workflows?.synchronize(); im?.synchronize(); settings?.activity(tasks?.read().tasks.some(t => t.status === 'running') ?? false); }); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined, { permissions, connectors, preferences: () => settings!.preferences() });
+  im = new IMRuntime(app.getPath('userData'), codec, library, tasks, integrationChanged);
+  await im.start();
   workflows = new WorkflowRuntime(new WorkflowStore(taskRepository, library), tasks, {
     encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); },
     decrypt(value) { return safeStorage.decryptString(value); },
@@ -79,6 +102,21 @@ app.whenReady().then(async () => {
     return listener(...args);
   });
   handle('status', () => status);
+  handle('integrations', scope => ({ connectors: connectors!.read(scope), channels: im!.channels(), sessions: im!.sessions(), events: im!.publicEvents(), permissions: scope ? permissions!.read(scope) : defaultPermissions() }));
+  handle('connector-save', input => connectors!.save(input));
+  handle('connector-connect', id => connectors!.connect(id));
+  handle('connector-remove', id => connectors!.remove(id));
+  handle('permissions-save', (id, input) => { permissions!.save(id, input); integrationChanged(); });
+  handle('im-channel-save', input => im!.saveChannel(input));
+  handle('im-channel-remove', id => im!.removeChannel(id));
+  handle('im-session-save', input => im!.saveSession(input));
+  handle('im-session-remove', id => im!.removeSession(id));
+  handle('im-pair', (id, input) => im!.pair(id, input));
+  handle('im-send-reply', id => im!.sendReply(id));
+  handle('settings', () => settings!.read());
+  handle('settings-save', input => { settings!.save(input); settings!.activity(tasks!.read().tasks.some(t => t.status === 'running')); });
+  handle('settings-diagnose', () => settings!.diagnose());
+  handle('settings-logs', () => settings!.openLogs());
   handle('library', () => library!.list());
   handle('expert', id => library!.detail(id));
   handle('archive', (id, file) => library!.archive(id, file));
@@ -252,13 +290,14 @@ app.whenReady().then(async () => {
   const resourceRenderChecks = await verifyResourcePages(window, page, verifyOutput, status.persistenceRun);
   const taskRenderChecks = await verifyTaskPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
   const workflowRenderChecks = await verifyWorkflowPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
+  const integrationRenderChecks = await verifyIntegrationPages(window, page, verifyOutput, status.persistenceRun);
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },
-    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, taskRenderChecks, workflowRenderChecks, status,
+    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, taskRenderChecks, workflowRenderChecks, integrationRenderChecks, status,
   }, null, 2));
   closeLibrary();
   app.exit(ok ? 0 : 1);

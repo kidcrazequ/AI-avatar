@@ -8,6 +8,10 @@ import { ArchiveDialog } from './expert-dialogs';
 import { ResourcesPage } from './resources-page';
 import { WorkflowsPage } from './workflows-page';
 import { TasksPage } from './tasks-page';
+import { IMPage } from './im-page';
+import { ConnectorsPage } from './connectors-page';
+import { PermissionsPage } from './permissions-page';
+import { SettingsPage, UsagePopover, applyTheme } from './settings-page';
 import './style.css';
 
 declare global { interface Window { soulDesktop: DesktopAPI } }
@@ -25,13 +29,18 @@ function App() {
   const [expert, setExpert] = useState<ExpertDetail>();
   const [file, setFile] = useState<ArchiveFile>();
   const [toast, setToast] = useState('');
+  const [usage, setUsage] = useState(false);
+  const closeUsage = useCallback(() => setUsage(false), []);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const notice = useCallback((message: string) => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4000); }, []);
   useEffect(() => {
     Promise.all([window.soulDesktop.readStatus(), window.soulDesktop.readLibrary()]).then(([runtime, snapshot]) => { setStatus(runtime); setLibrary(snapshot); }).catch(cause => setError(String(cause)));
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const theme = () => window.soulDesktop.settings.read().then(s => applyTheme(s.preferences.theme)).catch(c => notice(String(c)));
+    void theme(); media.addEventListener('change', theme);
     const navigate = () => { setRoute(currentRoute()); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', navigate);
-    return () => { window.removeEventListener('hashchange', navigate); clearTimeout(toastTimer.current); };
+    return () => { window.removeEventListener('hashchange', navigate); media.removeEventListener('change', theme); clearTimeout(toastTimer.current); };
   }, []);
   useEffect(() => {
     let active = true;
@@ -43,17 +52,22 @@ function App() {
   const back = () => { location.hash = ''; };
   const archive = async (expertId: string, path: string) => { try { setFile(await window.soulDesktop.readArchive(expertId, path)); } catch (cause) { notice(String(cause)); } };
   const saved = (snapshot: LibrarySnapshot) => setLibrary(snapshot);
-  const activeGlobal = ['chat', 'task'].includes(page) ? 1 : ['flows', 'flow', 'workflow'].includes(page) ? 3 : page === 'board' ? 4 : !id && page === 'projects' ? 5 : !id && page === 'knowledge' ? 6 : 0;
+  const activeGlobal = ['chat', 'task'].includes(page) ? 1 : page === 'im' ? 2 : ['flows', 'flow', 'workflow'].includes(page) ? 3 : page === 'board' ? 4 : !id && page === 'projects' ? 5 : !id && page === 'knowledge' ? 6 : 0;
   return <div className="shell" data-runtime-ready={Boolean(status && library)} data-ued-node="shell.desktop">
-    <aside className="rail" aria-label="主导航" data-ued-node="shell.global-nav"><div className="brand"><img src="./assets/soul-avatar.png" alt="Soul" /></div><nav>{globalItems.map(([icon, label], index) => <button key={label} className={`rail-tab ${index === activeGlobal ? 'active' : ''}`} aria-label={label} aria-current={index === activeGlobal ? 'page' : undefined} title={label} data-tip={label} onClick={index === 0 ? back : [1, 3, 4, 5, 6].includes(index) ? () => { location.hash = ({ 1: 'chat', 3: 'flows', 4: 'board', 5: 'projects', 6: 'knowledge' } as Record<number, string>)[index]; } : () => notice('该功能暂未开放')}><Icon name={icon} /></button>)}</nav><div className="rail-footer">{[['gauge', '用量'], ['settings', '设置']].map(([icon, label]) => <button key={label} className="rail-tab" aria-label={label} title={label} data-tip={label} onClick={() => notice('该功能暂未开放')}><Icon name={icon} /></button>)}</div></aside>
+    <aside className="rail" aria-label="主导航" data-ued-node="shell.global-nav"><div className="brand"><img src="./assets/soul-avatar.png" alt="Soul" /></div><nav>{globalItems.map(([icon, label], index) => <button key={label} className={`rail-tab ${index === activeGlobal ? 'active' : ''}`} aria-label={label} aria-current={index === activeGlobal ? 'page' : undefined} title={label} data-tip={label} onClick={index === 0 ? back : [1, 2, 3, 4, 5, 6].includes(index) ? () => { location.hash = ({ 1: 'chat', 2: 'im', 3: 'flows', 4: 'board', 5: 'projects', 6: 'knowledge' } as Record<number, string>)[index]; } : () => notice('该功能暂未开放')}><Icon name={icon} /></button>)}</nav><div className="rail-footer">{[['gauge', '用量'], ['settings', '设置']].map(([icon, label]) => <button key={label} className="rail-tab" aria-label={label} title={label} data-tip={label} onClick={() => { if (label === '用量') setUsage(previous => !previous); else location.hash = 'app-settings/preferences'; }}><Icon name={icon} /></button>)}</div></aside>
     {error && <main className="management"><h1>无法读取专家资料</h1><p role="alert" data-runtime-error>{error}</p></main>}
     {!library && !error && <main className="management"><p>正在读取专家资料…</p></main>}
-    {library && !id && !['projects', 'knowledge', 'chat', 'task', 'board', 'flows', 'workflow', 'flow'].includes(page) && <Management {...{ library, saved, notice, archive }} openExpert={expertId => { location.hash = `expert/${encodeURIComponent(expertId)}`; }} />}
+    {library && !id && !['projects', 'knowledge', 'chat', 'task', 'board', 'flows', 'workflow', 'flow', 'im', 'app-settings'].includes(page) && <Management {...{ library, saved, notice, archive }} openExpert={expertId => { location.hash = `expert/${encodeURIComponent(expertId)}`; }} />}
+    {library && (!id || expert) && page === 'im' && <IMPage key={id} {...{ expert, library, notice }} />}
+    {library && expert && page === 'connectors' && <ConnectorsPage {...{ expert, notice }} />}
+    {library && expert && page === 'permissions' && <PermissionsPage {...{ expert, notice, archive }} />}
+    {library && page === 'app-settings' && <SettingsPage page={detail} notice={notice} />}
     {library && ['flows', 'flow', 'workflow'].includes(page) && <WorkflowsPage key={id + detail} {...{ library, notice }} scope={id} id={['workflow', 'flow'].includes(page) ? detail : ''} initialModal={(route[2] === 'triggers' || route[4] === 'triggers') ? 'trigger' : ''} />}
     {library && ['chat', 'task', 'board'].includes(page) && <TasksPage {...{ library, saved, notice, archive, route }} />}
     {library && id && !expert && <main className="management"><p>正在读取专家档案…</p></main>}
     {library && expert && page === 'home' && <ExpertHome key={expert.id} {...{ expert, library, saved, notice, archive, back }} />}
     {library && (!id || expert) && ['projects', 'knowledge', 'memory', 'skills', 'settings'].includes(page) && <ResourcesPage key={`${id}/${page}`} {...{ expert: id ? expert : undefined, page, detail, saved, notice, archive }} />}
+    {usage && <UsagePopover onClose={closeUsage} />}
     {file && <ArchiveDialog file={file} onClose={() => setFile(undefined)} />}
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>;

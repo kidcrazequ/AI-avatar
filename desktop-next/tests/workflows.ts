@@ -83,7 +83,7 @@ async function main() {
     const apiFlow = create('API 验收'); configure(apiFlow, { enabled: true, prompt: 'API 要求', triggers: [{ ...trigger(), type: 'api' }] }); await runtime.start();
     const url = `${runtime.read().api.url}/workflows/${apiFlow}/trigger`, token = runtime.apiToken(apiFlow); calls = 0; call = async () => { calls++; return { text: 'API 交付', calls: [] }; };
     const send = (key: string, input: string, secret = token, origin = '') => fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${secret}`, 'Idempotency-Key': key, ...(origin ? { Origin: origin } : {}) }, body: JSON.stringify({ input }) });
-    assert.equal((await send('denied', '未授权', '0'.repeat(64))).status, 401); assert.equal((await send('origin', '网页', token, 'http://malicious.invalid')).status, 403); assert.equal(calls, 0);
+    assert.equal((await send('denied', '未授权', '0'.repeat(64))).status, 401); assert.equal((await send('origin', '网页', token, 'http://malicious.invalid')).status, 403); assert.equal(calls, 0); assert.equal((await send('too-large', 'x'.repeat(50000))).status, 413); assert.equal(calls, 0);
     const response = await send('stable-key', 'API 验收'); assert.equal(response.status, 202); const apiRun = (await response.json() as { runId: string }).runId; await wait(apiRun, 'completed');
     assert.equal((await send('stable-key', 'API 验收')).status, 202); assert.equal((await send('stable-key', '篡改内容')).status, 400); assert.equal(calls, 1); assert(!JSON.stringify(runtime.read()).includes(token)); checks.push('loopback-api-auth-origin-size-idempotency-secret-not-in-view');
 

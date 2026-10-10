@@ -152,6 +152,7 @@ export class WorkflowRuntime {
   }
   private async receive(request: http.IncomingMessage, response: http.ServerResponse): Promise<void> {
     const reply = (status: number, value: unknown) => { response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(value)); };
+    let deadline: NodeJS.Timeout | undefined;
     try {
       if (this.closing || request.method !== 'POST' || request.headers.origin || request.headers.host !== this.api.url.replace('http://', '')) return reply(403, { error: '仅允许本机脚本 POST 调用' });
       const match = /^\/workflows\/([a-f0-9-]{36})\/([A-Za-z0-9_-]{1,64})$/.exec(request.url ?? '');
@@ -160,13 +161,14 @@ export class WorkflowRuntime {
       const token = this.store.token(flow.id), bearer = request.headers.authorization?.replace(/^Bearer /, '');
       if (!token || !bearer || !/^[a-f0-9]{64}$/.test(bearer) || !crypto.timingSafeEqual(Buffer.from(bearer), Buffer.from(this.codec.decrypt(token)))) return reply(401, { error: '认证失败' });
       const key = request.headers['idempotency-key']; if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(key)) return reply(400, { error: '需要 Idempotency-Key，1–80 位字母数字或连字符' });
-      const chunks: Buffer[] = []; let bytes = 0; request.setTimeout(5000, () => request.destroy());
-      for await (const chunk of request) { bytes += chunk.length; if (bytes > 48_000) { reply(413, { error: '请求过大' }); request.destroy(); return; } chunks.push(Buffer.from(chunk)); }
+      const chunks: Buffer[] = []; let bytes = 0; deadline = setTimeout(() => request.destroy(), 5000);
+      for await (const chunk of request) { bytes += chunk.length; if (bytes <= 48_000) chunks.push(Buffer.from(chunk)); }
+      if (bytes > 48_000) return reply(413, { error: '请求过大' });
       if (this.closing) return reply(503, { error: '应用正在退出' });
       const input = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
       const runId = this.run(flow.id, required(input.input ?? flow.config.prompt, '任务要求', 10000), `api:${crypto.createHash('sha256').update(flow.id + ':' + key).digest('hex')}`, 'API', `api:${key}`);
       reply(202, { runId, taskId: this.store.run(runId).taskId, status: this.read().runs.find(run => run.id === runId)?.status });
-    } catch { reply(400, { error: '请求无效或幂等键已用于其他内容' }); }
+    } catch { if (!response.headersSent) reply(400, { error: '请求无效或幂等键已用于其他内容' }); } finally { if (deadline) clearTimeout(deadline); }
   }
   close(): void { this.closing = true; if (this.timer) clearInterval(this.timer); this.server?.close(); this.server?.closeAllConnections(); }
 }

@@ -7,6 +7,11 @@ export const verificationModel = { id: 'installation-test', label: '受控安装
 export const verificationCall = (run: number): ModelCall => async (_config, messages, signal) => {
   const request = messages.find(message => message.role === 'user')?.content ?? '';
   const toolResult = messages.some(message => message.role === 'tool');
+  if (request.includes('安装验收：工作流重启恢复')) {
+    if (messages[0].content.includes('工作流步骤 1 /')) return { text: '第一步已完成，资料缺口已记录。', calls: [], usage: { inputTokens: 4, outputTokens: 2 } };
+    if (run === 1) return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('工作流验收进程结束')), { once: true }));
+    return { text: '第二步恢复完成，综合草案。', calls: [], usage: { inputTokens: 5, outputTokens: 3 } };
+  }
   if (request.includes('安装验收：重启恢复')) {
     if (!toolResult) return { text: '', calls: [{ id: 'recovery-read', type: 'function', function: { name: 'search_knowledge', arguments: '{"query":"应收账款"}' } }], usage: { inputTokens: 7, outputTokens: 2 } };
     if (run === 1) return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('验收进程结束')), { once: true }));

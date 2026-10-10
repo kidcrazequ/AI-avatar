@@ -18,7 +18,7 @@ export function useTasks(notice: (value: string) => void) {
   return { ...snapshot, refresh };
 }
 function Badge({ task }: { task: TaskView }) { return <span className={`task-badge ${task.status}`}>{taskStatuses[task.status]}</span>; }
-function TaskAnswer({ text }: { text: string }) {
+export function TaskAnswer({ text }: { text: string }) {
   return <div className="task-markdown"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{ a: ({ children }) => <span>{children}</span>, img: ({ alt }) => <span>{alt}</span> }}>{text}</Markdown></div>;
 }
 function eventSummary(event: TaskView['events'][number]): string {

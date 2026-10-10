@@ -45,6 +45,7 @@ export interface DesktopAPI {
   chooseDirectory(): Promise<string | null>;
   resources: ResourceAPI;
   tasks: TaskAPI;
+  workflows: WorkflowAPI;
 }
 
 export interface ExpertRecord extends Expert {
@@ -135,7 +136,7 @@ export interface TaskUsage { inputTokens: number; outputTokens: number; cacheRea
 export interface TaskRound { id: string; member: number; kind: 'normal' | 'repair'; state: 'started' | 'done' | 'unknown' | 'failed'; text: string; reasoning?: string; calls: WireCall[]; usage?: TaskUsage }
 export interface TaskApproval { id: string; taskId: string; expertId: string; state: 'pending' | 'approved' | 'rejected' | 'cancelled'; requested: string; resolved?: string; destination: string; content: string; hash: string; note: string; callId: string; roundId: string }
 export interface TaskCheckpoint { member: number; wire: WireMessage[]; calls: WireCall[]; callIndex: number; repairing: boolean; memberRounds: number }
-export interface TaskRecord { id: string; title: string; expertId: string; groupId: string; owner: string; status: TaskStatus; created: string; updated: string; project: ResourceProject | null; members: TaskMember[]; messages: TaskMessage[]; events: TaskEvent[]; approvals: TaskApproval[]; rounds: TaskRound[]; checkpoint: TaskCheckpoint; artifacts: Array<{ path: string; hash: string }>; error: string }
+export interface TaskRecord { id: string; title: string; expertId: string; groupId: string; owner: string; status: TaskStatus; created: string; updated: string; project: ResourceProject | null; members: TaskMember[]; messages: TaskMessage[]; events: TaskEvent[]; approvals: TaskApproval[]; rounds: TaskRound[]; checkpoint: TaskCheckpoint; artifacts: Array<{ path: string; hash: string }>; error: string; workflow?: { id: string; runId: string; name: string; version: number } }
 export type TaskView = Omit<TaskRecord, 'checkpoint' | 'members'> & { members: Array<Pick<TaskMember, 'expertId' | 'name' | 'avatar' | 'model' | 'directory'>> };
 export interface TaskSnapshot { tasks: TaskView[]; models: ModelEntry[] }
 export interface TaskSendInput { requestId: string; taskId: string; expertId: string; groupId: string; model: string; directory: string; projectId: string; text: string; attachments: TaskFile[] }
@@ -149,5 +150,28 @@ export interface TaskAPI {
   importModels(): Promise<ModelEntry[]>;
   chooseAttachments(): Promise<TaskFile[]>;
   exportResult(id: string): Promise<boolean>;
+  onChanged(listener: () => void): () => void;
+}
+
+export interface WorkflowStep { expert: string; prompt: string }
+export interface WorkflowSpec { name: string; description: string; steps: WorkflowStep[] }
+export interface WorkflowTrigger { id: string; type: 'timer' | 'event' | 'api'; schedule: 'once' | 'repeat'; repeat: 'daily' | 'weekly' | 'monthly'; at: string; time: string; weekday: number; day: number; branch: string; apiName: string; timezone: string; nextAt: number | null; lastCommit: string; error: string }
+export interface WorkflowConfig { directory: string; projectId: string; model: string; timeout: number; concurrency: 'skip' | 'queue'; prompt: string; enabled: boolean; triggers: WorkflowTrigger[] }
+export interface WorkflowVersion { version: number; at: string; reason: string; spec: WorkflowSpec; config: WorkflowConfig }
+export interface WorkflowRecord extends WorkflowSpec { id: string; version: number; created: string; updated: string; removed: boolean; config: WorkflowConfig; versions: WorkflowVersion[] }
+export type WorkflowRunState = TaskStatus | 'queued' | 'missed' | 'skipped';
+export interface WorkflowRun { id: string; workflowId: string; name: string; version: number; created: string; origin: string; occurrence: string; status: WorkflowRunState; taskId: string; note: string; resumed: boolean; snapshot: WorkflowVersion; input: string }
+export interface WorkflowSnapshot { workflows: WorkflowRecord[]; runs: WorkflowRun[]; api: { url: string; error: string } }
+export interface WorkflowAPI {
+  read(): Promise<WorkflowSnapshot>;
+  save(id: string, version: number, spec: WorkflowSpec, requestId: string): Promise<string>;
+  configure(id: string, version: number, config: WorkflowConfig, requestId: string): Promise<void>;
+  restore(id: string, version: number, target: number, requestId: string): Promise<void>;
+  remove(id: string, requestId: string): Promise<void>;
+  restoreRemoved(requestId: string): Promise<void>;
+  run(id: string, input: string, requestId: string): Promise<string>;
+  resume(runId: string, requestId: string): Promise<void>;
+  cancel(runId: string, requestId: string): Promise<void>;
+  apiToken(id: string): Promise<string>;
   onChanged(listener: () => void): () => void;
 }

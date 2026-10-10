@@ -39,6 +39,7 @@ export class TaskRepository {
     return JSON.parse(row.value);
   }
   put(task: TaskRecord): void { this.db.prepare('INSERT INTO tasks_v3 VALUES (?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(task.id, JSON.stringify(task)); }
+  transaction<T>(apply: (db: Database.Database) => T): T { return this.db.transaction(() => apply(this.db))(); }
   command<T>(id: string, payload: unknown, apply: () => T): T {
     required(id, '请求 ID', 100);
     const fingerprint = digest(JSON.stringify(payload));

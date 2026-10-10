@@ -111,7 +111,7 @@ async function main() {
     const result: Record<string, unknown> = { ok: true, platform: process.platform, arch: process.arch, checks };
     if (realReport && corpus) result.real = await realBenchmark(realReport, corpus);
     fs.writeFileSync(output, JSON.stringify(result, null, 2));
-  } finally { permissions.close(); resources.close(); repository.close(); fs.rmSync(profile, { recursive: true, force: true }); }
+  } finally { permissions.close(); resources.close(); repository.close(); library.close(); fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 }
 async function realBenchmark(reportFile: string, corpusRoot: string) {
   const report = JSON.parse(fs.readFileSync(reportFile, 'utf8')), profile = path.join(path.dirname(output), `knowledge-lookup-real-${Date.now()}`); fs.cpSync(report.profile, profile, { recursive: true });
@@ -159,6 +159,6 @@ async function realBenchmark(reportFile: string, corpusRoot: string) {
     fs.writeFileSync(path.join(path.dirname(output), 'lookup-real-results.json'), JSON.stringify(result, null, 2));
     assert(queries.filter(q => q.found).length >= 51, 'Source recall must not regress below the best measured Soul/PAP baseline; the offline RRF target is reported separately'); assert(negatives.every(n => n.ok), 'Absent evidence must not produce a positive result'); assert.equal(evidence.filter(e => e.found).length, 28, 'Preserve all available evidence; the known OCR defect must remain explicit'); assert(tables.every(t => t.ok), 'Physical table associations must pass');
     return result;
-  } finally { store.close(); }
+  } finally { store.close(); library.close(); }
 }
 void main().catch(error => { console.error(error); process.exitCode = 1; });

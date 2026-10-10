@@ -5,6 +5,8 @@ import os from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { probeRuntime } from './runtime-probe';
 import { ExpertLibrary } from './expert-library';
+import { ResourceStore } from './resources';
+import { verifyResourcePages } from './verify-resources';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
@@ -17,7 +19,8 @@ fs.mkdirSync(app.getPath('userData'), { recursive: true });
 let window: BrowserWindow | null = null;
 let timer: NodeJS.Timeout | undefined;
 let library: ExpertLibrary | undefined;
-const closeLibrary = () => { library?.close(); library = undefined; };
+let resources: ResourceStore | undefined;
+const closeLibrary = () => { resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -35,6 +38,7 @@ app.whenReady().then(async () => {
   const resourceRoot = app.isPackaged ? path.join(process.resourcesPath, 'soul-resources') : path.join(app.getAppPath(), 'build/resources');
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
+  resources = new ResourceStore(resourceRoot, app.getPath('userData'), library);
   const page = path.join(__dirname, '../dist/index.html');
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
@@ -60,6 +64,34 @@ app.whenReady().then(async () => {
   handle('save-group', input => library!.saveGroup(input));
   handle('remove-group', id => library!.removeGroup(id));
   handle('create-role', input => library!.createRole(input));
+  handle('resources', scope => resources!.read(scope));
+  handle('project-save', (input, scope) => resources!.saveProject(input, scope));
+  handle('project-remove', (id, scope) => resources!.removeProject(id, scope));
+  handle('collection-save', (id, title) => resources!.saveCollection(id, title));
+  handle('collection-remove', id => resources!.removeCollection(id));
+  handle('resource-restore', scope => resources!.restoreTrash(scope));
+  handle('knowledge-bind', (id, ids) => resources!.bind(id, ids));
+  handle('documents', (id, scope) => resources!.documents(id, scope));
+  handle('document', (id, file, scope) => resources!.readDocument(id, file, scope));
+  handle('document-save', (input, scope) => resources!.saveDocument(input, scope));
+  handle('document-remove', (id, file, revision, scope) => resources!.removeDocument(id, file, revision, scope));
+  handle('memory-save', (id, value, revision, group) => resources!.saveMemory(id, value, revision, group));
+  handle('memory-restore', (id, version, revision) => resources!.restoreVersion(id, version, revision));
+  handle('skill', (id, key) => resources!.readSkill(id, key));
+  handle('skill-configure', (id, key, enabled) => resources!.configureSkill(id, key, enabled));
+  handle('skill-upload', (id, value) => resources!.uploadSkill(id, value));
+  handle('expert-settings', (id, name, intro, model) => library!.saveSettings(id, name, intro, model));
+  handle('soul-save', (id, value, revision) => resources!.saveSoul(id, value, revision));
+  handle('quality', id => resources!.checkQuality(id));
+  handle('test-case', (id, file) => resources!.readCase(id, file));
+  handle('resource-text', async kind => {
+    if (kind !== 'document' && kind !== 'skill') throw new Error('导入类型无效');
+    const result = await dialog.showOpenDialog(window!, { properties: ['openFile'], filters: [{ name: 'Markdown / 文本', extensions: kind === 'skill' ? ['md'] : ['md', 'txt'] }] });
+    if (result.canceled || !result.filePaths[0]) return null;
+    const file = result.filePaths[0];
+    if (fs.lstatSync(file).isSymbolicLink() || !fs.statSync(file).isFile() || !(/\.md$/i.test(file) || (kind === 'document' && /\.txt$/i.test(file))) || fs.statSync(file).size > (kind === 'skill' ? 65536 : 2 * 1024 * 1024)) throw new Error('文件格式或大小不符合要求');
+    return { name: path.basename(file), content: fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '') };
+  });
   const directory = async () => {
     const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0] ?? null;
@@ -151,13 +183,14 @@ app.whenReady().then(async () => {
     homeRenderChecks.push(rendered);
     fs.writeFileSync(path.join(path.dirname(verifyOutput), `home-${width}x${height}-${status.persistenceRun}.png`), (await window.webContents.capturePage()).toPNG());
   }
+  const resourceRenderChecks = await verifyResourcePages(window, page, verifyOutput, status.persistenceRun);
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },
-    versions: process.versions, renderChecks, homeRenderChecks, status,
+    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, status,
   }, null, 2));
   closeLibrary();
   app.exit(ok ? 0 : 1);

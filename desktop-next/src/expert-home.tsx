@@ -2,8 +2,7 @@ import { useState } from 'react';
 import type { ExpertDetail } from '../shared/contracts';
 import { Avatar, Icon, Section } from './primitives';
 import { RemoveDialog, type DialogActions } from './expert-dialogs';
-
-const sideItems = [['home', '首页'], ['folder', '项目'], ['flow', '工作流'], ['memory', '记忆'], ['skill', '技能'], ['book', '知识库'], ['connector', '连接器'], ['bot', 'IM'], ['shield', '权限'], ['edit', '设置']];
+import { ExpertSidebar } from './expert-sidebar';
 
 function Heatmap() {
   const month = new Date().getMonth();
@@ -18,7 +17,7 @@ export function ExpertHome({ expert, back, ...actions }: DialogActions & { exper
   const memoryContent = expert.memory.text.replace(/<!--[\s\S]*?-->/g, '').replace(/^#{1,6}\s+.*$/gm, '').replace(/^长期记忆索引。分身应在用户明示偏好或被纠正后置入对应小节。\s*$/gm, '').trim();
   const pending = () => notice('该功能暂未开放');
   return <>
-    <aside className="expert-sidebar" aria-label="专家详情导航" data-ued-node="shell.expert-nav"><button className="back" onClick={back}><Icon name="back" small />我的专家</button><nav>{sideItems.map(([icon, label], index) => <span className="side-row" key={label}>{index === 9 && <hr />}<button className={`side-tab ${index === 0 ? 'active' : ''}`} aria-current={index === 0 ? 'page' : undefined} onClick={index === 0 ? () => window.scrollTo(0, 0) : pending}><Icon name={icon} small />{label}</button></span>)}</nav></aside>
+    <ExpertSidebar id={expert.id} page="home" notice={notice} />
     <main className="home-main" data-ued-node="expert.home"><header className="home-topbar"><h1>首页</h1><button className="icon-button" aria-label={`移除${expert.name}`} title="移除专家" onClick={() => setRemove(true)}><Icon name="trash" small /></button></header><div className="home-page">
       <section className="identity" data-ued-node="expert.identity"><div className="polaroid-wrap"><div className="polaroid-back" /><div className="polaroid-front"><div className="portrait"><Avatar name={expert.name} avatar={expert.avatar} /></div><div className="polaroid-id" title={expert.id}>ID: {expert.id}</div></div><div className="seal" aria-hidden="true"><Icon name="check" small /></div></div><div className="identity-text"><div className="identity-name"><h2>{expert.name}</h2><span className="role-tag"><Icon name="id" small />{expert.role}</span></div><div className="identity-info"><div className="identity-meta"><span className="status"><i className={`status-dot ${expert.installed ? 'installed' : ''}`} />{expert.draft ? '角色草案' : expert.installed ? '已安装' : '未安装'}</span><span className="divider" /><span>{expert.draft ? '待完善资料与审核' : `专家包版本：${expert.version}`}</span>{!expert.installed && expert.installable && <button className="section-link" disabled={installing} onClick={async () => { setInstalling(true); try { saved(await window.soulDesktop.installExpert(expert.id)); notice('专家已安装'); } catch (error) { notice(String(error)); } finally { setInstalling(false); } }}>{installing ? '正在安装…' : '安装专家'}</button>}</div><p className="identity-intro">{expert.description}</p></div></div></section>
       <Section title="工作记录" node="expert.work-record" extra={<div className="home-tabs" role="tablist" aria-label="工作记录分类">{[['timeline', 'history', '时间线视图'], ['chat', 'chat', '对话任务'], ['auto', 'clock', '自动任务']].map(([value, icon, label]) => <button key={value} role="tab" aria-selected={tab === value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon name={icon} small />{label}</button>)}</div>}>

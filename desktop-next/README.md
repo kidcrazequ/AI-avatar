@@ -1,8 +1,8 @@
-# Soul Next — 第 1 项安装验证工程
+# Soul Next — V3 桌面工程
 
-以已确认的 Soul V3 / QoderWake CN 原型为后续界面迁移基准。目前提供最小专家包页面和安装验证入口，完整管理、任务、资源、设置页面按后续子任务实现。
+以已确认的 Soul V3 / QoderWake CN 原型为界面迁移基准。已实现专家管理、群组配置、专家主页，以及项目、知识库、记忆、技能、专家设置和质量页，使用真实专家包、独立安装副本与本地 SQLite。任务执行与模型连接按后续子任务实现。
 
-本工程应用身份为 `com.soul.desktop.next.validation`，名称 `Soul Next`，版本 `0.20.0-alpha.1`。普通启动使用独立的 `SoulNextValidation` 数据目录；安装验证使用显式测试目录。原 `desktop-app/` 与现有用户数据不参与迁移。
+本工程应用身份为 `com.soul.desktop.next.validation`，名称 `Soul Next`，版本 `0.20.0-alpha.3`。普通启动使用独立的 `SoulNextValidation` 数据目录；安装验证使用显式测试目录。原 `desktop-app/` 与现有用户数据不参与迁移。
 
 ## 构建
 
@@ -13,7 +13,9 @@ cd desktop-next
 npm ci
 npm run typecheck
 npm run dist:mac   # macOS 原生构建 DMG + ZIP
-npm run verify:mac # 从 DMG 安装到当前用户 Applications 后启动两次
+npm run verify:experts # 使用原生 Electron 验证专家数据与重启恢复
+npm run verify:resources # 实际文件、资源隔离、版本恢复与设置持久化
+npm run verify:mac -- release/Soul-Next-0.20.0-alpha.3-mac-arm64.dmg # Intel 改为 mac-x64.dmg
 ```
 
 Windows x64 上执行：
@@ -23,6 +25,8 @@ cd desktop-next
 npm ci
 npm run typecheck
 npm run dist:win
+npm run verify:experts
+npm run verify:resources
 npm run verify:win
 ```
 
@@ -37,7 +41,12 @@ Mac 脚本挂载 DMG、复制 `.app` 到当前用户 Applications 的独立目�
 3. nodejieba 原生模块实际加载、五个词典文件长度与 SHA-256 比对、中文分词；Windows 中文安装路径使用既有 core 的安全降级规则，避免 C++ ANSI `fopen` 导致整个进程退出。
 4. 对打包的 `rg` 可执行文件实际执行版本命令和中文资料检索。
 5. 复用 `packages/core` 的真实 KnowledgeRetriever，检索仓库中财研的虚构测试示例并确认来源文件和词条；该示例只用于溯源检查，不作为财务事实。
-6. 安装后的 Electron 加载 React 和真实 preload IPC；1440×900、1280×800 检查字体、64px 导航、资源卡片、溢出与 Node 隔离，保存窗口截图。
+6. 安装后的 Electron 加载 React 和真实 preload IPC；1440×900、1280×800 检查字体、64px 导航、资源卡片、溢出与 Node 隔离，保存管理页与财研主页截图。主页同时比对 V3 的侧栏、页面、身份区、工作记录与记忆区尺寸。
+
+7. 专家包安装与完整复制、创建、群组、重启恢复、可恢复移除、目录导入、档案路径约束和角色草案。角色草案保留模板约束与 5 个待补充测试用例，不能安装运行；模型、任务与专业测试状态不会伪装成已连接或已执行。
+
+8. 资源文件与知识库绑定、公开/私密项目、记忆分组及版本恢复、技能配置优先级与上传、基础设置与人格文件、专业测试未执行状态；检查版本冲突、路径约束、跨专家隔离和关闭数据库后的恢复。
+9. 安装后的 8 个资源/设置页面在 1440×900、1280×800 下逐页检查 V3 几何和字体，检查项目与记忆版本弹窗；经真实 preload 保存财研记忆，第二次启动检查文件与版本记录保留。
 
 每次验证输出实际 EXE/app 路径、宿主系统、Electron / Node / ABI、源码 SHA、锁文件哈希、资源哈希和检查结果。检查失败使进程和 CI 失败。`build-inputs.json` 还记录此次实际复用的 core 文件哈希。
 

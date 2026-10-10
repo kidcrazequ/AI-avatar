@@ -47,6 +47,8 @@ jobs:
         run: npm run dist:${{ matrix.target }}
       - name: Verify expert persistence using the native Electron runtime
         run: npm run verify:experts
+      - name: Verify resource isolation, recovery and persistence
+        run: npm run verify:resources
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
       - name: Upload installation evidence

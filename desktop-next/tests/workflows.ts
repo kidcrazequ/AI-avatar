@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -15,7 +14,8 @@ import type { WorkflowConfig, WorkflowRun, WorkflowTrigger } from '../shared/con
 const pause = () => new Promise(resolve => setTimeout(resolve, 10));
 async function main() {
   const [root, output, mode = 'suite', crashProfile] = process.argv.slice(2);
-  const profile = crashProfile || fs.mkdtempSync(path.join(os.tmpdir(), 'soul-workflow-'));
+  if (!crashProfile) throw new Error('Workflow verification requires a parent-owned temporary profile');
+  const profile = crashProfile;
   const library = new ExpertLibrary(root, profile); library.installExpert('finance-expert'); library.installExpert('hr-expert');
   const resources = new ResourceStore(root, profile, library), repository = new TaskRepository(profile), store = new WorkflowStore(repository, library);
   const model = { id: 'test', label: '受控验收', model: 'test', baseUrl: 'http://127.0.0.1', protocol: 'openai' as const, configured: true, apiKey: '' };
@@ -92,9 +92,7 @@ async function main() {
     runtime.remove(timeoutFlow, 'soft-remove'); assert(!runtime.read().workflows.find(item => item.id === timeoutFlow)); runtime.restoreRemoved('restore-removed'); assert(runtime.read().workflows.find(item => item.id === timeoutFlow)); checks.push('recoverable-removal-keeps-history-disabled-triggers');
   }
   await runtime.close(); taskRuntime.close(); await pause(); repository.close(); resources.close(); library.close();
-  if (!crashProfile) {
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    assert(!fs.existsSync(profile)); checks.push('shutdown-releases-git-handles-before-profile-removal');
+  if (mode === 'suite') {
     fs.writeFileSync(output, JSON.stringify({ ok: true, checks }, null, 2)); console.log(JSON.stringify({ ok: true, checks }));
   }
 }

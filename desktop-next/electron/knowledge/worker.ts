@@ -1,8 +1,11 @@
-import { parentPort, workerData } from 'node:worker_threads';
 import { extractSource, type ExtractionInput } from './extract';
 
-if (!parentPort) throw new Error('Knowledge extraction requires a background worker');
-extractSource(workerData as ExtractionInput).then(
-  manifest => parentPort!.postMessage({ manifest }),
-  cause => parentPort!.postMessage({ error: cause instanceof Error ? cause.message : String(cause) }),
-).finally(() => parentPort!.close());
+if (!process.send) throw new Error('Knowledge extraction requires an isolated IPC process');
+const abandoned = () => process.exit(1);
+process.once('disconnect', abandoned);
+process.once('message', input => {
+  void extractSource(input as ExtractionInput).then(
+    manifest => ({ manifest }),
+    cause => ({ error: cause instanceof Error ? cause.message : String(cause) }),
+  ).then(result => process.send!(result, () => { process.off('disconnect', abandoned); process.disconnect!(); }));
+});

@@ -126,6 +126,17 @@ if (process.argv[5] === '--crash-child') {
       assert.equal(original.sha256, hash(stampedBytes)); assert(source.assets.some(a => a.derivedFrom === original.path && a.preprocessing?.method === 'suppress-red' && a.text.includes('2023-11-08')));
       assert(source.warnings.some(w => w.includes('彩色内容')));
     });
+    await check('A native extractor crash fails only its file and preserves the usable source', async () => {
+      const doc = store.documents(collection, '').find(d => d.name === '来源.txt')!, before = store.readDocument(collection, doc.id, '');
+      const crashWorker = write('crash-parser.cjs', 'process.once("message", () => process.exit(42));');
+      store.close(); store = new ResourceStore(root, profile, library, crashWorker);
+      const failed = await importFiles([write('来源.txt', '模拟解析崩溃不得覆盖旧资料')]);
+      assert.equal(failed.items[0].state, 'failed'); assert.match(failed.items[0].error, /异常退出.*42/);
+      assert.equal(store.readDocument(collection, doc.id, '').revision, before.revision);
+      store.close(); store = new ResourceStore(root, profile, library, worker);
+      const valid = await importFiles([write('崩溃后继续.txt', '主进程仍可导入 62709')]);
+      assert.equal(valid.items[0].state, 'ready');
+    });
     await check('Invalid reimports and cancellation keep the last usable version intact', async () => {
       const file = path.join(input, '验证.docx'), doc = store.documents(collection, '').find(d => d.name === '验证.docx')!;
       const before = store.readDocument(collection, doc.id, ''); fs.writeFileSync(file, 'not a zip');

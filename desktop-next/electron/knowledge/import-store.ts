@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { Worker } from 'node:worker_threads';
+import { fork, type ChildProcess } from 'node:child_process';
 import { crc32, inflateRaw } from 'node:zlib';
 import { promisify } from 'node:util';
 import type Database from 'better-sqlite3';
@@ -40,7 +40,7 @@ export class KnowledgeImports {
   private closed = false;
   private scheduled = false;
   private preparing = 0;
-  private active?: { batch: string; worker: Worker; reject(cause: Error): void };
+  private active?: { batch: string; worker: ChildProcess; reject(cause: Error): void };
   private listener: () => void = () => {};
   constructor(private db: Database.Database, profile: string, private access: Access, private languages: string, private workerFile = path.join(__dirname, 'knowledge-worker.cjs'), private signature = extractionSignature) {
     this.intakeRoot = path.join(profile, 'knowledge/_imports'); fs.mkdirSync(this.intakeRoot, { recursive: true });
@@ -64,7 +64,7 @@ export class KnowledgeImports {
       const batch = this.batch(this.active.batch);
       for (const item of batch.items) if (item.state === 'extracting') item.state = 'queued';
       batch.state = 'queued'; this.persist(batch);
-      this.active.reject(new Error('应用退出，导入将在重启后恢复')); void this.active.worker.terminate(); this.active = undefined;
+      this.active.reject(new Error('应用退出，导入将在重启后恢复')); this.active.worker.kill(); this.active = undefined;
     }
   }
   private all(): StoredBatch[] { return (this.db.prepare('SELECT value FROM knowledge_imports_v1 ORDER BY rowid').all() as Array<{ value: string }>).map(row => JSON.parse(row.value)); }
@@ -148,7 +148,7 @@ export class KnowledgeImports {
     batch.state = 'cancelled';
     for (const item of batch.items) if (item.state === 'queued' || item.state === 'extracting') { item.state = 'cancelled'; item.error = ''; }
     this.persist(batch);
-    if (this.active?.batch === id) { this.active.reject(new Error('导入已取消')); void this.active.worker.terminate(); }
+    if (this.active?.batch === id) { this.active.reject(new Error('导入已取消')); this.active.worker.kill(); }
   }
   retry(id: string, scope: string): void {
     const batch = this.batch(id); if (batch.scope !== scope) throw new Error('导入批次范围不匹配');
@@ -182,12 +182,23 @@ export class KnowledgeImports {
       staging = safe(this.intakeRoot, `${batch.id}/staging-${item.id}`); fs.rmSync(staging, { recursive: true, force: true });
       const workerFile = this.workerFile.replace(/app\.asar([/\\])/, 'app.asar.unpacked$1');
       const result = await new Promise<SourceManifest>((resolve, reject) => {
-        const worker = new Worker(workerFile, { workerData: { file: intake, relativePath: item.relativePath, output: staging, documentId: item.documentId, version: item.version, languages: this.languages, signature: this.signature } satisfies ExtractionInput, resourceLimits: { maxOldGenerationSizeMb: 1024 } });
+        // Native PDF/image libraries can terminate the whole process from a thread.
+        // A separate packaged Electron process confines failure to this file.
+        const worker = fork(workerFile, [], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, execArgv: ['--max-old-space-size=1024'], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
         this.active = { batch: batch.id, worker, reject };
-        const timer = setTimeout(() => { reject(new Error('资料提取超时，旧版本保留')); void worker.terminate(); }, knowledgeLimits.parseMs);
-        worker.once('message', message => { if (message.error) reject(new Error(message.error)); else resolve(message.manifest); });
-        worker.once('error', reject); worker.once('exit', code => reject(new Error(`提取进程未返回结果即退出 (${code})`)));
-        worker.once('exit', () => clearTimeout(timer));
+        let result: { error?: string; manifest?: SourceManifest } | undefined;
+        const timer = setTimeout(() => { reject(new Error('资料提取超时，旧版本保留')); worker.kill(); }, knowledgeLimits.parseMs);
+        worker.once('message', message => { result = message as typeof result; });
+        worker.stderr?.on('data', () => {});
+        worker.once('error', reject);
+        worker.once('exit', (code, signal) => {
+          clearTimeout(timer);
+          if (code !== 0 || !result) reject(new Error(`提取进程异常退出 (${signal ?? code})，旧版本保留`));
+          else if (result.error) reject(new Error(result.error));
+          else if (result.manifest) resolve(result.manifest);
+          else reject(new Error('提取进程未返回有效来源清单'));
+        });
+        worker.send({ file: intake, relativePath: item.relativePath, output: staging, documentId: item.documentId, version: item.version, languages: this.languages, signature: this.signature } satisfies ExtractionInput, error => { if (error) reject(error); });
       });
       if (this.closed || this.batch(batch.id).state === 'cancelled') return;
       this.access(batch.collectionId, batch.scope, true);
@@ -203,7 +214,8 @@ export class KnowledgeImports {
     } catch (cause) {
       if (!this.closed && this.batch(batch.id).state !== 'cancelled') { item.state = 'failed'; item.error = cause instanceof Error ? cause.message : String(cause); this.persist(batch); }
     } finally {
-      const worker = this.active?.worker; this.active = undefined; if (worker) await worker.terminate();
+      const worker = this.active?.worker; this.active = undefined;
+      if (worker && worker.exitCode === null && worker.signalCode === null) { const exited = new Promise<void>(resolve => worker.once('exit', () => resolve())); worker.kill(); await exited; }
       if (staging && !this.closed) fs.rmSync(staging, { recursive: true, force: true });
       if (!this.closed) this.schedule();
     }

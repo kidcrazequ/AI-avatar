@@ -105,6 +105,12 @@ app.whenReady().then(async () => {
   let policy: UpdatePolicy | null = fs.existsSync(policyFile) ? JSON.parse(fs.readFileSync(policyFile, 'utf8')) : null;
   if (upgradeOutput && flag('upgrade-feed')) policy = { url: validateFeed(flag('upgrade-feed')!, true), channel: 'candidate', production: false };
   autoUpdater.logger = { info() {}, warn() {}, error() {} };
+  if (upgradeOutput && flag('upgrade-feed')) {
+    const config = path.join(app.getPath('userData'), 'upgrade-app-update.yml');
+    fs.writeFileSync(config, JSON.stringify({ provider: 'generic', url: policy!.url, updaterCacheDirName: `soul-next-upgrade-${crypto.createHash('sha256').update(app.getPath('userData')).digest('hex').slice(0, 16)}` }));
+    autoUpdater.updateConfigPath = config;
+    autoUpdater.logger = console;
+  }
   updater = new UpdateManager(app.getPath('userData'), app.getVersion(), policy, autoUpdater,
     () => {
       if (!window?.isDestroyed()) window?.webContents.send('soul-next:updates-changed');

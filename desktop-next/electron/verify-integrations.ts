@@ -22,8 +22,8 @@ export async function verifyIntegrationPages(window: BrowserWindow, page: string
   await window.loadFile(page,{hash:'im'});await wait('[data-integration-ready="true"]');
   await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='开通 @Soul').click()`);await wait('.im-pair-dialog');
   const dialog=await window.webContents.executeJavaScript(`(()=>{const r=document.querySelector('.im-pair-dialog').getBoundingClientRect();return {width:r.width,height:r.height,y:r.y,bottom:r.bottom}})()`);
-  if(dialog.width!==800||dialog.height!==565||dialog.y<0||dialog.bottom>800)throw new Error('IM pairing dialog differs from V3');checks.push({surface:'pairing-dialog',...dialog});
-  await window.webContents.executeJavaScript(`document.querySelector('dialog .dialog-close').click()`);
+  if(dialog.width!==800||dialog.height!==565||dialog.y<0||dialog.bottom>800)throw new Error(`IM pairing dialog differs from V3: ${JSON.stringify(dialog)}`);checks.push({surface:'pairing-dialog',...dialog});
+  await window.webContents.executeJavaScript(`document.querySelector('.im-pair-dialog .dialog-close').click()`);
   const persisted=await window.webContents.executeJavaScript(`(async()=>{const api=window.soulDesktop;const s=await api.settings.read();const p=await api.integrations.read('finance-expert');if(${iteration}===1){await api.settings.save({...s.preferences,reply:'English'});await api.integrations.savePermissions('finance-expert',{...p.permissions,policies:{...p.permissions.policies,read_project_file:'deny'}});return {prepared:true};}return {reply:s.preferences.reply,policy:p.permissions.policies.read_project_file,other:(await api.integrations.read('hr-expert')).permissions.policies.read_project_file};})()`);
   if(iteration>1&&(persisted.reply!=='English'||persisted.policy!=='deny'||persisted.other!=='allow'))throw new Error('Settings/permissions did not persist or isolation failed');checks.push({installedRestartPersistence:persisted});
   return checks;

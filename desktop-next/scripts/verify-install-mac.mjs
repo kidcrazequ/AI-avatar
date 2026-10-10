@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 if (process.platform !== 'darwin') throw new Error('macOS installation must be verified on macOS');
 if (process.getuid() === 0) throw new Error('Verify installation as a normal user');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dmg = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, 'release', fs.readdirSync(path.join(root, 'release')).find(name => name.endsWith(`mac-${process.arch}.dmg`)) ?? 'MISSING.dmg');
+const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const dmg = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, 'release', `Soul-Next-${version}-mac-${process.arch}.dmg`);
 const evidence = path.join(root, 'evidence', `mac-${process.arch}-${Date.now()}`);
 const installRoot = path.join(os.homedir(), 'Applications', `Soul Next Verification ${Date.now()}`);
 const profile = path.join(installRoot, '测试用户 数据');
@@ -40,7 +41,7 @@ for (const iteration of [1, 2]) {
     });
   } finally { fs.closeSync(log); }
   const report = JSON.parse(fs.readFileSync(output, 'utf8'));
-  if (!report.ok || !report.packaged || report.execPath !== executable || report.status.persistenceRun !== iteration || report.status.arch !== process.arch) throw new Error(`Installed app verification mismatch: ${output}`);
+  if (!report.ok || !report.packaged || report.execPath !== executable || report.status.version !== version || report.status.persistenceRun !== iteration || report.status.arch !== process.arch || !Array.isArray(report.taskRenderChecks) || report.taskRenderChecks.length < 10 || (iteration === 2 && !report.taskRenderChecks.some(check => check.installedResume))) throw new Error(`Installed app verification mismatch: ${output}`);
   runs.push(report);
 }
 const report = {

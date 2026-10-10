@@ -36,9 +36,11 @@ const dictionaries = ['jieba.dict.utf8', 'hmm_model.utf8', 'user.dict.utf8', 'id
 });
 const manifest = { sourceSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), lockSha256: hash(fs.readFileSync('package-lock.json')), files, experts, dictionaries };
 fs.writeFileSync(path.join(resourceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2));
-await bundle({ entryPoints: ['electron/main.ts', 'electron/preload.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outdir: 'dist-electron', outExtension: { '.js': '.cjs' }, external: ['electron', 'better-sqlite3', 'nodejieba', '@vscode/ripgrep', './retriever.cjs'] });
+await bundle({ entryPoints: ['electron/main.ts', 'electron/preload.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outdir: 'dist-electron', outExtension: { '.js': '.cjs' }, external: ['electron', 'better-sqlite3', 'nodejieba', '@vscode/ripgrep', './retriever.cjs', './model.cjs'] });
+const models = await bundle({ stdin: { contents: `export { OpenAICompatProvider } from '../desktop-app/src/services/llm-providers/openai-compat.ts'; export { ClaudeProvider } from '../desktop-app/src/services/llm-providers/claude.ts';`, resolveDir: root, sourcefile: 'soul-model-adapter.ts' }, bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/model.cjs', alias: { '@soul/core/browser': path.join(repo, 'packages/core/src/browser.ts') }, nodePaths: [path.join(root, 'node_modules')], metafile: true });
 const core = await bundle({ entryPoints: ['../packages/core/src/knowledge-retriever.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/retriever.cjs', external: ['nodejieba'], metafile: true });
 const coreInputs = Object.keys(core.metafile.inputs).map(name => ({ path: path.relative(repo, path.resolve(root, name)).replaceAll(path.sep, '/'), sha256: hash(fs.readFileSync(name)) }));
-fs.writeFileSync(path.join(resourceRoot, 'build-inputs.json'), JSON.stringify({ ...manifest, files: undefined, experts: undefined, coreInputs }, null, 2));
+const modelInputs = Object.keys(models.metafile.inputs).filter(name => !name.includes('node_modules') && fs.existsSync(name)).map(name => ({ path: path.relative(repo, path.resolve(root, name)).replaceAll(path.sep, '/'), sha256: hash(fs.readFileSync(name)) }));
+fs.writeFileSync(path.join(resourceRoot, 'build-inputs.json'), JSON.stringify({ ...manifest, files: undefined, experts: undefined, coreInputs, modelInputs }, null, 2));
 await viteBuild({ root, base: './', build: { outDir: 'dist', emptyOutDir: true } });
 console.log(`Resource manifest: ${files.length} files, ${experts.length} experts, ${files.reduce((sum, file) => sum + file.bytes, 0)} bytes`);

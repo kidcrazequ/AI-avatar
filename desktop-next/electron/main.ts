@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
     width: 1440, height: 900, minWidth: 960, minHeight: 600,
-    backgroundColor: '#ffffff', show: false, title: 'Soul Next',
+    backgroundColor: '#ffffff', show: false, title: 'Soul Next', enableLargerThanScreen: Boolean(verifyOutput),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   ipcMain.handle('soul-next:status', event => {

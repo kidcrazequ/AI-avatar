@@ -1,6 +1,6 @@
 {
   "name": "soul-desktop-next",
-  "version": "0.20.0-alpha.4",
+  "version": "0.20.0-alpha.5",
   "private": true,
   "engines": {
     "node": ">=24.0.0 <25"
@@ -20,7 +20,8 @@
     "verify:mac": "node scripts/verify-install-mac.mjs",
     "verify:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install-win.ps1",
     "verify:resources": "node scripts/verify-resources.mjs",
-    "verify:tasks": "node scripts/verify-tasks.mjs"
+    "verify:tasks": "node scripts/verify-tasks.mjs",
+    "verify:workflows": "node scripts/verify-workflows.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.96.0",

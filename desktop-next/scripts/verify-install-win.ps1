@@ -48,7 +48,8 @@ foreach ($iteration in 1, 2) {
     throw "Installed app failed: $exitCode, see $output"
   }
   $report = Get-Content -Raw -Encoding UTF8 $output | ConvertFrom-Json
-  if (-not $report.ok -or -not $report.packaged -or $report.execPath -ne $executable -or $report.status.persistenceRun -ne $iteration -or $report.status.platform -ne 'win32' -or $report.status.arch -ne 'x64' -or $report.status.version -ne $version -or $report.taskRenderChecks.Count -lt 10 -or ($iteration -eq 2 -and -not ($report.taskRenderChecks | Where-Object { $_.PSObject.Properties.Name -contains 'installedResume' }))) { throw "Install verification mismatch: $output" }
+  if (-not $report.ok -or -not $report.packaged -or $report.execPath -ne $executable -or $report.status.persistenceRun -ne $iteration -or $report.status.platform -ne 'win32' -or $report.status.arch -ne 'x64' -or $report.status.version -ne $version -or $report.workflowRenderChecks.Count -lt 12 -or ($iteration -eq 2 -and -not ($report.workflowRenderChecks | Where-Object { $_.PSObject.Properties.Name -contains 'installedWorkflowResume' })) -or $report.taskRenderChecks.Count -lt 10 -or ($iteration -eq 2 -and -not ($report.taskRenderChecks | Where-Object { $_.PSObject.Properties.Name -contains 'installedResume' }))) { throw "Install verification mismatch: $output" }
+  if ($iteration -eq 1) { Start-Sleep -Milliseconds 1500 }
   $runs += $report
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()

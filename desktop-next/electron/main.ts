@@ -7,10 +7,13 @@ import { pathToFileURL } from 'node:url';
 import { probeRuntime } from './runtime-probe';
 import { ExpertLibrary } from './expert-library';
 import { ResourceStore } from './resources';
+import { verifyWorkflowPages } from './verify-workflows';
 import { verifyResourcePages } from './verify-resources';
 import { TaskRepository } from './task-repository';
 import { TaskModels } from './task-models';
 import { TaskRuntime } from './task-runtime';
+import { WorkflowStore } from './workflow-store';
+import { WorkflowRuntime } from './workflow-runtime';
 import { taskFile } from './task-tools';
 import { verificationModel, verificationCall, verifyTaskPages } from './verify-tasks';
 
@@ -22,6 +25,8 @@ if (profile && !path.isAbsolute(profile)) throw new Error('Profile must be absol
 app.setName('Soul Next');
 app.setPath('userData', profile ?? path.join(app.getPath('appData'), 'SoulNextValidation'));
 fs.mkdirSync(app.getPath('userData'), { recursive: true });
+const ownsProfile = app.requestSingleInstanceLock();
+if (!ownsProfile) app.quit();
 let window: BrowserWindow | null = null;
 let timer: NodeJS.Timeout | undefined;
 let library: ExpertLibrary | undefined;
@@ -29,7 +34,8 @@ let resources: ResourceStore | undefined;
 let tasks: TaskRuntime | undefined;
 let taskRepository: TaskRepository | undefined;
 let models: TaskModels | undefined;
-const closeLibrary = () => { tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
+let workflows: WorkflowRuntime | undefined;
+const closeLibrary = () => { workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
   const detail = error instanceof Error ? error.stack : String(error);
@@ -44,6 +50,7 @@ process.on('uncaughtException', fail);
 process.on('unhandledRejection', fail);
 
 app.whenReady().then(async () => {
+  if (!ownsProfile) return;
   const resourceRoot = app.isPackaged ? path.join(process.resourcesPath, 'soul-resources') : path.join(app.getAppPath(), 'build/resources');
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
@@ -54,7 +61,12 @@ app.whenReady().then(async () => {
     decrypt(value) { return safeStorage.decryptString(value); },
   });
   const executionModels = verifyOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
-  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined);
+  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); queueMicrotask(() => workflows?.synchronize()); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined);
+  workflows = new WorkflowRuntime(new WorkflowStore(taskRepository, library), tasks, {
+    encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); },
+    decrypt(value) { return safeStorage.decryptString(value); },
+  }, () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:workflows-changed'); });
+  await workflows.start();
   const page = path.join(__dirname, '../dist/index.html');
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
@@ -80,10 +92,20 @@ app.whenReady().then(async () => {
   handle('save-group', input => library!.saveGroup(input));
   handle('remove-group', id => library!.removeGroup(id));
   handle('create-role', input => library!.createRole(input));
+  handle('workflows', () => workflows!.read());
+  handle('workflow-save', (id, version, spec, requestId) => workflows!.save(id, version, spec, requestId));
+  handle('workflow-configure', (id, version, config, requestId) => workflows!.configure(id, version, config, requestId));
+  handle('workflow-restore', (id, version, target, requestId) => workflows!.restore(id, version, target, requestId));
+  handle('workflow-remove', (id, requestId) => workflows!.remove(id, requestId));
+  handle('workflow-restore-removed', requestId => workflows!.restoreRemoved(requestId));
+  handle('workflow-run', (id, input, requestId) => workflows!.run(id, input, requestId));
+  handle('workflow-resume', (id, requestId) => workflows!.resume(id, requestId));
+  handle('workflow-cancel', (id, requestId) => workflows!.cancel(id, requestId));
+  handle('workflow-token', id => workflows!.apiToken(id));
   handle('tasks', () => tasks!.read());
   handle('task-send', input => tasks!.send(input));
-  handle('task-resume', (id, requestId) => tasks!.resume(id, requestId));
-  handle('task-cancel', (id, requestId) => tasks!.cancel(id, requestId));
+  handle('task-resume', (id, requestId) => { const task = taskRepository!.get(id); return task.workflow ? workflows!.resume(task.workflow.runId, requestId) : tasks!.resume(id, requestId); });
+  handle('task-cancel', (id, requestId) => { const task = taskRepository!.get(id); return task.workflow ? workflows!.cancel(task.workflow.runId, requestId) : tasks!.cancel(id, requestId); });
   handle('task-approve', (id, approvalId, approved, note, requestId) => tasks!.approve(id, approvalId, approved, note, requestId));
   handle('task-model-save', input => { const result = models!.save(input); window!.webContents.send('soul-next:tasks-changed'); return result; });
   handle('task-model-import', async () => {
@@ -229,13 +251,14 @@ app.whenReady().then(async () => {
   }
   const resourceRenderChecks = await verifyResourcePages(window, page, verifyOutput, status.persistenceRun);
   const taskRenderChecks = await verifyTaskPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
+  const workflowRenderChecks = await verifyWorkflowPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));
   fs.writeFileSync(verifyOutput, JSON.stringify({
     ok, packaged: app.isPackaged, execPath: process.execPath, resourcesPath: process.resourcesPath,
     userData: app.getPath('userData'), host: { platform: os.platform(), release: os.release(), arch: os.arch() },
-    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, taskRenderChecks, status,
+    versions: process.versions, renderChecks, homeRenderChecks, resourceRenderChecks, taskRenderChecks, workflowRenderChecks, status,
   }, null, 2));
   closeLibrary();
   app.exit(ok ? 0 : 1);

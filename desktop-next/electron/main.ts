@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { probeRuntime } from './runtime-probe';
 import { ExpertLibrary } from './expert-library';
 import { ResourceStore } from './resources';
-import { verifyWorkflowPages } from './verify-workflows';
+import { armWorkflowOfflineTimer, verifyWorkflowPages } from './verify-workflows';
 import { verifyResourcePages } from './verify-resources';
 import { TaskRepository } from './task-repository';
 import { TaskModels, callKnowledgeModel } from './task-models';
@@ -377,6 +377,7 @@ app.whenReady().then(async () => {
   const taskRenderChecks = await verifyTaskPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
   const workflowRenderChecks = await verifyWorkflowPages(window, page, verifyOutput, app.getPath('userData'), status.persistenceRun);
   const integrationRenderChecks = await verifyIntegrationPages(window, page, verifyOutput, status.persistenceRun);
+  workflowRenderChecks.push(...await armWorkflowOfflineTimer(window, app.getPath('userData'), status.persistenceRun));
   if (timer) clearTimeout(timer);
   const ok = app.isPackaged && status.checks.every(check => check.ok);
   console.log(JSON.stringify({ ok, checks: status.checks, renderChecks }));

@@ -17,7 +17,7 @@ export async function verifyWorkflowPages(window: BrowserWindow, page: string, o
     const before = await window.webContents.executeJavaScript(`(async()=>({workflows:await window.soulDesktop.workflows.read(),tasks:await window.soulDesktop.tasks.read()}))()`);
     const run = before.workflows.runs.find((item: any) => item.id === marker.runId), task = before.tasks.tasks.find((item: any) => item.id === marker.taskId);
     const missed = before.workflows.runs.filter((item: any) => item.workflowId === marker.flowId && item.status === 'missed');
-    if (run?.status !== 'interrupted' || task?.rounds[0].id !== marker.firstRound || task.rounds[1].state !== 'unknown' || task.rounds.length !== 2 || missed.length !== 1 || missed[0].taskId) throw new Error('Installed workflow recovery or missed execution invariant failed');
+    if (run?.status !== 'interrupted' || task?.rounds[0].id !== marker.firstRound || task.rounds[1].state !== 'unknown' || task.rounds.length !== 2 || missed.length !== 1 || missed[0].taskId) throw new Error(`Installed workflow recovery or missed execution invariant failed: ${JSON.stringify({ runStatus: run?.status, rounds: task?.rounds.map((item: any) => ({ id: item.id, state: item.state })), missed })}`);
     checks.push({ recoveredRun: run.id, taskId: task.id, preservedRound: marker.firstRound, missedRun: missed[0].id, automaticReplay: false });
   }
   await window.loadFile(page, { hash: 'flows' }); await wait('[data-ued-node="workflow.cards"]');
@@ -54,8 +54,14 @@ export async function verifyWorkflowPages(window: BrowserWindow, page: string, o
     const resumed = await window.webContents.executeJavaScript(`(async()=>{const api=window.soulDesktop;await api.workflows.resume(${JSON.stringify(marker.runId)},'installed-workflow-resume');for(let n=0;n<200;n++){const r=(await api.workflows.read()).runs.find(item=>item.id===${JSON.stringify(marker.runId)});if(r?.status==='completed')return (await api.tasks.read()).tasks.find(item=>item.id===r.taskId);await new Promise(resolve=>setTimeout(resolve,20))}throw new Error('Installed workflow did not resume')})()`);
     if (resumed.rounds.length !== 3 || resumed.rounds[0].id !== marker.firstRound || resumed.messages.filter((item: any) => item.role === 'user').length !== 1 || resumed.messages.filter((item: any) => item.role === 'assistant').length !== 2) throw new Error('Completed workflow repeated earlier steps or polluted user history');
     checks.push({ installedWorkflowResume: { runId: marker.runId, taskId: resumed.id, retainedRound: marker.firstRound, newCalls: 1, finalStatus: resumed.status }, evidence: 'controlled provider; no network calls' });
-  } else {
-    await window.webContents.executeJavaScript(`(async()=>{const api=window.soulDesktop.workflows,f=(await api.read()).workflows.find(item=>item.id===${JSON.stringify(marker.flowId)});await api.configure(f.id,f.version,{...f.config,prompt:'安装验收：漏执行',enabled:true,triggers:[{id:'installed-offline-timer',type:'timer',schedule:'once',repeat:'daily',at:new Date(Date.now()+15000).toISOString(),time:'09:00',weekday:1,day:1,branch:'main',apiName:'trigger',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,nextAt:null,lastCommit:'',error:''}]},'installed-offline-config')})()`);
   }
   return checks;
+}
+
+export async function armWorkflowOfflineTimer(window: BrowserWindow, profile: string, iteration: number): Promise<unknown[]> {
+  if (iteration !== 1) return [];
+  const marker = JSON.parse(fs.readFileSync(path.join(profile, 'workflow-install-check.json'), 'utf8'));
+  // Arm immediately before shutdown so later page checks cannot consume the offline interval.
+  const at = await window.webContents.executeJavaScript(`(async()=>{const api=window.soulDesktop.workflows,f=(await api.read()).workflows.find(item=>item.id===${JSON.stringify(marker.flowId)}),at=new Date(Date.now()+15000).toISOString();await api.configure(f.id,f.version,{...f.config,prompt:'安装验收：漏执行',enabled:true,triggers:[{id:'installed-offline-timer',type:'timer',schedule:'once',repeat:'daily',at,time:'09:00',weekday:1,day:1,branch:'main',apiName:'trigger',timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,nextAt:null,lastCommit:'',error:''}]},'installed-offline-config');return at})()`);
+  return [{ installedOfflineTimer: { workflowId: marker.flowId, at, armedAfterPageChecks: true } }];
 }

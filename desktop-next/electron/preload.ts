@@ -2,6 +2,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopAPI } from '../shared/contracts';
 
 const api: DesktopAPI = {
+  updates: {
+    read: () => ipcRenderer.invoke('soul-next:updates'),
+    check: () => ipcRenderer.invoke('soul-next:update-check'),
+    download: () => ipcRenderer.invoke('soul-next:update-download'),
+    cancel: () => ipcRenderer.invoke('soul-next:update-cancel'),
+    install: () => ipcRenderer.invoke('soul-next:update-install'),
+    automatic: value => ipcRenderer.invoke('soul-next:update-automatic', value),
+    onChanged(listener) { const callback = () => listener(); ipcRenderer.on('soul-next:updates-changed', callback); return () => ipcRenderer.removeListener('soul-next:updates-changed', callback); },
+  },
   readStatus: () => ipcRenderer.invoke('soul-next:status'),
   readLibrary: () => ipcRenderer.invoke('soul-next:library'),
   readExpert: id => ipcRenderer.invoke('soul-next:expert', id),

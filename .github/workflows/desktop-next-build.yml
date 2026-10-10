@@ -55,8 +55,12 @@ jobs:
         run: npm run verify:workflows
       - name: Verify connectors, IM pairing, permissions and settings
         run: npm run verify:integrations
+      - name: Verify update safety and data migration
+        run: npm run verify:updates
       - name: Install and launch the installed app twice
         run: npm run verify:${{ matrix.target }}
+      - name: Verify native two-version installation and data preservation
+        run: npm run verify:upgrade
       - name: Upload installation evidence
         if: always()
         uses: actions/upload-artifact@v4

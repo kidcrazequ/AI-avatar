@@ -10,6 +10,8 @@ module.exports = {
     'node_modules/@vscode/ripgrep/**/*',
   ],
   npmRebuild: true,
+  publish: process.env.SOUL_NEXT_UPDATE_URL ? { provider: 'generic', url: process.env.SOUL_NEXT_UPDATE_URL, channel: process.env.SOUL_NEXT_PRODUCTION === '1' ? 'latest' : 'candidate' } : null,
+  generateUpdatesFilesForAllChannels: false,
   // Each architecture must be built on its own native host. No afterPack binary swaps.
   mac: { target: ['dmg', 'zip'], category: 'public.app-category.productivity', icon: 'icon.icns', identity: null },
   dmg: { title: 'Soul Next', contents: [{ x: 130, y: 220 }, { x: 410, y: 220, type: 'link', path: '/Applications' }] },

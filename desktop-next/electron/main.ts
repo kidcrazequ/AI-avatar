@@ -21,10 +21,17 @@ import { ConnectorRuntime } from './connector-runtime';
 import { IMRuntime } from './im-runtime';
 import { AppSettings } from './app-settings';
 import { verifyIntegrationPages } from './verify-integrations';
+import { autoUpdater } from 'electron-updater';
+import { UpdateManager, validateFeed } from './update-manager';
+import { migrateProfile, backupProfile } from './profile-upgrade';
+import type { UpdatePolicy } from '../shared/updates';
+import { verifyUpgrade } from './verify-upgrade';
 
 const flag = (name: string) => process.argv.find(item => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 const verifyOutput = flag('verify-output');
 const profile = flag('profile');
+const upgradeOutput = flag('verify-upgrade');
+if (upgradeOutput && (!profile || !path.isAbsolute(upgradeOutput))) throw new Error('Upgrade verification requires isolated absolute profile and output');
 if (verifyOutput && !profile) throw new Error('Install verification requires an isolated --profile');
 if (profile && !path.isAbsolute(profile)) throw new Error('Profile must be absolute');
 app.setName('Soul Next');
@@ -45,6 +52,8 @@ let connectors: ConnectorRuntime | undefined;
 let im: IMRuntime | undefined;
 let settings: AppSettings | undefined;
 let wakeId: number | undefined;
+let updater: UpdateManager | undefined;
+let upgrading = false;
 const closeLibrary = () => { im?.close(); im = undefined; void connectors?.close(); connectors = undefined; settings?.close(); settings = undefined; permissions?.close(); permissions = undefined; workflows?.close(); workflows = undefined; tasks?.close(); tasks = undefined; taskRepository?.close(); taskRepository = undefined; models?.close(); models = undefined; resources?.close(); resources = undefined; library?.close(); library = undefined; };
 
 const fail = (error: unknown) => {
@@ -61,6 +70,7 @@ process.on('unhandledRejection', fail);
 
 app.whenReady().then(async () => {
   if (!ownsProfile) return;
+  const migration = await migrateProfile(app.getPath('userData'));
   const resourceRoot = app.isPackaged ? path.join(process.resourcesPath, 'soul-resources') : path.join(app.getAppPath(), 'build/resources');
   const status = probeRuntime(resourceRoot, app.getPath('userData'), app.getVersion());
   library = new ExpertLibrary(resourceRoot, app.getPath('userData'));
@@ -70,7 +80,7 @@ app.whenReady().then(async () => {
     encrypt(value) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); },
     decrypt(value) { return safeStorage.decryptString(value); },
   });
-  const executionModels = verifyOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
+  const executionModels = verifyOutput || upgradeOutput ? { list: () => [verificationModel], resolve: () => verificationModel } : models;
   const codec = { encrypt(value: string) { if (!safeStorage.isEncryptionAvailable()) throw new Error('系统密钥加密暂不可用'); return safeStorage.encryptString(value); }, decrypt(value: Buffer) { return safeStorage.decryptString(value); } };
   const integrationChanged = () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:integrations-changed'); };
   permissions = new Permissions(app.getPath('userData'), id => library!.detail(id));
@@ -82,7 +92,7 @@ app.whenReady().then(async () => {
     wake(start) { if (start && wakeId === undefined) wakeId = powerSaveBlocker.start('prevent-app-suspension'); if (!start && wakeId !== undefined) { powerSaveBlocker.stop(wakeId); wakeId = undefined; } return wakeId !== undefined && powerSaveBlocker.isStarted(wakeId); },
     async open(file) { const error = await shell.openPath(file); if (error) throw new Error('无法打开日志目录'); },
   });
-  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); queueMicrotask(() => { workflows?.synchronize(); im?.synchronize(); settings?.activity(tasks?.read().tasks.some(t => t.status === 'running') ?? false); }); }, verifyOutput ? verificationCall(status.persistenceRun) : undefined, { permissions, connectors, preferences: () => settings!.preferences() });
+  tasks = new TaskRuntime(taskRepository, library, resources, executionModels, app.getPath('userData'), () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:tasks-changed'); queueMicrotask(() => { workflows?.synchronize(); im?.synchronize(); settings?.activity(tasks?.read().tasks.some(t => t.status === 'running') ?? false); }); }, verifyOutput || upgradeOutput ? verificationCall(status.persistenceRun) : undefined, { permissions, connectors, preferences: () => settings!.preferences() });
   im = new IMRuntime(app.getPath('userData'), codec, library, tasks, integrationChanged);
   await im.start();
   workflows = new WorkflowRuntime(new WorkflowStore(taskRepository, library), tasks, {
@@ -90,6 +100,22 @@ app.whenReady().then(async () => {
     decrypt(value) { return safeStorage.decryptString(value); },
   }, () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:workflows-changed'); });
   await workflows.start();
+  const policyFile = path.join(resourceRoot, 'update-policy.json');
+  let policy: UpdatePolicy | null = fs.existsSync(policyFile) ? JSON.parse(fs.readFileSync(policyFile, 'utf8')) : null;
+  if (upgradeOutput && flag('upgrade-feed')) policy = { url: validateFeed(flag('upgrade-feed')!, true), channel: 'candidate', production: false };
+  autoUpdater.logger = { info() {}, warn() {}, error() {} };
+  updater = new UpdateManager(app.getPath('userData'), app.getVersion(), policy, autoUpdater,
+    () => { if (!window?.isDestroyed()) window?.webContents.send('soul-next:updates-changed'); },
+    () => Boolean(tasks?.read().tasks.some(t => t.status === 'running') || workflows?.read().runs.some(r => r.status === 'running') || im?.isSending()),
+    async () => {
+      upgrading = true;
+      im?.close(); im = undefined;
+      await workflows?.close(); workflows = undefined;
+      await connectors?.close(); connectors = undefined;
+      closeLibrary();
+      try { return await backupProfile(app.getPath('userData'), 'pre-update'); }
+      catch (e) { if (!upgradeOutput) { await dialog.showMessageBox({ type: 'error', message: '升级前备份失败，未安装更新', detail: '应用将重新启动以恢复当前工作。' }); app.relaunch(); app.exit(1); } throw e; }
+    }, process.platform === 'darwin' && !policy?.production ? 'Mac 自动安装需要签名发行包；当前内部版本可使用 DMG 验证安装和数据保留' : '', Boolean(upgradeOutput));
   const page = path.join(__dirname, '../dist/index.html');
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
@@ -99,8 +125,15 @@ app.whenReady().then(async () => {
   });
   const handle = (channel: string, listener: (...args: any[]) => unknown) => ipcMain.handle(`soul-next:${channel}`, (event, ...args) => {
     if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame || event.senderFrame.url.split('#')[0] !== pageUrl) throw new Error('Untrusted IPC sender');
+    if (upgrading && channel !== 'updates') throw new Error('正在准备更新，请稍候');
     return listener(...args);
   });
+  handle('updates', () => updater!.read());
+  handle('update-check', () => updater!.check());
+  handle('update-download', () => updater!.download());
+  handle('update-cancel', () => updater!.cancel());
+  handle('update-automatic', value => updater!.automatic(value));
+  handle('update-install', async () => { const result = await dialog.showMessageBox(window!, { type: 'question', message: '重启并安装更新？', detail: '请保存页面中尚未提交的编辑。已保存的数据会在升级前备份；运行中的任务和外部发送需先停止。', buttons: ['稍后', '重启并安装'], defaultId: 0, cancelId: 0 }); if (result.response === 1) await updater!.install(); });
   handle('status', () => status);
   handle('integrations', scope => ({ connectors: connectors!.read(scope), channels: im!.channels(), sessions: im!.sessions(), events: im!.publicEvents(), permissions: scope ? permissions!.read(scope) : defaultPermissions() }));
   handle('connector-save', input => connectors!.save(input));
@@ -233,6 +266,8 @@ app.whenReady().then(async () => {
   window.once('ready-to-show', () => { window?.show(); window?.focus(); });
   if (verifyOutput) timer = setTimeout(() => fail(new Error('Installed renderer timed out')), 60_000);
   await window.loadFile(page);
+  if (upgradeOutput) { await verifyUpgrade(window, updater, library!, app.getPath('userData'), upgradeOutput, flag('upgrade-mode') ?? 'read', migration); return; }
+  if (!verifyOutput) updater.start();
   if (!verifyOutput) return;
   await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     let attempts = 0;
@@ -304,3 +339,4 @@ app.whenReady().then(async () => {
 }).catch(fail);
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', closeLibrary);
+app.on('will-quit', () => updater?.close());

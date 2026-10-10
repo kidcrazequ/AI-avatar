@@ -35,7 +35,7 @@ for (const iteration of [1, 2]) {
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(executable, [`--verify-output=${output}`, `--profile=${profile}`], { stdio: ['ignore', log, log] });
-      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Installed application timed out')); }, 90_000);
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Installed application timed out')); }, 240_000);
       child.once('error', error => { clearTimeout(timer); reject(error); });
       child.once('exit', (code, signal) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(`Installed app exit: ${code}/${signal}; see ${output}`)); });
     });

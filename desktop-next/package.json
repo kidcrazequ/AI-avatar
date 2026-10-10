@@ -23,6 +23,7 @@
     "verify:knowledge": "node scripts/verify-knowledge.mjs",
     "verify:lookup": "node scripts/verify-lookup.mjs",
     "verify:learning": "node scripts/verify-learning.mjs",
+    "verify:migration": "node scripts/verify-migration.mjs",
     "verify:tasks": "node scripts/verify-tasks.mjs",
     "verify:workflows": "node scripts/verify-workflows.mjs",
     "verify:integrations": "node scripts/verify-integrations.mjs",

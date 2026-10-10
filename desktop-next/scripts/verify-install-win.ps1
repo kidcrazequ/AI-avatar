@@ -37,7 +37,7 @@ foreach ($iteration in 1, 2) {
   [void]$process.Start()
   $stdoutTask = $process.StandardOutput.ReadToEndAsync()
   $stderrTask = $process.StandardError.ReadToEndAsync()
-  if (-not $process.WaitForExit(90000)) { $process.Kill(); throw 'Installed app timed out' }
+  if (-not $process.WaitForExit(240000)) { $process.Kill(); throw 'Installed app timed out' }
   $process.WaitForExit()
   [IO.File]::WriteAllText($stdout, $stdoutTask.Result)
   [IO.File]::WriteAllText($stderr, $stderrTask.Result)

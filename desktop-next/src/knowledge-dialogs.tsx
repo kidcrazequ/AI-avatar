@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ResourceDocument } from '../shared/contracts';
-import { knowledgeExtensions, knowledgeLimits, type KnowledgeImportBatch, type SourceManifest } from '../shared/knowledge';
+import { knowledgeExtensions, knowledgeLimits, type KnowledgeImportBatch, type KnowledgeImportKind, type SourceManifest } from '../shared/knowledge';
 import type { LearningJob, LearningPreview } from '../shared/knowledge-learning';
 import { Modal } from './primitives';
 
 export interface KnowledgeDialog { view: 'import' | 'batches' | 'source' | 'learning'; file?: ResourceDocument }
-const labels: Record<string, string> = { queued: '排队中', extracting: '提取中', running: '处理中', ready: '内容就绪', partial: '部分可用', reused: '已复用', failed: '失败', cancelled: '已取消', completed: '已完成', interrupted: '已中断', received: '已收到返回，正在校验引用', started: '模型调用中', done: '引用已验证', unknown: '调用结果未确认' };
+const labels: Record<string, string> = { skipped: '已跳过重复导出', queued: '排队中', extracting: '提取中', running: '处理中', ready: '内容就绪', partial: '部分可用', reused: '已复用', failed: '失败', cancelled: '已取消', completed: '已完成', interrupted: '已中断', received: '已收到返回，正在校验引用', started: '模型调用中', done: '引用已验证', unknown: '调用结果未确认' };
 const time = (at: string) => new Date(at).toLocaleString('zh-CN', { hour12: false });
 export function KnowledgeDialogs({ selection, collectionId, scope, writable, close, refresh }: { selection: KnowledgeDialog; collectionId: string; scope: string; writable: boolean; close(): void; refresh(): Promise<void> }) {
   const api = window.soulDesktop.resources.knowledge;
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const lock = useRef(false);
-  const [kind, setKind] = useState<'files' | 'directory' | 'zip'>('files');
+  const [kind, setKind] = useState<KnowledgeImportKind>('files');
   const [batches, setBatches] = useState<KnowledgeImportBatch[]>([]); const [selectedBatch, setSelectedBatch] = useState('');
   const [versions, setVersions] = useState<SourceManifest[]>([]); const [version, setVersion] = useState(selection.file?.sourceVersion ?? ''); const [expected, setExpected] = useState(selection.file?.sourceVersion ?? '');
   const [models, setModels] = useState<Array<{ id: string; label: string }>>([]); const [model, setModel] = useState('Auto');
@@ -42,8 +42,8 @@ export function KnowledgeDialogs({ selection, collectionId, scope, writable, clo
     <div className="dialog-body knowledge-dialog" data-ued-node={`knowledge.${selection.view}`}><h2>{title}</h2>
       {selection.view === 'import' && <>
         <p className="resource-note">先归档原件并提取正文、图片与完整表格。AI 整理需要另行手动开启。</p>
-        <div className="field"><label htmlFor="knowledge-import-kind">导入方式</label><select id="knowledge-import-kind" value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="files">资料文件（支持多选）</option><option value="directory">资料文件夹（包含子目录）</option><option value="zip">ZIP 资料包</option></select></div>
-        <p>支持 {knowledgeExtensions.join(' / ')}</p><p className="resource-note">单文件上限 {knowledgeLimits.fileBytes / 1024 / 1024} MB，每批最多 {knowledgeLimits.members} 份。目录或 ZIP 中不支持的格式会在导入记录列出；扫描件可能仅部分可用。</p>
+        <div className="field"><label htmlFor="knowledge-import-kind">导入方式</label><select id="knowledge-import-kind" value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="files">资料文件（支持多选）</option><option value="directory">资料文件夹（包含子目录）</option><option value="zip">ZIP 资料包</option><option value="legacy">旧版 Soul 知识目录</option></select></div>
+        {kind === 'legacy' && <p className="resource-note">选择旧版 knowledge 文件夹。保留 Markdown 与 _raw 原件；原工作簿可用时优先提取完整网格。只有 _excel 导出时保留已有值并标为部分可用，不补造原始行号或公式。旧目录保持原样。</p>}<p>支持 {knowledgeExtensions.join(' / ')}</p><p className="resource-note">单文件上限 {knowledgeLimits.fileBytes / 1024 / 1024} MB，每批最多 {knowledgeLimits.members} 份。目录或 ZIP 中不支持的格式会在导入记录列出；扫描件可能仅部分可用。</p>
       </>}
       {selection.view === 'batches' && <>
         <div className="field"><label htmlFor="knowledge-batch">导入批次</label><select id="knowledge-batch" value={selectedBatch} onChange={event => setSelectedBatch(event.target.value)}>{batches.map(item => <option key={item.id} value={item.id}>{time(item.at)} · {labels[item.state]} · {item.items.length} 份</option>)}</select></div>

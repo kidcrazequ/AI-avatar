@@ -231,16 +231,17 @@ app.whenReady().then(async () => {
   handle('learning-list', (collection, document, scope) => learning!.list(collection, document, scope));
   handle('learning-read', (id, scope) => learning!.read(id, scope));
   handle('learning-cancel', (id, scope) => learning!.cancel(id, scope));
+  let verificationKnowledgeImports = 0;
   handle('knowledge-import', async (id, scope, kind) => {
-    if (!['files', 'directory', 'zip'].includes(kind)) throw new Error('导入方式无效');
+    if (!['files', 'directory', 'zip', 'legacy'].includes(kind)) throw new Error('导入方式无效');
     // Installed acceptance selects only this generated fixture. Normal mode
     // always uses the OS picker, never renderer-supplied filesystem paths.
-    if (verifyOutput && kind === 'files') {
+    if ((verifyOutput || upgradeOutput) && kind === 'files') {
       const folder = path.join(app.getPath('userData'), 'knowledge-ui-fixture'); fs.mkdirSync(folder, { recursive: true });
-      const file = path.join(folder, '安装版来源.csv'); fs.writeFileSync(file, `供应商,保修年限,验收标记\n英维克,5,IMPORTUI62709-${status.persistenceRun}\n盖鼎,2,保留原文`);
+      const file = path.join(folder, upgradeOutput ? '升级版来源.csv' : '安装版来源.csv'); const marker = upgradeOutput ? `UPGRADEKNOWLEDGE62709-${++verificationKnowledgeImports}` : `IMPORTUI62709-${status.persistenceRun}`; fs.writeFileSync(file, `供应商,保修年限,验收标记\n英维克,5,${marker}\n盖鼎,2,保留原文`);
       return resources!.knowledge.start(id, scope, [file], 'files');
     }
-    const result = await dialog.showOpenDialog(window!, kind === 'directory' ? { properties: ['openDirectory'] } : { properties: kind === 'files' ? ['openFile', 'multiSelections'] : ['openFile'], filters: [{ name: '知识资料', extensions: kind === 'zip' ? ['zip'] : knowledgeExtensions }] });
+    const result = await dialog.showOpenDialog(window!, kind === 'directory' || kind === 'legacy' ? { properties: ['openDirectory'] } : { properties: kind === 'files' ? ['openFile', 'multiSelections'] : ['openFile'], filters: [{ name: '知识资料', extensions: kind === 'zip' ? ['zip'] : knowledgeExtensions }] });
     return result.canceled ? null : resources!.knowledge.start(id, scope, result.filePaths, kind);
   });
   handle('knowledge-batches', (id, scope) => resources!.knowledge.list(id, scope));
@@ -313,7 +314,7 @@ app.whenReady().then(async () => {
   window.once('ready-to-show', () => { window?.show(); window?.focus(); });
   if (verifyOutput) timer = setTimeout(() => fail(new Error('Installed renderer timed out')), 60_000);
   await window.loadFile(page);
-  if (upgradeOutput) { await verifyUpgrade(window, updater, library!, app.getPath('userData'), upgradeOutput, flag('upgrade-mode') ?? 'read', migration); return; }
+  if (upgradeOutput) { await verifyUpgrade(window, updater, library!, resources!, app.getPath('userData'), upgradeOutput, flag('upgrade-mode') ?? 'read', migration); return; }
   if (!verifyOutput) updater.start();
   if (!verifyOutput) return;
   await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
@@ -324,6 +325,9 @@ app.whenReady().then(async () => {
       setTimeout(poll, 50);
     }; poll();
   })`);
+  if (timer) clearTimeout(timer);
+  // Initial renderer readiness and the complete multi-page suite have separate deadlines.
+  timer = setTimeout(() => fail(new Error('Installed acceptance suite timed out')), 180_000);
   fs.mkdirSync(path.dirname(verifyOutput), { recursive: true });
   const renderChecks: unknown[] = [];
   const homeRenderChecks: unknown[] = [];

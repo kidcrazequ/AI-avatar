@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import type Database from 'better-sqlite3';
 import AdmZip from 'adm-zip';
 import { assertSafeSegment, resolveUnderRoot } from '../../../packages/core/src/utils/path-security';
-import { extractionSignature, knowledgeExtensions, knowledgeLimits, type KnowledgeImportBatch, type SourceManifest } from '../../shared/knowledge';
+import { extractionSignature, knowledgeExtensions, knowledgeLimits, type KnowledgeImportBatch, type KnowledgeImportKind, type SourceManifest } from '../../shared/knowledge';
 import type { ResourceDocument, ResourceFile } from '../../shared/contracts';
 import type { ExtractionInput } from './extract';
 
@@ -15,7 +15,7 @@ const digest = (value: string | Buffer) => crypto.createHash('sha256').update(va
 const now = () => new Date().toISOString();
 const documentId = (relative: string) => digest(relative.normalize('NFC').toLowerCase()).slice(0, 32);
 interface DocumentRow { id: string; collection_id: string; relative: string; version: string; archived: number; removed_scope: string }
-interface StoredBatch extends KnowledgeImportBatch { force?: boolean }
+interface StoredBatch extends KnowledgeImportBatch { force?: boolean; kind?: KnowledgeImportKind }
 type Access = (id: string, scope: string, write?: boolean) => { root: string; source: string };
 
 function safe(root: string, relative: string): string {
@@ -75,10 +75,10 @@ export class KnowledgeImports {
   }
   private persist(batch: StoredBatch): void { batch.updated = now(); this.db.prepare('INSERT INTO knowledge_imports_v1 VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value').run(batch.id, batch.collectionId, batch.scope, JSON.stringify(batch)); this.listener(); }
   list(collectionId: string, scope: string): KnowledgeImportBatch[] { this.access(collectionId, scope); return this.all().filter(b => b.collectionId === collectionId && b.scope === scope).slice(-100).reverse(); }
-  async start(collectionId: string, scope: string, sources: string[], kind: 'files' | 'directory' | 'zip'): Promise<KnowledgeImportBatch> {
+  async start(collectionId: string, scope: string, sources: string[], kind: KnowledgeImportKind): Promise<KnowledgeImportBatch> {
     if (this.closed) throw new Error('应用正在关闭');
     this.access(collectionId, scope, true);
-    if (!Array.isArray(sources) || !sources.length || sources.length > knowledgeLimits.members || !['files', 'directory', 'zip'].includes(kind)) throw new Error('导入来源无效');
+    if (!Array.isArray(sources) || !sources.length || sources.length > knowledgeLimits.members || !['files', 'directory', 'zip', 'legacy'].includes(kind)) throw new Error('导入来源无效');
     const id = crypto.randomUUID(), folder = safe(this.intakeRoot, id); fs.mkdirSync(folder);
     const inputs: Array<{ relative: string; file?: string; entry?: AdmZip.IZipEntry; bytes: number }> = [];
     const skipped: KnowledgeImportBatch['skipped'] = [];
@@ -86,14 +86,14 @@ export class KnowledgeImports {
     const add = (relative: string, bytes: number, source: { file?: string; entry?: AdmZip.IZipEntry }) => {
       relative = relativeName(relative);
       const key = relative.toLowerCase(); if (seen.has(key)) throw new Error('同一批次含重复路径（含大小写差异）'); seen.add(key);
-      if (!knowledgeExtensions.includes(path.posix.extname(relative).slice(1).toLowerCase())) throw new Error(`不支持的资料格式：${relative}`);
+      if (!knowledgeExtensions.includes(path.posix.extname(relative).slice(1).toLowerCase()) && !(kind === 'legacy' && /^_excel\/.+\.json$/i.test(relative))) throw new Error(`不支持的资料格式：${relative}`);
       if (bytes > knowledgeLimits.fileBytes || (total += bytes) > knowledgeLimits.batchBytes || inputs.length >= knowledgeLimits.members) throw new Error('导入大小或成员数超过上限');
       inputs.push({ relative, bytes, ...source });
     };
     const checkFile = (file: string) => { if (!path.isAbsolute(file) || fs.lstatSync(file).isSymbolicLink() || !fs.statSync(file).isFile()) throw new Error('请选择普通资料文件'); return fs.statSync(file).size; };
     this.preparing++;
     try {
-      if (kind === 'directory') {
+      if (kind === 'directory' || kind === 'legacy') {
         if (sources.length !== 1 || !path.isAbsolute(sources[0])) throw new Error('请选择一个资料文件夹');
         const root = sources[0];
         const walk = (directory: string, prefix = '', depth = 0) => {
@@ -103,7 +103,7 @@ export class KnowledgeImports {
             if (entry.name.startsWith('.')) continue;
             const file = path.join(directory, entry.name), relative = prefix + entry.name;
             if (entry.isDirectory()) walk(file, relative + '/', depth + 1);
-            else if (entry.isFile() && knowledgeExtensions.includes(path.extname(entry.name).slice(1).toLowerCase())) add(relative, fs.statSync(file).size, { file });
+            else if (entry.isFile() && (knowledgeExtensions.includes(path.extname(entry.name).slice(1).toLowerCase()) || kind === 'legacy' && /^_excel\/.+\.json$/i.test(relative))) add(relative, fs.statSync(file).size, { file });
             else if (entry.isFile()) skipped.push({ path: relative, reason: '当前批次不支持此格式' });
           }
         };
@@ -123,7 +123,8 @@ export class KnowledgeImports {
         }
       } else for (const file of sources) add(path.basename(file), checkFile(file), { file });
       if (!inputs.length) throw new Error('没有支持的知识资料');
-      const batch: StoredBatch = { id, collectionId, scope, at: now(), updated: now(), state: 'queued', items: [], skipped };
+      if (kind === 'legacy') inputs.sort((a, b) => Number(/^_excel\/.+\.json$/i.test(a.relative)) - Number(/^_excel\/.+\.json$/i.test(b.relative)));
+      const batch: StoredBatch = { id, collectionId, scope, kind, at: now(), updated: now(), state: 'queued', items: [], skipped };
       for (const [i, source] of inputs.entries()) {
         let bytes: Buffer;
         if (source.entry) {
@@ -204,6 +205,15 @@ export class KnowledgeImports {
       if (this.closed || this.batch(batch.id).state === 'cancelled') return;
       this.access(batch.collectionId, batch.scope, true);
       if (result.originalSha256 !== item.sha256 || result.documentId !== item.documentId || result.version !== item.version || result.signature !== this.signature || digest(fs.readFileSync(path.join(staging, 'body.md'))) !== result.bodySha256) throw new Error('提取来源校验失败，未发布');
+      if (batch.kind === 'legacy' && result.legacyExport) {
+        const originalName = path.posix.basename(result.legacyExport.replaceAll('\\', '/')).normalize('NFC').toLowerCase();
+        const candidates = batch.items.filter(candidate => /\.(xlsx|xls|csv|tsv)$/i.test(candidate.relativePath) && path.posix.basename(candidate.relativePath).normalize('NFC').toLowerCase() === originalName);
+        const original = candidates.length === 1 ? candidates[0] : undefined;
+        if (original && ['ready', 'reused'].includes(original.state) && !original.warnings.length) {
+          item.state = 'skipped'; item.warnings = ['原工作簿已成功提取，优先使用完整网格：' + original.relativePath];
+          batch.skipped.push({ path: item.relativePath, reason: item.warnings[0] }); this.persist(batch); return;
+        }
+      }
       const current = this.db.prepare('SELECT version,archived FROM knowledge_documents_v1 WHERE collection_id=? AND id=?').get(batch.collectionId, item.documentId) as DocumentRow | undefined;
       if (current?.version !== previous?.version || current?.archived !== previous?.archived) throw new Error('资料在提取期间已变更，未覆盖当前版本');
       const versionRoot = safe(location.root, `_sources/${item.documentId}/versions/${item.version}`); fs.mkdirSync(path.dirname(versionRoot), { recursive: true }); fs.renameSync(staging, versionRoot); staging = '';

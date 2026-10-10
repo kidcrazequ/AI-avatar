@@ -8,6 +8,7 @@ import { createWorker, PSM, type Worker as OCRWorker } from 'tesseract.js';
 import { DocumentParser, isGarbledText } from '../../../desktop-app/electron/document-parser';
 import { decodeText, parseTables, tablePreview } from './table-parser';
 import { prepareOCRInputs, type OCRInput } from './ocr-inputs';
+import { readLegacyExport } from './legacy-export';
 import { knowledgeFormats, knowledgeLimits, type SourceManifest, type SourceLocation, type SourceAsset } from '../../shared/knowledge';
 
 export const sha256 = (value: string | Buffer) => crypto.createHash('sha256').update(value).digest('hex');
@@ -22,7 +23,7 @@ function boundedZip(file: string): AdmZip {
 
 export async function extractSource(input: ExtractionInput): Promise<SourceManifest> {
   const extension = path.extname(input.file).slice(1).toLowerCase();
-  const kind = knowledgeFormats.find(format => (format.extensions as readonly string[]).includes(extension))?.kind;
+  const kind = extension === 'json' && /^_excel\/.+\.json$/i.test(input.relativePath) ? 'legacy' : knowledgeFormats.find(format => (format.extensions as readonly string[]).includes(extension))?.kind;
   if (!kind) throw new Error('不支持的知识资料格式');
   fs.mkdirSync(input.output, { recursive: true });
   const bytes = fs.readFileSync(input.file);
@@ -30,6 +31,7 @@ export async function extractSource(input: ExtractionInput): Promise<SourceManif
   const original = 'original.' + extension; fs.writeFileSync(path.join(input.output, original), bytes, { flag: 'wx' });
   const warnings: string[] = [], locations: SourceLocation[] = [], assets: SourceAsset[] = [], tables: SourceManifest['tables'] = [];
   const sections: string[] = []; let line = 1;
+  let legacyExport: string | undefined;
   const append = (body: string, location: Omit<SourceLocation, 'lineStart' | 'lineEnd'>) => {
     const normalized = body.replace(/\r\n?/g, '\n').trim();
     if (!normalized) return;
@@ -75,7 +77,12 @@ export async function extractSource(input: ExtractionInput): Promise<SourceManif
     } catch (cause) { record.ocr = 'failed'; record.error = cause instanceof Error ? cause.message : String(cause); warnings.push(`图片 ${origin} OCR 失败：${record.error}`); }
   };
   try {
-    if (kind === 'table') {
+    if (kind === 'legacy') {
+      const parsed = readLegacyExport(bytes); legacyExport = parsed.fileName;
+      warnings.push('旧版 _excel 导出，仅保留已有导出值；不能还原原始物理行号、公式、合并单元格、曾截断的行或已损失的数字精度。完整表格工具需要原工作簿。');
+      append(`# 旧版表格导出\n原工作簿名称：${parsed.fileName}`, { kind: 'text', method: 'native' });
+      for (const sheet of parsed.sheets) append(sheet.text, { kind: 'text', method: 'native' });
+    } else if (kind === 'table') {
       const parsed = parseTables(input.file); fs.mkdirSync(path.join(input.output, '_tables'));
       parsed.forEach((table, index) => {
         const relative = `_tables/${index + 1}.json`, serialized = JSON.stringify(table); fs.writeFileSync(path.join(input.output, relative), serialized);
@@ -152,7 +159,7 @@ export async function extractSource(input: ExtractionInput): Promise<SourceManif
   if (!body.replace(/^#{1,6}[^\n]*$/gm, '').trim() && !tables.some(table => table.cells)) throw new Error('没有提取到可用正文或表格，原有版本保留');
   if (Buffer.byteLength(body) > knowledgeLimits.bodyBytes) throw new Error('提取正文超过上限，未截断发布');
   fs.writeFileSync(path.join(input.output, 'body.md'), body);
-  const manifest: SourceManifest = { schema: 1, documentId: input.documentId, version: input.version, relativePath: input.relativePath, originalName: path.basename(input.relativePath), original, originalSha256: sha256(bytes), originalBytes: bytes.length, signature: input.signature, created: new Date().toISOString(), bodySha256: sha256(body), bodyBytes: Buffer.byteLength(body), status: warnings.length ? 'partial' : 'ready', warnings, locations, assets, tables };
+  const manifest: SourceManifest = { schema: 1, documentId: input.documentId, version: input.version, relativePath: input.relativePath, originalName: path.basename(input.relativePath), original, originalSha256: sha256(bytes), originalBytes: bytes.length, signature: input.signature, created: new Date().toISOString(), bodySha256: sha256(body), bodyBytes: Buffer.byteLength(body), status: warnings.length ? 'partial' : 'ready', warnings, locations, assets, tables, ...(legacyExport ? { legacyExport } : {}) };
   fs.writeFileSync(path.join(input.output, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }

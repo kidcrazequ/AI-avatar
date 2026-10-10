@@ -63,6 +63,8 @@ jobs:
         run: npm run verify:lookup
       - name: Verify independent learning, provenance and billing checkpoints
         run: npm run verify:learning
+      - name: Verify knowledge compatibility, backup and upgrade busy guards
+        run: npm run verify:migration
       - name: Verify workflow versions, triggers and crash recovery
         if: inputs.scope != 'knowledge'
         run: npm run verify:workflows

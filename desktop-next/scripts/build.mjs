@@ -47,7 +47,7 @@ if (updateUrl) {
 fs.writeFileSync(path.join(resourceRoot, 'update-policy.json'), JSON.stringify(updatePolicy));
 fs.writeFileSync(path.join(resourceRoot, 'manifest.json'), JSON.stringify(manifest, null, 2));
 await bundle({ entryPoints: ['electron/main.ts', 'electron/preload.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outdir: 'dist-electron', outExtension: { '.js': '.cjs' }, external: ['electron', 'electron-updater', 'better-sqlite3', 'nodejieba', '@vscode/ripgrep', './retriever.cjs', './model.cjs'] });
-const knowledge = await bundle({ entryPoints: ['electron/knowledge/worker.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/knowledge-worker.cjs', nodePaths: [path.join(root, 'node_modules')], external: ['jsdom', 'pdf-parse', 'tesseract.js'], metafile: true });
+const knowledge = await bundle({ entryPoints: ['electron/knowledge/worker.ts'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/knowledge-worker.cjs', nodePaths: [path.join(root, 'node_modules')], external: ['jsdom', 'pdf-parse', 'tesseract.js', '@napi-rs/canvas'], metafile: true });
 await bundle({ entryPoints: ['node_modules/pdfjs-dist/build/pdf.worker.mjs'], bundle: true, platform: 'node', target: 'node22', format: 'cjs', outfile: 'dist-electron/pdf-worker.cjs' });
 const ocr = ['chi_sim', 'eng'].map(code => {
   const from = path.join(root, `node_modules/@tesseract.js-data/${code}/4.0.0/${code}.traineddata.gz`), to = path.join(resourceRoot, `ocr/${code}.traineddata.gz`);

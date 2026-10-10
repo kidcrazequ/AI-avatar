@@ -114,6 +114,17 @@ if (process.argv[5] === '--crash-child') {
       const batch = await importFiles([png, write('原生文字.pdf', makePdf(false)), write('扫描验证.pdf', makePdf(true))]);
       assert(batch.items.every(i => i.state === 'ready'), JSON.stringify(batch));
       for (const item of batch.items) { assert(store.readDocument(collection, `imports/${item.documentId}.md`, '').content.includes('62709')); const manifest = store.knowledge.versions(collection, item.documentId, '')[0]; assert(manifest.assets.some(a => a.ocr === 'recognized')); assert(manifest.assets.every(a => a.bytes > 0)); }
+      // A stamp-filtered recognition supplements the source; it cannot replace
+      // colored evidence or make unverified OCR look like native text.
+      context.fillStyle = 'white'; context.fillRect(0, 0, 1200, 240); context.strokeStyle = 'red'; context.lineWidth = 8;
+      context.beginPath(); context.arc(600, 120, 90, 0, Math.PI * 2); context.stroke();
+      context.fillStyle = 'black'; context.font = '72px sans-serif'; context.fillText('Soul 2023-11-08', 70, 145);
+      const stampedBytes = canvas.toBuffer('image/png'), stamped = await importFiles([write('红章辅助.png', stampedBytes)]), item = stamped.items[0];
+      assert.equal(item.state, 'partial');
+      const source = store.knowledge.versions(collection, item.documentId, '')[0], original = source.assets.find(a => !a.derivedFrom)!;
+      assert.equal(hash(fs.readFileSync(store.knowledge.original(collection, item.documentId, item.version, ''))), hash(stampedBytes));
+      assert.equal(original.sha256, hash(stampedBytes)); assert(source.assets.some(a => a.derivedFrom === original.path && a.preprocessing?.method === 'suppress-red' && a.text.includes('2023-11-08')));
+      assert(source.warnings.some(w => w.includes('彩色内容')));
     });
     await check('Invalid reimports and cancellation keep the last usable version intact', async () => {
       const file = path.join(input, '验证.docx'), doc = store.documents(collection, '').find(d => d.name === '验证.docx')!;

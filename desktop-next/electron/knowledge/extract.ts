@@ -4,10 +4,11 @@ import crypto from 'node:crypto';
 import AdmZip from 'adm-zip';
 import { JSDOM } from 'jsdom';
 import { imageSize } from 'image-size';
-import { createWorker, type Worker as OCRWorker } from 'tesseract.js';
+import { createWorker, PSM, type Worker as OCRWorker } from 'tesseract.js';
 import { DocumentParser, isGarbledText } from '../../../desktop-app/electron/document-parser';
 import { decodeText, parseTables, tablePreview } from './table-parser';
-import { extractionSignature, knowledgeFormats, knowledgeLimits, type SourceManifest, type SourceLocation, type SourceAsset } from '../../shared/knowledge';
+import { prepareOCRInputs, type OCRInput } from './ocr-inputs';
+import { knowledgeFormats, knowledgeLimits, type SourceManifest, type SourceLocation, type SourceAsset } from '../../shared/knowledge';
 
 export const sha256 = (value: string | Buffer) => crypto.createHash('sha256').update(value).digest('hex');
 export interface ExtractionInput { file: string; relativePath: string; output: string; documentId: string; version: string; languages: string; signature: string }
@@ -37,25 +38,40 @@ export async function extractSource(input: ExtractionInput): Promise<SourceManif
   };
   let ocr: OCRWorker | undefined;
   const ocrCache = new Map<string, { text: string; confidence: number }>();
-  const recognize = async (file: string) => {
+  const recognize = async (file: string, auto: boolean) => {
     // Both language files and the WASM core are shipped locally; no model or CDN.
     ocr ??= await createWorker(['chi_sim', 'eng'], 1, { langPath: input.languages, cacheMethod: 'none', gzip: true, errorHandler: () => {} });
+    await ocr.setParameters({ tessedit_pageseg_mode: auto ? PSM.AUTO : PSM.SINGLE_BLOCK });
     const result = await ocr.recognize(file);
     return { text: result.data.text.trim(), confidence: result.data.confidence };
   };
-  const asset = async (data: Buffer, origin: string, ext: string, position: { page?: number; slide?: number } = {}) => {
+  const asset = async (data: Buffer, origin: string, ext: string, position: { page?: number; slide?: number } = {}, derived?: { from: string; preparation: Omit<OCRInput, 'bytes'> }) => {
     const relative = `_assets/${String(assets.length + 1).padStart(4, '0')}.${ext}`;
     const target = path.join(input.output, relative); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, data);
-    const record: SourceAsset = { path: relative, sha256: sha256(data), bytes: data.length, origin, ...position, ocr: 'unsupported', text: '' }; assets.push(record);
+    const auto = derived?.preparation.method === 'suppress-red';
+    const record: SourceAsset = { path: relative, sha256: sha256(data), bytes: data.length, origin, ...position, ocr: 'unsupported', text: '', segmentation: auto ? 'auto' : 'block', ...(derived ? { derivedFrom: derived.from, preprocessing: derived.preparation } : {}) }; assets.push(record);
     if (!/^(png|jpe?g|bmp|gif|webp)$/i.test(ext)) { warnings.push(`图片 ${origin} 保留原件，当前 OCR 不支持 ${ext}`); return; }
     try {
       const size = imageSize(data);
       if (!size.width || !size.height || size.width * size.height > knowledgeLimits.pixels) throw new Error('图片像素超过 OCR 上限');
-      let result = ocrCache.get(record.sha256);
-      if (!result) { if (ocrCache.size >= knowledgeLimits.ocrPages) throw new Error('图片 OCR 数量超过上限，原图保留'); result = await recognize(target); ocrCache.set(record.sha256, result); }
+      const cacheKey = record.sha256 + (auto ? '/auto' : '/block');
+      let result = ocrCache.get(cacheKey);
+      if (!result) { if (ocrCache.size >= knowledgeLimits.ocrPages) throw new Error('图片 OCR 数量超过上限，原图保留'); result = await recognize(target, auto); ocrCache.set(cacheKey, result); }
       record.text = result.text; record.confidence = result.confidence; record.ocr = result.text ? 'recognized' : 'empty';
       if (!result.text) warnings.push(`图片 ${origin} 未识别出文字`);
-      else append(`### ${position.page ? `第 ${position.page} 页` : position.slide ? `第 ${position.slide} 页` : origin} · OCR\n\n${result.text}`, { kind: 'asset', page: position.page ?? position.slide, asset: relative, method: 'ocr' });
+      else {
+        if (result.confidence < 85) warnings.push(`图片 ${origin} OCR 置信度 ${Math.round(result.confidence)}，内容待核对原件`);
+        if (auto) warnings.push(`图片 ${origin} 使用抑制红色干扰的辅助 OCR，彩色内容请同时核对原图`);
+        append(`### ${position.page ? `第 ${position.page} 页` : position.slide ? `第 ${position.slide} 页` : origin} · ${derived ? '辅助 ' : ''}OCR（识别结果，关键数据需核对原件）\n\n${result.text}`, { kind: 'asset', page: position.page ?? position.slide, asset: relative, method: 'ocr' });
+      }
+      if (!derived && /^(png|jpe?g)$/i.test(ext)) {
+        try {
+          for (const prepared of await prepareOCRInputs(data)) {
+            const { bytes, ...preparation } = prepared;
+            await asset(bytes, origin + (prepared.method === 'upscale' ? '（字形放大）' : '（红色干扰辅助）'), 'png', position, { from: relative, preparation });
+          }
+        } catch (cause) { warnings.push(`图片 ${origin} 辅助 OCR 未完成，原图识别结果保留：${cause instanceof Error ? cause.message : String(cause)}`); }
+      }
     } catch (cause) { record.ocr = 'failed'; record.error = cause instanceof Error ? cause.message : String(cause); warnings.push(`图片 ${origin} OCR 失败：${record.error}`); }
   };
   try {

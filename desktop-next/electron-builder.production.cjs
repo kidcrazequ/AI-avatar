@@ -5,4 +5,5 @@ module.exports = {
   forceCodeSigning: true,
   mac: { ...base.mac, identity: undefined, hardenedRuntime: true, notarize: true },
   win: { ...base.win, publisherName: process.env.SOUL_NEXT_PUBLISHER },
+  nsis: { ...base.nsis, runAfterFinish: true },
 };

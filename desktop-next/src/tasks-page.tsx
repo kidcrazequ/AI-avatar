@@ -23,8 +23,8 @@ export function TaskAnswer({ text }: { text: string }) {
 }
 function eventSummary(event: TaskView['events'][number]): string {
   if (event.kind !== 'tool') return event.text;
-  const labels: Record<string, string> = { search_knowledge: '检索知识', read_knowledge: '读取资料', read_skill: '读取技能', read_project_file: '读取项目文件', write_artifact: '写入成果' };
-  const title = event.text.split('\n')[0].replace(/search_knowledge|read_knowledge|read_skill|read_project_file|write_artifact/g, name => labels[name]);
+  const labels: Record<string, string> = { search_knowledge: '检索知识', read_knowledge: '读取资料', describe_table: '查看表格结构', query_table: '查询表格数据', read_skill: '读取技能', read_project_file: '读取项目文件', write_artifact: '写入成果' };
+  const title = event.text.split('\n')[0].replace(/search_knowledge|read_knowledge|describe_table|query_table|read_skill|read_project_file|write_artifact/g, name => labels[name]);
   return title + (event.text.includes('\n工具未执行：') ? ' · 未执行，详情见运行记录' : '');
 }
 export function TasksPage({ route, ...actions }: DialogActions & { route: string[] }) {

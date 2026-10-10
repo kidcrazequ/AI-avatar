@@ -120,7 +120,7 @@ app.whenReady().then(async () => {
   const pageUrl = pathToFileURL(page).href;
   window = new BrowserWindow({
     width: 1440, height: 900, minWidth: 960, minHeight: 600,
-    backgroundColor: '#ffffff', show: false, title: 'Soul Next', enableLargerThanScreen: Boolean(verifyOutput),
+    backgroundColor: '#ffffff', show: false, title: 'Soul Next', enableLargerThanScreen: Boolean(verifyOutput || upgradeOutput),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   const handle = (channel: string, listener: (...args: any[]) => unknown) => ipcMain.handle(`soul-next:${channel}`, (event, ...args) => {

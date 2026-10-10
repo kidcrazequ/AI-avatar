@@ -3,12 +3,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { parse } from 'yaml';
 const folder = process.argv[2] ?? 'release';
+const expectedVersion = process.argv[3] ?? JSON.parse(fs.readFileSync('package.json')).version;
 const metadata = fs.readdirSync(folder).filter(file => /^(latest|candidate)(-mac)?\.yml$/.test(file));
 if (!metadata.length) throw new Error('No updater metadata produced');
 const artifacts = [];
 for (const file of metadata) {
   const info = parse(fs.readFileSync(path.join(folder, file), 'utf8'));
-  if (!info.version || !Array.isArray(info.files) || !info.files.length) throw new Error('Invalid updater metadata');
+  if (info.version !== expectedVersion || !Array.isArray(info.files) || !info.files.length) throw new Error('Updater metadata version differs from the selected build');
   for (const item of info.files) {
     const name = decodeURIComponent(item.url);
     if (path.basename(name) !== name || !name.includes(`-${process.arch}.`)) throw new Error('Metadata must name a local artifact for the native architecture');

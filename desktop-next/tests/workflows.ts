@@ -90,8 +90,12 @@ async function main() {
     const monthly = { ...trigger(), schedule: 'repeat' as const, repeat: 'monthly' as const, day: 31, time: '09:00' }; const after = new Date(2026, 3, 1).getTime(); const next = new Date(nextScheduled(monthly, after)!); assert.equal(next.getMonth(), 4); assert.equal(next.getDate(), 31); checks.push('monthly-31-skips-short-month-local-calendar');
     const timeoutFlow = create('超时验收'); configure(timeoutFlow, { timeout: 1 }); call = async () => new Promise(() => {}); const timeoutRun = runtime.run(timeoutFlow, '超时停止', 'timeout-run'); const timeoutTask = repository.get(store.run(timeoutRun).taskId); timeoutTask.events.find(item => item.kind === 'start')!.at = new Date(Date.now() - 120000).toISOString(); repository.put(timeoutTask); await runtime.tick(); await wait(timeoutRun, 'stopped'); assert.equal(runtime.read().runs.find(item => item.id === timeoutRun)!.status, 'stopped'); checks.push('timeout-aborts-running-task-preserves-record');
     runtime.remove(timeoutFlow, 'soft-remove'); assert(!runtime.read().workflows.find(item => item.id === timeoutFlow)); runtime.restoreRemoved('restore-removed'); assert(runtime.read().workflows.find(item => item.id === timeoutFlow)); checks.push('recoverable-removal-keeps-history-disabled-triggers');
+  }
+  await runtime.close(); taskRuntime.close(); await pause(); repository.close(); resources.close(); library.close();
+  if (!crashProfile) {
+    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    assert(!fs.existsSync(profile)); checks.push('shutdown-releases-git-handles-before-profile-removal');
     fs.writeFileSync(output, JSON.stringify({ ok: true, checks }, null, 2)); console.log(JSON.stringify({ ok: true, checks }));
   }
-  runtime.close(); taskRuntime.close(); await pause(); repository.close(); resources.close(); library.close(); if (!crashProfile) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 }
 main().catch(error => { console.error(error); process.exit(1); });

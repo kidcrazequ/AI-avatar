@@ -24,6 +24,7 @@ export interface RuntimeStatus {
 }
 
 export interface DesktopAPI {
+  updates: import('./updates').UpdateAPI;
   readStatus(): Promise<RuntimeStatus>;
   readLibrary(): Promise<LibrarySnapshot>;
   readExpert(id: string): Promise<ExpertDetail>;

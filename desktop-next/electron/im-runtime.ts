@@ -16,6 +16,8 @@ export class IMRuntime {
   private adapters = new Map<string, IMAdapter>();
   private errors = new Map<string, string>();
   private closing = false;
+  private sending = 0;
+  isSending(): boolean { return this.sending > 0; }
   constructor(profile: string, private codec: SecretCodec, private library: ExpertLibrary, private tasks: TaskRuntime, private changed: () => void, private factory: IMFactory = createFeishu) {
     this.db = new Database(path.join(profile, 'soul.sqlite')); this.db.pragma('synchronous = FULL');
     this.db.exec('CREATE TABLE IF NOT EXISTS im_channels_v3(id TEXT PRIMARY KEY,value TEXT NOT NULL,secret BLOB NOT NULL); CREATE TABLE IF NOT EXISTS im_sessions_v3(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS im_events_v3(id TEXT PRIMARY KEY,value TEXT NOT NULL)');
@@ -88,8 +90,10 @@ export class IMRuntime {
     const event = this.events().find(e => e.id === id); if (!event || event.state !== 'ready' || !event.response) throw new Error('回复未就绪或已处理');
     const adapter = this.adapters.get(event.channelId); if (adapter?.state() !== 'connected') throw new Error('飞书尚未连接');
     event.state = 'unknown'; event.error = '正在发送；中断后需人工核对'; this.put(event); this.changed();
+    this.sending++;
     try { const receipt = await adapter.send(event.messageId, event.response, event.id.slice(0, 32)); if (this.closing) return; event.receipt = receipt; event.state = 'sent'; event.error = ''; this.put(event); this.changed(); }
     catch { if (!this.closing) { event.error = '外部发送结果未知，请在飞书核对；不会自动重发'; this.put(event); this.changed(); } }
+    finally { this.sending--; }
   }
   close(): void { this.closing = true; for (const adapter of this.adapters.values()) adapter.close(); this.adapters.clear(); this.db.close(); }
 }

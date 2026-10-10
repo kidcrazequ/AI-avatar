@@ -1,0 +1,68 @@
+name: Soul Next signed release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable version tag (vX.Y.Z)
+        type: string
+        required: true
+jobs:
+  signed-build:
+    environment: soul-next-release
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            arch: x64
+            platform: win32
+          - os: macos-15
+            arch: arm64
+            platform: darwin
+          - os: macos-15-intel
+            arch: x64
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop-next
+    env:
+      SOUL_NEXT_PRODUCTION: '1'
+      SOUL_NEXT_UPDATE_URL: ${{ vars.SOUL_NEXT_UPDATE_BASE }}/${{ matrix.platform }}/${{ matrix.arch }}/
+      SOUL_NEXT_PUBLISHER: ${{ vars.SOUL_NEXT_PUBLISHER }}
+      CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.SOUL_NEXT_MAC_CSC_LINK || secrets.SOUL_NEXT_WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.SOUL_NEXT_MAC_CSC_KEY_PASSWORD || secrets.SOUL_NEXT_WINDOWS_CSC_KEY_PASSWORD }}
+      SOUL_NEXT_APPLE_API_KEY_BASE64: ${{ secrets.SOUL_NEXT_APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.SOUL_NEXT_APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.SOUL_NEXT_APPLE_API_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-next/package-lock.json
+      - name: Validate immutable stable tag and native host
+        env:
+          SOUL_RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/verify-release-tag.mjs ${{ matrix.arch }}
+      - run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: node scripts/prepare-notarization.mjs
+      - run: npm run typecheck
+      - run: npm run dist:production
+      - name: Validate metadata and package hashes
+        run: node scripts/verify-release-files.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soul-next-signed-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.tag }}
+          path: desktop-next/release/
+          retention-days: 30
+          if-no-files-found: error
+      # Publication is a separate user action after installed signature and A→B verification.

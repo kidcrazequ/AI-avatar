@@ -55,6 +55,7 @@ async function main() {
       const spec2 = { ...spec, lineEnd: 2 }, preview = learning.preview(spec2), job = await wait(learning.start(preview.token, spec.scope).id);
       assert.equal(job.state, 'interrupted'); assert.equal(job.parts[0].state, 'failed'); assert.equal(job.parts[0].notes.length, 0);
       const before = calls; learning.start(preview.token, spec.scope); assert.equal(calls, before);
+      assert(job.parts[0].rawResponse!.includes('原文不存在'));
     });
     await check('Actual process crash keeps source version and unknown billing checkpoint; restart does not resend', async () => {
       learning!.close(); learning = undefined;
@@ -71,7 +72,7 @@ async function main() {
       let requests = 0, status = 200; const bodies: any[] = [];
       const server = http.createServer((req, res) => { let body = ''; req.on('data', chunk => body += chunk); req.on('end', () => { requests++; bodies.push(JSON.parse(body)); res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(req.url!.endsWith('/messages') ? { content: [{ type: 'text', text: '{"notes":[],"gaps":[]}' }], usage: { input_tokens: 10, output_tokens: 5 } } : { choices: [{ message: { content: '{"notes":[],"gaps":[]}' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } })); }); });
       await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve)); const baseUrl = `http://127.0.0.1:${(server.address() as any).port}/v1`;
-      try { for (const protocol of ['openai', 'anthropic'] as const) { const reply = await callKnowledgeModel({ ...model, protocol, baseUrl }, [{ role: 'system', content: '独立整理' }, { role: 'user', content: '来源' }], new AbortController().signal, () => {}); assert.equal(reply.usage!.inputTokens, 10); } status = 503; await assert.rejects(callKnowledgeModel({ ...model, protocol: 'anthropic', baseUrl }, [{ role: 'user', content: '失败' }], new AbortController().signal, () => {}), /503/); assert.equal(requests, 3); for (const body of bodies) { assert.equal(body.max_tokens, 2048); assert(!body.tools); } }
+      try { for (const protocol of ['openai', 'anthropic'] as const) { const reply = await callKnowledgeModel({ ...model, protocol, baseUrl }, [{ role: 'system', content: '独立整理' }, { role: 'user', content: '来源' }], new AbortController().signal, () => {}); assert.equal(reply.usage!.inputTokens, 10); } status = 503; await assert.rejects(callKnowledgeModel({ ...model, protocol: 'anthropic', baseUrl }, [{ role: 'user', content: '失败' }], new AbortController().signal, () => {}), /503/); assert.equal(requests, 3); for (const body of bodies) { assert.equal(body.max_tokens, 8192); assert(!body.tools); } }
       finally { await new Promise<void>(resolve => server.close(() => resolve())); }
     });
     fs.mkdirSync(path.dirname(output), { recursive: true }); fs.writeFileSync(output, JSON.stringify({ ok: true, platform: process.platform, arch: process.arch, checks }, null, 2));

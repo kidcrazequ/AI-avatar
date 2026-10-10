@@ -4,10 +4,11 @@ import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import type { ModelEntry, ModelInput, TaskRound, WireMessage } from '../shared/contracts';
 import { required } from './task-repository';
+import { learningOutputLimit } from '../shared/knowledge-learning';
 
 export interface SecretCodec { encrypt(value: string): Buffer; decrypt(value: Buffer): string }
 export interface ModelCredentials extends ModelEntry { apiKey: string }
-export interface ModelReply { text: string; reasoning?: string; calls: TaskRound['calls']; usage?: TaskRound['usage'] }
+export interface ModelReply { text: string; reasoning?: string; calls: TaskRound['calls']; usage?: TaskRound['usage']; finishReason?: string }
 export type ModelCall = (config: ModelCredentials, messages: WireMessage[], signal: AbortSignal, chunk: (value: string) => void) => Promise<ModelReply>;
 export class TaskModels {
   private db: Database.Database;
@@ -71,7 +72,7 @@ export const callKnowledgeModel: ModelCall = async (config, messages, signal) =>
   const response = await fetch(anthropic ? base.replace(/\/v1$/, '') + '/v1/messages' : base + '/chat/completions', {
     method: 'POST', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(300_000)]),
     headers: anthropic ? { 'content-type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' } : { 'content-type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify(anthropic ? { model: config.model, max_tokens: 2048, system: messages.filter(m => m.role === 'system').map(m => m.content).join('\n'), messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) } : { model: config.model, max_tokens: 2048, stream: false, messages }),
+    body: JSON.stringify(anthropic ? { model: config.model, max_tokens: learningOutputLimit, system: messages.filter(m => m.role === 'system').map(m => m.content).join('\n'), messages: messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content })) } : { model: config.model, max_tokens: learningOutputLimit, stream: false, messages }),
   });
   if (!response.ok) throw new Error(`整理模型请求失败 (${response.status})`);
   const value = await response.json() as any;
@@ -79,5 +80,5 @@ export const callKnowledgeModel: ModelCall = async (config, messages, signal) =>
   const calls = anthropic ? (value.content ?? []).filter((item: any) => item.type === 'tool_use') : value.choices?.[0]?.message?.tool_calls ?? [];
   if (typeof text !== 'string' || text.length > 200_000 || calls.length) throw new Error('整理模型响应无效');
   const usage = value.usage;
-  return { text, calls: [], usage: usage ? { inputTokens: usage.input_tokens ?? usage.prompt_tokens ?? 0, outputTokens: usage.output_tokens ?? usage.completion_tokens ?? 0 } : undefined };
+  return { text, calls: [], finishReason: anthropic ? value.stop_reason : value.choices?.[0]?.finish_reason, usage: usage ? { inputTokens: usage.input_tokens ?? usage.prompt_tokens ?? 0, outputTokens: usage.output_tokens ?? usage.completion_tokens ?? 0 } : undefined };
 };

@@ -12,7 +12,7 @@ $stamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $evidence = Join-Path $root "evidence\windows-x64-$stamp"
 # Keep dictionaries on an ASCII path while explicitly exercising Unicode userData.
 $installDir = Join-Path $env:LOCALAPPDATA "Soul Next Verification $stamp"
-$profile = Join-Path $env:LOCALAPPDATA "Soul Next Verification Data $stamp\测试用户 数据"
+$verificationProfile = Join-Path $env:LOCALAPPDATA "Soul Next Verification Data $stamp\测试用户 数据"
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $installerLog = Join-Path $evidence 'installer.txt'
 $process = Start-Process -FilePath $Installer -ArgumentList "/S /currentuser /D=$installDir" -Wait -PassThru
@@ -27,7 +27,7 @@ foreach ($iteration in 1, 2) {
   $stderr = Join-Path $evidence "launch-$iteration.stderr.log"
   $startInfo = New-Object System.Diagnostics.ProcessStartInfo
   $startInfo.FileName = $executable
-  $startInfo.Arguments = "`"--verify-output=$output`" `"--profile=$profile`""
+  $startInfo.Arguments = "`"--verify-output=$output`" `"--profile=$verificationProfile`""
   $startInfo.UseShellExecute = $false
   $startInfo.RedirectStandardOutput = $true
   $startInfo.RedirectStandardError = $true
@@ -52,16 +52,24 @@ foreach ($iteration in 1, 2) {
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+$installerHasher = [Security.Cryptography.SHA256]::Create()
+$installerStream = [IO.File]::OpenRead($Installer)
+try {
+  $installerSha256 = [BitConverter]::ToString($installerHasher.ComputeHash($installerStream)).Replace('-', '').ToLowerInvariant()
+} finally {
+  $installerStream.Dispose()
+  $installerHasher.Dispose()
+}
 $summary = @{
   ok = $true
   installer = $Installer
-  installerSha256 = (Get-FileHash $Installer -Algorithm SHA256).Hash.ToLower()
+  installerSha256 = $installerSha256
   executable = $executable
-  profile = $profile
+  profile = $verificationProfile
   sourceSha = $runs[0].status.sourceSha
   resourceSha256 = $runs[0].status.resources.sha256
   launches = @($runs | ForEach-Object { $_.status.persistenceRun })
-  host = @{ os = (Get-CimInstance Win32_OperatingSystem).Caption; version = [Environment]::OSVersion.Version.ToString(); architecture = 'x64'; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+  host = @{ os = [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion', 'ProductName', 'Windows'); version = $runs[0].host.release; architecture = 'x64'; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
   scope = 'Native Windows build; actual per-user silent NSIS install; installed EXE launched twice with Unicode userData. Unsigned internal verification; interactive wizard, Windows 10/11 end-user trust and auto-update remain separate gates.'
 }
 $summary | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $evidence 'installation.json')
@@ -73,5 +81,5 @@ $process = Start-Process -FilePath $uninstaller -ArgumentList '/S /currentuser' 
 if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
 for ($attempt = 0; $attempt -lt 30 -and (Test-Path $executable); $attempt++) { Start-Sleep -Milliseconds 1000 }
 if (Test-Path $executable) { throw 'Uninstaller did not remove the installed executable' }
-if (-not (Test-Path (Join-Path $profile 'validation.sqlite'))) { throw 'Uninstall deleted persistent test data' }
+if (-not (Test-Path (Join-Path $verificationProfile 'validation.sqlite'))) { throw 'Uninstall deleted persistent test data' }
 'Uninstall passed; persistent test data retained' | Set-Content -Encoding UTF8 (Join-Path $evidence 'uninstall.txt')

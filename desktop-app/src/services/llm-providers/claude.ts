@@ -59,10 +59,16 @@ export class ClaudeProvider implements LLMProvider {
   ): Promise<void> {
     try {
       const { system: fallbackSystem, claudeMessages } = convertMessages(messages)
-      const system = options.systemBlocks
-        ? buildSystemBlocks(options.systemBlocks)
-        : fallbackSystem
       const tools = options.tools && options.tools.length > 0 ? convertTools(options.tools) : undefined
+      // 工具块（~2000 行 schema、跨轮稳定）标为可缓存：Anthropic 缓存顺序 tools→system→messages，
+      // 在最后一个工具上打 cache_control 即缓存整个工具块，第 2 轮起走缓存读，省下每轮重发的
+      // 工具 token（此前工具块完全未缓存）。占 1 个 cache breakpoint，故 system 可用断点相应减 1。
+      if (tools && tools.length > 0) {
+        tools[tools.length - 1].cache_control = { type: 'ephemeral' }
+      }
+      const system = options.systemBlocks
+        ? buildSystemBlocks(options.systemBlocks, tools && tools.length > 0 ? 1 : 0)
+        : fallbackSystem
 
       const stream = this.client.messages.stream({
         model: this.model,
@@ -323,9 +329,10 @@ function convertTools(tools: LLMTool[]): AnthropicTool[] {
  * 服务端最多识别 4 个 breakpoint——超过的标记会被静默丢弃，
  * 因此在客户端就先截断到前 4 个 cacheable，明确报警。
  */
-function buildSystemBlocks(blocks: SystemBlock[]): TextBlockParam[] {
+function buildSystemBlocks(blocks: SystemBlock[], reservedBreakpoints = 0): TextBlockParam[] {
   const out: TextBlockParam[] = []
-  let cacheBreakpointsUsed = 0
+  // reservedBreakpoints：已被工具块占用的 cache breakpoint 数（Anthropic 全局最多 4 个）
+  let cacheBreakpointsUsed = reservedBreakpoints
   for (const block of blocks) {
     if (!block.text || block.text.length === 0) continue
     const text: TextBlockParam = { type: 'text', text: block.text }

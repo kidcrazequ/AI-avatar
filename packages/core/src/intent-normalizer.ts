@@ -28,6 +28,8 @@ export interface IntentFrame {
   confidence: number
   needsClarification: boolean
   clarificationOptions: string[]
+  /** 澄清闸门（问题2·A）：回显主体的澄清问句，做教学回声；needsClarification=false 时为 undefined */
+  clarificationQuestion?: string
   guardrail?: IntentGuardrail
 }
 
@@ -155,6 +157,11 @@ export function normalizeIntentLocal(userMessage: string): IntentFrame {
     clarificationOptions: needsClarification
       ? ['质量表现', '结构拆解', '故障率/异常率', '选型或决策历史']
       : [],
+    clarificationQuestion: needsClarification
+      ? (entity && isSpecificEntity(entity)
+          ? `你想了解「${entity}」的哪方面？选一个我直接答，省得我猜偏。`
+          : '你想聚焦哪一方面？选一个我直接答，省得我猜偏。')
+      : undefined,
   }
 }
 
@@ -224,6 +231,20 @@ function detectKnowledgePipelineBoundary(text: string): IntentGuardrail | undefi
   }
 }
 
+/**
+ * 主体是否"够具体"到值得回显给用户。extractEntity 的 named 分支较宽松，会把
+ * "一下最近表现怎么样"这类含填充/评估词的片段贪婪捕获成主体；回显这种垃圾主体
+ * （"你想了解「一下最近表现怎么样」的哪方面"）反而伤体验。此处只用于教学回声降级，
+ * 不影响是否触发澄清——降级后改用通用问句，仍然反问。
+ */
+function isSpecificEntity(entity: string): boolean {
+  const e = entity.trim()
+  // 含笼统评估/填充词 → 多半是过度捕获，不是真主体
+  if (/(表现|怎么样|情况|最近|一下|目前|现在|这个|那个|一些|一点|之前|当前|整体|全部|如何|靠不靠谱)/.test(e)) return false
+  // 过长（>12 字）多半是把整句当主体
+  return e.length <= 12
+}
+
 function extractEntity(text: string): string | undefined {
   const quoted = text.match(/[「『"']([^「」『』"']{1,40})[」』"']/)
   if (quoted?.[1]) return quoted[1].trim()
@@ -256,6 +277,17 @@ function inferChartFormat(text: string): string {
   return 'echarts.bar'
 }
 
+/**
+ * 澄清闸门评分卡：只有「欠定义 × 高代价」两轴同时成立才建议反问（两轴相乘，不相加）。
+ *
+ *   - 高代价轴：猜错代价高的领域才值得打断用户。这里限定为"评估表现"类——它必然产出
+ *     较长的分析/报告，且多用于数据决策场景，猜错 = 整轮返工 + 可能误导用户下游决策。
+ *   - 欠定义轴：提到了主体(entity)，却没有产物(artifact)、没有具体指标(concrete metric)、
+ *     规则解析置信低——即"我要替用户默默做多个决定"，两个合理理解答案实质不同（分叉测试）。
+ *
+ * 起步刻意保守（与放宽前的行为等价）：宁可漏问也不滥问，靠 clarify-gate 埋点数据
+ * 再决定是否放宽阈值（如把 trace_decision 纳入高代价轴、或降低 confidence 门槛）。
+ */
 function shouldClarify(input: {
   entity?: string
   intents: Set<string>
@@ -263,10 +295,16 @@ function shouldClarify(input: {
   metrics: Set<string>
   confidence: number
 }): boolean {
+  // 欠定义前置：必须提到一个主体，否则无从"聚焦"，问了也无从选起
   if (!input.entity) return false
-  if (!input.intents.has('evaluate_performance')) return false
-  if (input.artifact) return false
+
+  // 高代价轴
+  const highCost = input.intents.has('evaluate_performance')
+  if (!highCost) return false
+
+  // 欠定义轴：无产物 且 无具体指标（仅笼统"表现"不算） 且 规则解析置信低
   const concreteMetrics = [...input.metrics].filter(metric => metric !== 'performance')
-  if (concreteMetrics.length > 0) return false
-  return input.confidence < 0.75
+  const underspecified = !input.artifact && concreteMetrics.length === 0 && input.confidence < 0.75
+
+  return underspecified
 }

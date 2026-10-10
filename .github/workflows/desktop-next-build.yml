@@ -38,6 +38,8 @@ jobs:
       - name: Confirm native host architecture
         run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('Non-native architecture'); console.log(process.platform, process.arch, process.version)"
       - name: Install locked dependencies
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm ci
       - name: Typecheck
         run: npm run typecheck

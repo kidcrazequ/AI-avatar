@@ -59,5 +59,26 @@ export async function verifyResourcePages(window: BrowserWindow, page: string, o
     return { run: ${run}, memorySaved: true, restoredAfterRestart: ${run} > 1, versions: after.versions.length, revision: after.memory.revision, source: after.memory.source };
   })()`);
   checks.push({ persistence });
+  const lookup = await window.webContents.executeJavaScript(`(async () => {
+    const api = window.soulDesktop.resources, title = '安装版统一查找验收';
+    let collection = (await api.read('')).collections.find(item => item.title === title);
+    if (!collection) { await api.saveCollection('', title); collection = (await api.read('')).collections.find(item => item.title === title); }
+    let document = (await api.documents(collection.id, '')).find(item => item.name === '范围证据.md');
+    if (!document) { await api.saveDocument({collectionId: collection.id, id:'',name:'范围证据.md',revision:'',content:'# 安装版范围阅读\\n' + Array.from({length:1500},(_,i) => '原始正文第 '+(i+1)+' 行。').join('\\n') + '\\n尾部标记 INSTALLEDLOOKUP62709'}, ''); document = (await api.documents(collection.id, '')).find(item => item.name === '范围证据.md'); }
+    const state = await api.read('finance-expert'); await api.bind('finance-expert', [...new Set([...state.bindings, collection.id])]);
+    const resource = await api.lookup.execute('finance-expert', collection.id, {operation:'search',query:'INSTALLEDLOOKUP62709'});
+    if (resource.chunks.length !== 1 || resource.chunks[0].lineStart < 1000) throw new Error('Installed lookup did not find the tail');
+    return {collectionId:collection.id, documentId:document.id, bodySha256:resource.chunks[0].bodySha256, version:resource.chunks[0].version};
+  })()`);
+  await window.loadFile(page, { hash: 'expert/finance-expert/knowledge/' + encodeURIComponent(lookup.collectionId) });
+  await wait('.resource-filter input');
+  await window.webContents.executeJavaScript(`(() => { const input = document.querySelector('.resource-filter input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'INSTALLEDLOOKUP62709'); input.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  await window.webContents.executeJavaScript(`new Promise((resolve,reject) => { let n=0; const poll=()=> { const rows=[...document.querySelectorAll('.resource-table tbody tr')]; if(rows.length===1 && rows[0].innerText.includes('INSTALLEDLOOKUP62709')) return resolve(); if(++n>250) return reject(new Error('Installed resource search did not render')); setTimeout(poll,40); }; poll(); })`);
+  await window.webContents.executeJavaScript(`document.querySelector('.resource-table tbody .doc-actions button').click()`);
+  await wait('dialog[open] .resource-preview');
+  const preview = await window.webContents.executeJavaScript(`({tail:document.querySelector('.resource-preview').textContent.includes('INSTALLEDLOOKUP62709'), hash:document.querySelector('dialog').textContent.includes(${JSON.stringify(lookup.bodySha256)}), overflow:document.documentElement.scrollWidth>innerWidth})`);
+  if (!preview.tail || !preview.hash || preview.overflow) throw new Error('Installed range preview lost source evidence');
+  checks.push({ installedLookup: { ...lookup, run, ...preview } });
+  fs.writeFileSync(path.join(path.dirname(output), 'lookup-preview-' + run + '.png'), (await window.webContents.capturePage()).toPNG());
   return checks;
 }

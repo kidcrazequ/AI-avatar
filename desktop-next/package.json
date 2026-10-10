@@ -21,6 +21,7 @@
     "verify:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install-win.ps1",
     "verify:resources": "node scripts/verify-resources.mjs",
     "verify:knowledge": "node scripts/verify-knowledge.mjs",
+    "verify:lookup": "node scripts/verify-lookup.mjs",
     "verify:tasks": "node scripts/verify-tasks.mjs",
     "verify:workflows": "node scripts/verify-workflows.mjs",
     "verify:integrations": "node scripts/verify-integrations.mjs",

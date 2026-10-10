@@ -104,6 +104,7 @@ export interface QualityReport { at: string; checks: Array<{ name: string; ok: b
 export interface DocumentInput { collectionId: string; id: string; name: string; content: string; revision: string }
 export interface ResourceAPI {
   knowledge: import('./knowledge').KnowledgeAPI;
+  lookup: import('./knowledge-lookup').KnowledgeLookupAPI;
   read(expertId: string): Promise<ResourceSnapshot>;
   saveProject(input: ResourceProject, scope: string): Promise<void>;
   removeProject(id: string, scope: string): Promise<void>;
@@ -130,7 +131,7 @@ export interface ResourceAPI {
 export type TaskStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'stopped' | 'interrupted' | 'failed';
 export interface ModelEntry { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; configured: boolean }
 export interface ModelInput { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; apiKey: string }
-export interface TaskFile { id: string; name: string; source: string; content: string; hash: string }
+export interface TaskFile { id: string; name: string; source: string; content: string; hash: string; reference?: import('./knowledge-lookup').KnowledgeReference }
 export interface TaskMember { expertId: string; name: string; avatar: string; model: string; modelConfig?: Pick<ModelEntry, 'model' | 'baseUrl' | 'protocol'>; directory: string; system: string; knowledge: TaskFile[]; skills: TaskFile[] }
 export interface TaskMessage { id: string; role: 'user' | 'assistant'; text: string; expertId: string; at: string; attachments?: TaskFile[] }
 export interface TaskEvent { at: string; text: string; kind: string }

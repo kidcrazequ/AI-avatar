@@ -76,6 +76,7 @@ const api: DesktopAPI = {
     onChanged(listener) { const callback = () => listener(); ipcRenderer.on('soul-next:workflows-changed', callback); return () => ipcRenderer.removeListener('soul-next:workflows-changed', callback); },
   },
   resources: {
+    lookup: { execute: (scope, collection, request) => ipcRenderer.invoke('soul-next:knowledge-lookup', scope, collection, request) },
     knowledge: {
       formats: () => ipcRenderer.invoke('soul-next:knowledge-formats'),
       chooseImport: (id, scope, kind) => ipcRenderer.invoke('soul-next:knowledge-import', id, scope, kind),

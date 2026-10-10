@@ -9,6 +9,8 @@ module.exports = {
     'node_modules/**/*',
     'dist-electron/knowledge-worker.cjs',
     'dist-electron/pdf-worker.cjs',
+    'dist-electron/lookup-worker.cjs',
+    'dist-electron/retriever.cjs',
   ],
   npmRebuild: true,
   publish: process.env.SOUL_NEXT_UPDATE_URL ? { provider: 'generic', url: process.env.SOUL_NEXT_UPDATE_URL, channel: process.env.SOUL_NEXT_PRODUCTION === '1' ? 'latest' : 'candidate' } : null,

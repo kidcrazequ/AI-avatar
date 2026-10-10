@@ -4,12 +4,16 @@ import crypto from 'node:crypto';
 import { resolveUnderRoot, assertSafeSegment } from '../../packages/core/src/utils/path-security';
 import type { TaskApproval, TaskFile, TaskMember, TaskRecord, WireCall } from '../shared/contracts';
 import { digest, now, required } from './task-repository';
+import type { KnowledgeLookup } from './knowledge/lookup-store';
+import type { LookupRequest } from '../shared/knowledge-lookup';
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[]) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 const string = { type: 'string' };
 export const taskTools = [
-  tool('search_knowledge', '检索当前专家绑定知识的任务快照，返回原文、来源与覆盖信号。专业事实必须先检索。', { query: string }, ['query']),
-  tool('read_knowledge', '读取当前专家知识快照中的文件。文件 ID 来自检索或知识索引。', { id: string }, ['id']),
+  tool('search_knowledge', '检索当前专家绑定知识的任务快照，返回候选原文、来源与覆盖信号；引号短语和编号须匹配。专业事实必须再阅读核对。', { query: string, caseSensitive: { type: 'boolean' }, limit: { type: 'integer' } }, ['query']),
+  tool('read_knowledge', '按行、页或章节读取冻结的来源版本。使用 nextLine 继续阅读长文；文件 ID 来自检索。', { id: string, lineStart: { type: 'integer' }, lineEnd: { type: 'integer' }, page: { type: 'integer' }, section: string }, ['id']),
+  tool('describe_table', '查看冻结来源的全部工作表、物理行列、表头块、合并区域及公式数量。', { id: string }, ['id']),
+  tool('query_table', '查询完整表格，保留物理行号、单元格、类型、公式原式和缓存值。默认表头是物理第1行，其他表块显式指定 headerRow 与行范围。列为 describe_table 返回的唯一 key 或 @A/@B/@C 物理列。聚合由代码执行，缓存值不重新计算。', { id: string, sheet: string, headerRow: { type: 'integer' }, rowStart: { type: 'integer' }, rowEnd: { type: 'integer' }, columns: { type: 'array', items: string }, filters: { type: 'array', items: { type: 'object', properties: { column: string, operator: { type: 'string', enum: ['eq', 'contains', 'gt', 'gte', 'lt', 'lte'] }, value: { type: ['string', 'number', 'boolean'] } }, required: ['column', 'operator', 'value'], additionalProperties: false } }, offset: { type: 'integer' }, limit: { type: 'integer' }, aggregate: { type: 'object', properties: { column: string, operation: { type: 'string', enum: ['sum', 'average', 'min', 'max', 'count'] } }, required: ['column', 'operation'], additionalProperties: false } }, ['id', 'sheet']),
   tool('read_skill', '读取当前专家启用的技能原文。', { id: string }, ['id']),
   tool('read_project_file', '读取选定工作目录下的 Markdown、文本、CSV、JSON 文件，路径必须相对。', { file: string }, ['file']),
   tool('write_artifact', '申请把成果写入工作目录的 Soul-Outputs/任务ID/ 下。必须等待用户审批，只能新建文件。', { file: string, content: string }, ['file', 'content']),
@@ -58,15 +62,14 @@ export function commitArtifact(task: TaskRecord, approval: TaskApproval): string
   if (!task.artifacts.some(item => item.path === destination)) task.artifacts.push({ path: destination, hash: approval.hash });
   return `已写入：${destination}\nSHA256：${approval.hash}`;
 }
-export function runReadonlyTool(member: TaskMember, call: WireCall, knowledgeDir: string): string {
+export async function runReadonlyTool(member: TaskMember, call: WireCall, lookup: KnowledgeLookup): Promise<string> {
   const input = parseTool(call);
-  if (call.function.name === 'search_knowledge') {
-    const { KnowledgeRetriever } = require('./retriever.cjs') as { KnowledgeRetriever: new (root: string) => { searchChunksWithCoverage(query: string, n: number): { chunks: Array<{ file: string; heading: string; content: string; score: number }>; coverage: unknown } } };
-    const result = new KnowledgeRetriever(knowledgeDir).searchChunksWithCoverage(required(input.query, '检索词', 1000), 5);
-    return JSON.stringify({ ...result, chunks: result.chunks.map(hit => ({ ...hit, content: hit.content.slice(0, 8000), ...member.knowledge[Number(path.basename(hit.file, '.md'))] && { id: member.knowledge[Number(path.basename(hit.file, '.md'))].id, source: member.knowledge[Number(path.basename(hit.file, '.md'))].source } })) });
+  if (['search_knowledge', 'read_knowledge', 'describe_table', 'query_table'].includes(call.function.name)) {
+    const operation = ({ search_knowledge: 'search', read_knowledge: 'read', describe_table: 'describe', query_table: 'table' } as const)[call.function.name as 'search_knowledge'];
+    return JSON.stringify(await lookup.execute(lookup.taskSources(member.knowledge), { ...input, operation } as LookupRequest));
   }
-  if (['read_knowledge', 'read_skill'].includes(call.function.name)) {
-    const files = call.function.name === 'read_skill' ? member.skills : member.knowledge;
+  if (call.function.name === 'read_skill') {
+    const files = member.skills;
     const file = files.find(item => item.id === required(input.id, '资源 ID', 2000));
     if (!file) return JSON.stringify({ error: '当前专家快照中未找到该文件', available: files.map(({ id, source }) => ({ id, source })) });
     return JSON.stringify({ id: file.id, source: file.source, hash: file.hash, content: file.content.slice(0, 24000), truncated: file.content.length > 24000 });

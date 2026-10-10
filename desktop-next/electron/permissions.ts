@@ -5,7 +5,7 @@ import type { PermissionConfig, Policy } from '../shared/integrations';
 import type { TaskMember, WireCall } from '../shared/contracts';
 import { required } from './task-repository';
 import { parseTool, safeTaskPath } from './task-tools';
-export const builtinNames = ['search_knowledge', 'read_knowledge', 'read_skill', 'read_project_file', 'write_artifact', 'list_connector_tools', 'call_connector_tool'];
+export const builtinNames = ['search_knowledge', 'read_knowledge', 'describe_table', 'query_table', 'read_skill', 'read_project_file', 'write_artifact', 'list_connector_tools', 'call_connector_tool'];
 export const defaultPermissions = (): PermissionConfig => ({ tools: true, files: true, builtin: true, model: false, paths: [], models: [], policies: Object.fromEntries(builtinNames.map(name => [name, ['write_artifact', 'call_connector_tool'].includes(name) ? 'ask' : 'allow'])) });
 export class Permissions {
   private db: Database.Database;

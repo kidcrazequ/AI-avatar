@@ -5,7 +5,7 @@ import { ExpertSidebar } from './expert-sidebar';
 import { Icon } from './primitives';
 import { Switch, useIntegrations } from './integration-ui';
 import './integrations.css';
-const tools = [['知识与技能', ['search_knowledge', 'read_knowledge', 'read_skill']], ['文件', ['read_project_file', 'write_artifact']], ['连接器', ['list_connector_tools', 'call_connector_tool']]] as const;
+const tools = [['知识与技能', ['search_knowledge', 'read_knowledge', 'describe_table', 'query_table', 'read_skill']], ['文件', ['read_project_file', 'write_artifact']], ['连接器', ['list_connector_tools', 'call_connector_tool']]] as const;
 export function PermissionsPage({ expert, notice, archive }: { expert: ExpertDetail; notice(text: string): void; archive(id: string, file: string): void }) {
   const { data, error, refresh } = useIntegrations(expert.id), [tab, setTab] = useState('tools'), [path, setPath] = useState(''), [models, setModels] = useState<ModelEntry[]>([]), [busy, setBusy] = useState(false);
   const save = async (config: PermissionConfig) => { setBusy(true); try { await window.soulDesktop.integrations.savePermissions(expert.id, config); refresh(); notice('权限策略已生效'); return true; } catch (cause) { notice(String(cause)); return false; } finally { setBusy(false); } };

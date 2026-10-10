@@ -251,6 +251,11 @@ export class KnowledgeImports {
     this.row(collectionId, id); const manifest = this.manifest(collectionId, id, version, scope), file = safe(this.artifactRoot(collectionId, id, version, scope), manifest.original);
     if (digest(fs.readFileSync(file)) !== manifest.originalSha256) throw new Error('原件哈希不匹配'); return file;
   }
+  capture(collectionId: string, file: string, version: string, scope: string): { root: string; manifest: SourceManifest } {
+    const id = this.fileId(file); this.row(collectionId, id);
+    const manifest = this.manifest(collectionId, id, version, scope);
+    return { root: this.artifactRoot(collectionId, id, version, scope), manifest };
+  }
   remove(collectionId: string, file: string, revision: string, scope: string): void {
     this.access(collectionId, scope, true); if (this.read(collectionId, file, scope).revision !== revision) throw new Error('资料已变更，请重新打开');
     this.db.prepare('UPDATE knowledge_documents_v1 SET archived=1,removed_scope=? WHERE collection_id=? AND id=?').run(scope, collectionId, this.fileId(file)); this.listener();

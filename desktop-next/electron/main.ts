@@ -218,6 +218,7 @@ app.whenReady().then(async () => {
     return true;
   });
   handle('resources', scope => resources!.read(scope));
+  handle('knowledge-lookup', (scope, collection, request) => resources!.queryKnowledge(scope, collection, request));
   handle('knowledge-formats', () => ({ extensions: knowledgeExtensions, limits: knowledgeLimits }));
   handle('knowledge-import', async (id, scope, kind) => {
     if (!['files', 'directory', 'zip'].includes(kind)) throw new Error('导入方式无效');

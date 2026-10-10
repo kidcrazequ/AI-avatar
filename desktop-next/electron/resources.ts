@@ -6,6 +6,8 @@ import { isSeq, parse, parseDocument } from 'yaml';
 import { assertSafeSegment, resolveUnderRoot } from '../../packages/core/src/utils/path-security';
 import { ExpertLibrary } from './expert-library';
 import { KnowledgeImports } from './knowledge/import-store';
+import { KnowledgeLookup } from './knowledge/lookup-store';
+import type { KnowledgeSource, LookupRequest, LookupResult } from '../shared/knowledge-lookup';
 import type { DocumentInput, KnowledgeCollection, QualityReport, ResourceDocument, ResourceFile, ResourceProject, ResourceSnapshot, ResourceVersion, SkillItem } from '../shared/contracts';
 
 const hash = (text: string | Buffer) => crypto.createHash('sha256').update(text).digest('hex');
@@ -56,6 +58,7 @@ export class ResourceStore {
   private db: Database.Database;
   private collectionsRoot: string;
   readonly knowledge: KnowledgeImports;
+  readonly lookup: KnowledgeLookup;
   constructor(private resourcesRoot: string, private profileRoot: string, private library: ExpertLibrary, knowledgeWorker?: string) {
     this.collectionsRoot = path.join(profileRoot, 'knowledge');
     fs.mkdirSync(this.collectionsRoot, { recursive: true });
@@ -67,8 +70,18 @@ export class ResourceStore {
       CREATE TABLE IF NOT EXISTS resource_trash (id INTEGER PRIMARY KEY AUTOINCREMENT,collection_id TEXT NOT NULL,file TEXT NOT NULL,content TEXT NOT NULL,scope TEXT NOT NULL);`);
     const parserPolicy = path.join(resourcesRoot, 'knowledge-parser.json');
     this.knowledge = new KnowledgeImports(this.db, profileRoot, (id, scope, write) => this.collection(id, scope, write), path.join(resourcesRoot, 'ocr'), knowledgeWorker, fs.existsSync(parserPolicy) ? JSON.parse(fs.readFileSync(parserPolicy, 'utf8')).signature : undefined);
+    this.lookup = new KnowledgeLookup(profileRoot, knowledgeWorker ? path.join(path.dirname(knowledgeWorker), 'lookup-worker.cjs') : undefined);
   }
-  close(): void { this.knowledge.close(); this.db.close(); }
+  close(): void { this.lookup.close(); this.knowledge.close(); this.db.close(); }
+  captureKnowledge(scope: string, collectionId = ''): KnowledgeSource[] {
+    this.scope(scope);
+    const ids = collectionId ? [collectionId] : scope ? this.bindings(scope) : this.collections().map(item => item.id);
+    return ids.flatMap(id => this.documents(id, scope).map(document => {
+      const file = this.readDocument(id, document.id, scope);
+      return this.lookup.freeze(`${id}/${document.id}`, document.name, file.source, file.content, document.sourceVersion ? this.knowledge.capture(id, document.id, document.sourceVersion, scope) : undefined);
+    }));
+  }
+  async queryKnowledge(scope: string, collectionId: string, request: LookupRequest): Promise<LookupResult> { return this.lookup.execute(this.captureKnowledge(scope, collectionId), request); }
   private scope(id: string): void { if (id) this.library.resourceLocation(id); }
   private collection(id: string, scope: string, write = false): { root: string; source: string; builtin: boolean } {
     this.scope(scope);

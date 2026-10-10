@@ -52,7 +52,7 @@ try {
  console.log(`Installed baseline ${version}; building upgrade fixture ${next}`);
  fs.mkdirSync(folder,{recursive:true});
  await new Promise((resolve,reject)=>{const log=fs.openSync(path.join(evidence,'build-upgrade.log'),'w');const child=spawn(process.execPath,[path.join(base,'node_modules/electron-builder/cli.js'),'--config','electron-builder.upgrade.cjs',process.platform==='win32'?'--win':'--mac','--publish','never'],{env:{...process.env,SOUL_NEXT_TEST_BUILD:'1',SOUL_NEXT_UPDATE_URL:feed,SOUL_NEXT_UPGRADE_VERSION:next},stdio:['ignore',log,log]});child.once('exit',code=>{fs.closeSync(log);code===0?resolve():reject(new Error(`Native upgrade fixture build failed ${code}`))});child.once('error',reject);});
- run(process.execPath,[path.join(base,'scripts/verify-release-files.mjs'),folder]);
+ run(process.execPath,[path.join(base,'scripts/verify-release-files.mjs'),folder,next]);
  behavior='offline';const offline=await launch('offline','offline');behavior='normal';
  let corrupt=null;if(process.platform==='win32'){behavior='corrupt';corrupt=await launch('corrupt','corrupt');behavior='normal';}
  const discovered=await launch(process.platform==='win32'?'install':'check','discovered');if(discovered.discovered.nextVersion!==next)throw new Error('Updater discovered incorrect version');

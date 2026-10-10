@@ -4,5 +4,6 @@ dist-electron/
 build/resources/
 build/expert-library-test.cjs
 release/
+release-upgrade/
 evidence/
 build/resource-test.cjs

@@ -3,15 +3,16 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: Native gate scope (windows and upgrade run Windows only)
+        description: Native gate scope (client requires Windows 10 and 11 standard-user desktop runners)
         type: choice
-        options: [all, knowledge, upgrade, windows]
+        options: [all, knowledge, upgrade, windows, client]
         default: all
   push:
     branches: ['codex/desktop-v3-native-gate']
     paths: ['desktop-next/**', '.github/workflows/desktop-next-build.yml', 'packages/core/src/**', 'expert-packs/**', 'shared/**', 'templates/**']
 jobs:
   native-install:
+    if: inputs.scope != 'client'
     strategy:
       fail-fast: false
       matrix:
@@ -100,4 +101,105 @@ jobs:
             desktop-next/release/*.blockmap
             desktop-next/release/builder-effective-config.yaml
           if-no-files-found: warn
+          retention-days: 7
+  windows-client-fixture:
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'client'
+    runs-on: windows-2022
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop-next
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Refuse Server and administrator environments for client acceptance
+        shell: powershell
+        run: |
+          foreach ($version in '10', '11') {
+            $folder = Join-Path $PWD "evidence\client-guard-server-$version"
+            & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-client.ps1 -ExpectedWindows $version -EvidenceDirectory $folder -PreflightOnly
+            if ($LASTEXITCODE -eq 0) { throw 'Server incorrectly satisfied a Windows client gate' }
+            $result = Get-Content -Raw -Encoding UTF8 (Join-Path $folder 'environment.json') | ConvertFrom-Json
+            if ($result.ok -or $result.reasons -notcontains 'expected-windows-client-required' -or $result.reasons -notcontains 'standard-non-administrator-account-required') { throw 'Client guard did not reject Server and administrator identities' }
+          }
+          $global:LASTEXITCODE = 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-next/package-lock.json
+      - run: npm ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: npm run dist:win
+      - name: Validate native two-version fixture before sending it to clients
+        run: npm run verify:upgrade
+      - name: Record native installers and installed-file fingerprints
+        run: node scripts/write-windows-client-fixture.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soul-windows-client-fixture-${{ github.sha }}
+          path: |
+            desktop-next/windows-client-fixture.json
+            desktop-next/release/*.exe
+            desktop-next/release-upgrade/*.exe
+            desktop-next/release-upgrade/candidate.yml
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soul-windows-client-fixture-evidence-${{ github.sha }}
+          path: desktop-next/evidence/
+          retention-days: 7
+  windows-client:
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'client'
+    needs: windows-client-fixture
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - windows: '10'
+            label: soul-win10-standard
+          - windows: '11'
+            label: soul-win11-standard
+    runs-on: [self-hosted, Windows, X64, '${{ matrix.label }}']
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop-next
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove Windows client, standard account and interactive desktop
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-client.ps1 -ExpectedWindows ${{ matrix.windows }} -PreflightOnly
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-next/package-lock.json
+      - name: Install acceptance JS utilities without compiling or elevating
+        run: npm ci --ignore-scripts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: soul-windows-client-fixture-${{ github.sha }}
+          path: desktop-next/client-fixture
+      - name: Actual standard-user NSIS install, two launches, uninstall and updater upgrade
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-client.ps1 -ExpectedWindows ${{ matrix.windows }} -FixtureDirectory "$PWD\client-fixture"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soul-windows-client-${{ matrix.windows }}-evidence-${{ github.sha }}
+          path: desktop-next/evidence/
           retention-days: 7

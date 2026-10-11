@@ -15,7 +15,18 @@ process.chdir(base);
 const version = JSON.parse(fs.readFileSync('package.json')).version;
 if (!/^\d+\.\d+\.\d+-alpha\.\d+$/.test(version)) throw new Error('Upgrade fixture requires internal alpha version');
 const next = version.replace(/\d+$/, n => String(Number(n)+1));
-const folder = path.join(base,'release-upgrade');
+const fixtureArg = process.argv.find(arg => arg.startsWith('--fixture-dir='));
+const fixtureRoot = fixtureArg ? path.resolve(fixtureArg.slice('--fixture-dir='.length)) : '';
+const fixture = fixtureRoot ? JSON.parse(fs.readFileSync(path.join(fixtureRoot,'windows-client-fixture.json'),'utf8')) : null;
+const fingerprint = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+if (fixture) {
+ if(process.platform!=='win32'||process.arch!=='x64'||fixture.schema!==1||fixture.platform!=='win32'||fixture.arch!=='x64'||fixture.from!==version||fixture.to!==next||!/^[a-f0-9]{40}$/.test(fixture.sourceSha))throw new Error('Native Windows fixture identity mismatch');
+ if(process.env.GITHUB_SHA&&fixture.sourceSha!==process.env.GITHUB_SHA)throw new Error('Fixture source differs from the accepted workflow revision');
+ for(const item of [fixture.initial,fixture.upgrade]){
+   if(!item?.file||path.isAbsolute(item.file)||item.file.split(/[\\/]/).some(part=>part==='..')||fingerprint(path.join(fixtureRoot,item.file))!==item.sha256)throw new Error('Native fixture installer checksum mismatch');
+ }
+}
+const folder = path.join(fixtureRoot||base,'release-upgrade');
 const stamp = Date.now();
 const evidence = path.join(base,'evidence',`upgrade-${process.platform}-${process.arch}-${stamp}`);
 const install = process.platform==='win32'?path.join(process.env.LOCALAPPDATA,`Soul Next Upgrade ${stamp}`):path.join(os.homedir(),'Applications',`Soul Next Upgrade ${stamp}`);
@@ -48,12 +59,12 @@ const launch=async(mode,name)=>{
  const report=JSON.parse(fs.readFileSync(output));if(!report.ok||!report.packaged)throw new Error('Installed upgrade report failed');return report;
 };
 try {
- const initial=path.join(base,'release',`Soul-Next-${version}-${process.platform==='win32'?'win':'mac'}-${process.arch}.${process.platform==='win32'?'exe':'dmg'}`);
+ const initial=fixture?path.join(fixtureRoot,fixture.initial.file):path.join(base,'release',`Soul-Next-${version}-${process.platform==='win32'?'win':'mac'}-${process.arch}.${process.platform==='win32'?'exe':'dmg'}`);
  if(process.platform==='win32')run('powershell',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(base,'scripts/upgrade-install-win.ps1'),'-Installer',initial,'-Destination',install]);else installMac(initial);
  const before=await launch('prepare','before');if(before.version!==version)throw new Error('Baseline installed version mismatch');
- console.log(`Installed baseline ${version}; building upgrade fixture ${next}`);
+ console.log(`Installed baseline ${version}; ${fixture?'using verified native':'building'} upgrade fixture ${next}`);
  fs.mkdirSync(folder,{recursive:true});
- await new Promise((resolve,reject)=>{const log=fs.openSync(path.join(evidence,'build-upgrade.log'),'w');const child=spawn(process.execPath,[path.join(base,'node_modules/electron-builder/cli.js'),'--config','electron-builder.upgrade.cjs',process.platform==='win32'?'--win':'--mac','--publish','never'],{env:{...process.env,SOUL_NEXT_TEST_BUILD:'1',SOUL_NEXT_UPDATE_URL:feed,SOUL_NEXT_UPGRADE_VERSION:next},stdio:['ignore',log,log]});child.once('exit',code=>{fs.closeSync(log);code===0?resolve():reject(new Error(`Native upgrade fixture build failed ${code}`))});child.once('error',reject);});
+ if(!fixture)await new Promise((resolve,reject)=>{const log=fs.openSync(path.join(evidence,'build-upgrade.log'),'w');const child=spawn(process.execPath,[path.join(base,'node_modules/electron-builder/cli.js'),'--config','electron-builder.upgrade.cjs',process.platform==='win32'?'--win':'--mac','--publish','never'],{env:{...process.env,SOUL_NEXT_TEST_BUILD:'1',SOUL_NEXT_UPDATE_URL:feed,SOUL_NEXT_UPGRADE_VERSION:next},stdio:['ignore',log,log]});child.once('exit',code=>{fs.closeSync(log);code===0?resolve():reject(new Error(`Native upgrade fixture build failed ${code}`))});child.once('error',reject);});
  run(process.execPath,[path.join(base,'scripts/verify-release-files.mjs'),folder,next]);
  behavior='offline';const offline=await launch('offline','offline');behavior='normal';
  let corrupt=null,installerCompletion=null;if(process.platform==='win32'){behavior='corrupt';corrupt=await launch('corrupt','corrupt');behavior='normal';}
@@ -68,9 +79,8 @@ try {
    const installer=path.join(process.env.LOCALAPPDATA,config.updaterCacheDirName,'pending',`Soul-Next-${next}-win-x64.exe`);
    installerCompletion=JSON.parse(run('powershell',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(base,'scripts/upgrade-install-win.ps1'),'-Installer',installer,'-WaitForExit']));
    // A new app.asar version can appear while NSIS is still replacing other files.
-   const fingerprint=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
    const expected=path.join(folder,'win-unpacked');
-   if(fingerprint(executable)!==fingerprint(path.join(expected,'Soul Next.exe'))||fingerprint(path.join(resources,'app.asar'))!==fingerprint(path.join(expected,'resources','app.asar')))throw new Error('Completed NSIS installation differs from the native upgrade build');
+   if(fingerprint(executable)!==(fixture?.installed.executableSha256??fingerprint(path.join(expected,'Soul Next.exe')))||fingerprint(path.join(resources,'app.asar'))!==(fixture?.installed.archiveSha256??fingerprint(path.join(expected,'resources','app.asar'))))throw new Error('Completed NSIS installation differs from the native upgrade build');
    installerCompletion.filesMatchNativeBuild=true;fs.writeFileSync(path.join(evidence,'installer-completion.json'),JSON.stringify(installerCompletion,null,2));
  } else {
    const backup=await launch('backup','manual-backup');if(!backup.backup)throw new Error('Manual upgrade backup missing');
@@ -78,7 +88,7 @@ try {
  }
  const after=await launch('read','after');const restart=await launch('read','restart');if(after.version!==next||restart.version!==next)throw new Error('Updated app version did not persist');
  const artifacts=fs.readdirSync(folder).filter(n=>/\.(exe|dmg|zip)$/.test(n)).map(name=>({name,sha256:crypto.createHash('sha256').update(fs.readFileSync(path.join(folder,name))).digest('hex')}));
- const summary={ok:true,platform:process.platform,arch:process.arch,softwareRendering,sourceSha:run('git',['rev-parse','HEAD']).trim(),from:version,to:next,before,offline,corrupt,discovered,installerCompletion,after,restart,artifacts,automaticInstall:process.platform==='win32',scope:process.platform==='win32'?'Native Windows installed electron-updater → verified download → backup → actual NSIS replacement → two launches; unsigned internal loopback feed':'Native Mac actual updater discovery → backed up manual DMG replacement → two launches; signed automatic installation pending credentials'};
+ const summary={ok:true,platform:process.platform,arch:process.arch,softwareRendering,sourceSha:fixture?.sourceSha??run('git',['rev-parse','HEAD']).trim(),from:version,to:next,before,offline,corrupt,discovered,installerCompletion,after,restart,artifacts,automaticInstall:process.platform==='win32',scope:process.platform==='win32'?'Native Windows installed electron-updater → verified download → backup → actual NSIS replacement → two launches; unsigned internal loopback feed':'Native Mac actual updater discovery → backed up manual DMG replacement → two launches; signed automatic installation pending credentials'};
  fs.writeFileSync(path.join(evidence,'upgrade.json'),JSON.stringify(summary,null,2));console.log(JSON.stringify({ok:true,evidence,from:version,to:next,automaticInstall:summary.automaticInstall}));
  if(process.platform==='win32')run('powershell',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(base,'scripts/upgrade-install-win.ps1'),'-Installer',path.join(install,'Uninstall Soul Next.exe'),'-Uninstall']);
 } finally {server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

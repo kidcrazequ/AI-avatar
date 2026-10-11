@@ -54,6 +54,8 @@ foreach ($iteration in 1, 2) {
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+$userHasher = [Security.Cryptography.SHA256]::Create()
+try { $identitySha256 = [BitConverter]::ToString($userHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($identity.User.Value))).Replace('-', '').ToLowerInvariant() } finally { $userHasher.Dispose() }
 $installerHasher = [Security.Cryptography.SHA256]::Create()
 $installerStream = [IO.File]::OpenRead($Installer)
 try {
@@ -71,8 +73,8 @@ $summary = @{
   sourceSha = $runs[0].status.sourceSha
   resourceSha256 = $runs[0].status.resources.sha256
   launches = @($runs | ForEach-Object { $_.status.persistenceRun })
-  host = @{ os = [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion', 'ProductName', 'Windows'); version = $runs[0].host.release; architecture = 'x64'; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
-  scope = 'Native Windows build; actual per-user silent NSIS install; installed EXE launched twice with Unicode userData. Unsigned internal verification; interactive wizard, Windows 10/11 end-user trust and auto-update remain separate gates.'
+  host = @{ os = (Get-CimInstance Win32_OperatingSystem).Caption; version = $runs[0].host.release; architecture = 'x64'; elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); administratorGroupMember = @($identity.Groups | Where-Object { $_.Value -eq 'S-1-5-32-544' }).Count -gt 0; sessionId = [Diagnostics.Process]::GetCurrentProcess().SessionId; identitySha256 = $identitySha256 }
+  scope = 'Native Windows build; actual per-user silent NSIS install; installed EXE launched twice with Unicode userData. Unsigned internal verification; interactive wizard and end-user public download trust remain separate gates; updater acceptance is recorded separately.'
 }
 $summary | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 (Join-Path $evidence 'installation.json')
 $summary | ConvertTo-Json -Depth 8

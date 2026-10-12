@@ -79,12 +79,13 @@ if (mode === 'crash-resume') {
   assert.equal(repository.get(repaired.id).messages.filter(message => message.role === 'user').length, 2);
   checks.push('result-review-persistent-idempotent-no-model-history-or-usage-mutation-and-new-result-invalidation');
 
-  const boardNow = new Date('2026-10-11T12:00:00+08:00'), boardView = repository.views().find(task => task.id === repaired.id)!;
+  // The period filter uses local calendar days, so fixtures must use the host's timezone.
+  const boardNow = new Date(2026, 9, 11, 12), boardView = repository.views().find(task => task.id === repaired.id)!;
   const boardFixture = [
-    { ...boardView, id: 'owned', expertId: 'self', owner: '我的专家', created: '2026-10-11T00:00:00+08:00', members: [], status: 'waiting' as const },
-    { ...boardView, id: 'participated', expertId: 'other', created: '2026-10-05T00:00:00+08:00', members: [{ ...boardView.members[0], expertId: 'self' }], workflow: { id: 'flow', runId: 'run', name: '自动', version: 1 } },
-    { ...boardView, id: 'unrelated', expertId: 'other', created: '2026-10-11T00:00:00+08:00', members: [] },
-    { ...boardView, id: 'old', expertId: 'self', created: '2026-10-04T23:59:59+08:00', members: [] },
+    { ...boardView, id: 'owned', expertId: 'self', owner: '我的专家', created: new Date(2026, 9, 11).toISOString(), members: [], status: 'waiting' as const },
+    { ...boardView, id: 'participated', expertId: 'other', created: new Date(2026, 9, 5).toISOString(), members: [{ ...boardView.members[0], expertId: 'self' }], workflow: { id: 'flow', runId: 'run', name: '自动', version: 1 } },
+    { ...boardView, id: 'unrelated', expertId: 'other', created: new Date(2026, 9, 11).toISOString(), members: [] },
+    { ...boardView, id: 'old', expertId: 'self', created: new Date(2026, 9, 4, 23, 59, 59).toISOString(), members: [] },
   ];
   const filters = { scope: 'self', executor: 'all', trigger: 'all', search: '', period: '7' as const }, imIds = new Set(['owned']);
   assert.deepEqual(new Set(boardTasks(boardFixture, filters, imIds, boardNow).map(task => task.id)), new Set(['owned', 'participated']));

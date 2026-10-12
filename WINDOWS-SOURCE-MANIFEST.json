@@ -1270,8 +1270,8 @@
     },
     {
       "path": "desktop-next/tests/tasks.ts",
-      "bytes": 15370,
-      "sha256": "c38fd041a700c83a4ee91fd9c668f8ae33a432b386358ecac965879d9be64845"
+      "bytes": 15491,
+      "sha256": "3e3ceb6123638a057bb5013bdb280fe4f0da5c6de0a8b80ef2bae73ce08fa5b8"
     },
     {
       "path": "desktop-next/tests/updates.ts",
@@ -8210,7 +8210,8 @@
     }
   ],
   "changes": [
-    "Windows CI matrix restricted to windows-2022; candidate branch trigger"
+    "Windows CI matrix restricted to windows-2022; candidate branch trigger",
+    "Task filter test fixtures use host-local calendar dates after reproducing the UTC boundary failure; product code unchanged"
   ],
   "excludes": [
     "runtime user profiles",

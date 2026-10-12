@@ -5,8 +5,8 @@
   "files": [
     {
       "path": ".github/workflows/desktop-next-build.yml",
-      "bytes": 3033,
-      "sha256": "c437690195bfc93909566efce0a753ee687b94cb4e5d44efc9fc072aa5107018"
+      "bytes": 3658,
+      "sha256": "f0a92e90c9f2b814c081f8f9e7d687c03038764b7d0dda720f0aa45b5c03f9fc"
     },
     {
       "path": "desktop-app/src/services/llm-providers/claude.ts",
@@ -590,8 +590,8 @@
     },
     {
       "path": "desktop-next/scripts/verify-workflows.mjs",
-      "bytes": 3084,
-      "sha256": "096ec96474bfb6ef25d9c32c6016bbaeefadc23c26515de711de30100063db70"
+      "bytes": 3297,
+      "sha256": "f3a68f867eced341bbc7ae90fc16f5d611053844006ba8b5dc9379d314e2e2c5"
     },
     {
       "path": "desktop-next/shared/assistant.ts",
@@ -8211,7 +8211,9 @@
   ],
   "changes": [
     "Windows CI matrix restricted to windows-2022; candidate branch trigger",
-    "Task filter test fixtures use host-local calendar dates after reproducing the UTC boundary failure; product code unchanged"
+    "Task filter test fixtures use host-local calendar dates after reproducing the UTC boundary failure; product code unchanged",
+    "Windows workflow harness budget 180s with per-mode wall time; macOS budget unchanged; assertions retained",
+    "Independent verification steps continue after a suite failure when native build succeeded; failures still fail the job"
   ],
   "excludes": [
     "runtime user profiles",

@@ -38,22 +38,31 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Build native installer
+        id: native_build
         run: npm run dist:${{ matrix.target }}
       - name: Verify expert persistence using the native Electron runtime
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:experts
       - name: Verify resource isolation, recovery and persistence
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:resources
       - name: Verify task execution, approvals and crash recovery
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:tasks
       - name: Verify workflow versions, triggers and crash recovery
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:workflows
       - name: Verify connectors, IM pairing, permissions and settings
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:integrations
       - name: Verify update safety and data migration
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:updates
       - name: Install and launch the installed app twice
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:${{ matrix.target }}
       - name: Verify native two-version installation and data preservation
+        if: ${{ !cancelled() && steps.native_build.outcome == 'success' }}
         run: npm run verify:upgrade
       - name: Upload installation evidence
         if: always()

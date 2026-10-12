@@ -31,7 +31,9 @@ const cleanup = profile => {
 try {
   for (const mode of ['suite', 'crash-prepare', 'crash-resume']) {
     const output = path.join(root, 'evidence', `workflows-${process.platform}-${process.arch}-${mode === 'suite' ? 'runtime' : 'recovery'}.json`);
-    const result = spawnSync(executable, [entry, path.join(root, 'build/resources'), output, mode, mode === 'suite' ? suiteProfile : crashProfile], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 60_000 });
+    const started = Date.now();
+    const result = spawnSync(executable, [entry, path.join(root, 'build/resources'), output, mode, mode === 'suite' ? suiteProfile : crashProfile], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: process.platform === 'win32' ? 180_000 : 60_000 });
+    console.log(JSON.stringify({ workflowMode: mode, elapsedMs: Date.now() - started, status: result.status, error: result.error?.code }));
     process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
     if (result.error || result.status !== 0) throw result.error ?? new Error(`Workflow verification ${mode} exited ${result.status}`);
     if (mode === 'suite') {

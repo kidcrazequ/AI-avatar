@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), entry = path.join(root, 'build/assistant-test.cjs');
+await build({ entryPoints: [path.join(root, 'tests/assistant.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: entry, external: ['better-sqlite3', './model.cjs'] });
+const executable = process.platform === 'win32' ? path.join(root, 'release/win-unpacked/Soul Next.exe') : [path.join(root, `release/mac${process.arch === 'arm64' ? '-arm64' : ''}/Soul Next.app/Contents/MacOS/Soul Next`), path.join(root, `release/mac${process.arch === 'arm64' ? '-arm64' : ''}/Soul Next UI Preview.app/Contents/MacOS/Soul Next UI Preview`)].find(fs.existsSync);
+if (!executable || !fs.existsSync(executable)) throw new Error('Build the native desktop package before assistant verification');
+const result = spawnSync(executable, [entry, path.join(root, 'public/product-guide.md'), path.join(root, `evidence/assistant-${process.platform}-${process.arch}.json`)], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 60000 });
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); if (result.error || result.status !== 0) throw result.error ?? new Error(`Assistant verification exited ${result.status}`);

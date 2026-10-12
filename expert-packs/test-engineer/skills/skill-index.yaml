@@ -1,0 +1,21 @@
+skills:
+  - name: test-engineer-capability-1
+    path: skills/test-engineer-capability-1.md
+    source: local
+    domain: 测试计划设计
+  - name: test-engineer-capability-2
+    path: skills/test-engineer-capability-2.md
+    source: local
+    domain: 端到端验证
+  - name: test-engineer-capability-3
+    path: skills/test-engineer-capability-3.md
+    source: local
+    domain: 缺陷复现与分诊支持
+  - name: test-engineer-capability-4
+    path: skills/test-engineer-capability-4.md
+    source: local
+    domain: 证据化报告
+  - name: test-engineer-capability-5
+    path: skills/test-engineer-capability-5.md
+    source: local
+    domain: 回归与发布质量门禁

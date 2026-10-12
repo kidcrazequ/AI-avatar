@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const executable = process.platform === 'win32' ? path.join(root, 'release/win-unpacked/Soul Next.exe') : ['Soul Next', 'Soul Next UI Preview'].map(name => path.join(root, `release/mac${process.arch==='arm64'?'-arm64':''}/${name}.app/Contents/MacOS/${name}`)).find(fs.existsSync);
+if (!executable) throw new Error('Build the native package before update verification');
+const entry = path.join(root, 'dist-electron/update-test.cjs');
+await build({ entryPoints: [path.join(root, 'tests/updates.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: entry, external: ['better-sqlite3'] });
+const result = spawnSync(executable, [entry, path.join(root, 'evidence', `updates-${process.platform}-${process.arch}.json`)], { env: { ...process.env, ELECTRON_RUN_AS_NODE:'1' }, timeout:60000, encoding:'utf8' });
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
+if (result.error || result.status !== 0) throw result.error ?? new Error(`Update verification exited ${result.status}`);

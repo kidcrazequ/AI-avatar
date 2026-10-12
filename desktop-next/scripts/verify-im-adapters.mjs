@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const entry=path.join(root,'dist-electron/im-adapters-test.mjs');
+await build({entryPoints:[path.join(root,'tests/im-adapters.ts')],bundle:true,platform:'node',format:'esm',banner:{js:"import { createRequire as soulCreateRequire } from 'node:module'; const require = soulCreateRequire(import.meta.url);"},outfile:entry,external:['ws','@larksuiteoapi/node-sdk']});
+const output=path.join(root,'evidence',`im-adapters-${process.platform}-${process.arch}-runtime.json`);fs.mkdirSync(path.dirname(output),{recursive:true});
+const result=spawnSync(process.execPath,[entry,output],{encoding:'utf8',timeout:30000});process.stdout.write(result.stdout||'');process.stderr.write(result.stderr||'');if(result.error||result.status!==0)throw result.error||new Error(`IM protocol checks exited ${result.status}`);

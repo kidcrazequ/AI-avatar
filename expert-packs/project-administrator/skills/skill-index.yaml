@@ -1,0 +1,17 @@
+skills:
+  - name: project-administrator-capability-1
+    path: skills/project-administrator-capability-1.md
+    source: local
+    domain: 项目计划
+  - name: project-administrator-capability-2
+    path: skills/project-administrator-capability-2.md
+    source: local
+    domain: 进度与风险管理
+  - name: project-administrator-capability-3
+    path: skills/project-administrator-capability-3.md
+    source: local
+    domain: 跨职能协同
+  - name: project-administrator-capability-4
+    path: skills/project-administrator-capability-4.md
+    source: local
+    domain: 决策可追溯

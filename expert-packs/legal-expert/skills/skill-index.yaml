@@ -1,0 +1,90 @@
+# Skill 路由索引 v1.0 — 法务（法研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  # ── 决策回溯（v14，shared/skills/decision-trace.md） ──
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    source: shared
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 为什么取消
+      - 为什么沿用
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 谁讨论过
+      - 评估
+      - 变更点
+      - 评审
+      - 输入确认清单
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    priority: 1
+
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 法律关系与流程可视化
+    keywords:
+      - 违约责任因果
+      - 交割条件
+      - 救济路径
+      - 诉讼流程概览草案
+      - mermaid
+    when: 结构图（事实须来自 knowledge/；非法条推断；先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 时间与金额对齐
+    keywords:
+      - 违约金阶梯
+      - 里程碑回款
+      - 赔偿测算表可视化
+      - KPI
+      - （数据须来自用户提供或 knowledge）
+    when: 多数字制图且已取证（先 load_skill）
+    priority: 2
+
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    source: shared
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1

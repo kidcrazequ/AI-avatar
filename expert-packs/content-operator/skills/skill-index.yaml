@@ -1,0 +1,33 @@
+skills:
+  - name: content-operator-capability-1
+    path: skills/content-operator-capability-1.md
+    source: local
+    domain: 账号定位
+  - name: content-operator-capability-2
+    path: skills/content-operator-capability-2.md
+    source: local
+    domain: 热点与选题规划
+  - name: content-operator-capability-3
+    path: skills/content-operator-capability-3.md
+    source: local
+    domain: 内容日历运营
+  - name: content-operator-capability-4
+    path: skills/content-operator-capability-4.md
+    source: local
+    domain: 小红书笔记生产
+  - name: content-operator-capability-5
+    path: skills/content-operator-capability-5.md
+    source: local
+    domain: 视觉素材 Brief
+  - name: content-operator-capability-6
+    path: skills/content-operator-capability-6.md
+    source: local
+    domain: 审批后发布与验证
+  - name: content-operator-capability-7
+    path: skills/content-operator-capability-7.md
+    source: local
+    domain: 评论互动运营
+  - name: content-operator-capability-8
+    path: skills/content-operator-capability-8.md
+    source: local
+    domain: 数据复盘与合规闭环

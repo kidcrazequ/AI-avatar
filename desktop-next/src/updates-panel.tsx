@@ -1,0 +1,19 @@
+import { useEffect, useState } from 'react';
+import type { UpdateSnapshot } from '../shared/updates';
+import { Switch } from './integration-ui';
+const states = { unconfigured: '更新服务未配置', idle: '当前没有可用更新', checking: '正在检查更新', available: '发现新版本', downloading: '正在下载并校验', ready: '更新已就绪', installing: '正在准备重启安装', cancelled: '下载已取消', error: '更新失败' };
+export function UpdatesPanel() {
+  const [data, setData] = useState<UpdateSnapshot>(), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  useEffect(() => { let live = true; const refresh = () => window.soulDesktop.updates.read().then(value => { if (live) setData(value); }).catch(e => { if (live) setError(String(e)); }); refresh(); const remove = window.soulDesktop.updates.onChanged(refresh); return () => { live = false; remove(); }; }, []);
+  const perform = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); } };
+  return <div data-update-ready={Boolean(data)}>{data && <>
+    <section className="settings-card">
+      <div className="settings-row"><div><strong>当前版本<span className="settings-version">V{data.version}</span></strong><p>当前正在运行的 Soul 版本。检查新版本后，下载与重启安装由你确认。</p></div><button className="btn" disabled={!data.configured || busy || ['checking', 'downloading', 'ready', 'installing'].includes(data.state)} onClick={() => perform(() => window.soulDesktop.updates.check())}>检查更新</button></div>
+      {data.configured && <div className="settings-row"><div><strong>{data.state === 'idle' && !data.checkedAt ? '尚未检查更新' : states[data.state]}</strong><p>{data.nextVersion ? `Soul Next ${data.nextVersion}` : data.checkedAt ? `上次检查：${new Date(data.checkedAt).toLocaleString()}` : '尚未检查更新'}</p></div>{data.state === 'available' && <button className="btn" disabled={busy || Boolean(data.installBlocked)} onClick={() => perform(() => window.soulDesktop.updates.download())}>下载更新</button>}{data.state === 'downloading' && <button className="btn" onClick={() => perform(() => window.soulDesktop.updates.cancel())}>取消下载</button>}{data.state === 'ready' && <button className="btn primary" disabled={busy || Boolean(data.installBlocked)} onClick={() => perform(() => window.soulDesktop.updates.install())}>重启并安装</button>}</div>}
+      {data.state === 'downloading' && <div className="settings-row"><div style={{ width: '100%' }}><progress aria-label="更新下载进度" value={data.percent} max={100} style={{ width: '100%', accentColor: 'var(--accent)' }} /><p>{data.percent.toFixed(0)}% · {(data.transferred / 1048576).toFixed(1)} / {(data.total / 1048576).toFixed(1)} MB</p></div></div>}
+    </section>
+    {!data.configured && <p className="settings-update-note">更新服务未配置；配置发行渠道后可检查新版本。</p>}
+    {data.configured && <section className="settings-card"><div className="settings-row"><div><strong>自动检查与下载</strong><p>后台检查并下载；安装前保存任务并由你确认重启</p></div><Switch label="自动检查与下载" disabled={busy} checked={data.automatic} onChange={() => perform(() => window.soulDesktop.updates.automatic(!data.automatic))} /></div></section>}
+    {data.installBlocked && <p className="resource-note">{data.installBlocked}</p>}{data.error && <p className="resource-error" role="alert">{data.error}</p>}
+  </>}{error && <p className="resource-error" role="alert">{error}</p>}</div>;
+}

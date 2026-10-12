@@ -1,0 +1,115 @@
+# Skill 路由索引 v1.0 — 财务专家（财研）
+#
+# 路径约定：
+#   source: shared → path 相对仓库根目录
+#   source: local  → path 相对本分身目录
+#
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  # ── 决策回溯（v14，shared/skills/decision-trace.md） ──
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    source: shared
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 为什么取消
+      - 为什么沿用
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 谁讨论过
+      - 评估
+      - 变更点
+      - 评审
+      - 输入确认清单
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    priority: 1
+
+  # ── Excel / 结构化数据场景的图表链路（先于 query_excel，遵守 G1）──
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 财务报表可视化
+      - 柱状图
+      - 折线图
+      - 营业收入趋势
+      - 可视化
+      - 对比图
+    when: 需要基于 knowledge/ 或已导入表格数据输出 ECharts（先 load_skill，再 query_excel / search_knowledge）
+    priority: 1
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 数据可视化
+    keywords:
+      - 饼图
+      - 柱状图
+      - 折线图
+      - 散点图
+      - 雷达图
+      - chart
+      - 指标对比
+      - 画图
+    when: 需要将多个精确数值制图展示时（首工具须为 load_skill）
+    priority: 2
+
+  # ── 结构与流程 ──
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - 流程图
+      - 时序图
+      - 关账流程
+      - 现金流路径
+      - mermaid
+    when: 展示结算流程、业务流程、系统间资金流时
+    priority: 3
+
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    source: shared
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1

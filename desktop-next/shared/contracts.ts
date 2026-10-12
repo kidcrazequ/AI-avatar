@@ -1,0 +1,211 @@
+export interface Check {
+  name: string;
+  ok: boolean;
+  detail: unknown;
+}
+
+export interface Expert {
+  id: string;
+  name: string;
+  description: string;
+  domain: string;
+  knowledgeFiles: number;
+}
+
+export interface RuntimeStatus {
+  version: string;
+  platform: string;
+  arch: string;
+  sourceSha: string;
+  checks: Check[];
+  experts: Expert[];
+  resources: { files: number; bytes: number; sha256: string };
+  persistenceRun: number;
+}
+
+export interface DesktopAPI {
+  assistant: import('./assistant').AssistantAPI;
+  updates: import('./updates').UpdateAPI;
+  readStatus(): Promise<RuntimeStatus>;
+  readLibrary(): Promise<LibrarySnapshot>;
+  readExpert(id: string): Promise<ExpertDetail>;
+  readArchive(id: string, file: string): Promise<ArchiveFile>;
+  installExpert(id: string): Promise<LibrarySnapshot>;
+  createExpert(input: CreateExpertInput): Promise<LibrarySnapshot>;
+  renameExpert(id: string, name: string): Promise<LibrarySnapshot>;
+  removeExpert(id: string): Promise<LibrarySnapshot>;
+  restoreExperts(): Promise<LibrarySnapshot>;
+  chooseExpertImport(): Promise<ImportPreview | null>;
+  importExpert(token: string): Promise<LibrarySnapshot>;
+  discardImport(token: string): Promise<void>;
+  saveGroup(input: ExpertGroup): Promise<LibrarySnapshot>;
+  removeGroup(id: string): Promise<LibrarySnapshot>;
+  createRole(input: RoleInput): Promise<LibrarySnapshot>;
+  readRole(id: string): Promise<RoleInput>;
+  roleSkills(): Promise<RoleSkill[]>;
+  chooseRoleConnector(): Promise<RoleConnector | null>;
+  generateRole(input: RoleGenerationInput): Promise<RoleInput>;
+  cancelRoleGeneration(id: string): Promise<void>;
+  chooseAvatar(): Promise<string | null>;
+  chooseRoleText(): Promise<string | null>;
+  saveRoleTemplate(): Promise<boolean>;
+  chooseDirectory(): Promise<string | null>;
+  resources: ResourceAPI;
+  evolution: import('./learning').EvolutionAPI;
+  recording: import('./recording').RecordingAPI;
+  tasks: TaskAPI;
+  workflows: WorkflowAPI;
+  integrations: IntegrationAPI;
+  settings: SettingsAPI;
+}
+
+export interface ExpertRecord extends Expert {
+  role: string;
+  version: string;
+  author: string;
+  redline: string;
+  defaultModel: string;
+  avatar: string;
+  source: 'bundled' | 'imported' | 'custom';
+  sourceLabel: string;
+  installed: boolean;
+  installedAt: string | null;
+  draft: boolean;
+  installable: boolean;
+  templateId: string;
+}
+
+export interface SkillReference {
+  id: string;
+  name: string;
+  domain: string;
+  source: 'local' | 'shared' | 'community';
+  path: string;
+  available: boolean;
+}
+
+export interface ExpertDetail extends ExpertRecord {
+  about: Array<{ title: string; source: string; items: Array<{ title: string; text: string }> }>;
+  skills: SkillReference[];
+  archives: string[];
+  memory: { text: string; source: string };
+  testCases: number;
+}
+
+export interface ArchiveFile { path: string; source: string; content: string }
+export interface GroupMember { expertId: string; model: string; directory: string }
+export interface ExpertGroup { id: string; name: string; leader: string; members: GroupMember[] }
+export interface LibrarySnapshot { experts: ExpertRecord[]; groups: ExpertGroup[]; templates: ExpertRecord[]; removed: number }
+export interface CreateExpertInput { templateId: string; name: string; description: string; avatar: string | null }
+export interface ImportPreview { token: string; expert: ExpertRecord; files: number; bytes: number }
+export interface RoleSkill { name: string; path: string; source: 'local' | 'shared' | 'community'; content?: string; title?: string }
+export interface RoleConnector { name: string; catalog: string; transport: 'http' | 'sse' | 'stdio' | 'github'; url: string; command: string; args: string[] }
+export interface RoleInput { name: string; description: string; identity: string; style: string; workflow: string; redlines?: string; avatar?: string | null; skills?: RoleSkill[]; connectors?: RoleConnector[]; reviewed?: boolean; id?: string; revision?: string }
+export interface RoleGenerationInput { requestId: string; name: string; description: string; model: string }
+
+export interface ProjectSource { type: 'local' | 'git'; path: string }
+export interface ResourceProject { id: string; name: string; description: string; expertId: string; sources: ProjectSource[]; updated: string }
+export interface KnowledgeCollection { id: string; title: string; source: string; documents: number; builtin: boolean; writable: boolean }
+export interface ResourceDocument { id: string; name: string; path: string; bytes: number; placeholder: boolean }
+export interface ResourceFile extends ArchiveFile { revision: string }
+export interface SkillItem extends SkillReference { key: string; description: string; title: string; category: string; configured: boolean }
+export interface ResourceSnapshot { projects: ResourceProject[]; collections: KnowledgeCollection[]; bindings: string[]; skills: SkillItem[]; memory: ResourceFile | null; settings: ResourceFile | null; versions: ResourceVersion[]; quality: QualityReport | null }
+export interface ResourceVersion { id: number; at: string; reason: string; file: string; content: string }
+export interface QualityReport { at: string; checks: Array<{ name: string; ok: boolean; source: string }>; cases: ResourceDocument[]; knowledge: number; professional: '未执行' }
+export interface DocumentInput { collectionId: string; id: string; name: string; content: string; revision: string }
+export interface CapabilitySkill { name: string; key: string; description: string }
+export interface CapabilityItem { key: string; kind: 'plugin' | 'skill'; name: string; description: string; category: string; author: string; version: string; origin: 'bundled' | 'uploaded'; skills: CapabilitySkill[]; installed: boolean; enabled: boolean; expertIds: string[]; revision: string }
+export interface CapabilityDetail { item: CapabilityItem; readme: string; documents: Array<{ name: string; content: string }> }
+export interface CapabilitySnapshot { items: CapabilityItem[]; errors: string[] }
+export interface CapabilityState { installed: boolean; enabled: boolean; expertIds: string[] }
+export interface ResourceAPI {
+  capabilities(scope: string): Promise<CapabilitySnapshot>;
+  capability(key: string): Promise<CapabilityDetail>;
+  configureCapability(key: string, revision: string, state: CapabilityState): Promise<void>;
+  importCapability(content: string, kind: 'plugin' | 'skill'): Promise<string>;
+  chooseCapability(kind: 'plugin' | 'skill'): Promise<{ name: string; content: string } | null>;
+  read(expertId: string): Promise<ResourceSnapshot>;
+  saveProject(input: ResourceProject, scope: string): Promise<void>;
+  removeProject(id: string, scope: string): Promise<void>;
+  saveCollection(id: string, title: string): Promise<void>;
+  removeCollection(id: string): Promise<void>;
+  restoreTrash(scope: string): Promise<void>;
+  bind(expertId: string, ids: string[]): Promise<void>;
+  documents(collectionId: string, scope: string): Promise<ResourceDocument[]>;
+  readDocument(collectionId: string, id: string, scope: string): Promise<ResourceFile>;
+  saveDocument(input: DocumentInput, scope: string): Promise<void>;
+  removeDocument(collectionId: string, id: string, revision: string, scope: string): Promise<void>;
+  chooseText(kind: 'document' | 'skill'): Promise<{ name: string; content: string } | null>;
+  saveMemory(expertId: string, text: string, revision: string, group: string): Promise<void>;
+  restoreVersion(expertId: string, id: number, revision: string): Promise<void>;
+  readSkill(expertId: string, key: string): Promise<ResourceFile>;
+  configureSkill(expertId: string, key: string, enabled: boolean): Promise<void>;
+  uploadSkill(expertId: string, text: string): Promise<void>;
+  saveSettings(expertId: string, name: string, description: string, model: string, avatar?: string): Promise<LibrarySnapshot>;
+  readProfileFile(expertId: string, file: string): Promise<ResourceFile>;
+  saveProfileFile(expertId: string, file: string, content: string, revision: string): Promise<void>;
+  saveSoul(expertId: string, text: string, revision: string): Promise<void>;
+  checkQuality(expertId: string): Promise<QualityReport>;
+  readCase(expertId: string, file: string): Promise<ResourceFile>;
+}
+
+export type TaskStatus = 'pending' | 'running' | 'waiting' | 'completed' | 'stopped' | 'interrupted' | 'failed';
+export interface ModelEntry { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; configured: boolean }
+export interface ModelInput { id: string; label: string; model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; apiKey: string }
+export interface TaskFile { id: string; name: string; source: string; content: string; hash: string }
+export interface TaskMember { expertId: string; name: string; avatar: string; model: string; modelConfig?: Pick<ModelEntry, 'model' | 'baseUrl' | 'protocol'>; directory: string; system: string; knowledge: TaskFile[]; skills: TaskFile[] }
+export interface TaskMessage { id: string; role: 'user' | 'assistant'; text: string; expertId: string; at: string; attachments?: TaskFile[] }
+export interface TaskEvent { at: string; text: string; kind: string }
+export interface WireCall { id: string; type: 'function'; function: { name: string; arguments: string } }
+export interface WireMessage { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; tool_calls?: WireCall[]; tool_call_id?: string; reasoning_content?: string }
+export interface TaskUsage { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheCreationTokens?: number }
+export interface TaskRound { id: string; member: number; kind: 'normal' | 'repair'; state: 'started' | 'done' | 'unknown' | 'failed'; text: string; reasoning?: string; calls: WireCall[]; usage?: TaskUsage }
+export interface TaskApproval { id: string; taskId: string; expertId: string; state: 'pending' | 'approved' | 'rejected' | 'cancelled'; requested: string; resolved?: string; destination: string; content: string; hash: string; note: string; callId: string; roundId: string; kind?: 'tool'; execution?: 'started' | 'done'; result?: string }
+export interface TaskCheckpoint { member: number; wire: WireMessage[]; calls: WireCall[]; callIndex: number; repairing: boolean; memberRounds: number }
+export interface TaskRecord { id: string; title: string; expertId: string; groupId: string; owner: string; status: TaskStatus; created: string; updated: string; project: ResourceProject | null; members: TaskMember[]; messages: TaskMessage[]; events: TaskEvent[]; approvals: TaskApproval[]; rounds: TaskRound[]; checkpoint: TaskCheckpoint; artifacts: Array<{ path: string; hash: string }>; error: string; workflow?: { id: string; runId: string; name: string; version: number }; review?: { revision: string; at: string } }
+export type TaskView = Omit<TaskRecord, 'checkpoint' | 'members'> & { resultRevision: string; members: Array<Pick<TaskMember, 'expertId' | 'name' | 'avatar' | 'model' | 'directory'>> };
+export interface TaskSnapshot { tasks: TaskView[]; models: ModelEntry[] }
+export interface TaskSendInput { requestId: string; taskId: string; expertId: string; groupId: string; model: string; directory: string; projectId: string; text: string; attachments: TaskFile[] }
+export interface TaskAPI {
+  read(): Promise<TaskSnapshot>;
+  send(input: TaskSendInput): Promise<string>;
+  resume(id: string, requestId: string): Promise<void>;
+  cancel(id: string, requestId: string): Promise<void>;
+  approve(id: string, approvalId: string, approved: boolean, note: string, requestId: string): Promise<void>;
+  review(id: string, revision: string, requestId: string): Promise<void>;
+  openDirectory(id: string): Promise<void>;
+  saveModel(input: ModelInput): Promise<ModelEntry[]>;
+  importModels(): Promise<ModelEntry[]>;
+  chooseAttachments(): Promise<TaskFile[]>;
+  exportResult(id: string): Promise<boolean>;
+  onChanged(listener: () => void): () => void;
+}
+
+export interface WorkflowStep { expert: string; prompt: string }
+export interface WorkflowSpec { name: string; description: string; steps: WorkflowStep[] }
+export interface WorkflowTrigger { id: string; type: 'timer' | 'event' | 'api'; schedule: 'once' | 'repeat'; repeat: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'cron'; cron?: string; at: string; time: string; weekday: number; day: number; branch: string; apiName: string; timezone: string; nextAt: number | null; lastCommit: string; error: string }
+export interface WorkflowConfig { directory: string; projectId: string; model: string; timeout: number; concurrency: 'skip' | 'queue'; prompt: string; enabled: boolean; triggers: WorkflowTrigger[]; maxRuns?: number; until?: string }
+export interface AutomationExecutor { kind: 'expert' | 'workflow'; targetId: string; targetVersion?: number }
+export interface AutomationInput { name: string; executor: AutomationExecutor; config: WorkflowConfig }
+export interface WorkflowVersion { version: number; at: string; reason: string; spec: WorkflowSpec; config: WorkflowConfig; automation?: AutomationExecutor }
+export interface WorkflowRecord extends WorkflowSpec { id: string; version: number; created: string; updated: string; removed: boolean; config: WorkflowConfig; versions: WorkflowVersion[]; automation?: AutomationExecutor }
+export type WorkflowRunState = TaskStatus | 'queued' | 'missed' | 'skipped';
+export interface WorkflowRun { id: string; workflowId: string; name: string; version: number; created: string; origin: string; occurrence: string; status: WorkflowRunState; taskId: string; note: string; resumed: boolean; snapshot: WorkflowVersion; input: string }
+export interface WorkflowSnapshot { removedAutomations?: number; workflows: WorkflowRecord[]; runs: WorkflowRun[]; api: { url: string; error: string } }
+export interface WorkflowAPI {
+  read(): Promise<WorkflowSnapshot>;
+  save(id: string, version: number, spec: WorkflowSpec, requestId: string): Promise<string>;
+  saveAutomation(id: string, version: number, input: AutomationInput, requestId: string): Promise<string>;
+  configure(id: string, version: number, config: WorkflowConfig, requestId: string): Promise<void>;
+  restore(id: string, version: number, target: number, requestId: string): Promise<void>;
+  remove(id: string, requestId: string): Promise<void>;
+  restoreRemoved(requestId: string, automationOnly?: boolean | 'resources'): Promise<void>;
+  run(id: string, input: string, requestId: string): Promise<string>;
+  resume(runId: string, requestId: string): Promise<void>;
+  cancel(runId: string, requestId: string): Promise<void>;
+  apiToken(id: string): Promise<string>;
+  onChanged(listener: () => void): () => void;
+}
+
+export type { IntegrationSnapshot, PermissionConfig, ConnectorInput, ConnectorView, ChannelView, IMSession, IMEvent, AppPreferences, SettingsSnapshot } from './integrations';
+import type { IntegrationAPI, SettingsAPI } from './integrations';

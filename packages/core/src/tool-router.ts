@@ -1,0 +1,7414 @@
+import path from 'path'
+import fs from 'fs'
+import dns from 'dns'
+import net from 'net'
+import { execFileSync } from 'child_process'
+import { Agent } from 'undici'
+import { KnowledgeRetriever, type KnowledgeSearchCoverage } from './knowledge-retriever'
+import { loadIndex } from './knowledge-indexer'
+import { saveTokensCache, loadTokensCache } from './utils/chunk-cache'
+import { SubAgentManager, type SubAgentTask } from './sub-agent-manager'
+import { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
+import { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+import { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
+import { CompositeKnowledgeRetriever } from './composite-knowledge-retriever'
+import { HookPoint } from './agent-runtime/hooks/points'
+import type { HookRegistry } from './agent-runtime/hooks/registry'
+import { collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+import { readLifeEpisode as readLifeEpisodeFromStore } from './life/store'
+import {
+  listConversationEpisodes,
+  pinConversationEpisode,
+  appendConversationEpisodeNote,
+} from './memory/episode-store'
+import { appendStandingOrder } from './memory/standing-orders'
+import { listDailySummaries, readDailySummary } from './memory/daily-summary'
+import {
+  applyBoundedMemoryOp,
+  formatMemoryUsageHeader,
+  readBoundedMemoryFile,
+  resolveMemoryCharBudget,
+  writeBoundedMemoryFileAtomic,
+  type BoundedMemoryOp,
+} from './memory/bounded-store'
+import { buildPalaceContextCard } from './palace/context-card'
+import { hasSubstantivePalaceProfile, PALACE_ONBOARDING_NUDGE } from './palace/prompt-injection'
+import {
+  PALACE_COMMITMENT_DIRECTIONS,
+  PALACE_COMMITMENT_STATUSES,
+  type PalaceCommitmentCreateInput,
+  type PalaceCommitmentFilter,
+  type PalaceCommitmentUpdatePatch,
+} from './palace/commitments'
+import {
+  PALACE_INBOX_KINDS,
+  PALACE_INBOX_STATUSES,
+  PALACE_SEDIMENT_TARGETS,
+  type PalaceInboxCreateInput,
+  type PalaceInboxFilter,
+  type PalaceInboxUpdatePatch,
+} from './palace/inbox'
+import { matchPalaceRooms } from './palace/matcher'
+import {
+  addPalaceCommitment,
+  addPalaceInboxItem,
+  listPalaceCommitmentViews,
+  listPalaceContextExtras,
+  listPalaceInboxItems,
+  listPalaceRooms,
+  readPalaceRoom,
+  readPalaceProfile,
+  readPalaceCompany,
+  readPalaceCommitments,
+  readPalaceInbox,
+  updatePalaceCommitmentEntry,
+  updatePalaceInboxItemEntry,
+  upsertPalaceRoom,
+  writePalaceProfile,
+  writePalaceCompany,
+} from './palace/store'
+import type { PalaceRoomInput } from './palace/room'
+import type {
+  PalaceCommitmentDirection,
+  PalaceCommitmentStatus,
+  PalaceInboxKind,
+  PalaceInboxStatus,
+  PalaceSedimentTarget,
+} from './palace/types'
+import { buildKnowledgeLinkGraph, expandLinkedFiles, selectRelevantSnippet, type LinkGraph } from './link-graph'
+import { rerankChunksWithDiversity } from './knowledge-rerank'
+import { buildExcelSourceAnchor, buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, formatSourceAnchor, type KnowledgeSourceAnchor } from './source-anchor'
+import { fetchWithTimeout, HttpError } from './utils/http'
+import { WikiCompiler } from './wiki-compiler'
+import { buildDefaultCompressConfig, compressToolResult, type CompressConfig } from './tool-result-compressor'
+import { loadCardsIndex, cardsIndexPath, type KnowledgeCardsIndex, type DocumentCard, type SectionCard } from './knowledge-cards'
+import { parseSopCard, type SopCard } from './sop-schema'
+import { SopRunner, type SopState } from './sop-runner'
+import {
+  buildDefaultLazyStoreConfig,
+  maybeStoreLazyRef,
+  readToolRef,
+  isValidCallId,
+  type LazyStoreConfig,
+} from './tool-result-lazy-store'
+import TurndownService from 'turndown'
+import * as XLSX from 'xlsx'
+import type { McpClientManager } from './mcp-client-manager'
+
+/**
+ * 工具调用路由器（GAP4）
+ * 处理 LLM 发起的工具调用，执行对应的本地函数并返回结果。
+ */
+
+export interface ToolCallRequest {
+  name: string
+  arguments: Record<string, unknown>
+}
+
+export interface ToolCallResult {
+  content: string
+  error?: string
+}
+
+/**
+ * 文档生成跨进程渲染钩子（决策 A1）。
+ *
+ * - md：packages/core 内部纯字符串渲染，无需此钩子
+ * - pdf：Electron 主进程 BrowserWindow + printToPDF
+ * - docx：Electron 主进程 docx@9.x（NodeJS 环境，packages/core 不依赖）
+ *
+ * 调用方在创建 ToolRouter 时注入；未注入则 generate_document(pdf|docx) 返回 error。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+/**
+ * 文档渲染器调用方可选透传的运行时上下文。
+ *
+ * - imageRoot：DOCX 渲染时图片相对路径的解析根（通常为分身根目录）。
+ *   传入后 docx-renderer 会在该目录下安全解析 image.src 并嵌入真实图片；
+ *   不传或图片解析失败时渲染器自动降级为占位段。
+ *
+ * @author zhi.qu
+ * @date 2026-05-08
+ */
+export interface DocumentRenderContext {
+  imageRoot?: string
+}
+
+export interface DocumentRendererHook {
+  renderPdf: (html: string, outputPath: string) => Promise<{ size: number }>
+  renderDocx: (
+    ir: import('./document/ir-schema').DocumentIR,
+    outputPath: string,
+    context?: DocumentRenderContext,
+  ) => Promise<{ size: number }>
+}
+
+export interface KnowledgeSearchResult {
+  file: string
+  heading: string
+  content: string
+  score: number
+  anchor?: KnowledgeSourceAnchor
+}
+
+/**
+ * 把召回完整度信号格式化成 LLM 看的 header 行。
+ *
+ * 写到 search_knowledge 工具结果**第一行**，让 LLM 在生成回答前先看到证据强度。
+ * empty/low 档位带 ⚠️ 警示标记 + 拒答指引，强制 LLM 在回答开头声明"召回不全"，
+ * 不能基于稀薄证据装作权威——参见 [[feedback-soul-prefer-refuse-over-placeholder]]。
+ */
+function formatCoverageHeader(coverage: KnowledgeSearchCoverage): string {
+  const { hits, totalCandidates, topScore, mode, hint } = coverage
+  const stats = `命中 ${hits} / 候选 ${totalCandidates} · 最高分 ${topScore.toFixed(mode === 'bm25' ? 2 : 4)} (${mode})`
+  switch (hint) {
+    case 'empty':
+      return `[召回完整度: empty | ${stats}] ⚠️ 知识库中没找到相关内容，请回答"知识库未收录"并明确告知用户，不要凭记忆/常识强答。`
+    case 'low':
+      return `[召回完整度: low | ${stats}] ⚠️ 召回证据稀薄（命中过少或得分偏低），回答必须以"召回不全，仅基于以下片段..."开头，明确告知用户证据有限。`
+    case 'partial':
+      return `[召回完整度: partial | ${stats}] 召回中等，可作答但需在结论旁标注"基于本次检索片段"，并建议用户用更具体的关键词再问一次以提升完整度。`
+    case 'high':
+      return `[召回完整度: high | ${stats}] 召回充分，可正常作答；仍需逐条标注来源锚点。`
+    default: {
+      // 给 TypeScript 一个 never 检查：未来加 hint 档位时这里会报错
+      const _exhaustive: never = hint
+      return `[召回完整度: ${String(_exhaustive)} | ${stats}]`
+    }
+  }
+}
+
+interface DesignSystemSearchHit {
+  category: string
+  slug: string
+  path: string
+  score: number
+  snippet: string
+}
+
+interface AssetManifestItem {
+  asset: string
+  path: string
+  status?: 'needs-review' | 'approved' | 'changes-requested'
+  group?: string
+  subtitle?: string
+  viewport?: { width: number; height?: number }
+}
+
+/**
+ * 后台 shell 任务记录。
+ *
+ * 用于 exec_shell(background:true) 启动的长跑命令；await_shell / kill_shell 通过 task_id 操作。
+ *
+ * @author zhi.qu
+ * @date 2026-04-29
+ */
+interface BackgroundShellRecord {
+  taskId: string
+  command: string
+  cwd: string
+  pid: number | undefined
+  startedAt: number
+  /** child_process 句柄（已结束的记录保留为 null 节省内存） */
+  child: import('child_process').ChildProcess | null
+  stdout: string
+  stderr: string
+  /** stdout/stderr 是否被截断到上限 */
+  truncated: boolean
+  exitCode: number | null
+  signal: NodeJS.Signals | null
+  status: 'running' | 'exited' | 'killed'
+  endedAt?: number
+  /** 等待中的 promise resolve 列表，进程结束 / pattern 匹配时统一唤醒 */
+  pendingWaiters: Array<() => void>
+}
+
+// ─── git_status / git_diff 限流常量 ───────────────────────────────────────────
+// git 单次执行硬超时（10 秒，足够本地仓库 status/diff；大仓库可调高）
+const GIT_HARD_TIMEOUT_MS = 10 * 1000
+// git 输出字符上限（32KB ≈ 8k token；超出按字符截断）
+const GIT_OUTPUT_MAX_CHARS = 32 * 1024
+
+// ─── read_lines / list_files 限流常量 ─────────────────────────────────────────
+// read_lines 单次默认返回行数（200 行 ≈ 1.5k token，覆盖 90% 阅读栈跟踪/diff 场景）
+const READ_LINES_DEFAULT_RANGE = 200
+// read_lines 单次硬上限（4000 行 ≈ 30k token，再多必须分页读取）
+const READ_LINES_HARD_LIMIT = 4000
+// list_files 单次返回条目硬上限（防止 LLM 在大仓库下 dump 几万条目撑爆 context）
+const LIST_FILES_HARD_LIMIT = 500
+
+// ─── query_excel 限流常量 ─────────────────────────────────────────────────────
+// 防止单次工具调用 dump 几百行 × 几十列 × 几十字符 = 几十 KB 数据进 chat history
+// 累积起来撞破 LLM context 上限。
+
+/** 单次 query_excel 默认返回行数 */
+const QUERY_EXCEL_DEFAULT_LIMIT = 50
+/** 单次 query_excel 硬上限行数（即使 LLM 显式传 1000 也会被截断） */
+const QUERY_EXCEL_HARD_LIMIT = 200
+/**
+ * 单次 query_excel 返回 content 的字符数硬上限（约 2k token）。
+ * 即使在 limit 范围内，如果列数太多导致 JSON 太大也会被按行二次截断。
+ */
+const QUERY_EXCEL_MAX_CONTENT_CHARS = 8000
+
+// ─── export_excel 限流常量 ────────────────────────────────────────────────────
+// query_excel 是只读工具，对比/分析输出无法落盘；exportExcel() 弥补此能力缺口。
+// 但 LLM 可能传入巨大的 rows（几十万行），需多重防护避免：
+//   1. 单文件过大撑爆磁盘 / 后续 Excel 打开崩溃
+//   2. 单 sheet 行数过多，xlsx 库序列化耗时过长阻塞主线程
+//   3. sheet 过多导致 Excel 客户端打不开
+//
+// 数值参考 desktop-app/electron/document-parser.ts 的 EXCEL_MAX_ROWS_PER_SHEET
+// 与常见办公场景：50_000 行 × 50 sheet 已足以覆盖任何 BI 报表导出场景。
+
+/** export_excel 单文件落盘后字节数硬上限（10 MB；超出立即删除并报错） */
+const EXPORT_EXCEL_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+/** export_excel 单 sheet 最大行数（50_000；与 document-parser.ts 解析端一致） */
+const EXPORT_EXCEL_MAX_ROWS_PER_SHEET = 50_000
+/** export_excel 单文件最大 sheet 数 */
+const EXPORT_EXCEL_MAX_SHEETS = 50
+
+// ─── generate_document 限流常量 ───────────────────────────────────────────────
+//
+// 设计动机：
+//   - 单文件 20MB：PDF/DOCX 含图比 xlsx 重，但仍需防止 LLM/渲染异常撑爆磁盘
+//   - IR 长度 200_000：一次约 50-80 页正文，足以覆盖任何报告/方案场景，
+//     再多就该让 LLM 拆分多次调用而非塞进单个 IR
+//
+// @author zhi.qu
+// @date 2026-05-08
+/** generate_document 单文件落盘后字节数硬上限（20 MB） */
+const MAX_DOCUMENT_FILE_SIZE_BYTES = 20 * 1024 * 1024
+/** generate_document IR markdown 字符数硬上限（防 LLM 输出无限长） */
+const MAX_IR_LENGTH = 200_000
+/** 支持的文档输出格式（白名单） */
+const SUPPORTED_DOCUMENT_FORMATS = ['md', 'pdf', 'docx'] as const
+type DocumentFormat = typeof SUPPORTED_DOCUMENT_FORMATS[number]
+
+// ─── exec_shell 安全沙箱常量 ───────────────────────────────────────────────────
+// 设计参考 Cursor / Claude Code Bash 工具的桌面端安全模型：
+//   - 进程 cwd 强制锁定到工作区目录（无法跳出）
+//   - 命令白名单（首词必须命中）
+//   - 危险参数黑名单（regex 拦截 sudo / rm / curl|sh 等）
+//   - 硬超时 + 输出截断（防止 stdout 撑爆 LLM context）
+
+/** 单次 exec_shell 硬超时（5 分钟，无法被 args.timeout_ms 覆盖到更大） */
+const EXEC_SHELL_HARD_TIMEOUT_MS = 5 * 60 * 1000
+/** 前台模式 stdout / stderr 各自字符上限（8KB ≈ 2k token），超出截断 */
+const EXEC_SHELL_OUTPUT_MAX = 8 * 1024
+/** 后台模式 stdout / stderr 各自字符上限（64KB，长跑场景需要更大缓冲） */
+const BG_SHELL_OUTPUT_MAX = 64 * 1024
+/** 后台 shell 注册表最大条目数；超出时按结束时间 evict 最旧 */
+const BG_SHELL_MAX_ENTRIES = 50
+/** 已结束的后台 shell 记录保留时长（超过则可被 evict） */
+const BG_SHELL_RETAIN_MS = 60 * 60 * 1000
+/** await_shell 默认阻塞时长（30 秒） */
+const AWAIT_SHELL_DEFAULT_BLOCK_MS = 30 * 1000
+/** await_shell 最大阻塞时长（5 分钟，单次调用上限） */
+const AWAIT_SHELL_MAX_BLOCK_MS = 5 * 60 * 1000
+
+// ─── exec_code 沙箱常量 ─────────────────────────────────────────────────────
+// LLM 现场写脚本（Python/Node/TSX）的执行通道；与 shell 互补，覆盖结构化数据处理、
+// 文件批量改写、报表分析等"造粗工具"难以穷举的场景。
+//
+// 安全模型：
+//   - cwd 强制锁定 workspace（脚本默认在工作区目录跑）
+//   - 解释器枚举白名单（仅 python/python3/node/tsx）
+//   - 不用 shell:true（spawn(interpreter, [scriptPath])，避免命令注入）
+//   - 临时脚本写入 workspace/.code-exec/{taskId}.{ext}，不跨工作区
+//   - 输出截断 16KB / 前台超时 5 分钟 / 同样支持 background
+
+/** exec_code 前台硬超时（5 分钟） */
+const EXEC_CODE_HARD_TIMEOUT_MS = 5 * 60 * 1000
+/** exec_code stdout/stderr 各自字符上限（16KB ≈ 4k token） */
+const EXEC_CODE_OUTPUT_MAX = 16 * 1024
+/** exec_code 单脚本字符数上限 */
+const EXEC_CODE_SCRIPT_MAX_CHARS = 16_000
+
+/** exec_code 支持的解释器配置 */
+interface InterpreterConfig {
+  /** 实际可执行命令名 */
+  command: string
+  /** 写入的脚本扩展名（含点） */
+  ext: string
+  /** 调用解释器的额外参数（在 [scriptPath] 之前） */
+  preArgs: string[]
+}
+
+const EXEC_CODE_INTERPRETERS: Record<string, InterpreterConfig> = {
+  python: { command: 'python', ext: '.py', preArgs: ['-u'] }, // -u: unbuffered stdio
+  python3: { command: 'python3', ext: '.py', preArgs: ['-u'] },
+  node: { command: 'node', ext: '.mjs', preArgs: [] },
+  tsx: { command: 'tsx', ext: '.ts', preArgs: [] },
+}
+
+// ─── web_search 常量（Tavily API） ──────────────────────────────────────────
+// Tavily 是为 LLM 设计的搜索 API（cursor/Perplexity/LangChain 默认推荐），
+// 返回的 content 直接是可读的网页摘要，免去解析 HTML 的成本。
+// API 文档：https://docs.tavily.com/docs/rest-api/api-reference
+
+/** Tavily API 端点 */
+const TAVILY_API_URL = 'https://api.tavily.com/search'
+/** web_search 单次请求超时（30 秒） */
+const WEB_SEARCH_TIMEOUT_MS = 30 * 1000
+/** web_search 默认结果数 */
+const WEB_SEARCH_DEFAULT_MAX = 5
+/** web_search 结果数硬上限（防止 LLM 索取过多导致 context 爆） */
+const WEB_SEARCH_HARD_MAX = 10
+/** 单条结果 content 截断长度（避免单页摘要太长撑爆 context） */
+const WEB_SEARCH_CONTENT_MAX_CHARS = 800
+
+// ─── cn_web_search 常量（wigolo 本地边车） ──────────────────────────────────
+// wigolo 是本机运行的多引擎搜索边车（docs/wigolo-cn-search-plan.md）：
+// 免 API key、$0/查询，结果带 citation_id + source_span 字节级溯源。
+// 与 web_search（Tavily）并存：中文/国内站点走 cn_web_search，国际内容走 Tavily。
+
+/** cn_web_search 单次请求超时（30 秒；wigolo 多引擎扇出在本机融合，冷启动首查偏慢） */
+const CN_WEB_SEARCH_TIMEOUT_MS = 30 * 1000
+/** cn_web_search 默认结果数 */
+const CN_WEB_SEARCH_DEFAULT_MAX = 5
+/** cn_web_search 结果数硬上限（防止 LLM 索取过多导致 context 爆） */
+const CN_WEB_SEARCH_HARD_MAX = 10
+/** 单条结果 excerpt 截断长度（同 web_search 的 content 纪律） */
+const CN_WEB_SEARCH_EXCERPT_MAX_CHARS = 800
+
+// ─── web_fetch 常量 ────────────────────────────────────────────────────────
+// web_fetch 用于深入抓取单个 URL 的完整内容（与 web_search 互补：先搜后抓）。
+// 关键安全控制：
+//   - 只允许 http / https；禁止 file:// / chrome:// / data: 等本地协议
+//   - 屏蔽内网 IP / localhost（防 SSRF 攻击）
+//   - 强制 30 秒超时 + 30KB 输出截断（防 LLM context 爆）
+
+/** web_fetch 单次请求超时（30 秒）*/
+const WEB_FETCH_TIMEOUT_MS = 30 * 1000
+/** web_fetch 默认输出上限（30 000 字符≈ 7.5K token） */
+const WEB_FETCH_DEFAULT_MAX_CHARS = 30_000
+/** web_fetch 输出硬上限（防 LLM 索取过多） */
+const WEB_FETCH_HARD_MAX_CHARS = 100_000
+
+// ─── generate_image 常量（DashScope wanx2.1-t2i-turbo） ────────────────────
+// DashScope 异步 API：先 POST 创建任务（拿 task_id）→ 轮询 task 状态 → SUCCEEDED 后下载图片
+// 文档：https://help.aliyun.com/zh/dashscope/developer-reference/api-details-9
+
+/** DashScope 文生图任务创建端点 */
+const IMAGE_GEN_CREATE_URL = 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis'
+/** DashScope 异步任务查询端点（拼 /:task_id） */
+const IMAGE_GEN_TASK_URL = 'https://dashscope.aliyuncs.com/api/v1/tasks'
+/** 任务创建请求超时（30 秒） */
+const IMAGE_GEN_CREATE_TIMEOUT_MS = 30 * 1000
+/** 单次轮询请求超时（10 秒） */
+const IMAGE_GEN_POLL_TIMEOUT_PER_REQ_MS = 10 * 1000
+/** 总轮询超时（90 秒；wanx-turbo 通常 5-15s 完成，留余量给排队） */
+const IMAGE_GEN_POLL_TIMEOUT_MS = 90 * 1000
+/** 轮询间隔（2 秒） */
+const IMAGE_GEN_POLL_INTERVAL_MS = 2 * 1000
+/** 图片下载超时（30 秒） */
+const IMAGE_GEN_DOWNLOAD_TIMEOUT_MS = 30 * 1000
+/**
+ * IPv4 special-use / 非 global-unicast 段（RFC 5735 / 6598 等），命中即拒。
+ * 之前只拦 10/8、127/8、172.16/12、192.168/16、169.254/16，漏掉 CGNAT(100.64/10)、
+ * benchmarking(198.18/15)、TEST-NET、多播(224/4)、保留(240/4) 等——启用联网后 LLM
+ * 可借 web_fetch 打到用户机所在的 Tailscale/CGNAT/实验网。改为枚举全部 special-use 段。
+ */
+const IPV4_BLOCKED_CIDRS: ReadonlyArray<readonly [string, number]> = [
+  ['0.0.0.0', 8],        // "this host"（含 0.0.0.0）
+  ['10.0.0.0', 8],       // private
+  ['100.64.0.0', 10],    // CGNAT / Tailscale (RFC 6598)
+  ['127.0.0.0', 8],      // loopback
+  ['169.254.0.0', 16],   // link-local
+  ['172.16.0.0', 12],    // private
+  ['192.0.0.0', 24],     // IETF protocol assignments
+  ['192.0.2.0', 24],     // TEST-NET-1
+  ['192.88.99.0', 24],   // 6to4 relay anycast
+  ['192.168.0.0', 16],   // private
+  ['198.18.0.0', 15],    // benchmarking (RFC 2544)
+  ['198.51.100.0', 24],  // TEST-NET-2
+  ['203.0.113.0', 24],   // TEST-NET-3
+  ['224.0.0.0', 4],      // multicast 224.0.0.0/4
+  ['240.0.0.0', 4],      // reserved 240.0.0.0/4 + 255.255.255.255 broadcast
+]
+
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split('.')
+  if (parts.length !== 4) return null
+  let n = 0
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p)) return null
+    const v = Number(p)
+    if (v > 255) return null
+    n = n * 256 + v
+  }
+  return n >>> 0
+}
+
+function isBlockedIpv4Int(ipInt: number): boolean {
+  for (const [base, prefix] of IPV4_BLOCKED_CIDRS) {
+    const baseInt = ipv4ToInt(base)!
+    const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+    if (((ipInt & mask) >>> 0) === ((baseInt & mask) >>> 0)) return true
+  }
+  return false
+}
+
+function isBlockedIpv4(ip: string): boolean {
+  const n = ipv4ToInt(ip)
+  if (n === null) return true   // 解析不出 = 不可信，fail closed
+  return isBlockedIpv4Int(n)
+}
+
+/** IPv6 → 8 个 16-bit hextet；处理 :: 压缩、zone id、尾部内嵌 IPv4。无法解析返回 null。 */
+function expandIpv6(ip: string): number[] | null {
+  let s = ip.toLowerCase()
+  const pct = s.indexOf('%')
+  if (pct >= 0) s = s.slice(0, pct)               // 去 zone id（fe80::1%eth0）
+  // 尾部内嵌 IPv4（::ffff:127.0.0.1 / 64:ff9b::1.2.3.4）→ 转成两个 hextet 的十六进制
+  if (s.includes('.')) {
+    const lastColon = s.lastIndexOf(':')
+    if (lastColon < 0) return null
+    const v4 = ipv4ToInt(s.slice(lastColon + 1))
+    if (v4 === null) return null
+    s = `${s.slice(0, lastColon + 1)}${((v4 >>> 16) & 0xffff).toString(16)}:${(v4 & 0xffff).toString(16)}`
+  }
+  let groups: string[]
+  if (s.includes('::')) {
+    if (s.indexOf('::') !== s.lastIndexOf('::')) return null  // 只能有一个 ::
+    const [head, tail] = s.split('::')
+    const headGroups = head ? head.split(':') : []
+    const tailGroups = tail ? tail.split(':') : []
+    const missing = 8 - headGroups.length - tailGroups.length
+    if (missing < 0) return null
+    groups = [...headGroups, ...Array<string>(missing).fill('0'), ...tailGroups]
+  } else {
+    groups = s.split(':')
+  }
+  if (groups.length !== 8) return null
+  const out: number[] = []
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null
+    out.push(parseInt(g, 16))
+  }
+  return out
+}
+
+/**
+ * 落在 global unicast 2000::/3 内、但 IANA registry 标 Globally Reachable=false 的
+ * special-purpose 段（来源：IANA IPv6 Special-Purpose Address Registry）。
+ * 2000::/3 之外的段由下方 top-3-bit 判定统一拦掉；2001::/23 父段单独走“默认拦 +
+ * allowlist”（见 isBlockedIpv6）。这里只列 2001::/23 之外、2000::/3 之内的 GR=false 段。
+ */
+const IPV6_BLOCKED_IN_GLOBAL: ReadonlyArray<readonly [string, number]> = [
+  ['2001:db8::', 32],    // Documentation（在 2001::/23 之外）
+  ['2002::', 16],        // 6to4（内嵌 IPv4）
+  ['3fff::', 20],        // Documentation (RFC 9637)
+  ['5f00::', 16],        // Segment Routing SRv6 (RFC 9602)
+]
+
+/**
+ * 2001::/23（IETF Protocol Assignments）父段 IANA 默认标 Globally Reachable=false，
+ * 仅以下更具体分配是 GR=true，需放行；其余（含 Teredo 2001::/32、Benchmarking
+ * 2001:2::/48、已废弃 ORCHID 2001:10::/28、2001:5::/2001:100:: 等未分配段）一律拦。
+ */
+const IPV6_2001_23_GLOBALLY_REACHABLE: ReadonlyArray<readonly [string, number]> = [
+  ['2001:1::1', 128],    // Port Control Protocol Anycast
+  ['2001:1::2', 128],    // TURN Anycast
+  ['2001:1::3', 128],    // DNS-SD Service Registration Anycast
+  ['2001:3::', 32],      // AMT
+  ['2001:4:112::', 48],  // AS112-v6
+  ['2001:20::', 28],     // ORCHIDv2
+  ['2001:30::', 28],     // Drone Remote ID Protocol Entity Tags (DETs)
+]
+
+/** 比较 IPv6 hextet 数组的前 prefix bit 是否与 base 相同（CIDR 前缀匹配）。 */
+function ipv6Match(h: number[], base: number[], prefix: number): boolean {
+  let bits = prefix
+  for (let i = 0; i < 8 && bits > 0; i++) {
+    const take = Math.min(16, bits)
+    const mask = take === 16 ? 0xffff : (0xffff << (16 - take)) & 0xffff
+    if ((h[i] & mask) !== (base[i] & mask)) return false
+    bits -= take
+  }
+  return true
+}
+
+function isBlockedIpv6(ip: string): boolean {
+  const h = expandIpv6(ip)
+  if (h === null) return true   // fail closed
+  // IPv4-mapped ::ffff:0:0/96 → 用内嵌 IPv4 重新判（::ffff:8.8.8.8 之类公网应放行）
+  if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0xffff) {
+    return isBlockedIpv4Int((((h[6] << 16) | h[7]) >>> 0))
+  }
+  // 只允许 global unicast 2000::/3（首 3 bit = 001）。其余（::、::1、fc00::/7、
+  // fe80::/10、ff00::/8、64:ff9b:: NAT64 等所有 special-use）一律拒。
+  if (((h[0] >> 13) & 0x7) !== 0b001) return true
+  // 2001::/23 父段默认 GR=false：默认拦，仅放行 registry 里 GR=true 的更具体段。
+  // /23 = h[0]==0x2001 且 h[1] 高 7 bit 为 0（即 2001:0000:: – 2001:01ff::）。
+  if (h[0] === 0x2001 && (h[1] & 0xfe00) === 0x0000) {
+    for (const [base, prefix] of IPV6_2001_23_GLOBALLY_REACHABLE) {
+      if (ipv6Match(h, expandIpv6(base)!, prefix)) return false
+    }
+    return true
+  }
+  // 其余 2000::/3 内 Globally Reachable=false 段补拦
+  for (const [base, prefix] of IPV6_BLOCKED_IN_GLOBAL) {
+    if (ipv6Match(h, expandIpv6(base)!, prefix)) return true
+  }
+  return false
+}
+
+/**
+ * 判断 IP 是否【不是公网 global-unicast 地址】（防 SSRF）——内网/回环/链路本地/CGNAT/
+ * 多播/保留/文档等 special-use 段均返回 true（拒绝）。
+ * 仅接受 net.isIPv4/IPv6 通过的字符串；非 IP 字符串返回 false（调用方单独处理，如 localhost）。
+ * 导出供单测。
+ */
+export function isPrivateIp(ip: string): boolean {
+  if (net.isIPv4(ip)) return isBlockedIpv4(ip)
+  if (net.isIPv6(ip)) return isBlockedIpv6(ip)
+  return false
+}
+
+/**
+ * relaxed 模式（web_fetch_allow_private 开启，用于 fake-ip 代理）下**仍然硬拦**的最危险段：
+ * loopback（0/8、127/8、::1）+ link-local（169.254/16、fe80::/10）。
+ * 这些永远不会是"经代理抓公网页面"的合法目标，保留零成本，却挡住最有价值的 SSRF
+ * 目标（localhost 管理面板、云 metadata 169.254.169.254）。其余段（198.18 fake-ip、
+ * 100.64 CGNAT、10/172.16/192.168 等）在 relaxed 下放行，交给用户的代理路由。
+ */
+function isLoopbackOrLinkLocal(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const n = ipv4ToInt(ip)
+    if (n === null) return true
+    const inCidr = (base: string, prefix: number): boolean => {
+      const b = ipv4ToInt(base)!
+      const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0
+      return ((n & mask) >>> 0) === ((b & mask) >>> 0)
+    }
+    return inCidr('0.0.0.0', 8) || inCidr('127.0.0.0', 8) || inCidr('169.254.0.0', 16)
+  }
+  if (net.isIPv6(ip)) {
+    const g = expandIpv6(ip)
+    if (!g) return true
+    if (g.slice(0, 7).every(x => x === 0) && g[7] === 1) return true   // ::1 loopback
+    if ((g[0] & 0xffc0) === 0xfe80) return true                        // fe80::/10 link-local
+    return false
+  }
+  return true   // 解析不出 = fail-closed
+}
+
+/**
+ * DNS 解析 hostname、校验所有返回 IP 都不在内网段，并返回首个 public IP 用于 pinning。
+ * 之前只对 hostname 字符串做正则匹配，localtest.me / 自定义域名解析到 127.0.0.1
+ * 或公网 URL 302 到内网 IP 都会绕过。
+ *
+ * 返回值用于 DNS rebinding 防护：调用方把这个 IP 灌进 undici 的 connect.lookup，
+ * 确保 fetch 实际连接的就是我们校验过的 IP，不会被攻击域名第二次解析返回内网替换。
+ */
+export async function resolveAndAssertNotPrivate(
+  hostname: string,
+  allowPrivate = false,
+): Promise<{ address: string; family: 4 | 6 }> {
+  // allowPrivate=true（fake-ip 代理放宽）下只硬拦 loopback/link-local，其余放行。
+  const blocked = (ip: string): boolean => (allowPrivate ? isLoopbackOrLinkLocal(ip) : isPrivateIp(ip))
+  const blockedLabel = allowPrivate ? '回环/链路本地' : '内网'
+  // IPv6 literal URL（http://[2606:...]/）的 URL.hostname 在 Node 里带 []，
+  // net.isIP('[...]')=0 会误走 DNS lookup 失败。先剥外层方括号按 IP 直判。
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    hostname = hostname.slice(1, -1)
+  }
+  // 字符串级先拦 localhost：DNS 行为不可控（hosts 文件 / 解析器配置），直接黑名单。
+  // 即使 allowPrivate 也拦——localhost 永远不是经代理抓公网的合法目标。
+  if (/^localhost$/i.test(hostname) || /\.localhost$/i.test(hostname)) {
+    throw new Error(`拒绝内网/回环主机名：${hostname}`)
+  }
+  // 输入本身就是 IP：直接判
+  if (net.isIP(hostname)) {
+    if (blocked(hostname)) throw new Error(`拒绝抓取${blockedLabel}地址：${hostname}`)
+    return { address: hostname, family: net.isIPv4(hostname) ? 4 : 6 }
+  }
+  let addrs: Array<{ address: string; family: number }>
+  try {
+    addrs = await dns.promises.lookup(hostname, { all: true, verbatim: true })
+  } catch (err) {
+    throw new Error(`DNS 解析失败 ${hostname}：${err instanceof Error ? err.message : String(err)}`, { cause: err })
+  }
+  for (const addr of addrs) {
+    if (blocked(addr.address)) {
+      throw new Error(`拒绝抓取${blockedLabel}地址 ${addr.address}（DNS 解析自 ${hostname}）`)
+    }
+  }
+  const picked = addrs[0]
+  return { address: picked.address, family: picked.family === 6 ? 6 : 4 }
+}
+
+/** HTML 实体解码表（覆盖 99% 常见场景，避免引入 he 这种额外库） */
+const HTML_ENTITIES: Readonly<Record<string, string>> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'",
+  '&#39;': "'", '&nbsp;': ' ', '&copy;': '©', '&reg;': '®', '&trade;': '™',
+  '&hellip;': '…', '&mdash;': '—', '&ndash;': '–', '&laquo;': '«', '&raquo;': '»',
+  '&ldquo;': '"', '&rdquo;': '"', '&lsquo;': "'", '&rsquo;': "'",
+  '&middot;': '·', '&bull;': '•', '&times;': '×', '&divide;': '÷',
+}
+/**
+ * 命令白名单（首词必须命中）。首批保守：覆盖文件浏览、文本处理、版本控制、
+ * 解释器、压缩归档。后续按真实需求再扩。
+ *
+ * 不放：通用网络请求工具的执行入口（curl/wget/ssh/scp/rsync）—— 联网页面读取
+ * 必须走 web_fetch 工具，避免 shell 直接拉远程脚本执行。Agent Reach 这类
+ * 专用只读 CLI 作为显式安装能力按需放行。
+ */
+const EXEC_SHELL_WHITELIST: ReadonlySet<string> = new Set([
+  // 文件 / 目录
+  'ls', 'cat', 'head', 'tail', 'wc', 'sort', 'uniq', 'find', 'tree',
+  'echo', 'pwd', 'which', 'whoami', 'date', 'env', 'basename', 'dirname',
+  'mkdir', 'cp', 'mv', 'touch',
+  // 文本处理
+  'grep', 'rg', 'sed', 'awk', 'cut', 'tr', 'tee', 'jq', 'diff',
+  // 版本控制
+  'git',
+  // 解释器
+  'python', 'python3', 'node', 'npm', 'npx', 'pnpm', 'yarn',
+  'pip', 'pip3', 'tsx', 'deno', 'bun',
+  // 归档 / 压缩
+  'tar', 'gzip', 'gunzip', 'zip', 'unzip', '7z',
+  // 联网只读 CLI（显式安装能力；通用 curl/wget 仍禁用）
+  'agent-reach', 'mcporter', 'gh', 'yt-dlp',
+  // 帮助类
+  'man', 'help',
+])
+/**
+ * 命令黑名单（命中任意一条 regex 立即拒绝）。
+ * 即使首词在白名单也会再次校验。
+ */
+const EXEC_SHELL_BLACKLIST: readonly RegExp[] = [
+  /\bsudo\b/i,
+  /\bsu\s+-/i,
+  /\brm\s+(-[a-zA-Z]*[rfRF][a-zA-Z]*\s+)+(\/|~|\$HOME)/, // rm -rf / 或 ~
+  /\bmkfs\b/i,
+  /\bdd\s+(if|of)=/i,
+  /\b(curl|wget|fetch)\s+[^|]*\|\s*(sh|bash|zsh|python)\b/i, // 远程脚本管道执行
+  /\bnc\s+-l\b/i,                                            // netcat 监听
+  />\s*\/dev\/(sd[a-z]|nvme|disk|hd[a-z])/,                  // 写块设备
+  /\bchmod\s+[0-7]?[7]\d{2}\b/,                               // chmod 7xx 全权
+  /\bchown\s+root\b/i,
+  /\b(shutdown|reboot|halt|poweroff|init\s+0|init\s+6)\b/i,
+  /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,           // fork bomb
+  /\beval\s+["'`]?\$/i,                                        // eval $ 动态执行
+  /\bbase64\s+-d\b.*\|\s*(sh|bash)/i,                          // base64 解码后执行
+  // agent-reach 加固：gh / yt-dlp 是多用途二进制，first-word 白名单不足以约束其写操作 / 凭据访问 /
+  // 任意命令执行。黑名单校验整条命令串，也覆盖 `grep x; gh secret set` 这类链式绕过。
+  /--exec(-before-download|-on-playlist)?\b/i,                 // yt-dlp --exec 家族：任意命令执行
+  /\bgh\s+(auth|secret|variable|api|workflow|codespace|ssh-key|gpg-key|ruleset|org|extension)\b/i, // gh 高危/可写/凭据子命令整体禁
+  /\bgh\s+(repo|release|pr|issue|gist|label|cache|run|project)\s+(create|delete|edit|merge|close|upload|rename|archive|sync|set|add|remove|disable|enable|cancel|rerun|approve|review|comment|lock|unlock|pin|unpin|transfer|fork|restore|develop|ready|reopen)\b/i, // gh 资源写操作（只读 view/list/status/checks/diff/search 仍放行）
+]
+
+/** 返回命令命中的首个危险黑名单模式（供 execShell 与测试统一使用）；未命中返回 null。 */
+export function findDangerousShellPattern(command: string): RegExp | null {
+  for (const pattern of EXEC_SHELL_BLACKLIST) {
+    if (pattern.test(command)) return pattern
+  }
+  return null
+}
+
+
+interface CachedExcelSource {
+  mtimeMs: number
+  size: number
+  parsed: {
+    fileName?: string
+    sheets?: Array<{
+      name: string
+      rowCount: number
+      columns: Array<{ name: string; dtype: string; uniqueCount?: number; samples?: Array<string | number>; min?: string | number; max?: string | number }>
+      rows: Array<Record<string, string | number | null>>
+    }>
+  }
+}
+
+/**
+ * 子分身派发上下文（v15 引入，Managed-Agents 借鉴第 1 步）。
+ *
+ * SubAgentManager 内部不知道"派发发生在哪个会话、派发方是谁、目标是谁"，
+ * 这些都是 ToolRouter.delegateTask 才有的上下文。通过 sink 闭包带下去，
+ * 让 desktop-app 适配器组装 SubAgentTaskRow 时不必反向依赖 core。
+ */
+export interface SubAgentDispatchContext {
+  /** 派发发生的会话 ID */
+  conversationId: string
+  /** 派发方分身 ID（即 task() 工具调用所在的分身） */
+  parentAvatarId: string
+  /** 跨分身派发的目标分身 ID；同分身派发为 null */
+  targetAvatar: string | null
+  /**
+   * 子代理角色（2026-05-22 Mavis 借鉴）：'verifier' 用于复核 worker 已产出的结论。
+   * task() 工具的 agent_type 参数透传到这里；旧 SubAgentManager 路径默认为 null
+   * （desktop-app sink 据此决定 sqlite agent_type 列写什么）。
+   */
+  agentType?: 'explore' | 'plan' | 'worker' | 'verifier' | null
+}
+
+/**
+ * 子分身派发 sink 类型。
+ *
+ * SubAgentManager 不知道 sqlite 行的字段名，ToolRouter 不依赖 desktop-app；
+ * 用 ctx 闭包带上下文 + task 快照，desktop-app 装配点把两者拼成 row 落库。
+ */
+export type SubAgentTaskSink = (task: SubAgentTask, ctx: SubAgentDispatchContext) => void
+
+/**
+ * wigolo 本地搜索边车桥接口（cn_web_search 依赖注入）。
+ * 实现方（desktop-app/electron/main.ts）适配 WigoloSidecar.ensureReady 的状态对象。
+ */
+export interface WigoloBridge {
+  /** 懒启动或复用本机 wigolo daemon；约定不 throw，失败以 ok=false + detail 返回 */
+  ensureReady(): Promise<{ ok: boolean; baseUrl?: string; detail?: string }>
+}
+
+export class ToolRouter {
+  private avatarsPath: string
+  private designSystemsPath: string
+  private retrievers = new Map<string, KnowledgeRetriever>()
+  /** projects/<pid>/knowledge 独立索引缓存 */
+  private projectKnowledgeRetrievers = new Map<string, KnowledgeRetriever>()
+  /** 当前 execute 调用栈内的项目分区（线程非安全：假定单会话串行工具执行） */
+  private knowledgeProjectContext: string = DEFAULT_AVATAR_PROJECT_ID
+  /**
+   * 可选 Hook 总线（借鉴 Pi）：仅在 SOUL_USE_NEW_RUNTIME 开启时由 main 注入。
+   * execute 末尾 fire POST_TOOL_USE（观测型，不阻断结果回流）；deny 类 hook 需另行评审，不在此挂。
+   */
+  private hooks?: HookRegistry
+  /**
+   * 按会话 ID 解析 `project_id`（与主进程 DB 一致），用于 `/projects/<conv>/` 跨会话路径与 ToolRouter 内工作区根解析。
+   * 未注入时跨会话路径按 `default` 分区解析（兼容旧测试）；桌面端由 main 注入真实解析器。
+   */
+  private resolveConversationProjectId?: (conversationId: string) => string
+  /** Feature 7: 子代理管理器 */
+  readonly subAgentManager = new SubAgentManager()
+  /** 主代理 system prompt（用于子代理共享上下文） */
+  private systemPromptCache = new Map<string, string>()
+  /**
+   * grep-first 分身集合：这些分身的知识库走 grep 工具按需检索，BM25 `search_knowledge`
+   * 让位（返回引导用 knowledge_grep 的提示，不构建 chunk）。由 main 在 loadAvatar 时按
+   * avatar.config.json#grepFirst 推入。用于大库（如小凯 ~30MB）避免 BM25 预热/同步构建。
+   */
+  private grepFirstAvatars = new Set<string>()
+  /** Excel 导入 JSON 的内存缓存（按文件 mtime + size 失效） */
+  private excelSourceCache = new Map<string, CachedExcelSource>()
+  /** 显式引用图缓存（knowledge/*.md -> linked files） */
+  private linkGraphCache = new Map<string, LinkGraph>()
+  /**
+   * 概念卡索引缓存（knowledge_navigate 用），按 index.json 的 mtime+size 失效。
+   * 大库索引可达十几 MB（小凯 1998 文档 / 37409 节 ≈ 13.7MB），每次工具调用都
+   * 全量 JSON.parse 会明显拖慢并抬高主进程内存峰值——只在文件变化时重读。
+   */
+  private cardsIndexCache = new Map<string, { index: KnowledgeCardsIndex; mtimeMs: number; size: number }>()
+  /**
+   * 进行中的 SOP 流程状态（W5.3/W5.4）。key = `${avatarId}::${conversationId}::${skill}`。
+   *
+   * v1 是**进程内存态**：应用重启后进行中的流程丢失，下次 load_skill 会重新从起点开始。
+   * 没做 DB 持久化是有意收缩——SopState 已是纯 JSON（round-trip 安全），
+   * 等真实使用验证了流程价值再决定是否付迁移成本。
+   */
+  private sopStates = new Map<string, SopState>()
+  /** SOP 卡片解析缓存，key = sop.yaml 绝对路径，按 mtime 失效 */
+  private sopCardCache = new Map<string, { card: SopCard; mtimeMs: number }>()
+  /**
+   * 后台 shell 任务注册表。
+   * key = task_id，value = BackgroundShellRecord。
+   * 自动 evict：超过 BG_SHELL_MAX_ENTRIES 或已结束超过 BG_SHELL_RETAIN_MS 的旧记录会被清理。
+   */
+  private backgroundShells = new Map<string, BackgroundShellRecord>()
+
+  /**
+   * 可选回调：按 avatarId 加载目标分身的 systemPrompt。
+   *
+   * 用于 delegate_task 的 target_avatar 参数：当用户想把任务委派给"另一个分身"
+   * （比如设计专科分身 design-master）时，子代理需要切到目标分身的人格与
+   * 知识库再跑。ToolRouter 不直接依赖 SoulLoader（避免环依赖），由外部
+   * （desktop-app/main.ts 或测试脚手架）注入。
+   *
+   * 返回 undefined 表示目标分身不存在或无法加载，delegateTask 会返回错误。
+   */
+  private loadAvatarSystemPrompt?: (avatarId: string) => string | undefined
+  /**
+   * 可选回调：读取应用设置（API Key 等）。
+   *
+   * 用于需要外部凭据的工具（web_search 读 tavily_api_key 等）。
+   * ToolRouter 不直接依赖 DatabaseManager（避免环依赖），由外部 main.ts 注入。
+   *
+   * 返回 undefined 表示用户未配置该项。
+   */
+  private getSetting?: (key: string) => string | undefined
+
+  /**
+   * 可选注入：wigolo 本地搜索边车桥（cn_web_search 用）。
+   *
+   * ToolRouter 不直接依赖 Electron 的边车生命周期模块（保持环境无关），
+   * 由 main.ts 注入一个适配器。ensureReady 约定**不 throw**：边车未安装 /
+   * 启动失败一律以 ok=false + detail 返回，cn_web_search 把 detail 如实
+   * 透给 LLM（诚实降级，不伪装成空结果）。
+   *
+   * 不注入时 cn_web_search 返回部署配置错误提示。
+   */
+  private wigoloBridge?: WigoloBridge
+
+  /**
+   * 可选注入：MCP 客户端管理器。
+   *
+   * 注入后，list_mcp_tools / call_mcp_tool 工具会路由到这里。
+   * 不注入时，这两个工具返回提示「MCP 未启用」。
+   */
+  private mcpManager?: McpClientManager
+
+  /**
+   * 可选注入：文档渲染器钩子。
+   *
+   * generate_document 工具的 PDF / DOCX 分支需要 Electron 主进程能力（BrowserWindow + docx 库），
+   * 但 packages/core 必须保持环境无关。决策 A1：构造时由调用方注入实际渲染函数。
+   *
+   * 不注入时：md 格式仍可工作（纯字符串渲染）；pdf/docx 调用会返回 error 提示注入缺失。
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private documentRenderers?: DocumentRendererHook
+
+  /**
+   * 可选注入：子分身派发任务 sink（v15 引入，Managed-Agents 借鉴第 1 步）。
+   *
+   * 在 running/done/error 三个时刻被 SubAgentManager 触发。
+   * desktop-app 注入的 sink 会把任务镜像到 sqlite + JSONL；
+   * 不注入时不影响 LLM 主链路，只是没有持久化记录（如纯核心单测场景）。
+   *
+   * sink 内部失败由调用方兜底；SubAgentManager.fireChange 已 try/catch 兜底。
+   */
+  private subAgentTaskSink?: SubAgentTaskSink
+
+  /**
+   * Tool Result 压缩配置（TokenJuice 启发，2026-05-18 引入）。
+   * 构造时从 `SOUL_TOOL_COMPRESSION` env 读取启停；默认开启。
+   * 红线见 `tool-result-compressor.ts` 顶部注释——只做无损操作，绝不调 LLM 二次总结。
+   */
+  private compressConfig: CompressConfig = buildDefaultCompressConfig(process.env.SOUL_TOOL_COMPRESSION)
+
+  /**
+   * Tool Result Lazy Store 配置（TDAI symbolic memory 启发，2026-05-18 引入）。
+   * 从 `SOUL_TOOL_LAZY_RETRIEVAL` env 读取，**默认 off**。
+   * 仅对 white-list 工具（v1: web_fetch）触发；事实根基类工具绝不 lazy。
+   * 红线见 `tool-result-lazy-store.ts` 顶部注释。
+   */
+  private lazyStoreConfig: LazyStoreConfig = (() => {
+    const cfg = buildDefaultLazyStoreConfig(process.env.SOUL_TOOL_LAZY_RETRIEVAL)
+    console.log(`[tool-router] lazy-store config: enabled=${cfg.enabled} (env SOUL_TOOL_LAZY_RETRIEVAL=${JSON.stringify(process.env.SOUL_TOOL_LAZY_RETRIEVAL)}) threshold=${cfg.thresholdChars} allowed=[${[...cfg.allowedTools].join(',')}]`)
+    return cfg
+  })()
+
+  /**
+   * @param avatarsPath 仓库 avatars/ 目录绝对路径
+   * @param options 可选依赖注入：
+   *   - loadAvatarSystemPrompt: 用于 delegate_task target_avatar 跨分身委派
+   *   - listAvailableAvatars: 目标分身不存在时返回候选列表，提升错误可读性
+   *   - getSetting: 读取应用设置（API Key 等），用于 web_search 等需要外部凭据的工具
+   *   - mcpManager: MCP 客户端管理器，用于 list_mcp_tools / call_mcp_tool
+   *   - documentRenderers: 文档生成 PDF/DOCX 渲染器（决策 A1 依赖注入）
+   *   - resolveConversationProjectId: 会话 → project_id（与 WorkspaceManager 注入同源，保证工具层工作区与 IPC 一致）
+   */
+  constructor(
+    avatarsPath: string,
+    options?: {
+      loadAvatarSystemPrompt?: (avatarId: string) => string | undefined
+      listAvailableAvatars?: () => string[]
+      getSetting?: (key: string) => string | undefined
+      wigoloBridge?: WigoloBridge
+      mcpManager?: McpClientManager
+      documentRenderers?: DocumentRendererHook
+      resolveConversationProjectId?: (conversationId: string) => string
+      subAgentTaskSink?: SubAgentTaskSink
+    },
+  ) {
+    this.avatarsPath = avatarsPath
+    this.designSystemsPath = path.join(avatarsPath, '..', 'shared', 'design-systems')
+    this.loadAvatarSystemPrompt = options?.loadAvatarSystemPrompt
+    this.listAvailableAvatars = options?.listAvailableAvatars
+    this.getSetting = options?.getSetting
+    this.wigoloBridge = options?.wigoloBridge
+    this.mcpManager = options?.mcpManager
+    this.documentRenderers = options?.documentRenderers
+    this.resolveConversationProjectId = options?.resolveConversationProjectId
+    this.subAgentTaskSink = options?.subAgentTaskSink
+  }
+
+  /** 允许在 ToolRouter 创建后再注入（如渲染进程在 ToolRouter 之后才完成 IPC 桥接） */
+  setDocumentRenderers(renderers: DocumentRendererHook): void {
+    this.documentRenderers = renderers
+  }
+
+  /** 见 loadAvatarSystemPrompt 注释 */
+  private listAvailableAvatars?: () => string[]
+
+  private getWorkspaceRoot(avatarId: string, conversationId?: string): string {
+    if (!conversationId) {
+      throw new Error('缺少 conversationId，无法定位 workspace')
+    }
+    assertSafeSegment(avatarId, '分身ID')
+    assertSafeSegment(conversationId, 'conversationId')
+    const root = resolveAvatarWorkspaceSessionRoot(
+      this.avatarsPath,
+      avatarId,
+      this.knowledgeProjectContext,
+      conversationId,
+    )
+    fs.mkdirSync(root, { recursive: true })
+    return root
+  }
+
+  private resolveWorkspacePath(avatarId: string, conversationId: string | undefined, rawPath: string): string {
+    const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    const normalized = (rawPath || '.').replace(/\\/g, '/')
+    if (!normalized.startsWith('/projects/')) {
+      return resolveUnderRoot(workspaceRoot, normalized)
+    }
+    const parts = normalized.split('/').filter(Boolean)
+    if (parts.length < 2) {
+      throw new Error(`非法跨项目路径: ${rawPath}`)
+    }
+    const targetConversationId = parts[1]
+    assertSafeSegment(targetConversationId, 'conversationId')
+    const resolver = this.resolveConversationProjectId ?? (() => DEFAULT_AVATAR_PROJECT_ID)
+    const rawTargetPid = resolver(targetConversationId)
+    const targetProjectId =
+      typeof rawTargetPid === 'string' && rawTargetPid.trim().length > 0
+        ? rawTargetPid.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    if (targetProjectId !== DEFAULT_AVATAR_PROJECT_ID) {
+      assertSafeSegment(targetProjectId, 'projectId')
+    }
+    const targetRoot = resolveAvatarWorkspaceSessionRoot(
+      this.avatarsPath,
+      avatarId,
+      targetProjectId,
+      targetConversationId,
+    )
+    fs.mkdirSync(targetRoot, { recursive: true })
+    const rest = parts.slice(2).join('/')
+    return resolveUnderRoot(targetRoot, rest || '.')
+  }
+
+  private getAssetManifestPath(avatarId: string, conversationId?: string): string {
+    const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    return path.join(workspaceRoot, '.assets.json')
+  }
+
+  private readAssetManifest(avatarId: string, conversationId?: string): AssetManifestItem[] {
+    const manifestPath = this.getAssetManifestPath(avatarId, conversationId)
+    if (!fs.existsSync(manifestPath)) return []
+    try {
+      const raw = fs.readFileSync(manifestPath, 'utf-8')
+      const parsed = JSON.parse(raw) as AssetManifestItem[]
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  private writeAssetManifest(avatarId: string, conversationId: string | undefined, items: AssetManifestItem[]): void {
+    const manifestPath = this.getAssetManifestPath(avatarId, conversationId)
+    fs.writeFileSync(manifestPath, JSON.stringify(items, null, 2), 'utf-8')
+  }
+
+  /**
+   * 在指定 knowledge 根目录上构造并 hydrate KnowledgeRetriever。
+   */
+  private loadRetrieverForKnowledgeRoot(knowledgePath: string): KnowledgeRetriever {
+    const retriever = new KnowledgeRetriever(knowledgePath)
+    const index = loadIndex(knowledgePath)
+    if (index) {
+      retriever.setContexts(index.contexts)
+      retriever.setEmbeddings(index.embeddings)
+      if (index.tokens.size > 0) {
+        retriever.setTokens(index.tokens)
+      }
+    }
+    if (!index) {
+      const indexDir = path.join(knowledgePath, '_index')
+      const tokenCache = loadTokensCache(indexDir)
+      if (tokenCache && tokenCache.size > 0) {
+        retriever.setTokens(tokenCache)
+        console.log(`[tool-router] 仅加载 tokens 缓存 (${tokenCache.size} entries)，contexts/embeddings 不存在`)
+      }
+    }
+    return retriever
+  }
+
+  /** 分身全局 knowledge/ + 当前 execute 上下文中的 project 分区（合并检索）。 */
+  private getKnowledgeSurfaceForContext(avatarId: string): CompositeKnowledgeRetriever {
+    const base = this.getRetriever(avatarId)
+    const pid = this.knowledgeProjectContext
+    if (pid === DEFAULT_AVATAR_PROJECT_ID) {
+      return new CompositeKnowledgeRetriever(base, null, '')
+    }
+    const overlayPath = path.join(this.avatarsPath, avatarId, 'projects', pid, 'knowledge')
+    if (!fs.existsSync(overlayPath)) {
+      return new CompositeKnowledgeRetriever(base, null, '')
+    }
+    const cacheKey = `${avatarId}\x1f${pid}`
+    if (!this.projectKnowledgeRetrievers.has(cacheKey)) {
+      this.projectKnowledgeRetrievers.set(cacheKey, this.loadRetrieverForKnowledgeRoot(overlayPath))
+    }
+    const overlay = this.projectKnowledgeRetrievers.get(cacheKey)!
+    return new CompositeKnowledgeRetriever(base, overlay, `projects/${pid}/knowledge/`)
+  }
+
+  /**
+   * 获取或创建分身的 KnowledgeRetriever，自动加载持久化索引（contexts + embeddings）。
+   */
+  getRetriever(avatarId: string): KnowledgeRetriever {
+    assertSafeSegment(avatarId, '分身ID')
+    if (!this.retrievers.has(avatarId)) {
+      const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+      this.retrievers.set(avatarId, this.loadRetrieverForKnowledgeRoot(knowledgePath))
+    }
+    return this.retrievers.get(avatarId)!
+  }
+
+  /**
+   * 把 retriever 当前的 tokens 落盘到 _index/tokens.json。
+   * 由调用方在 searchKnowledge 之后判断 isTokensDirty() 决定是否调用，
+   * 避免每次查询都 I/O。
+   */
+  saveRetrieverTokens(avatarId: string): void {
+    const retriever = this.retrievers.get(avatarId)
+    if (retriever?.isTokensDirty()) {
+      const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+      const indexDir = path.join(knowledgePath, '_index')
+      try {
+        saveTokensCache(indexDir, retriever.getTokens())
+        retriever.clearTokensDirty()
+      } catch (err) {
+        console.warn(`[tool-router] saveTokensCache 失败: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    const pid = this.knowledgeProjectContext
+    if (pid !== DEFAULT_AVATAR_PROJECT_ID) {
+      const cacheKey = `${avatarId}\x1f${pid}`
+      const projR = this.projectKnowledgeRetrievers.get(cacheKey)
+      if (projR?.isTokensDirty()) {
+        const pPath = path.join(this.avatarsPath, avatarId, 'projects', pid, 'knowledge')
+        try {
+          saveTokensCache(path.join(pPath, '_index'), projR.getTokens())
+          projR.clearTokensDirty()
+        } catch (err) {
+          console.warn(`[tool-router] saveTokensCache(project) 失败: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
+  }
+
+  /**
+   * 使新索引生效：清除缓存的 retriever，下次访问时自动重新加载。
+   */
+  invalidateRetriever(avatarId: string): void {
+    this.retrievers.delete(avatarId)
+    const pfx = `${avatarId}\x1f`
+    for (const key of [...this.projectKnowledgeRetrievers.keys()]) {
+      if (key.startsWith(pfx)) this.projectKnowledgeRetrievers.delete(key)
+    }
+    this.linkGraphCache.delete(avatarId)
+    for (const key of this.excelSourceCache.keys()) {
+      if (key.startsWith(`${avatarId}:`)) this.excelSourceCache.delete(key)
+    }
+  }
+
+  /**
+   * 设置主代理 system prompt 缓存，供子代理委派时共享。
+   */
+  setSystemPrompt(avatarId: string, systemPrompt: string): void {
+    this.systemPromptCache.set(avatarId, systemPrompt)
+  }
+
+  /** 标记/取消某分身为 grep-first（BM25 search_knowledge 让位 grep）。 */
+  setGrepFirst(avatarId: string, value: boolean): void {
+    if (value) this.grepFirstAvatars.add(avatarId)
+    else this.grepFirstAvatars.delete(avatarId)
+  }
+
+  /** 注入 / 清除 Hook 总线（仅 SOUL_USE_NEW_RUNTIME 开启时由 main 调用）。 */
+  setHooks(hooks: HookRegistry | undefined): void {
+    this.hooks = hooks
+  }
+
+
+  private getKnowledgeFiles(avatarId: string): string[] {
+    return this.getRetriever(avatarId).listFiles().filter((file) => file.toLowerCase().endsWith('.md'))
+  }
+
+  private getLinkGraph(avatarId: string): LinkGraph {
+    const cached = this.linkGraphCache.get(avatarId)
+    if (cached) return cached
+
+    const retriever = this.getRetriever(avatarId)
+    const files = this.getKnowledgeFiles(avatarId)
+    const entries = files.map((file) => ({ file, content: retriever.readFile(file) }))
+    const graph = buildKnowledgeLinkGraph(entries)
+    this.linkGraphCache.set(avatarId, graph)
+    return graph
+  }
+
+  anchorKnowledgeChunks(
+    avatarId: string,
+    chunks: Array<{ file: string; heading: string; content: string; score: number }>,
+  ): KnowledgeSearchResult[] {
+    const retriever = this.getKnowledgeSurfaceForContext(avatarId)
+    const fileCache = new Map<string, string>()
+
+    const readMarkdown = (file: string): string => {
+      if (!fileCache.has(file)) fileCache.set(file, retriever.readFile(file))
+      return fileCache.get(file)!
+    }
+
+    return chunks.map((chunk) => {
+      const heading = chunk.heading?.trim() || ''
+      try {
+        const markdown = readMarkdown(chunk.file)
+        return {
+          ...chunk,
+          anchor: buildKnowledgeSourceAnchor(chunk.file, markdown, chunk.content, heading || undefined),
+        }
+      } catch {
+        return {
+          ...chunk,
+          anchor: { kind: 'knowledge', file: chunk.file, heading: heading || undefined },
+        }
+      }
+    })
+  }
+
+  getRelatedKnowledgeChunks(
+    avatarId: string,
+    question: string,
+    seedFiles: string[],
+    options: { maxRelatedFiles?: number; maxChars?: number; baseScore?: number } = {},
+  ): KnowledgeSearchResult[] {
+    const {
+      maxRelatedFiles = 4,
+      maxChars = 650,
+      baseScore = 0.52,
+    } = options
+
+    const uniqueSeedFiles = Array.from(new Set(seedFiles.filter((file) => typeof file === 'string' && file.trim().length > 0)))
+    if (uniqueSeedFiles.length === 0) return []
+
+    const graph = this.getLinkGraph(avatarId)
+    const linkedFiles = expandLinkedFiles(graph, uniqueSeedFiles, { maxDepth: 2, maxFiles: maxRelatedFiles })
+    if (linkedFiles.length === 0) return []
+
+    const retriever = this.getKnowledgeSurfaceForContext(avatarId)
+    const results: KnowledgeSearchResult[] = []
+
+    for (const linked of linkedFiles) {
+      let markdown: string
+      try {
+        markdown = retriever.readFile(linked.file)
+      } catch {
+        continue
+      }
+      const snippet = selectRelevantSnippet(markdown, question, { maxChars })
+      if (!snippet.content) continue
+      const score = Number((baseScore + linked.relationCount * 0.03 - (linked.depth - 1) * 0.08).toFixed(4))
+      const heading = snippet.heading ? `${snippet.heading}（关联文件）` : '关联文件'
+      results.push({
+        file: linked.file,
+        heading,
+        content: snippet.content,
+        score,
+        anchor: buildKnowledgeSourceAnchor(linked.file, markdown, snippet.content, snippet.heading),
+      })
+    }
+
+    return results
+  }
+
+  buildKnowledgeSearchResults(
+    avatarId: string,
+    query: string,
+    options: { rawTopN?: number; maxChunks?: number; maxPerFile?: number; minDistinctFiles?: number; maxRelatedFiles?: number } = {},
+  ): { results: KnowledgeSearchResult[]; coverage: KnowledgeSearchCoverage } {
+    const {
+      rawTopN = 14,
+      maxChunks = 8,
+      maxPerFile = 3,
+      minDistinctFiles = 3,
+      maxRelatedFiles = 4,
+    } = options
+
+    // coverage 取**原始 retrieve 信号**（rerank/diversity 之前），更能反映"知识库里
+    // 到底有没有靠谱证据"——rerank 后的 hits 受 maxChunks/maxPerFile 截断，不代表召回质量。
+    const { chunks: rawSearchChunks, coverage } =
+      this.getKnowledgeSurfaceForContext(avatarId).searchChunksWithCoverage(query, rawTopN)
+    const rawChunks = this.anchorKnowledgeChunks(avatarId, rawSearchChunks)
+    const reranked = rerankChunksWithDiversity(rawChunks, {
+      maxChunks,
+      maxPerFile,
+      minDistinctFiles,
+      similarityThreshold: 0.82,
+    })
+    const seedFiles = reranked.slice(0, 4).map((chunk) => chunk.file)
+    const relatedChunks = this.getRelatedKnowledgeChunks(avatarId, query, seedFiles, { maxRelatedFiles })
+    const results = rerankChunksWithDiversity([...reranked, ...relatedChunks], {
+      maxChunks,
+      maxPerFile,
+      minDistinctFiles,
+      similarityThreshold: 0.82,
+    })
+    return { results, coverage }
+  }
+
+  private loadExcelSource(avatarId: string, file: string): CachedExcelSource['parsed'] {
+    const jsonPath = path.join(this.avatarsPath, avatarId, 'knowledge', '_excel', `${file}.json`)
+    const cacheKey = `${avatarId}:${file}`
+
+    let stat
+    try {
+      stat = fs.statSync(jsonPath)
+    } catch {
+      throw new Error(`Excel 数据源不存在: _excel/${file}.json`)
+    }
+
+    const cached = this.excelSourceCache.get(cacheKey)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.parsed
+    }
+
+    let raw: string
+    try {
+      raw = fs.readFileSync(jsonPath, 'utf-8')
+    } catch {
+      throw new Error(`Excel 数据源不存在: _excel/${file}.json`)
+    }
+
+    let parsed: CachedExcelSource['parsed']
+    try {
+      parsed = JSON.parse(raw) as CachedExcelSource['parsed']
+    } catch (e) {
+      throw new Error(`Excel JSON 解析失败: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+    }
+
+    this.excelSourceCache.set(cacheKey, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      parsed,
+    })
+    return parsed
+  }
+
+  /** 执行工具调用 */
+  async execute(
+    avatarId: string,
+    request: ToolCallRequest,
+    callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>,
+    conversationId?: string,
+    /** 会话所属 Avatar 项目分区，影响合并知识检索范围 */
+    knowledgeProjectId?: string,
+  ): Promise<ToolCallResult> {
+    assertSafeSegment(avatarId, '分身ID')
+    const { name, arguments: args } = request
+    const hookStart = this.hooks ? Date.now() : 0
+
+    const prevCtx = this.knowledgeProjectContext
+    const pid =
+      typeof knowledgeProjectId === 'string' && knowledgeProjectId.trim().length > 0
+        ? knowledgeProjectId.trim()
+        : DEFAULT_AVATAR_PROJECT_ID
+    try {
+      if (pid !== DEFAULT_AVATAR_PROJECT_ID) assertSafeSegment(pid, 'projectId')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    this.knowledgeProjectContext = pid
+
+    try {
+      let result: ToolCallResult
+      switch (name) {
+        case 'read_file':
+          result = this.readFile(avatarId, conversationId, args); break
+        case 'read_lines':
+          result = this.readLines(avatarId, conversationId, args); break
+        case 'write_file':
+          result = this.writeFile(avatarId, conversationId, args); break
+        case 'list_files':
+          result = this.listFiles(avatarId, conversationId, args); break
+        case 'grep':
+          result = this.grepWorkspace(avatarId, conversationId, args); break
+        case 'copy_files':
+          result = this.copyFiles(avatarId, conversationId, args); break
+        case 'str_replace_edit':
+          result = this.strReplaceEdit(avatarId, conversationId, args); break
+        case 'multi_edit':
+          result = this.multiEdit(avatarId, conversationId, args); break
+        case 'delete_file':
+          result = this.deleteFile(avatarId, conversationId, args); break
+        case 'git_status':
+          result = await this.gitStatus(avatarId, conversationId, args); break
+        case 'git_diff':
+          result = await this.gitDiff(avatarId, conversationId, args); break
+        case 'notebook_edit':
+          result = this.notebookEdit(avatarId, conversationId, args); break
+        case 'register_assets':
+          result = this.registerAssets(avatarId, conversationId, args); break
+        case 'unregister_assets':
+          result = this.unregisterAssets(avatarId, conversationId, args); break
+        case 'read_knowledge_file':
+          result = this.readKnowledgeFile(avatarId, args); break
+        case 'search_knowledge':
+          result = this.searchKnowledge(avatarId, args); break
+        case 'list_knowledge_files':
+          result = this.listKnowledgeFiles(avatarId); break
+        case 'knowledge_grep':
+          result = this.knowledgeGrep(avatarId, args); break
+        case 'knowledge_glob':
+          result = this.knowledgeGlob(avatarId, args); break
+        case 'knowledge_navigate':
+          result = this.knowledgeNavigate(avatarId, args); break
+        case 'list_wiki_concepts':
+          result = await this.listWikiConcepts(avatarId, args); break
+        case 'read_wiki_concept':
+          result = await this.readWikiConcept(avatarId, args); break
+        case 'read_life_episode':
+          result = await this.readLifeEpisode(avatarId, args); break
+        case 'recall_conversation':
+          result = await this.recallConversation(avatarId, args); break
+        case 'pin_episode':
+          result = await this.pinEpisodeTool(avatarId, args); break
+        case 'add_episode_note':
+          result = await this.addEpisodeNoteTool(avatarId, args); break
+        case 'add_standing_order':
+          result = this.addStandingOrderTool(avatarId, args, conversationId); break
+        case 'memory_update':
+          result = this.memoryUpdateTool(avatarId, args); break
+        case 'list_daily_summaries':
+          result = this.listDailySummariesTool(avatarId, args); break
+        case 'read_daily_summary':
+          result = this.readDailySummaryTool(avatarId, args); break
+        case 'match_palace_rooms':
+          result = await this.matchPalaceRoomsTool(avatarId, args); break
+        case 'build_palace_context_card':
+          result = await this.buildPalaceContextCardTool(avatarId, args); break
+        case 'write_palace_room':
+          result = await this.writePalaceRoomTool(avatarId, args); break
+        case 'write_palace_profile':
+          result = await this.writePalaceProfileTool(avatarId, args); break
+        case 'list_palace_commitments':
+          result = await this.listPalaceCommitmentsTool(avatarId, args); break
+        case 'add_palace_commitment':
+          result = await this.addPalaceCommitmentTool(avatarId, args); break
+        case 'update_palace_commitment':
+          result = await this.updatePalaceCommitmentTool(avatarId, args); break
+        case 'list_palace_inbox':
+          result = await this.listPalaceInboxTool(avatarId, args); break
+        case 'add_palace_inbox_item':
+          result = await this.addPalaceInboxItemTool(avatarId, args); break
+        case 'update_palace_inbox_item':
+          result = await this.updatePalaceInboxItemTool(avatarId, args); break
+        case 'list_design_systems':
+          result = this.listDesignSystems(args); break
+        case 'read_design_system':
+          result = this.readDesignSystem(args); break
+        case 'search_design_systems':
+          result = this.searchDesignSystems(args); break
+        case 'query_excel':
+          result = this.queryExcel(avatarId, args); break
+        case 'export_excel':
+          result = this.exportExcel(avatarId, conversationId, args); break
+        case 'generate_document':
+          result = await this.generateDocument(avatarId, conversationId, args); break
+        case 'calculate_roi':
+          result = this.calculateRoi(args); break
+        case 'load_skill':
+          result = this.loadSkill(avatarId, args, conversationId); break
+        case 'sop_report':
+          result = this.sopReport(avatarId, conversationId, args); break
+        case 'delegate_task':
+        case 'task':
+          // task 是 delegate_task 的升级别名（九层重构 2026-04-30），保留 delegate_task 兼容旧 skill
+          result = await this.delegateTask(avatarId, args, callLLM, conversationId); break
+        case 'glob':
+          // glob 是 list_files 的语义别名：把 pattern 映射到 list_files 的 glob 参数
+          result = this.listFiles(avatarId, conversationId, {
+            ...args,
+            glob: typeof args.pattern === 'string' ? args.pattern : (args.glob as string | undefined),
+          }); break
+        case 'ask_question':
+          result = this.askQuestion(args); break
+        case 'generate_image':
+          result = await this.generateImage(avatarId, conversationId, args); break
+        case 'switch_mode':
+          result = this.switchMode(args); break
+        case 'exec_shell':
+          result = await this.execShell(avatarId, conversationId, args); break
+        case 'exec_code':
+          result = await this.execCode(avatarId, conversationId, args); break
+        case 'await_shell':
+          result = await this.awaitShell(args); break
+        case 'kill_shell':
+          result = this.killShell(args); break
+        case 'web_search':
+          result = await this.webSearch(args); break
+        case 'cn_web_search':
+          result = await this.cnWebSearch(args); break
+        case 'web_fetch':
+          result = await this.webFetch(args); break
+        case 'read_user_file':
+          result = this.readUserFile(args); break
+        case 'list_user_folder':
+          result = this.listUserFolder(args); break
+        case 'read_tool_ref':
+          result = this.readToolRefTool(avatarId, conversationId, args); break
+        case 'list_mcp_tools':
+          result = this.listMcpTools(args); break
+        case 'call_mcp_tool':
+          result = await this.callMcpTool(args); break
+        default:
+          return { content: '', error: `未知工具: ${name}` }
+      }
+      // v0.6.0: 如果本次工具调用触发了 lazy tokenize，把新的 tokens 落盘到
+      // _index/tokens.json，下次重启不用再花 30-180 秒重新 segmentit 分词。
+      // 覆盖所有可能调 retriever.searchChunks 的工具（search_knowledge、内部 wiki 注入等），
+      // 不只是显式 search_knowledge。
+      this.saveRetrieverTokens(avatarId)
+      // 2026-05-18: Tool Result 压缩层（TokenJuice 启发）。
+      // 仅压缩 content；error 字段不动。透传白名单 + env 短路在 compressToolResult 内部处理。
+      // 任何异常自动降级为原文（compressor 内 try/catch 兜底），绝不破坏工具输出。
+      if (result.content && !result.error) {
+        const before = result.content.length
+        const compressed = compressToolResult(name, result.content, this.compressConfig)
+        if (compressed.finalChars < before) {
+          console.log(`[tool-router] compress ${name}: ${before} → ${compressed.finalChars} chars (-${before - compressed.finalChars}, droppedSections=${compressed.droppedSections})`)
+          result = { ...result, content: compressed.content }
+        }
+      }
+      // 2026-05-18: Tool Result Lazy Store（TDAI symbolic memory 启发）。
+      // 长 web_fetch 等输出落盘到 workspaces/<conv>/tool-refs/，prompt 只留 body_lazy_ref 标记。
+      // 默认 off（SOUL_TOOL_LAZY_RETRIEVAL=on 启用）；仅对 lazyStoreConfig.allowedTools 触发。
+      // 需要 conversationId 才能拿 workspace 路径；无 convId 时跳过 lazy（如 delegate_task 内部调用）。
+      if (
+        result.content && !result.error
+        && this.lazyStoreConfig.enabled
+        && this.lazyStoreConfig.allowedTools.has(name)
+        && conversationId
+      ) {
+        try {
+          const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+          const lazied = maybeStoreLazyRef(result.content, this.lazyStoreConfig, {
+            workspaceRoot,
+            toolName: name,
+            toolArgs: args,
+          })
+          if (lazied.stored) {
+            console.log(`[tool-router] lazy-store ${name}: stored as ${lazied.callId}, prompt content ${result.content.length} → ${lazied.content.length} chars`)
+            result = { ...result, content: lazied.content }
+          }
+        } catch (err) {
+          // 失败不影响原结果——lazy 是优化层，不是核心路径
+          console.warn(`[tool-router] lazy-store ${name} 失败（降级为原文）:`, err instanceof Error ? err.message : String(err))
+        }
+      }
+      if (this.hooks) {
+        try {
+          await this.hooks.fire({
+            point: HookPoint.POST_TOOL_USE,
+            timestamp: Date.now(),
+            toolName: name,
+            args,
+            result,
+            durationMs: Date.now() - hookStart,
+            error: result.error,
+          })
+        } catch {
+          // Hook 绝不影响工具结果回流（registry.fire 内已吞 handler 异常，这里再兜一层）
+        }
+      }
+      return result
+    } catch (error) {
+      return { content: '', error: error instanceof Error ? error.message : String(error) }
+    } finally {
+      this.knowledgeProjectContext = prevCtx
+    }
+  }
+
+  // ─── 知识库工具 ──────────────────────────────────────────────────────────────
+
+  private readFile(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const filePath = (args.path as string) ?? ''
+    if (!filePath) return { content: '', error: '缺少 path 参数' }
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, filePath)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return { content: '', error: `文件不存在: ${filePath}` }
+    }
+    const offset = typeof args.offset === 'number' ? Math.max(0, Math.floor(args.offset)) : 0
+    const limit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000
+    const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
+    const sliced = lines.slice(offset, offset + limit)
+    return { content: sliced.map((line, idx) => `${offset + idx + 1}|${line}`).join('\n') }
+  }
+
+  /**
+   * 读取用户授权根路径下的任意文件（Marvis File Agent 借鉴，2026-05-22）。
+   *
+   * 与 readFile 的区别：
+   *   - readFile 限定 avatar workspace，路径不能逃逸
+   *   - readUserFile 允许跨 workspace 读，但**仅限**用户在设置里显式授权的根目录
+   *
+   * 权限模型：
+   *   - 用户在「设置 → 用户文件根」里添加 absolute path（settings 表 key=`user_file_roots`，值为 JSON 数组）
+   *   - 调用时检查 path 是否落在任一授权根下（用 path.relative 实现，避免 startsWith 误判 /foo vs /foobar）
+   *   - 未授权或未配置 getSetting → 直接返错 + 给用户操作指引
+   *
+   * 默认保守关闭——没显式授权前任何读取都拒绝，零安全风险。
+   */
+  private readUserFile(args: Record<string, unknown>): ToolCallResult {
+    const filePath = typeof args.path === 'string' ? args.path.trim() : ''
+    if (!filePath) return { content: '', error: '缺少 path 参数（需要绝对路径）' }
+    if (!path.isAbsolute(filePath)) {
+      return { content: '', error: 'read_user_file 仅接受绝对路径；若读 avatar workspace 内文件请用 read_file' }
+    }
+    const guard = this.checkUserFileRoot(filePath)
+    if (!guard.ok) return { content: '', error: guard.reason }
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      return { content: '', error: `文件不存在或不是普通文件: ${filePath}` }
+    }
+    // 大小硬上限：之前 readFileSync 整文件读入再 split，授权了大目录后 LLM 让工具去读
+    // GB 级日志会直接 OOM 主进程。10 MB 已经够 ~10 万行普通文本日志，足够单次工具调用
+    // 决策；用户需要超大文件请走 offset 分页或换专用工具。
+    const MAX_USER_FILE_BYTES = 10 * 1024 * 1024
+    // limit 上限：之前没 cap，LLM 可以传 limit: 999999 让工具吐巨量字符占满 context。
+    // 5000 行已经远超任何合理「让 LLM 看一段」场景；超过即截断，并通过提示让 LLM 用 offset 翻页。
+    const MAX_LIMIT_LINES = 5000
+    // 单行字符上限：阻止 minified JSON / single-line log（如 9MB 单行）整行回吐撑爆 context。
+    const MAX_LINE_CHARS = 4000
+    // 返回总字符上限：行数 cap 对单行超长无效，再加一层 grand-total 兜底。
+    const MAX_TOTAL_CHARS = 80_000
+    const stat = fs.statSync(filePath)
+    if (stat.size > MAX_USER_FILE_BYTES) {
+      return {
+        content: '',
+        error: `文件过大（${(stat.size / 1024 / 1024).toFixed(1)}MB > ${MAX_USER_FILE_BYTES / 1024 / 1024}MB 上限）；请缩窄目标或换专用工具`,
+      }
+    }
+    const offset = typeof args.offset === 'number' ? Math.max(0, Math.floor(args.offset)) : 0
+    const rawLimit = typeof args.limit === 'number' ? Math.max(1, Math.floor(args.limit)) : 2000
+    const limit = Math.min(rawLimit, MAX_LIMIT_LINES)
+    const lines = fs.readFileSync(filePath, 'utf-8').split(/\r?\n/)
+    const sliced = lines.slice(offset, offset + limit)
+    let truncatedLineCount = 0
+    let totalCharBudget = MAX_TOTAL_CHARS
+    const rendered: string[] = []
+    let stoppedAtIdx = sliced.length
+    for (let i = 0; i < sliced.length; i++) {
+      const raw = sliced[i]
+      let line = raw
+      if (line.length > MAX_LINE_CHARS) {
+        line = `${line.slice(0, MAX_LINE_CHARS)}…[truncated, full length ${raw.length} chars]`
+        truncatedLineCount++
+      }
+      const prefixed = `${offset + i + 1}|${line}`
+      if (prefixed.length + 1 > totalCharBudget) {
+        stoppedAtIdx = i
+        break
+      }
+      rendered.push(prefixed)
+      totalCharBudget -= prefixed.length + 1
+    }
+    const hintParts: string[] = []
+    if (lines.length > offset + limit) {
+      hintParts.push(`文件共 ${lines.length} 行，本次只返回 ${offset + 1}-${offset + sliced.length} 行；继续读请加 offset=${offset + sliced.length}`)
+    }
+    if (stoppedAtIdx < sliced.length) {
+      hintParts.push(`返回字符达 ${MAX_TOTAL_CHARS} 上限，仅返回前 ${stoppedAtIdx} 行；继续读请加 offset=${offset + stoppedAtIdx}`)
+    }
+    if (truncatedLineCount > 0) {
+      hintParts.push(`${truncatedLineCount} 行单行超 ${MAX_LINE_CHARS} 字符已截断（典型 minified JSON / single-line log）`)
+    }
+    const tailHint = hintParts.length > 0 ? `\n[hint] ${hintParts.join('；')}` : ''
+    return { content: rendered.join('\n') + tailHint }
+  }
+
+  /**
+   * 列出用户授权根路径下的目录内容（Marvis File Agent 借鉴）。
+   * 权限模型同 readUserFile。
+   */
+  private listUserFolder(args: Record<string, unknown>): ToolCallResult {
+    const dirPath = typeof args.path === 'string' ? args.path.trim() : ''
+    if (!dirPath) return { content: '', error: '缺少 path 参数（需要绝对路径）' }
+    if (!path.isAbsolute(dirPath)) {
+      return { content: '', error: 'list_user_folder 仅接受绝对路径；若列 avatar workspace 内目录请用 list_files' }
+    }
+    const guard = this.checkUserFileRoot(dirPath)
+    if (!guard.ok) return { content: '', error: guard.reason }
+    if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+      return { content: '', error: `目录不存在或不是目录: ${dirPath}` }
+    }
+    // entries 数量上限 + 总字符上限，避免授权了大目录（如 ~/Downloads 数万项）
+    // 一次性把所有 entries join 出来撑爆工具输出 / context
+    const MAX_ENTRIES = 500
+    const MAX_TOTAL_CHARS = 50_000
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    const allLines = entries
+      .map((e) => {
+        const tag = e.isDirectory() ? 'DIR ' : e.isFile() ? 'FILE' : 'OTHER'
+        return `${tag}\t${e.name}`
+      })
+      .sort()
+    const sliced = allLines.slice(0, MAX_ENTRIES)
+    const rendered: string[] = []
+    let budget = MAX_TOTAL_CHARS
+    let stoppedAt = sliced.length
+    for (let i = 0; i < sliced.length; i++) {
+      const line = sliced[i]
+      if (line.length + 1 > budget) {
+        stoppedAt = i
+        break
+      }
+      rendered.push(line)
+      budget -= line.length + 1
+    }
+    const hintParts: string[] = []
+    if (allLines.length > MAX_ENTRIES) {
+      hintParts.push(`目录共 ${allLines.length} 项，本次只返回前 ${sliced.length} 项；可改用 read_user_file 精读特定子项`)
+    }
+    if (stoppedAt < sliced.length) {
+      hintParts.push(`返回字符达 ${MAX_TOTAL_CHARS} 上限，仅返回前 ${stoppedAt} 项`)
+    }
+    const tailHint = hintParts.length > 0 ? `\n[hint] ${hintParts.join('；')}` : ''
+    const body = rendered.join('\n') || '(空目录)'
+    return { content: body + tailHint }
+  }
+
+  /**
+   * 校验 absolute path 是否落在用户授权根目录下。
+   *
+   * `path.relative(root, target)` 不以 `..` 开头且不是绝对路径，则 target 在 root 下。
+   * 这种判定比 `startsWith` 安全：`/foo` vs `/foobar` 的边界 case 不会误判。
+   *
+   * 2026-05-24 安全加固：仅做字符串路径比较会被 symlink 绕过——
+   * 授权目录里若存在 symlink 指向外部（如 `/safe/evil → /etc/passwd`），
+   * `path.relative` 仍认为 target 在 `/safe` 内，但 `fs.readFileSync` 默认跟随
+   * symlink 读到外部内容。因此对 target 和 roots **双向都做 realpath 解析**
+   * 后再比较：
+   *   - target 是 symlink 指向外部 → 解析后落在 root 之外 → 拒绝
+   *   - root 本身是 symlink（如 macOS 的 ~/Desktop） → 解析后与 target 真位置一致 → 仍允许
+   * target 不存在时降级到 `realpath(dirname) + basename`，避免误把"文件不存在"
+   * 当成"未授权"，保留更精确的错误。
+   */
+  private checkUserFileRoot(abs: string): { ok: boolean; reason: string } {
+    if (!this.getSetting) {
+      return { ok: false, reason: '主进程未注入 getSetting，无法读取 user_file_roots 设置' }
+    }
+    const raw = (this.getSetting('user_file_roots') ?? '').trim()
+    if (!raw) {
+      return {
+        ok: false,
+        reason: '尚未授权任何用户文件根目录。请用户在「设置 → 用户文件根」里添加 absolute path 后再使用本工具（默认关闭，零安全风险）。',
+      }
+    }
+    let roots: string[]
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed) || !parsed.every((r) => typeof r === 'string')) {
+        return { ok: false, reason: 'user_file_roots 设置格式错误（应为字符串数组的 JSON）' }
+      }
+      roots = parsed
+    } catch (e) {
+      return { ok: false, reason: `user_file_roots 解析失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    const resolveRealPath = (p: string): string => {
+      const normalized = path.resolve(p)
+      try {
+        return fs.realpathSync(normalized)
+      } catch {
+        // target 不存在时降级：解析最深存在的父目录后拼回 basename。
+        // 这样既不会因路径不存在就报"未授权"，又能正确处理 dirname 是 symlink 的情况。
+        const dir = path.dirname(normalized)
+        try {
+          return path.join(fs.realpathSync(dir), path.basename(normalized))
+        } catch {
+          return normalized
+        }
+      }
+    }
+    const normalizedTarget = resolveRealPath(abs)
+    for (const root of roots) {
+      const rootAbs = resolveRealPath(root)
+      const rel = path.relative(rootAbs, normalizedTarget)
+      if (rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
+        return { ok: true, reason: '' }
+      }
+    }
+    return {
+      ok: false,
+      // 不要把 roots.join(', ') 放进 reason：工具结果会进入模型上下文，一次越界探测就能让
+      // 远端模型获知用户授权的完整本地目录名。精确授权根仅在本地「设置」UI 展示。
+      reason: '路径不在任何授权根下（已解析 symlink 后比较真实位置）。授权根目录仅在本地「设置」中可见；若该路径确属允许范围，请用户在「设置」里添加其所在父目录。',
+    }
+  }
+
+  /**
+   * read_lines: 按 1-based 行号读取文件指定区间。
+   *
+   * 与 read_file 互补：read_file 用 0-based offset+limit 偏移读，read_lines 直接传
+   * start_line/end_line（左闭右闭，更符合 LLM 阅读栈跟踪/diff/lint 报错的直觉）。
+   *
+   * 设计要点：
+   *   - start_line 默认 1（文件首行）
+   *   - end_line 默认 start_line + READ_LINES_DEFAULT_RANGE - 1（控制单次输出体积，省 token）
+   *   - end_line 自动收口到文件末行；start_line > 文件总行数时报错而非返回空
+   *   - 强制硬上限 READ_LINES_HARD_LIMIT（4000 行）防止 LLM 误传 1～100000 撑爆 context
+   *   - 输出每行带 `${行号}|${内容}` 前缀，与 read_file 保持一致，方便下游再次按行号编辑
+   *
+   * 参数：
+   *   path: string        — 工作区相对路径（必填）
+   *   start_line?: number — 起始行号（1-based，默认 1）
+   *   end_line?: number   — 结束行号（1-based，包含；默认 start_line + 199）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private readLines(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const filePath = (args.path as string) ?? ''
+    if (!filePath) return { content: '', error: '缺少 path 参数' }
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, filePath)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return { content: '', error: `文件不存在: ${filePath}` }
+    }
+
+    const startLine = typeof args.start_line === 'number' && Number.isFinite(args.start_line)
+      ? Math.max(1, Math.floor(args.start_line))
+      : 1
+
+    const lines = fs.readFileSync(abs, 'utf-8').split(/\r?\n/)
+    const totalLines = lines.length
+    if (startLine > totalLines) {
+      return {
+        content: '',
+        error: `start_line=${startLine} 超过文件总行数 ${totalLines}（文件: ${filePath}）`,
+      }
+    }
+
+    const requestedEnd = typeof args.end_line === 'number' && Number.isFinite(args.end_line)
+      ? Math.floor(args.end_line)
+      : startLine + READ_LINES_DEFAULT_RANGE - 1
+    if (requestedEnd < startLine) {
+      return { content: '', error: `end_line(${requestedEnd}) < start_line(${startLine})` }
+    }
+    // 受硬上限约束，再收口到文件末行
+    const cappedEnd = Math.min(
+      totalLines,
+      Math.min(requestedEnd, startLine + READ_LINES_HARD_LIMIT - 1),
+    )
+
+    const sliced = lines.slice(startLine - 1, cappedEnd)
+    const truncated = requestedEnd > cappedEnd
+    const body = sliced.map((line, idx) => `${startLine + idx}|${line}`).join('\n')
+    if (truncated) {
+      return {
+        content: `${body}\n[truncated: 实际返回 ${startLine}-${cappedEnd}/${totalLines}，原请求 end_line=${requestedEnd} 受 ${READ_LINES_HARD_LIMIT} 行硬上限或文件末尾限制]`,
+      }
+    }
+    return { content: body }
+  }
+
+  private writeFile(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const filePath = (args.path as string) ?? ''
+    const content = (args.content as string) ?? ''
+    if (!filePath) return { content: '', error: '缺少 path 参数' }
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, filePath)
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, content, 'utf-8')
+
+    if (typeof args.asset === 'string' && args.asset.trim().length > 0) {
+      const items = this.readAssetManifest(avatarId, conversationId)
+      const rel = path.relative(this.getWorkspaceRoot(avatarId, conversationId), abs).replace(/\\/g, '/')
+      const next = [
+        ...items.filter((it) => !(it.asset === args.asset && it.path === rel)),
+        { asset: args.asset.trim(), path: rel, subtitle: typeof args.subtitle === 'string' ? args.subtitle : undefined },
+      ]
+      this.writeAssetManifest(avatarId, conversationId, next)
+    }
+    return { content: `已写入 ${filePath}` }
+  }
+
+  /**
+   * list_files: 列出工作区目录文件。
+   *
+   * 支持三种过滤方式（互斥优先级 glob > filter；不传则不过滤）：
+   *   - glob:   `**\/*.ts` / `*.tsx` / `src/**\/*.json` 等 glob 模式（LLM 最熟悉）
+   *   - filter: 正则字符串（旧版兼容；走 RegExp(filter, 'i')）
+   *
+   * 当 glob 中出现 `**` 时会自动把 depth 提升到 DEFAULT_MAX_DIR_DEPTH，避免
+   * LLM 传了 `**` 又忘记调大 depth 导致命中不到深层文件。
+   *
+   * 输出条目硬上限 LIST_FILES_HARD_LIMIT（500），超过会截断并附 truncated 标志。
+   */
+  private listFiles(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const relPath = (args.path as string) ?? '.'
+    const offset = typeof args.offset === 'number' ? Math.max(0, Math.floor(args.offset)) : 0
+    const filter = typeof args.filter === 'string' ? args.filter : ''
+    const glob = typeof args.glob === 'string' ? args.glob.trim() : ''
+
+    // glob 含 ** 时强制递归到默认最大深度；否则尊重 LLM 传的 depth（默认 1 层）
+    const requestedDepth = typeof args.depth === 'number' ? Math.max(1, Math.floor(args.depth)) : 1
+    const depth = (glob.includes('**') && requestedDepth < DEFAULT_MAX_DIR_DEPTH)
+      ? DEFAULT_MAX_DIR_DEPTH
+      : requestedDepth
+
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, relPath)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
+      return { content: '', error: `目录不存在: ${relPath}` }
+    }
+
+    const entries: Array<{ path: string; type: 'file' | 'directory' }> = []
+    const walk = (dir: string, level: number): void => {
+      const list = fs.readdirSync(dir, { withFileTypes: true })
+      for (const entry of list) {
+        const full = path.join(dir, entry.name)
+        const rel = path.relative(abs, full).replace(/\\/g, '/')
+        entries.push({ path: rel, type: entry.isDirectory() ? 'directory' : 'file' })
+        if (entry.isDirectory() && level < depth) {
+          walk(full, level + 1)
+        }
+      }
+    }
+    walk(abs, 1)
+
+    let predicate: (e: { path: string; type: 'file' | 'directory' }) => boolean
+    if (glob) {
+      const globRegex = globToRegExp(glob)
+      // glob 通常用于匹配文件；目录条目放行以便 LLM 还能顺着结构往下钻
+      predicate = (e) => e.type === 'directory' || globRegex.test(e.path)
+    } else if (filter) {
+      const regex = new RegExp(filter, 'i')
+      predicate = (e) => regex.test(e.path)
+    } else {
+      predicate = () => true
+    }
+    const filtered = entries.filter(predicate)
+    const page = filtered.slice(offset, offset + LIST_FILES_HARD_LIMIT)
+    const truncated = filtered.length > offset + page.length
+    return {
+      content: JSON.stringify({
+        total: filtered.length,
+        offset,
+        count: page.length,
+        truncated,
+        ...(truncated ? { truncate_hint: `结果超过 ${LIST_FILES_HARD_LIMIT} 条已截断；请用 glob/filter 缩小范围或翻页（offset=${offset + page.length}）。` } : {}),
+        items: page,
+      }, null, 2),
+    }
+  }
+
+  private grepWorkspace(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const pattern = args.pattern as string
+    if (!pattern) return { content: '', error: '缺少 pattern 参数' }
+    const relPath = (args.path as string) ?? '.'
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, relPath)
+    if (!fs.existsSync(abs)) return { content: '', error: `路径不存在: ${relPath}` }
+    const regex = new RegExp(pattern, 'i')
+    const files = fs.statSync(abs).isDirectory()
+      ? collectFilesRecursive(abs, '', DEFAULT_MAX_DIR_DEPTH).filter((f) => fs.statSync(f).isFile())
+      : [abs]
+    const results: Array<{ file: string; line: number; text: string }> = []
+    for (const file of files) {
+      const lines = fs.readFileSync(file, 'utf-8').split(/\r?\n/)
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          results.push({
+            file: path.relative(this.getWorkspaceRoot(avatarId, conversationId), file).replace(/\\/g, '/'),
+            line: i + 1,
+            text: lines[i],
+          })
+        }
+      }
+    }
+    return { content: JSON.stringify({ count: results.length, matches: results.slice(0, 100) }, null, 2) }
+  }
+
+  private copyFiles(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const files = args.files as Array<{ src: string; dest: string; move?: boolean }> | undefined
+    if (!Array.isArray(files) || files.length === 0) return { content: '', error: '缺少 files 参数' }
+    for (const item of files) {
+      const srcAbs = this.resolveWorkspacePath(avatarId, conversationId, item.src)
+      const destAbs = this.resolveWorkspacePath(avatarId, conversationId, item.dest)
+      fs.mkdirSync(path.dirname(destAbs), { recursive: true })
+      fs.cpSync(srcAbs, destAbs, { recursive: true, force: true })
+      if (item.move) fs.rmSync(srcAbs, { recursive: true, force: true })
+    }
+    return { content: `已复制 ${files.length} 项` }
+  }
+
+  private strReplaceEdit(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const filePath = (args.path as string) ?? ''
+    if (!filePath) return { content: '', error: '缺少 path 参数' }
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, filePath)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) return { content: '', error: `文件不存在: ${filePath}` }
+    let content = fs.readFileSync(abs, 'utf-8')
+    const edits = Array.isArray(args.edits) ? args.edits as Array<{ old_string: string; new_string: string }> : null
+    if (edits && edits.length > 0) {
+      for (const edit of edits) {
+        if (!content.includes(edit.old_string)) {
+          return { content: '', error: `old_string 未找到: ${edit.old_string.slice(0, 40)}` }
+        }
+        content = content.replace(edit.old_string, edit.new_string)
+      }
+    } else {
+      const oldString = args.old_string as string
+      const newString = args.new_string as string
+      if (!oldString) return { content: '', error: '缺少 old_string 参数' }
+      if (!content.includes(oldString)) return { content: '', error: 'old_string 未找到' }
+      content = content.replace(oldString, newString ?? '')
+    }
+    fs.writeFileSync(abs, content, 'utf-8')
+    return { content: `已更新 ${filePath}` }
+  }
+
+  /**
+   * multi_edit: 在单个文件内顺序应用多条 string-replace 编辑，原子写入。
+   *
+   * 与 str_replace_edit（已支持 edits 数组）的区别：
+   *   1. 单条编辑可声明 `replace_all`（默认 false 仅替换首次匹配；true 全部替换）
+   *   2. 任意一条 old_string 未命中 → 不写入任何更改，直接报错（真正"全部成功 or 全部回滚"）
+   *   3. 返回每条编辑的命中次数与总命中数，便于 LLM 校验是否符合预期
+   *   4. 显式禁止 old_string === new_string 的"无操作"编辑（防止 LLM 浪费一轮）
+   *
+   * 参数：
+   *   path: string                                 — 工作区相对路径（必填）
+   *   edits: Array<{                              — 至少 1 条
+   *     old_string: string,
+   *     new_string: string,
+   *     replace_all?: boolean (默认 false)
+   *   }>
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private multiEdit(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const filePath = (args.path as string) ?? ''
+    if (!filePath) return { content: '', error: '缺少 path 参数' }
+
+    const rawEdits = args.edits
+    if (!Array.isArray(rawEdits) || rawEdits.length === 0) {
+      return { content: '', error: '缺少 edits 参数（需为至少含 1 条 {old_string, new_string} 的数组）' }
+    }
+
+    interface NormEdit { old_string: string; new_string: string; replace_all: boolean }
+    const edits: NormEdit[] = []
+    for (const [idx, raw] of rawEdits.entries()) {
+      if (!raw || typeof raw !== 'object') {
+        return { content: '', error: `edits[${idx}] 不是对象` }
+      }
+      const e = raw as Record<string, unknown>
+      const oldStr = typeof e.old_string === 'string' ? e.old_string : ''
+      const newStr = typeof e.new_string === 'string' ? e.new_string : ''
+      if (!oldStr) return { content: '', error: `edits[${idx}].old_string 缺失或为空` }
+      if (oldStr === newStr) {
+        return { content: '', error: `edits[${idx}] 的 old_string 与 new_string 相同（无操作编辑），请删除该条` }
+      }
+      edits.push({
+        old_string: oldStr,
+        new_string: newStr,
+        replace_all: e.replace_all === true,
+      })
+    }
+
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, filePath)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return { content: '', error: `文件不存在: ${filePath}` }
+    }
+
+    let working = fs.readFileSync(abs, 'utf-8')
+    const perEditHits: Array<{ index: number; hits: number; replace_all: boolean; old_preview: string }> = []
+
+    // 顺序应用，遇到任意一条 old_string 未命中 → 立即拒绝整个事务
+    for (const [idx, edit] of edits.entries()) {
+      if (!working.includes(edit.old_string)) {
+        return {
+          content: '',
+          error: `edits[${idx}] 失败：old_string 未在文件中找到（截断预览: "${edit.old_string.slice(0, 60)}${edit.old_string.length > 60 ? '...' : ''}"）。事务回滚，文件未改动。`,
+        }
+      }
+      let hits: number
+      if (edit.replace_all) {
+        // 用 split/join 实现安全的全量替换（避免正则元字符问题）
+        const parts = working.split(edit.old_string)
+        hits = parts.length - 1
+        working = parts.join(edit.new_string)
+      } else {
+        hits = 1
+        working = working.replace(edit.old_string, edit.new_string)
+      }
+      perEditHits.push({
+        index: idx,
+        hits,
+        replace_all: edit.replace_all,
+        old_preview: edit.old_string.slice(0, 40),
+      })
+    }
+
+    // 全部成功才落盘
+    fs.writeFileSync(abs, working, 'utf-8')
+
+    const totalHits = perEditHits.reduce((sum, e) => sum + e.hits, 0)
+    return {
+      content: JSON.stringify({
+        path: filePath,
+        edits_applied: edits.length,
+        total_replacements: totalHits,
+        per_edit: perEditHits,
+        hint: '事务已原子提交。如需校验改动效果，建议下一步 read_lines 该文件相关区间。',
+      }, null, 2),
+    }
+  }
+
+  private deleteFile(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const paths = args.paths as string[] | undefined
+    if (!Array.isArray(paths) || paths.length === 0) return { content: '', error: '缺少 paths 参数' }
+    for (const p of paths) {
+      const abs = this.resolveWorkspacePath(avatarId, conversationId, p)
+      fs.rmSync(abs, { recursive: true, force: true })
+    }
+    return { content: `已删除 ${paths.length} 项` }
+  }
+
+  /**
+   * notebook_edit: 编辑 Jupyter notebook (.ipynb) 的单个 cell（修改或新建）。
+   *
+   * .ipynb 是 JSON：顶层有 cells[] 数组，每个 cell 形如：
+   *   { cell_type: 'code'|'markdown'|'raw', source: string|string[], metadata: {...},
+   *     outputs?: [], execution_count?: number|null }
+   *
+   * 行为：
+   *   - is_new_cell=true  → 在 cell_idx 位置插入新 cell（其它 cells 后移）
+   *   - is_new_cell=false → 修改 cell_idx 处现有 cell：把 source 中 old_string 替换为 new_string
+   *     （old_string 为空 → 整段 source 覆写为 new_string；语义与 Cursor notebook_edit 对齐）
+   *   - cell_language 决定 cell_type：
+   *       'python' / 'javascript' / 'typescript' / 'r' / 'sql' / 'shell' / 'other' → 'code'
+   *       'markdown' → 'markdown'
+   *       'raw'      → 'raw'
+   *   - 修改 code cell 的 source 时，重置 execution_count=null 并清空 outputs
+   *     （执行结果与新代码不再对应，避免误导 LLM 与下游消费方）
+   *
+   * 安全：
+   *   - 非 .ipynb 后缀拒绝，避免误伤普通文件
+   *   - JSON.parse / 字段类型校验失败时不写入，原文件不受影响
+   *
+   * 参数：
+   *   target_notebook: string                    — 工作区相对路径（必须 .ipynb 结尾）
+   *   cell_idx: number                          — 0-based cell 索引
+   *   is_new_cell: boolean                      — true 新增；false 修改
+   *   cell_language: string                     — 见上文映射规则
+   *   old_string?: string                       — 修改场景下的待替换串（空串=覆盖整段）
+   *   new_string: string                        — 替换后的新内容（is_new_cell 时为新 cell 内容）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private notebookEdit(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const target = (args.target_notebook as string) ?? ''
+    if (!target) return { content: '', error: '缺少 target_notebook 参数' }
+    if (!target.toLowerCase().endsWith('.ipynb')) {
+      return { content: '', error: `target_notebook 必须以 .ipynb 结尾，实际: ${target}` }
+    }
+
+    const cellIdxRaw = args.cell_idx
+    if (typeof cellIdxRaw !== 'number' || !Number.isInteger(cellIdxRaw) || cellIdxRaw < 0) {
+      return { content: '', error: 'cell_idx 必须是 ≥0 的整数' }
+    }
+    const cellIdx = cellIdxRaw
+
+    const isNewCell = args.is_new_cell === true
+    const language = (args.cell_language as string) ?? ''
+    if (!language) return { content: '', error: '缺少 cell_language 参数' }
+
+    const cellType = mapNotebookCellType(language)
+    if (!cellType) {
+      return { content: '', error: `不支持的 cell_language: "${language}"。可选: python, markdown, javascript, typescript, r, sql, shell, raw, other` }
+    }
+
+    const oldString = typeof args.old_string === 'string' ? args.old_string : ''
+    const newString = typeof args.new_string === 'string' ? args.new_string : ''
+
+    if (!isNewCell && oldString === '' && newString === '') {
+      return { content: '', error: '编辑模式下 old_string 与 new_string 同时为空，无操作可执行' }
+    }
+
+    const abs = this.resolveWorkspacePath(avatarId, conversationId, target)
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      return { content: '', error: `notebook 不存在: ${target}` }
+    }
+
+    let raw: string
+    try {
+      raw = fs.readFileSync(abs, 'utf-8')
+    } catch (e) {
+      return { content: '', error: `读取 notebook 失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    let nb: { cells?: unknown[]; nbformat?: number; nbformat_minor?: number; metadata?: Record<string, unknown> }
+    try {
+      nb = JSON.parse(raw) as typeof nb
+    } catch (e) {
+      return { content: '', error: `notebook JSON 解析失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    if (!nb || typeof nb !== 'object' || !Array.isArray(nb.cells)) {
+      return { content: '', error: 'notebook 结构非法：缺少顶层 cells 数组' }
+    }
+    const cells = nb.cells as Array<Record<string, unknown>>
+
+    if (isNewCell) {
+      if (cellIdx > cells.length) {
+        return { content: '', error: `cell_idx=${cellIdx} 超出范围（当前有 ${cells.length} 个 cell，新增最大下标 ${cells.length}）` }
+      }
+      const newCell: Record<string, unknown> = {
+        cell_type: cellType,
+        metadata: {},
+        source: splitNotebookSource(newString),
+      }
+      if (cellType === 'code') {
+        newCell.execution_count = null
+        newCell.outputs = []
+      }
+      cells.splice(cellIdx, 0, newCell)
+    } else {
+      if (cellIdx >= cells.length) {
+        return { content: '', error: `cell_idx=${cellIdx} 超出范围（当前有 ${cells.length} 个 cell，最大下标 ${cells.length - 1}）` }
+      }
+      const cell = cells[cellIdx]
+      if (!cell || typeof cell !== 'object') {
+        return { content: '', error: `cells[${cellIdx}] 结构非法（不是对象）` }
+      }
+      const currentSource = joinNotebookSource(cell.source)
+      let nextSource: string
+      if (oldString === '') {
+        // 整段覆盖
+        nextSource = newString
+      } else {
+        if (!currentSource.includes(oldString)) {
+          return {
+            content: '',
+            error: `cells[${cellIdx}] 的 source 中未找到 old_string（截断预览: "${oldString.slice(0, 60)}${oldString.length > 60 ? '...' : ''}"）`,
+          }
+        }
+        nextSource = currentSource.replace(oldString, newString)
+      }
+      cell.cell_type = cellType
+      cell.source = splitNotebookSource(nextSource)
+      // source 变化 → 旧的执行结果失效
+      if (cellType === 'code') {
+        cell.execution_count = null
+        cell.outputs = []
+      } else {
+        // 切换到非 code 类型时移除 code 专属字段
+        delete cell.execution_count
+        delete cell.outputs
+      }
+    }
+
+    // 写回；保持 nbformat 字段不变，确保 Jupyter 仍可打开
+    let serialized: string
+    try {
+      serialized = JSON.stringify(nb, null, 1)
+    } catch (e) {
+      return { content: '', error: `notebook 序列化失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    fs.writeFileSync(abs, serialized, 'utf-8')
+
+    return {
+      content: JSON.stringify({
+        target_notebook: target,
+        action: isNewCell ? 'insert' : 'edit',
+        cell_idx: cellIdx,
+        cell_type: cellType,
+        cell_language: language,
+        total_cells: cells.length,
+        hint: '已写入。建议下一步用 read_file 校验 notebook 仍可被 Jupyter 解析。',
+      }, null, 2),
+    }
+  }
+
+  /**
+   * git_status: 在工作区目录下执行 `git status --short`（紧凑格式，省 token）。
+   *
+   * 让 LLM 自我观测："我刚才改动了哪些文件？"，避免重复 read 已写入的文件。
+   *
+   * 安全模型：
+   *   - 直接 spawn('git', [...args], { shell:false, cwd })，参数数组化避免命令注入
+   *   - cwd 锁定到 workspace 目录（受 resolveWorkspacePath 校验，禁穿越）
+   *   - 工作区不是 git 仓库时返回友好提示，不抛错
+   *
+   * 参数：
+   *   path?: string       — 工作区相对路径（默认 "."；用于限定 status 关心的子目录）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private async gitStatus(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const subPath = typeof args.path === 'string' && args.path.trim() ? args.path.trim() : '.'
+    let cwd: string
+    try {
+      cwd = this.resolveWorkspacePath(avatarId, conversationId, subPath)
+    } catch (e) {
+      return { content: '', error: `path 校验失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    if (!fs.existsSync(cwd)) {
+      return { content: '', error: `路径不存在: ${subPath}` }
+    }
+
+    const repoCheck = await runGitCommand(cwd, ['rev-parse', '--show-toplevel'])
+    if (repoCheck.exitCode !== 0) {
+      return {
+        content: '',
+        error: `当前工作区不在 git 仓库中（${cwd}）。请先在该目录执行 git init，或检查 path 是否正确。`,
+      }
+    }
+    const repoRoot = repoCheck.stdout.trim()
+
+    // --short 输出紧凑（每行一个文件，前缀 XY 标记 staged/working tree 状态）
+    // -uall  把未跟踪文件展开到具体文件名（默认 normal 仅显示目录）
+    // -- <path> 限定路径
+    const args4 = ['status', '--short', '-uall']
+    if (subPath !== '.') args4.push('--', subPath)
+
+    const result = await runGitCommand(cwd, args4)
+    if (result.exitCode !== 0) {
+      return { content: '', error: `git status 执行失败 (exit ${result.exitCode}): ${result.stderr || result.stdout}` }
+    }
+    const lines = result.stdout.split(/\r?\n/).filter((l) => l.length > 0)
+    const payload = {
+      repo_root: repoRoot,
+      cwd: subPath,
+      changed_count: lines.length,
+      truncated: result.truncated,
+      hint: lines.length === 0 ? '工作区干净，无改动。' : '前两个字符为状态标记：M=modified, A=added, D=deleted, ?? =untracked, R=renamed。',
+      changes: lines,
+      ...(result.truncated ? { truncate_hint: `输出超过 ${GIT_OUTPUT_MAX_CHARS} 字符已截断；请加 path 参数缩小范围。` } : {}),
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * git_diff: 在工作区目录下执行 `git diff`（默认 worktree 与 index 的差异）。
+   *
+   * 让 LLM 复核自己刚刚的改动，是 multi_edit / write_file 后做"我改对了吗"自检的标配。
+   *
+   * 参数：
+   *   path?: string         — 限定 diff 的文件/目录（默认全仓库）
+   *   staged?: boolean      — true → `git diff --cached`（已 staged 改动）
+   *   max_chars?: number    — 输出字符上限（默认 GIT_OUTPUT_MAX_CHARS，硬上限亦相同；超出按字符截断）
+   *   context_lines?: number — diff 上下文行数（默认 3，git 标准）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private async gitDiff(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const subPath = typeof args.path === 'string' && args.path.trim() ? args.path.trim() : '.'
+    let cwd: string
+    try {
+      cwd = this.resolveWorkspacePath(avatarId, conversationId, subPath)
+    } catch (e) {
+      return { content: '', error: `path 校验失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    if (!fs.existsSync(cwd)) {
+      return { content: '', error: `路径不存在: ${subPath}` }
+    }
+
+    const repoCheck = await runGitCommand(cwd, ['rev-parse', '--show-toplevel'])
+    if (repoCheck.exitCode !== 0) {
+      return { content: '', error: `当前工作区不在 git 仓库中（${cwd}）。` }
+    }
+
+    const staged = args.staged === true
+    const contextLines = typeof args.context_lines === 'number' && args.context_lines >= 0 && args.context_lines <= 50
+      ? Math.floor(args.context_lines)
+      : 3
+
+    const cmdArgs = ['diff', `--unified=${contextLines}`, '--no-color']
+    if (staged) cmdArgs.push('--cached')
+    if (subPath !== '.') cmdArgs.push('--', subPath)
+
+    const maxChars = typeof args.max_chars === 'number' && args.max_chars > 0
+      ? Math.min(GIT_OUTPUT_MAX_CHARS, Math.floor(args.max_chars))
+      : GIT_OUTPUT_MAX_CHARS
+    const result = await runGitCommand(cwd, cmdArgs, maxChars)
+    if (result.exitCode !== 0) {
+      return { content: '', error: `git diff 执行失败 (exit ${result.exitCode}): ${result.stderr || result.stdout}` }
+    }
+
+    const diff = result.stdout
+    if (!diff.trim()) {
+      return {
+        content: JSON.stringify({
+          cwd: subPath,
+          staged,
+          empty: true,
+          hint: staged ? '没有 staged 改动。' : '工作区与 index 之间没有差异。',
+        }, null, 2),
+      }
+    }
+
+    return {
+      content: JSON.stringify({
+        cwd: subPath,
+        staged,
+        context_lines: contextLines,
+        char_count: diff.length,
+        truncated: result.truncated,
+        ...(result.truncated ? { truncate_hint: `diff 超过 ${maxChars} 字符已截断；请加 path 参数限定到具体文件，或调小 context_lines。` } : {}),
+        diff,
+      }, null, 2),
+    }
+  }
+
+  private registerAssets(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const items = args.items as AssetManifestItem[] | undefined
+    if (!Array.isArray(items) || items.length === 0) return { content: '', error: '缺少 items 参数' }
+    const existing = this.readAssetManifest(avatarId, conversationId)
+    let merged = [...existing]
+    for (const item of items) {
+      if (!item.asset || !item.path) continue
+      merged = merged.filter((it) => !(it.asset === item.asset && it.path === item.path))
+      merged.push(item)
+    }
+    this.writeAssetManifest(avatarId, conversationId, merged)
+    return { content: `已注册 ${items.length} 个资产` }
+  }
+
+  private unregisterAssets(avatarId: string, conversationId: string | undefined, args: Record<string, unknown>): ToolCallResult {
+    const items = args.items as Array<{ asset?: string; path?: string }> | undefined
+    if (!Array.isArray(items) || items.length === 0) return { content: '', error: '缺少 items 参数' }
+    const existing = this.readAssetManifest(avatarId, conversationId)
+    const filtered = existing.filter((it) => {
+      return !items.some((target) => {
+        const assetMatch = target.asset ? target.asset === it.asset : true
+        const pathMatch = target.path ? target.path === it.path : true
+        return assetMatch && pathMatch
+      })
+    })
+    this.writeAssetManifest(avatarId, conversationId, filtered)
+    return { content: `已移除 ${existing.length - filtered.length} 个资产` }
+  }
+
+  /**
+   * 检查指定分身的知识库是否为空（即 knowledge/ 下无任何 .md 文件）。
+   *
+   * 用于 search_knowledge / read_knowledge_file / list_knowledge_files
+   * 三个工具入口的前置短路：当知识库为空时直接返回明确"空库"信号，
+   * 避免 LLM 反复换关键词检索导致工具调用循环 + 流式响应静默超时。
+   *
+   * 边界：仅 README.md 占位文件也会被 listFiles() 计入；只有当 listFiles 返回
+   * 空数组时才视为"完全空库"。检测异常时降级为 false（保留原行为，不误伤）。
+   *
+   * @author zhi.qu
+   * @date 2026-05-07
+   */
+  private isKnowledgeBaseEmpty(avatarId: string): boolean {
+    try {
+      return this.getKnowledgeSurfaceForContext(avatarId).listFiles().length === 0
+    } catch (err) {
+      console.warn(`[tool-router] isKnowledgeBaseEmpty 检测失败 avatarId=${avatarId}: ${err instanceof Error ? err.message : String(err)}`)
+      return false
+    }
+  }
+
+  /**
+   * 构造"知识库为空"的统一工具结果。
+   *
+   * 文案以 [KNOWLEDGE_BASE_EMPTY] 信号词开头 + 明确的"停止再次调用"指令，
+   * 引导 LLM 立即终止知识库工具调用、直接向用户解释知识库未导入文件，
+   * 而不是凭通用知识硬答。
+   *
+   * @author zhi.qu
+   * @date 2026-05-07
+   */
+  private buildEmptyKnowledgeBaseHint(): ToolCallResult {
+    return {
+      content: [
+        '[KNOWLEDGE_BASE_EMPTY]',
+        '当前分身知识库为空（0 个文件）。',
+        '⛔ 请立即停止调用 search_knowledge / read_knowledge_file。',
+        '请直接告诉用户：「当前知识库尚未导入任何文件，无法基于知识库回答；请先在知识库中导入相关资料。」',
+      ].join('\n'),
+    }
+  }
+
+  private readKnowledgeFile(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const rawFilePath = args.file_path as string
+    if (!rawFilePath) return { content: '', error: '缺少 file_path 参数' }
+    // LLM 经常把 search_knowledge 返回的 [来源: knowledge/...] 锚点里的路径整段复制过来，
+    // 带 `knowledge/` 前缀。但 retriever.readFile 期望相对 knowledge/ 根的路径，多一层前缀
+    // 就会拼成 `<avatar>/knowledge/knowledge/foo.md`，文件确实不存在。两种形式都接受。
+    const filePath = rawFilePath.replace(/^(?:\.\/)?knowledge\//i, '')
+    if (this.isKnowledgeBaseEmpty(avatarId)) {
+      console.log(`[tool-router] read_knowledge_file 短路：知识库为空 avatarId=${avatarId} file=${filePath}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
+    const content = this.getKnowledgeSurfaceForContext(avatarId).readFile(filePath)
+    const anchor = formatSourceAnchor(buildWholeFileKnowledgeAnchor(filePath, content))
+    return { content: `${anchor}
+${content}` }
+  }
+
+  /**
+   * read_life_episode：读取当前分身人生时间轴中某个具体事件的完整正文。
+   *
+   * 让分身在用户问起具体往事时能"翻日记"取细节，而不是凭 system prompt 里的
+   * consolidated.md 概览硬编往事。consolidated.md 已写入 system prompt，但
+   * 单条 episode 全文（2-5K 字 × 60-100 个）不进 prompt——成本和上下文双重考虑。
+   *
+   * 路径安全：
+   *   - avatarId：外层 execute 里已经过 assertSafeSegment（构造 ToolRouter 时上游守卫）
+   *   - episodeId：通过 store.ts 的 getLifeEpisodePath → assertSafeEpisodeId
+   *     校验（assertSafeSegment + 拒绝 `.` 开头 + 拒绝扩展名）
+   *
+   * @author zhi.qu
+   * @date 2026-05-09
+   */
+  private async readLifeEpisode(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const episodeId = typeof args.id === 'string' ? args.id.trim() : ''
+    if (!episodeId) return { content: '', error: '缺少 id 参数（形如 ep-0007-first-snow）' }
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const text = await readLifeEpisodeFromStore(this.avatarsPath, avatarId, episodeId)
+      if (text === null) {
+        return { content: '', error: `事件不存在: ${episodeId}（请先用 system prompt 中「我的人生」章节出现的 id）` }
+      }
+      return { content: `[来源: life/episodes/${episodeId}.md]\n${text}` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * recall_conversation：在过去对话情景记忆中按关键词检索 top-k（v17 Phase 2b）。
+   *
+   * 与 read_life_episode 的对偶——读"和用户的过去"而不是"想象人生"。
+   * v1 评分简单：query 拆词后按 title/theme/keyQuotes/summary 命中次数排序。
+   * 跳过 forgotten 状态的 episode（被遗忘机制筛掉的不该再被翻出来）。
+   *
+   * 入参：
+   *   - query (string): 必填，关键词或自然语言查询
+   *   - top_k (number): 可选，默认 3，最多 5
+   *
+   * 返回：每条 episode 的 title / theme / summary / keyQuotes / valence / importance。
+   * 无命中时直说"无相关记忆"，让分身按 prompt 守则承认遗忘。
+   *
+   * @author zhi.qu
+   * @date 2026-05-17
+   */
+  private async recallConversation(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return { content: '', error: '缺少 query 参数' }
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 3
+    const topK = Math.max(1, Math.min(5, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const episodes = await listConversationEpisodes(this.avatarsPath, avatarId)
+      const candidates = episodes.filter((e) => e.consolidationStatus !== 'forgotten')
+
+      if (candidates.length === 0) {
+        return { content: '[recall_conversation] 当前分身还没有对话情景记忆——可能是第一次和你聊，或所有过去会话都没产生显著记忆。' }
+      }
+
+      // 简单评分：query 拆词后在 title/theme/keyQuotes/summary 里的命中次数。
+      // 中文不分词：把 query 按空白切（覆盖英文/数字），同时取 2-3 字 n-gram 覆盖中文。
+      // 1 字 token 噪声太大（"我"/"的"/"了"几乎所有 episode 都命中），跳过。
+      const tokens: string[] = (() => {
+        const out = new Set<string>()
+        // 空白切分
+        for (const w of query.split(/\s+/).filter(s => s.length > 0)) {
+          if (w.length >= 2) out.add(w)
+        }
+        // 2-3 字 n-gram（处理无空白中文）
+        const noSpace = query.replace(/\s+/g, '')
+        for (let n = 2; n <= 3; n++) {
+          for (let i = 0; i + n <= noSpace.length; i++) {
+            out.add(noSpace.slice(i, i + n))
+          }
+        }
+        return Array.from(out)
+      })()
+      const scored = candidates.map((ep) => {
+        const haystack = [ep.title, ep.theme, ep.summary, ep.keyQuotes.join(' ')].join(' ').toLowerCase()
+        let score = 0
+        for (const t of tokens) {
+          // 短 token 用全字符串匹配——简单但够用
+          const occ = haystack.split(t.toLowerCase()).length - 1
+          score += occ * (t.length >= 2 ? 2 : 1) // 2+ 字 token 权重略高
+        }
+        // 重要性 + 情感强度作为次级排序加成（命中 0 时不算回忆）
+        const importanceBoost = ep.importance * 0.1
+        return { ep, score: score + (score > 0 ? importanceBoost : 0) }
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+
+      if (scored.length === 0) {
+        return { content: `[recall_conversation] 关键词 "${query}" 在我和你的过去对话里没找到相关记忆——这个我记不太清了。` }
+      }
+
+      const lines: string[] = [
+        `[recall_conversation] 关键词 "${query}" 命中 ${scored.length} 条记忆：\n`,
+      ]
+      for (const { ep, score } of scored) {
+        lines.push(`---\n## ${ep.title}（importance=${ep.importance}, valence=${ep.valence}, score=${score.toFixed(1)}）`)
+        if (ep.theme.trim()) lines.push(`**主题**：${ep.theme}`)
+        lines.push(`**summary**：${ep.summary}`)
+        if (ep.keyQuotes.length > 0) {
+          lines.push(`**关键引用**：\n${ep.keyQuotes.map((q) => `  - ${q}`).join('\n')}`)
+        }
+        lines.push('')
+      }
+      return { content: lines.join('\n') }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * pin_episode：agent 主动把一条 episode 标记为长期保留（v18 Letta-style）。
+   *
+   * pin 后该 episode：
+   *   - 永远进 system prompt 的「我和你的过去」段，无视 salience 排名
+   *   - 不会被 episode-forgetter 衰减为 blurred/forgotten
+   *
+   * 设计原则：**不提供 unpin 工具**——防止 LLM 自我审查删除负面记忆。
+   * 达到 MAX_PINNED_EPISODES_PER_AVATAR 上限后拒绝 pin，强制 LLM 取舍。
+   *
+   * 入参：
+   *   - conversation_id (string): 必填，要 pin 的 episode 所属会话 ID
+   *   - reason (string): 必填，pin 的理由（≤ 300 字，便于人工审计）
+   */
+  private async pinEpisodeTool(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const conversationId = typeof args.conversation_id === 'string' ? args.conversation_id.trim() : ''
+    const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
+    if (!conversationId) return { content: '', error: '缺少 conversation_id 参数' }
+    if (!reason) return { content: '', error: '缺少 reason 参数——必须说明 pin 的理由' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const res = await pinConversationEpisode(this.avatarsPath, avatarId, conversationId, reason)
+      if (!res.ok) return { content: '', error: res.error }
+      if (res.alreadyPinned) {
+        return { content: `[pin_episode] conversation_id=${conversationId} 已经处于 pinned 状态（幂等返回）。当前共 ${res.totalPinned} 条 pinned。` }
+      }
+      return { content: `[pin_episode] 已 pin episode ${conversationId}。当前共 ${res.totalPinned} 条 pinned；本框架不提供 unpin 工具，需人工编辑 .json 才能解除。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_episode_note：给已有 episode 追加 agent 主动补充的笔记（v18 Letta-style）。
+   *
+   * 设计目的：LLM 抽取 summary 时可能漏掉一些用户重视的事实，事后意识到时可补 note。
+   * 不覆盖 summary / keyQuotes 等原字段；只在 notes[] 末尾追加。
+   *
+   * 入参：
+   *   - conversation_id (string): 必填
+   *   - note (string): 必填，≤ MAX_NOTE_LENGTH 字符
+   */
+  private async addEpisodeNoteTool(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const conversationId = typeof args.conversation_id === 'string' ? args.conversation_id.trim() : ''
+    const note = typeof args.note === 'string' ? args.note : ''
+    if (!conversationId) return { content: '', error: '缺少 conversation_id 参数' }
+    if (!note.trim()) return { content: '', error: '缺少 note 参数' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const res = await appendConversationEpisodeNote(this.avatarsPath, avatarId, conversationId, note)
+      if (!res.ok) return { content: '', error: res.error }
+      return { content: `[add_episode_note] 已为 episode ${conversationId} 追加笔记。当前共 ${res.totalNotes} 条 notes。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_standing_order：写入一条永久工作流规则（v18 OpenClaw 借鉴）。
+   *
+   * 与 chatStore 的 [STANDING_ORDER] tag 抽取互为补充——tag 是被动抽取，工具是主动写入。
+   * 写到 memory/standing-orders.md，soul-loader 装配 system prompt 时整段注入紧挨 soul.md。
+   *
+   * 设计原则：
+   *   - **不提供 remove 工具**：防 LLM 自我审查删规则，需人工编辑文件
+   *   - 上限 MAX_STANDING_ORDERS=50 后拒绝
+   *   - 单条 ≤ MAX_ORDER_LENGTH=500 字符
+   */
+  private addStandingOrderTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+    conversationId?: string,
+  ): ToolCallResult {
+    const order = typeof args.order === 'string' ? args.order : ''
+    if (!order.trim()) return { content: '', error: '缺少 order 参数' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const source = conversationId || 'tool-call'
+      const res = appendStandingOrder(this.avatarsPath, avatarId, order, source)
+      if (!res.ok) return { content: '', error: res.error ?? '写入 standing order 失败' }
+      return { content: `[add_standing_order] 已写入永久规则。当前共 ${res.total} 条 standing orders。规则在下次会话装配 system prompt 时生效。` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * memory_update：有界长期记忆原子编辑（A4 · Hermes Agent 借鉴）。
+   *
+   * store="memory" → memory/MEMORY.md（分身运行笔记）
+   * store="user"   → memory/USER.md（用户画像）
+   * op="add" / "replace" / "remove"（replace/remove 需 id）
+   *
+   * 设计原则：
+   *   - **预算即遗忘**：全文件字符预算（resolveMemoryCharBudget，默认 5000），
+   *     超预算的 add/replace 被拒绝并回显现有条目清单，迫使 LLM 先删/合并
+   *   - **遗忘留痕**：remove/replace 的被删原文回显在工具结果里，
+   *     整个操作是可见的工具调用记录（合 Soul 溯源基因）
+   *   - **legacy 不可编辑**：条目标记之前的自由格式内容结构上不受任何 op 影响
+   *   - **冻结快照**：写入只落盘，下次装配 system prompt 才生效（保 prefix cache）
+   */
+  private memoryUpdateTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const storeName = args.store === 'user' ? 'user' : args.store === 'memory' ? 'memory' : null
+    if (!storeName) return { content: '', error: 'store 必须是 "memory"（MEMORY.md）或 "user"（USER.md）' }
+    const opName = typeof args.op === 'string' ? args.op : ''
+    if (opName !== 'add' && opName !== 'replace' && opName !== 'remove') {
+      return { content: '', error: 'op 必须是 "add" / "replace" / "remove" 之一' }
+    }
+    const id = typeof args.id === 'string' ? args.id.trim() : ''
+    const content = typeof args.content === 'string' ? args.content : ''
+    let op: BoundedMemoryOp
+    if (opName === 'add') {
+      op = { type: 'add', content }
+    } else if (opName === 'replace') {
+      if (!id) return { content: '', error: 'replace 需要 id（取自记忆条目标记 <!-- mem:<id> ... -->）' }
+      op = { type: 'replace', id, content }
+    } else {
+      if (!id) return { content: '', error: 'remove 需要 id（取自记忆条目标记 <!-- mem:<id> ... -->）' }
+      op = { type: 'remove', id }
+    }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const fileName = storeName === 'user' ? 'USER.md' : 'MEMORY.md'
+      const filePath = path.join(this.avatarsPath, avatarId, 'memory', fileName)
+      const budget = resolveMemoryCharBudget(this.avatarsPath, avatarId)
+      const doc = readBoundedMemoryFile(filePath)
+      const res = applyBoundedMemoryOp(doc, op, budget)
+      if (!res.ok) {
+        return { content: '', error: `[memory_update] ${res.error}` }
+      }
+      writeBoundedMemoryFileAtomic(filePath, res.doc)
+      const usageText = formatMemoryUsageHeader(res.usage.chars, res.usage.budget)
+      const lines = [
+        `[memory_update] ${storeName === 'user' ? 'USER.md' : 'MEMORY.md'} ${opName} 成功（条目 id=${res.entryId}）。当前用量 ${usageText}。写入已落盘，下次会话装配 system prompt 时生效。`,
+      ]
+      if (res.forgotten !== undefined) {
+        // 遗忘留痕：被删除/覆盖的原文回显，让每次遗忘都是可见记录
+        lines.push(`被${opName === 'remove' ? '删除' : '覆盖'}的原内容（留痕）：${res.forgotten}`)
+      }
+      return { content: lines.join('\n') }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * list_daily_summaries：列出已生成的 daily summary 日期（OpenHuman 借鉴）。
+   * 时间维度对偶 recall_conversation：后者按 query 召回 episode，前者按日期定位。
+   *
+   * 入参：start? / end? (YYYY-MM-DD)，limit? (默认 14)
+   */
+  private listDailySummariesTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const start = typeof args.start === 'string' ? args.start.trim() : undefined
+    const end = typeof args.end === 'string' ? args.end.trim() : undefined
+    const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 14
+    const limit = Math.max(1, Math.min(60, Math.floor(rawLimit)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const dates = listDailySummaries(this.avatarsPath, avatarId, { start, end, limit })
+      if (dates.length === 0) {
+        return { content: '[list_daily_summaries] 当前分身没有 daily summary——可能未到首次 cron 触发时间，或当时段没有显著对话。' }
+      }
+      return { content: `[list_daily_summaries] 命中 ${dates.length} 天：\n${dates.map(d => `- ${d}`).join('\n')}` }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** read_daily_summary：读单日 summary 全文。入参 date (YYYY-MM-DD) */
+  private readDailySummaryTool(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const date = typeof args.date === 'string' ? args.date.trim() : ''
+    if (!date) return { content: '', error: '缺少 date 参数（格式 YYYY-MM-DD）' }
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const content = readDailySummary(this.avatarsPath, avatarId, date)
+      if (!content) {
+        return { content: `[read_daily_summary] ${date} 的 daily summary 不存在或当天无显著对话。可先调 list_daily_summaries 看哪些日期有数据。` }
+      }
+      return { content }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * match_palace_rooms：根据用户任务匹配 Palace 路线卡。
+   *
+   * P1 只读，不创建/修改 Palace。无 routes 时给出明确提示。
+   */
+  private async matchPalaceRoomsTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const task = typeof args.task === 'string' ? args.task.trim() : ''
+    if (!task) return { content: '', error: '缺少 task 参数' }
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 5
+    const topK = Math.max(1, Math.min(10, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      if (rooms.length === 0) {
+        return {
+          content: '[match_palace_rooms] 当前分身还没有 Palace 路线卡。可在 palace/rooms/ 下创建 <id>.md 路线卡后再匹配。',
+        }
+      }
+      const matches = matchPalaceRooms(rooms, task, { limit: topK })
+      if (matches.length === 0) {
+        return {
+          content: JSON.stringify({
+            task,
+            count: 0,
+            hint: '未命中路线卡。可先用通用方式澄清任务，或创建新的 palace/rooms/<id>.md。',
+            available_rooms: rooms.slice(0, 10).map(r => ({ id: r.id, name: r.name, triggers: r.triggers })),
+          }, null, 2),
+        }
+      }
+      return {
+        content: JSON.stringify({
+          task,
+          count: matches.length,
+          matches: matches.map(m => ({
+            id: m.room.id,
+            name: m.room.name,
+            score: Number(m.score.toFixed(2)),
+            reasons: m.reasons,
+            description: m.room.description,
+            triggers: m.room.triggers,
+            requires_context_card: m.room.requiresContextCard,
+            required_files: m.room.requiredFiles,
+            read_order: m.room.readOrder,
+            pitfalls: m.room.pitfalls,
+            output_location: m.room.outputLocation,
+            sediment_targets: m.room.sedimentTargets,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * build_palace_context_card：生成任务前上下文包。
+   *
+   * 返回的卡片用于先展示给用户确认；P1 不继续执行任务，也不写入 inbox/commitments。
+   */
+  private async buildPalaceContextCardTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const task = typeof args.task === 'string' ? args.task.trim() : ''
+    if (!task) return { content: '', error: '缺少 task 参数' }
+    const roomId = typeof args.room_id === 'string' ? args.room_id.trim() : ''
+    const rawTopK = typeof args.top_k === 'number' && Number.isFinite(args.top_k) ? args.top_k : 3
+    const topK = Math.max(1, Math.min(5, Math.floor(rawTopK)))
+
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      const matches = matchPalaceRooms(rooms, task, { limit: topK })
+      const room = roomId
+        ? await readPalaceRoom(this.avatarsPath, avatarId, roomId)
+        : matches[0]?.room
+
+      if (roomId && !room) {
+        return { content: '', error: `Palace 路线卡不存在: ${roomId}` }
+      }
+
+      const [profile, company, commitments, inbox, extras] = await Promise.all([
+        readPalaceProfile(this.avatarsPath, avatarId),
+        readPalaceCompany(this.avatarsPath, avatarId),
+        readPalaceCommitments(this.avatarsPath, avatarId),
+        readPalaceInbox(this.avatarsPath, avatarId),
+        listPalaceContextExtras(this.avatarsPath, avatarId, task),
+      ])
+
+      return {
+        content: buildPalaceContextCard({
+          task,
+          room: room ?? undefined,
+          matches,
+          profile,
+          company,
+          commitments,
+          inbox,
+          peopleProfiles: extras.peopleProfiles,
+          materials: extras.materials,
+        }),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * 职场路线卡确定性召回（问题1·B）。
+   *
+   * 与 match_palace_rooms / build_palace_context_card 工具不同：这是给"每轮消息前"的
+   * 确定性预检用的——用户消息命中触发级路线卡（score ≥ minScore）时，直接构建"任务前
+   * 上下文包"返回，由渲染层注入 systemBlocks，不再依赖模型自觉调工具。
+   *
+   * 召回是纯增益：无路线卡 / 未命中 / 出错都返回 null，绝不阻断对话。
+   * minScore 默认 80 = 至少一个触发词子串/精确命中（matcher 里 trigger 命中记 80/120，
+   * 路线名/关键词命中分值更低），确保只在真正命中路线时召回，不被零散关键词误触发。
+   */
+  async recallPalaceForMessage(
+    avatarId: string,
+    task: string,
+    minScore = 80,
+  ): Promise<{ roomId: string; roomName: string; score: number; card: string } | null> {
+    try {
+      const t = typeof task === 'string' ? task.trim() : ''
+      if (!t) return null
+      assertSafeSegment(avatarId, '分身ID')
+      const rooms = await listPalaceRooms(this.avatarsPath, avatarId)
+      if (rooms.length === 0) return null
+      // matchPalaceRooms 是主进程事件循环上的同步计算，且 extractMatchTerms 的 n-gram
+      // 数量随文本长度增长。触发词是短语、通常在请求开头，截断头部 200 字既够召回、
+      // 又把每条消息的同步开销钉成常量，避免长消息拖慢发送。
+      const matchTask = t.length > 200 ? t.slice(0, 200) : t
+      const matches = matchPalaceRooms(rooms, matchTask, { limit: 3 })
+      const top = matches[0]
+      if (!top || top.score < minScore) return null
+
+      const [profile, company, commitments, inbox, extras] = await Promise.all([
+        readPalaceProfile(this.avatarsPath, avatarId),
+        readPalaceCompany(this.avatarsPath, avatarId),
+        readPalaceCommitments(this.avatarsPath, avatarId),
+        readPalaceInbox(this.avatarsPath, avatarId),
+        listPalaceContextExtras(this.avatarsPath, avatarId, t),
+      ])
+      const card = buildPalaceContextCard({
+        task: t,
+        room: top.room,
+        matches,
+        profile,
+        company,
+        commitments,
+        inbox,
+        peopleProfiles: extras.peopleProfiles,
+        materials: extras.materials,
+      })
+      // 一键入职 nudge：命中职场任务但画像还空 → 附一句建档提示（自然时机、上下文相关、
+      // 画像一填就不再出现）。不放 session 级注入，避免破坏"空 palace 零注入"原则。
+      const cardWithNudge = hasSubstantivePalaceProfile(profile)
+        ? card
+        : `${card}\n\n${PALACE_ONBOARDING_NUDGE}`
+      return { roomId: top.room.id, roomName: top.room.name, score: Number(top.score.toFixed(2)), card: cardWithNudge }
+    } catch {
+      // 召回失败静默降级：不能因为路线卡读取异常就中断用户这轮对话
+      return null
+    }
+  }
+
+  /**
+   * write_palace_room：创建或更新一张 Palace 路线卡（palace/rooms/<id>.md）。
+   *
+   * 持久写入，会改变分身的任务路由。只在用户明确要“把这类任务的流程固化成路线卡”，
+   * 或已把路线卡草案展示给用户并得到确认后调用。
+   */
+  /**
+   * write_palace_profile：写入职业画像 profile.md 或公司情况 company.md（整文件替换）。
+   *
+   * 补齐 palace 的关键缺口——此前模型侧无任何工具能写画像/公司，只能用户在面板手填；而画像
+   * 是 palace 唯一稳定注入 system prompt 的内容，用户不填→注入永远为空→palace 半瘫。有了它，
+   * 分身可在用户首次用职场功能时访谈几句、据此写入，让"职场底色"跨会话生效。
+   *
+   * 整文件替换：更新时调用方应保留仍有效的部分。持久写入，桌面端灰区确认、Plan 模式禁写。
+   */
+  private async writePalaceProfileTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const target = this.optionalTrimmedString(args.target)
+      const content = typeof args.content === 'string' ? args.content : ''
+      if (target !== 'profile' && target !== 'company') {
+        return { content: '', error: "target 必须是 'profile'（职业画像）或 'company'（公司情况）" }
+      }
+      if (!content.trim()) {
+        return { content: '', error: '缺少 content 参数（完整 Markdown 内容，整文件替换）' }
+      }
+      if (target === 'profile') await writePalaceProfile(this.avatarsPath, avatarId, content)
+      else await writePalaceCompany(this.avatarsPath, avatarId, content)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          target,
+          chars: content.length,
+          note: '已写入落盘；下个会话装配 system prompt 时注入生效（冻结快照语义）',
+        }, null, 2),
+      }
+    } catch (err) {
+      // 超字符预算等会在此转成 error 返回（assertProfileContentWithinCap 抛出）
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private async writePalaceRoomTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      const name = this.optionalTrimmedString(args.name)
+      if (!id) return { content: '', error: '缺少 id 参数（路线卡文件名，如 daily-room，仅小写字母/数字/连字符）' }
+      if (!name) return { content: '', error: '缺少 name 参数' }
+
+      const input: PalaceRoomInput = { id, name }
+      this.assignOptionalString(input, 'description', args.description)
+      this.assignOptionalString(input, 'outputLocation', args.output_location)
+      this.assignOptionalString(input, 'toneGuidance', args.tone_guidance)
+      this.assignOptionalString(input, 'body', args.body)
+      const triggers = this.optionalStringArray(args.triggers); if (triggers) input.triggers = triggers
+      const requiredFiles = this.optionalStringArray(args.required_files); if (requiredFiles) input.requiredFiles = requiredFiles
+      const readOrder = this.optionalStringArray(args.read_order); if (readOrder) input.readOrder = readOrder
+      const conditionalReads = this.optionalStringArray(args.conditional_reads); if (conditionalReads) input.conditionalReads = conditionalReads
+      const pitfalls = this.optionalStringArray(args.pitfalls); if (pitfalls) input.pitfalls = pitfalls
+      const sedimentTargets = this.parsePalaceSedimentTargetList(args.sediment_targets); if (sedimentTargets) input.sedimentTargets = sedimentTargets
+      if (typeof args.priority === 'number' && Number.isFinite(args.priority)) input.priority = args.priority
+      if (typeof args.enabled === 'boolean') input.enabled = args.enabled
+      if (typeof args.requires_context_card === 'boolean') input.requiresContextCard = args.requires_context_card
+
+      const { room, created } = await upsertPalaceRoom(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          action: created ? 'created' : 'updated',
+          room: {
+            id: room.id,
+            name: room.name,
+            triggers: room.triggers,
+            priority: room.priority,
+            enabled: room.enabled,
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private parsePalaceSedimentTargetList(value: unknown): PalaceSedimentTarget[] | undefined {
+    const arr = this.optionalStringArray(value)
+    if (!arr) return undefined
+    return arr.filter((v): v is PalaceSedimentTarget => (PALACE_SEDIMENT_TARGETS as readonly string[]).includes(v))
+  }
+
+  /**
+   * list_palace_commitments：查看承诺账本，默认只返回未关闭承诺并按逾期/到期排序。
+   */
+  private async listPalaceCommitmentsTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const filter: PalaceCommitmentFilter = {
+        includeClosed: args.include_closed === true,
+      }
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) filter.status = status
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) filter.direction = direction
+      const query = this.optionalTrimmedString(args.query)
+      if (query) filter.query = query
+      const dueBefore = this.optionalTrimmedString(args.due_before)
+      if (dueBefore) filter.dueBefore = dueBefore
+      const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 20
+      filter.limit = Math.max(1, Math.min(100, Math.floor(rawLimit)))
+
+      const commitments = await listPalaceCommitmentViews(this.avatarsPath, avatarId, filter)
+      return {
+        content: JSON.stringify({
+          count: commitments.length,
+          include_closed: filter.includeClosed,
+          commitments: commitments.map(c => ({
+            id: c.id,
+            title: c.title,
+            counterparty: c.counterparty,
+            promise: c.promise,
+            direction: c.direction,
+            status: c.status,
+            due_at: c.dueAt,
+            urgency: c.urgency,
+            days_until_due: c.daysUntilDue,
+            owner: c.owner,
+            source: c.source,
+            tags: c.tags ?? [],
+            notes: c.notes ?? [],
+            updated_at: c.updatedAt,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_palace_commitment：新增明确承诺。不要把普通偏好或模糊意图写入账本。
+   */
+  private async addPalaceCommitmentTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const title = this.optionalTrimmedString(args.title)
+      const promise = this.optionalTrimmedString(args.promise)
+      if (!title) return { content: '', error: '缺少 title 参数' }
+      if (!promise) return { content: '', error: '缺少 promise 参数' }
+
+      const input: PalaceCommitmentCreateInput = { title, promise }
+      this.assignOptionalString(input, 'id', args.id)
+      this.assignOptionalString(input, 'counterparty', args.counterparty)
+      this.assignOptionalString(input, 'dueAt', args.due_at)
+      this.assignOptionalString(input, 'owner', args.owner)
+      this.assignOptionalString(input, 'source', args.source)
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) input.direction = direction
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) input.status = status
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) input.tags = tags
+      const notes = this.optionalStringArray(args.notes)
+      if (notes) input.notes = notes
+
+      const commitment = await addPalaceCommitment(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          commitment: {
+            id: commitment.id,
+            title: commitment.title,
+            counterparty: commitment.counterparty,
+            promise: commitment.promise,
+            direction: commitment.direction,
+            status: commitment.status,
+            due_at: commitment.dueAt,
+            urgency: commitment.urgency,
+            days_until_due: commitment.daysUntilDue,
+            owner: commitment.owner,
+            source: commitment.source,
+            tags: commitment.tags ?? [],
+            notes: commitment.notes ?? [],
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * update_palace_commitment：更新承诺状态、截止日或备注。
+   */
+  private async updatePalaceCommitmentTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      if (!id) return { content: '', error: '缺少 id 参数' }
+
+      const patch: PalaceCommitmentUpdatePatch = {}
+      const direction = this.parsePalaceCommitmentDirection(args.direction, 'direction')
+      if (direction) patch.direction = direction
+      const status = this.parsePalaceCommitmentStatus(args.status, 'status')
+      if (status) patch.status = status
+      this.assignOptionalString(patch, 'title', args.title)
+      this.assignOptionalString(patch, 'counterparty', args.counterparty)
+      this.assignOptionalString(patch, 'promise', args.promise)
+      this.assignOptionalNullableString(patch, 'dueAt', args.due_at)
+      this.assignOptionalNullableString(patch, 'owner', args.owner)
+      this.assignOptionalNullableString(patch, 'source', args.source)
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) patch.tags = tags
+      this.assignOptionalString(patch, 'appendNote', args.append_note)
+      if (Object.keys(patch).length === 0) {
+        return { content: '', error: '没有可更新字段。请至少传 status / due_at / append_note 等一个字段。' }
+      }
+
+      const commitment = await updatePalaceCommitmentEntry(this.avatarsPath, avatarId, id, patch)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          commitment: {
+            id: commitment.id,
+            title: commitment.title,
+            counterparty: commitment.counterparty,
+            promise: commitment.promise,
+            direction: commitment.direction,
+            status: commitment.status,
+            due_at: commitment.dueAt,
+            urgency: commitment.urgency,
+            days_until_due: commitment.daysUntilDue,
+            owner: commitment.owner,
+            source: commitment.source,
+            tags: commitment.tags ?? [],
+            notes: commitment.notes ?? [],
+          },
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * list_palace_inbox：查看任务后沉淀队列，默认只返回 pending 项。
+   */
+  private async listPalaceInboxTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const filter: PalaceInboxFilter = {
+        includeResolved: args.include_resolved === true,
+      }
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) filter.status = status
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) filter.kind = kind
+      const target = this.parsePalaceSedimentTarget(args.target, 'target')
+      if (target) filter.target = target
+      const query = this.optionalTrimmedString(args.query)
+      if (query) filter.query = query
+      const rawLimit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? args.limit : 20
+      filter.limit = Math.max(1, Math.min(100, Math.floor(rawLimit)))
+
+      const items = await listPalaceInboxItems(this.avatarsPath, avatarId, filter)
+      return {
+        content: JSON.stringify({
+          count: items.length,
+          include_resolved: filter.includeResolved,
+          items: items.map(item => ({
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            content: item.content,
+            status: item.status,
+            target: item.target,
+            source: item.source,
+            confidence: item.confidence,
+            tags: item.tags ?? [],
+            created_at: item.createdAt,
+            updated_at: item.updatedAt,
+          })),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * add_palace_inbox_item：把任务后可复用的新事实/写法/路线建议放入待确认队列。
+   */
+  private async addPalaceInboxItemTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const title = this.optionalTrimmedString(args.title)
+      const content = this.optionalTrimmedString(args.content)
+      if (!title) return { content: '', error: '缺少 title 参数' }
+      if (!content) return { content: '', error: '缺少 content 参数' }
+
+      const input: PalaceInboxCreateInput = { title, content }
+      this.assignOptionalString(input, 'id', args.id)
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) input.kind = kind
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) input.status = status
+      const target = this.parsePalaceSedimentTarget(args.target, 'target')
+      if (target) input.target = target
+      this.assignOptionalString(input, 'source', args.source)
+      const confidence = this.parseOptionalConfidence(args.confidence)
+      if (confidence !== undefined && confidence !== null) input.confidence = confidence
+      const tags = this.optionalStringArray(args.tags)
+      if (tags && tags.length > 0) input.tags = tags
+
+      const item = await addPalaceInboxItem(this.avatarsPath, avatarId, input)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          item: this.serializePalaceInboxItem(item),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * update_palace_inbox_item：按用户确认更新沉淀项状态、目标或正文。
+   */
+  private async updatePalaceInboxItemTool(
+    avatarId: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+      const id = this.optionalTrimmedString(args.id)
+      if (!id) return { content: '', error: '缺少 id 参数' }
+
+      const patch: PalaceInboxUpdatePatch = {}
+      const kind = this.parsePalaceInboxKind(args.kind, 'kind')
+      if (kind) patch.kind = kind
+      const status = this.parsePalaceInboxStatus(args.status, 'status')
+      if (status) patch.status = status
+      const target = this.parseOptionalNullablePalaceTarget(args.target, 'target')
+      if (target !== undefined) patch.target = target
+      this.assignOptionalString(patch, 'title', args.title)
+      this.assignOptionalString(patch, 'content', args.content)
+      this.assignOptionalNullableString(patch, 'source', args.source)
+      const confidence = this.parseOptionalConfidence(args.confidence)
+      if (confidence !== undefined) patch.confidence = confidence
+      const tags = this.optionalStringArray(args.tags)
+      if (tags) patch.tags = tags
+      if (Object.keys(patch).length === 0) {
+        return { content: '', error: '没有可更新字段。请至少传 status / target / content 等一个字段。' }
+      }
+
+      const item = await updatePalaceInboxItemEntry(this.avatarsPath, avatarId, id, patch)
+      return {
+        content: JSON.stringify({
+          ok: true,
+          item: this.serializePalaceInboxItem(item),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private parsePalaceCommitmentDirection(
+    value: unknown,
+    label: string,
+  ): PalaceCommitmentDirection | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_COMMITMENT_DIRECTIONS.includes(text as PalaceCommitmentDirection)) {
+      return text as PalaceCommitmentDirection
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_COMMITMENT_DIRECTIONS.join(' / ')}`)
+  }
+
+  private parsePalaceCommitmentStatus(
+    value: unknown,
+    label: string,
+  ): PalaceCommitmentStatus | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_COMMITMENT_STATUSES.includes(text as PalaceCommitmentStatus)) {
+      return text as PalaceCommitmentStatus
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_COMMITMENT_STATUSES.join(' / ')}`)
+  }
+
+  private parsePalaceInboxKind(value: unknown, label: string): PalaceInboxKind | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_INBOX_KINDS.includes(text as PalaceInboxKind)) return text as PalaceInboxKind
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_INBOX_KINDS.join(' / ')}`)
+  }
+
+  private parsePalaceInboxStatus(value: unknown, label: string): PalaceInboxStatus | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_INBOX_STATUSES.includes(text as PalaceInboxStatus)) return text as PalaceInboxStatus
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_INBOX_STATUSES.join(' / ')}`)
+  }
+
+  private parsePalaceSedimentTarget(value: unknown, label: string): PalaceSedimentTarget | undefined {
+    const text = this.optionalTrimmedString(value)
+    if (!text) return undefined
+    if (PALACE_SEDIMENT_TARGETS.includes(text as PalaceSedimentTarget)) {
+      return text as PalaceSedimentTarget
+    }
+    throw new Error(`非法 ${label}: ${text}，可选值：${PALACE_SEDIMENT_TARGETS.join(' / ')}`)
+  }
+
+  private parseOptionalNullablePalaceTarget(
+    value: unknown,
+    label: string,
+  ): PalaceSedimentTarget | null | undefined {
+    if (value === undefined) return undefined
+    if (value === null) return null
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (!text) return null
+    return this.parsePalaceSedimentTarget(text, label) ?? null
+  }
+
+  private parseOptionalConfidence(value: unknown): number | null | undefined {
+    if (value === undefined) return undefined
+    if (value === null || value === '') return null
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error('confidence 必须是 0 到 1 之间的数字')
+    }
+    return Number(value.toFixed(4))
+  }
+
+  private serializePalaceInboxItem(item: {
+    id: string
+    kind: PalaceInboxKind
+    title: string
+    content: string
+    status: PalaceInboxStatus
+    createdAt: string
+    updatedAt: string
+    target?: PalaceSedimentTarget
+    source?: string
+    confidence?: number
+    tags?: string[]
+  }): Record<string, unknown> {
+    return {
+      id: item.id,
+      kind: item.kind,
+      title: item.title,
+      content: item.content,
+      status: item.status,
+      target: item.target,
+      source: item.source,
+      confidence: item.confidence,
+      tags: item.tags ?? [],
+      created_at: item.createdAt,
+      updated_at: item.updatedAt,
+    }
+  }
+
+  private optionalTrimmedString(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined
+    const text = value.trim()
+    return text || undefined
+  }
+
+  private optionalStringArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) return undefined
+    const out = value
+      .filter((item): item is string => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean)
+    return out.length > 0 ? Array.from(new Set(out)) : []
+  }
+
+  private assignOptionalString<T extends object, K extends keyof T>(
+    target: T,
+    key: K,
+    value: unknown,
+  ): void {
+    const text = this.optionalTrimmedString(value)
+    if (text !== undefined) target[key] = text as T[K]
+  }
+
+  private assignOptionalNullableString<T extends object, K extends keyof T>(
+    target: T,
+    key: K,
+    value: unknown,
+  ): void {
+    if (value === undefined) return
+    if (value === null) {
+      target[key] = null as T[K]
+      return
+    }
+    const text = typeof value === 'string' ? value.trim() : ''
+    target[key] = (text || null) as T[K]
+  }
+
+  private searchKnowledge(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const mode = typeof args.mode === 'string' ? args.mode : 'search'
+    if (mode === 'list') return this.listKnowledgeFiles(avatarId)
+    if (mode !== 'search') return { content: '', error: `未知 search_knowledge mode: ${mode}` }
+    if (this.isKnowledgeBaseEmpty(avatarId)) {
+      console.log(`[tool-router] search_knowledge 短路：知识库为空 avatarId=${avatarId}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
+    // grep-first 分身：BM25 让位 grep。直接引导改用 grep 工具，不构建 chunk
+    // （避免大库同步 buildChunks 读全库锁死主进程）。跑过 build-knowledge-index 后可在
+    // avatar.config.json 关掉 grepFirst 恢复 BM25。
+    if (this.grepFirstAvatars.has(avatarId)) {
+      return {
+        content: '本分身知识库为 grep-first 检索模式，BM25 语义检索（search_knowledge）已停用。请改用 `knowledge_grep`（按关键词/正则精确搜路径或内容，可加 scope 限定目录）/ `knowledge_glob`（按文件名）/ `list_knowledge_files` / `read_knowledge_file`（读全文）检索。',
+      }
+    }
+    const query = args.query as string
+    if (!query) return { content: '', error: '缺少 query 参数' }
+    const rawTopN = typeof args.top_n === 'number' && Number.isFinite(args.top_n) ? args.top_n : 5
+    const topN = Math.min(12, Math.max(1, Math.floor(rawTopN)))
+    const { results, coverage } = this.buildKnowledgeSearchResults(avatarId, query, {
+      rawTopN: Math.max(topN + 6, 10),
+      maxChunks: topN,
+      maxPerFile: 3,
+      minDistinctFiles: Math.min(3, Math.max(1, topN)),
+      maxRelatedFiles: Math.min(4, Math.max(2, topN)),
+    })
+    // tokens 落盘由 execute() 末尾统一处理（覆盖所有内部 searchChunks 调用方）
+    if (results.length === 0) {
+      const header = formatCoverageHeader(coverage)
+      return { content: `${header}\n\n未找到相关知识内容。` }
+    }
+    const body = results.map((r) => {
+      const heading = r.heading?.trim() ? r.heading : '命中片段'
+      const anchor = r.anchor ? formatSourceAnchor(r.anchor) : `[来源: knowledge/${r.file}]`
+      return `### [${r.file}] ${heading}\n${anchor}\n${r.content}`
+    }).join('\n\n---\n\n')
+    const header = formatCoverageHeader(coverage)
+    return { content: `${header}\n\n${body}` }
+  }
+
+  /**
+   * 概念卡索引读取（带 mtime+size 失效缓存）。
+   * 重建索引（build-knowledge-cards）后 index.json 变化会自动失效，无需重启应用。
+   */
+  private loadCardsIndexCached(knowledgePath: string): KnowledgeCardsIndex | null {
+    const indexPath = cardsIndexPath(knowledgePath)
+    let stat: fs.Stats
+    try {
+      stat = fs.statSync(indexPath)
+    } catch {
+      this.cardsIndexCache.delete(knowledgePath)
+      return null
+    }
+    const cached = this.cardsIndexCache.get(knowledgePath)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.index
+    }
+    const index = loadCardsIndex(knowledgePath)
+    if (index) {
+      this.cardsIndexCache.set(knowledgePath, { index, mtimeMs: stat.mtimeMs, size: stat.size })
+    } else {
+      this.cardsIndexCache.delete(knowledgePath)
+    }
+    return index
+  }
+
+  /**
+   * knowledge_navigate: 概念卡两级导航（先定位、再钻取）。
+   *
+   * 借鉴 StaffDeck 的文档结构感知检索（docs/staffdeck-adoption-plan.md W4）：
+   * 大库里 BM25 一把梭容易召回碎片，先让模型看"有哪些文档 / 文档里有哪些章节"，
+   * 再按行区间精读，引用天然落到章节粒度（服务数据溯源纪律）。
+   *
+   * 两级：
+   *   - 不传 doc：列文档卡（可用 query 过滤 title/keywords/summaryHint）
+   *   - 传 doc：列该文档的章节卡（含 startLine-endLine，供 read_knowledge_file 精读）
+   *
+   * 索引缺失时**明确报错并给构建命令**，绝不静默退回 BM25 冒充导航结果。
+   */
+  private knowledgeNavigate(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const docArg = typeof args.doc === 'string' ? args.doc.trim() : ''
+    const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : ''
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) && args.limit > 0
+      ? Math.min(50, Math.floor(args.limit))
+      : 20
+
+    const knowledgePath = path.join(this.avatarsPath, avatarId, 'knowledge')
+    const index = this.loadCardsIndexCached(knowledgePath)
+    if (!index) {
+      return {
+        content: '',
+        error: '概念卡索引不存在或已损坏（knowledge/_cards/index.json）。'
+          + '请先在终端构建：`npx tsx scripts/build-knowledge-cards.ts avatars/<分身目录>`。'
+          + '在此之前请改用 search_knowledge / knowledge_grep 检索，不要把本次导航当作"知识库为空"。',
+      }
+    }
+
+    // 二级：某个文档的章节卡
+    if (docArg) {
+      const sections: SectionCard[] | undefined = index.sections[docArg]
+      if (!sections) {
+        const near = index.documents
+          .filter((d) => d.path.includes(docArg) || d.title.includes(docArg))
+          .slice(0, 5)
+          .map((d) => d.path)
+        return {
+          content: '',
+          error: `概念卡索引中没有文档 "${docArg}"。`
+            + (near.length > 0 ? `路径相近的候选：${near.join(' / ')}` : '先不带 doc 参数调用本工具查看文档清单。'),
+        }
+      }
+      const picked = (query
+        ? sections.filter((s) =>
+          s.headingPath.join(' ').toLowerCase().includes(query)
+          || s.keywords.some((k) => k.toLowerCase().includes(query)))
+        : sections
+      ).slice(0, limit)
+      return {
+        content: JSON.stringify({
+          doc: docArg,
+          section_count: sections.length,
+          returned: picked.length,
+          sections: picked.map((s) => ({
+            heading: s.headingPath.join(' / '),
+            lines: `${s.startLine}-${s.endLine}`,
+            chars: s.charCount,
+          })),
+          hint: '用 read_knowledge_file 读该文档并聚焦上面的行区间；引用时把 章节标题 + 行区间 一并写进来源标注。',
+        }, null, 2),
+      }
+    }
+
+    // 一级：文档卡
+    const docs: DocumentCard[] = query
+      ? index.documents.filter((d) =>
+        d.title.toLowerCase().includes(query)
+        || d.path.toLowerCase().includes(query)
+        || d.summaryHint.toLowerCase().includes(query)
+        || d.keywords.some((k) => k.toLowerCase().includes(query)))
+      : index.documents
+    const picked = docs.slice(0, limit)
+    return {
+      content: JSON.stringify({
+        document_count: index.documents.length,
+        matched: docs.length,
+        returned: picked.length,
+        documents: picked.map((d) => ({
+          path: d.path,
+          title: d.title,
+          summary_hint: d.summaryHint,
+          sections: d.sectionCount,
+          chars: d.charCount,
+        })),
+        hint: picked.length === 0
+          ? '没有文档匹配该 query。换更宽的词，或不带 query 看全部文档清单。'
+          : '拿 documents[i].path 再调一次 knowledge_navigate(doc="<path>") 查看章节，再按行区间精读。',
+      }, null, 2),
+    }
+  }
+
+  private listKnowledgeFiles(avatarId: string): ToolCallResult {
+    const files = this.getKnowledgeSurfaceForContext(avatarId).listFiles()
+    if (files.length === 0) {
+      console.log(`[tool-router] list_knowledge_files 短路：知识库为空 avatarId=${avatarId}`)
+      return this.buildEmptyKnowledgeBaseHint()
+    }
+    return { content: files.join('\n') }
+  }
+
+  /**
+   * 收集当前分身 + 当前 project context 下的知识库 root 列表。
+   * v1 不下钻 `shared/knowledge/`（共享知识量小，已直接注入 system prompt）。
+   *
+   * 返回数组每项 `{ relPrefix, absRoot }`：
+   *   - relPrefix：返回结果里展示给 LLM 的相对路径前缀，如 `knowledge/` 或 `projects/<pid>/knowledge/`
+   *   - absRoot：磁盘上的绝对路径根
+   */
+  private listKnowledgeRoots(avatarId: string): Array<{ relPrefix: string; absRoot: string }> {
+    const roots: Array<{ relPrefix: string; absRoot: string }> = []
+    const avatarKnowledge = path.join(this.avatarsPath, avatarId, 'knowledge')
+    if (fs.existsSync(avatarKnowledge)) {
+      roots.push({ relPrefix: 'knowledge/', absRoot: avatarKnowledge })
+    }
+    if (this.knowledgeProjectContext !== DEFAULT_AVATAR_PROJECT_ID) {
+      const projKnowledge = path.join(
+        this.avatarsPath, avatarId, 'projects', this.knowledgeProjectContext, 'knowledge',
+      )
+      if (fs.existsSync(projKnowledge)) {
+        roots.push({
+          relPrefix: `projects/${this.knowledgeProjectContext}/knowledge/`,
+          absRoot: projKnowledge,
+        })
+      }
+    }
+    return roots
+  }
+
+  /**
+   * knowledge_grep: 在知识库 .md/.txt/.markdown/.json/.yaml 文件里按正则精确搜索。
+   *
+   * 与 `search_knowledge`（BM25 + vector + RRF）互补：grep 适合精确关键词（型号编号、政策条款号、专有名词）。
+   * search_knowledge 漏召回时用 grep 兜底。
+   *
+   * 后端：优先 ripgrep（大库快几个数量级），rg 不可用或拒绝该正则时回退到 Node 逐行扫描，
+   * 两条路径输出契约一致（见 ripgrepScan / nodeGrepScan）。
+   *
+   * 红线：
+   *   - 仅搜分身自己的 knowledge/（含当前 project knowledge），不下钻 shared/
+   *   - scope 必须在 knowledge root 内（防路径穿越）
+   *   - 硬上限：单文件 50 条 / 总计 200 条命中（防 LLM 误传过宽 pattern 撑爆 context）
+   */
+  private knowledgeGrep(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const pattern = typeof args.pattern === 'string' ? args.pattern : ''
+    if (!pattern.trim()) return { content: '', error: '缺少 pattern 参数（正则表达式）' }
+
+    let regex: RegExp
+    try {
+      regex = new RegExp(pattern, 'i')
+    } catch (e) {
+      return { content: '', error: `非法正则: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const scopeRaw = typeof args.scope === 'string' ? args.scope.trim() : ''
+    const maxPerFile = typeof args.max_per_file === 'number' && args.max_per_file > 0
+      ? Math.min(200, Math.floor(args.max_per_file))
+      : 50
+    const maxTotal = typeof args.max_total === 'number' && args.max_total > 0
+      ? Math.min(500, Math.floor(args.max_total))
+      : 200
+
+    // 归一化 scope：LLM 常把来源锚点里的展示前缀（knowledge/、projects/<pid>/knowledge/）
+    // 或仓库相对路径（avatars/<分身>/knowledge/...）整段拷回来当 scope（2026-07-21 小凯
+    // 实测连败 5 次后才自愈）。仓库级前缀在这里剥；root 展示前缀在逐 root 解析时剥。
+    let scope = scopeRaw.replace(/^\/+|\/+$/g, '')
+    const repoPrefix = `avatars/${avatarId}`
+    if (scope === repoPrefix) scope = ''
+    else if (scope.startsWith(`${repoPrefix}/`)) scope = scope.slice(repoPrefix.length + 1)
+
+    let roots = this.listKnowledgeRoots(avatarId)
+    if (roots.length === 0) {
+      return { content: JSON.stringify({ pattern, count: 0, matches: [], note: '知识库目录不存在' }, null, 2) }
+    }
+
+    // 应用 scope（如果有）—— 限定到子目录，scope 段会按 path-security 校验；
+    // 剥前缀后为空（如 scope="avatars/<分身>/knowledge"）≡ 指向知识库根 ≡ 整库搜索
+    if (scope) {
+      try {
+        // scope 可能含多段（如 `imports/2025/`），逐段验
+        for (const seg of scope.split('/').filter(Boolean)) {
+          assertSafeSegment(seg, 'scope segment')
+        }
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+      roots = roots
+        .map((r) => {
+          // 剥该 root 自己的展示前缀：scope="knowledge/工商业储能" ≡ "工商业储能"（对 avatar root）
+          let sub = scope
+          if (sub === r.relPrefix.replace(/\/$/, '')) sub = ''
+          else if (sub.startsWith(r.relPrefix)) sub = sub.slice(r.relPrefix.length)
+          if (!sub) return r
+          // resolveUnderRoot 确保 scope 解析后仍在 absRoot 内
+          let resolved: string
+          try {
+            resolved = resolveUnderRoot(r.absRoot, sub)
+          } catch {
+            return null
+          }
+          if (!fs.existsSync(resolved)) return null
+          return { relPrefix: r.relPrefix + sub.replace(/\/?$/, '/'), absRoot: resolved }
+        })
+        .filter((r): r is { relPrefix: string; absRoot: string } => r !== null)
+      if (roots.length === 0) {
+        // 自救指引：列出真实存在的顶层目录，模型下一次调用即可传对 scope
+        const tops = this.listKnowledgeRoots(avatarId)
+          .flatMap((r) => {
+            try {
+              return fs.readdirSync(r.absRoot, { withFileTypes: true })
+                .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+                .map((d) => r.relPrefix + d.name)
+            } catch {
+              return []
+            }
+          })
+          .slice(0, 12)
+        return {
+          content: '',
+          error: `scope 路径不存在于任何知识库 root: ${scopeRaw}。`
+            + 'scope 应为知识库根内的相对子目录（不带 avatars/<分身>/ 前缀）。'
+            + (tops.length ? `当前可用顶层目录：${tops.join('、')}。` : '')
+            + '不确定目录时可不传 scope 全库搜索。',
+        }
+      }
+    }
+
+    // 优先用 ripgrep（大库上比逐文件 Node 行扫快几个数量级）；rg 不可用或拒绝该
+    // 正则（Rust 引擎不支持 JS-only 特性如 lookahead/backref）时回退到 Node 扫描，
+    // 保证零回归。两条路径输出契约严格一致。
+    const rg = this.ripgrepScan(roots, pattern, { maxPerFile, maxTotal })
+    const { matches, truncated } = rg ?? this.nodeGrepScan(roots, regex, { maxPerFile, maxTotal })
+
+    // A1 溯源闭集：每条命中携带行级来源锚点，与 search_knowledge / query_excel 的
+    // [来源: ...] 下发口径对齐，verifier 后置断言据此累积"本轮已下发 anchor 集合"。
+    // file 已含 relPrefix；projects/<pid>/knowledge/ 前缀 parseSourceAnchor 不识别，
+    // 暂不发锚点（TODO：project 知识域锚点格式另行定义，属知识索引结构工作项）。
+    const anchoredMatches = matches.map((m) => (
+      m.file.startsWith('knowledge/')
+        ? { ...m, anchor: `[来源: ${m.file}#L${m.line}]` }
+        : m
+    ))
+
+    return { content: JSON.stringify({
+      pattern,
+      scope: scopeRaw || undefined,
+      engine: rg ? 'ripgrep' : 'node',
+      count: anchoredMatches.length,
+      truncated,
+      matches: anchoredMatches,
+      hint: truncated ? '已达硬上限，请缩窄 pattern 或加 scope' : undefined,
+    }, null, 2) }
+  }
+
+  /** knowledge_grep 的命中条目 */
+  private static readonly GREP_LINE_MAX = 300
+
+  /** 解析后的 ripgrep 可执行路径；undefined=尚未解析，null=无 bundle（退回系统 rg）。 */
+  private static resolvedRgPath: string | null | undefined = undefined
+
+  /**
+   * 解析 ripgrep 可执行文件路径，按优先级：
+   *   1. 随应用 bundle 的 @vscode/ripgrep（打包后 JS 在 app.asar 内、二进制经 asarUnpack
+   *      解到 app.asar.unpacked，需把路径里的 app.asar 重写为 app.asar.unpacked）
+   *   2. 系统 PATH 上的 `rg`（开发机 / 未 bundle 场景）
+   * 结果 memoize；解析不到 bundle 时返回 'rg'，再由调用方在 ENOENT 时回退 Node 扫描，保证零回归。
+   */
+  private static resolveRgPath(): string {
+    if (ToolRouter.resolvedRgPath !== undefined) {
+      return ToolRouter.resolvedRgPath ?? 'rg'
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { rgPath } = require('@vscode/ripgrep') as { rgPath?: string }
+      if (rgPath) {
+        // 打包后二进制在 app.asar.unpacked（见 electron-builder.yml asarUnpack）；
+        // 负向先行避免对已是 app.asar.unpacked 的路径重复改写。
+        const diskPath = rgPath.replace(/\bapp\.asar\b(?!\.unpacked)/, 'app.asar.unpacked')
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs') as typeof import('fs')
+        if (fs.existsSync(diskPath)) {
+          ToolRouter.resolvedRgPath = diskPath
+          return diskPath
+        }
+      }
+    } catch {
+      // @vscode/ripgrep 未安装（纯 CLI / 测试环境）→ 回退系统 rg
+    }
+    ToolRouter.resolvedRgPath = null
+    return 'rg'
+  }
+
+  /**
+   * ripgrep 后端：对每个 root 跑 `rg --json`，解析出与 Node 扫描完全一致的命中列表。
+   * 返回 null 表示 rg 不可用 / 出错（调用方据此回退到 nodeGrepScan）。
+   *
+   * - `-i` 大小写不敏感（对齐 Node 侧的 `new RegExp(pattern, 'i')`）
+   * - `-m maxPerFile` 单文件命中上限；maxTotal 在解析阶段跨文件统一截断
+   * - `--no-ignore` 不理会 .gitignore（对齐 Node 侧"扫全部匹配扩展名文件"的行为）
+   * - `--max-depth` 与 Node 侧 collectFilesRecursive 同用 DEFAULT_MAX_DIR_DEPTH
+   * - rg 退出码：0=有命中，1=无命中（非错误），2=错误（回退）
+   */
+  private ripgrepScan(
+    roots: Array<{ relPrefix: string; absRoot: string }>,
+    pattern: string,
+    limits: { maxPerFile: number; maxTotal: number },
+  ): { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean } | null {
+    // 优先用随应用 bundle 的 @vscode/ripgrep 二进制（Windows 用户无需自装 rg）；
+    // 解析不到时退回 PATH 上的系统 `rg`，再缺失则 execFileSync 抛 ENOENT → 回退 Node 扫描。
+    const rgPath = ToolRouter.resolveRgPath()
+
+    const matches: Array<{ file: string; line: number; text: string }> = []
+    let truncated = false
+
+    for (const root of roots) {
+      if (truncated) break
+      const args = [
+        // -a/--text：不在 NUL 字节处当二进制停搜，与 Node 侧"整文件按 utf-8 逐行扫"对齐
+        // （否则含 NUL 的 .md 会被 rg 中途截断，漏掉后半部分命中）
+        '--json', '-i', '-a', '-m', String(limits.maxPerFile),
+        '--max-depth', String(DEFAULT_MAX_DIR_DEPTH), '--no-ignore',
+        '-g', '*.md', '-g', '*.markdown', '-g', '*.txt',
+        '-g', '*.json', '-g', '*.yaml', '-g', '*.yml',
+        '--', pattern, root.absRoot,
+      ]
+      let stdout: string
+      try {
+        stdout = execFileSync(rgPath, args, {
+          encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024, timeout: 20_000,
+          // stderr 设为 pipe（而非默认 inherit），避免 rg 拒绝 JS-only 正则时
+          // 把 "look-around not supported" 报错泄漏到父进程 stderr / 日志。
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+      } catch (e) {
+        const err = e as { status?: number; code?: string; stdout?: string }
+        if (err.status === 1) continue          // 无命中：正常，继续下一个 root
+        if (err.code === 'ENOENT' || err.status === 2) return null  // rg 缺失 / 正则被拒 → 回退
+        return null                              // 其他异常 → 保守回退
+      }
+      for (const line of stdout.split('\n')) {
+        if (!line) continue
+        let evt: { type?: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } }
+        try { evt = JSON.parse(line) } catch { continue }
+        if (evt.type !== 'match' || !evt.data) continue
+        const absPath = evt.data.path?.text
+        const rawLine = evt.data.lines?.text
+        if (typeof absPath !== 'string' || typeof rawLine !== 'string') continue
+        if (matches.length >= limits.maxTotal) { truncated = true; break }
+        const rel = path.relative(root.absRoot, absPath).replace(/\\/g, '/')
+        const stripped = rawLine.replace(/\r?\n$/, '')
+        matches.push({
+          file: root.relPrefix + rel,
+          line: evt.data.line_number ?? 0,
+          text: stripped.length > ToolRouter.GREP_LINE_MAX
+            ? stripped.slice(0, ToolRouter.GREP_LINE_MAX) + '…'
+            : stripped,
+        })
+      }
+    }
+    return { matches, truncated }
+  }
+
+  /** Node 后端：逐文件 readFileSync + 逐行正则。ripgrep 不可用时的回退。 */
+  private nodeGrepScan(
+    roots: Array<{ relPrefix: string; absRoot: string }>,
+    regex: RegExp,
+    limits: { maxPerFile: number; maxTotal: number },
+  ): { matches: Array<{ file: string; line: number; text: string }>; truncated: boolean } {
+    const matches: Array<{ file: string; line: number; text: string }> = []
+    let totalCount = 0
+    let truncated = false
+    outer:
+    for (const root of roots) {
+      const files = collectFilesRecursive(root.absRoot, '', DEFAULT_MAX_DIR_DEPTH)
+        .filter((f) => /\.(md|markdown|txt|json|yaml|yml)$/i.test(f))
+      for (const file of files) {
+        let perFile = 0
+        try {
+          const text = fs.readFileSync(file, 'utf-8')
+          const lines = text.split(/\r?\n/)
+          for (let i = 0; i < lines.length; i++) {
+            if (regex.test(lines[i])) {
+              // 先判 total 上限，避免跨文件时多 push 一条（per-file 重置导致的 off-by-one）
+              if (totalCount >= limits.maxTotal) { truncated = true; break outer }
+              const rel = path.relative(root.absRoot, file).replace(/\\/g, '/')
+              matches.push({
+                file: root.relPrefix + rel,
+                line: i + 1,
+                text: lines[i].length > ToolRouter.GREP_LINE_MAX
+                  ? lines[i].slice(0, ToolRouter.GREP_LINE_MAX) + '…'
+                  : lines[i],
+              })
+              perFile++
+              totalCount++
+              if (perFile >= limits.maxPerFile) break
+            }
+          }
+        } catch {/* 读文件失败跳过 */}
+      }
+    }
+    return { matches, truncated }
+  }
+
+  /**
+   * list_wiki_concepts: 列出分身 wiki/concepts/ 下所有 LLM 自动编译的实体概念页。
+   *
+   * 概念页是 WikiCompiler.compileConceptPages 调 LLM 把同一实体（如 "ENS-L262"）
+   * 在不同知识文件的出现聚合成的独立 .md，含 LLM 摘要 + 属性表 + 来源依据 + 相关实体。
+   *
+   * 两种模式：
+   *   - 无 query：返回所有概念页元数据列表（仅 name + entity + generated_at）。仅适合探索式浏览。
+   *   - 有 query：读所有概念页正文做关键词匹配，返回 top_n 个最相关项 + 200 字符预览。**强烈推荐**：
+   *     某些分身的 WikiCompiler 实体提取阶段会把"明确"/"数值"/"图片"等高频词识别成实体导致 name 字段
+   *     无意义，无 query 时 LLM 无法从 name 列表识别目标实体；query 模式会扫正文匹配，绕开 name 命名问题。
+   */
+  private async listWikiConcepts(avatarId: string, args: Record<string, unknown> = {}): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    const topN = typeof args.top_n === 'number' && Number.isFinite(args.top_n) && args.top_n > 0
+      ? Math.min(20, Math.floor(args.top_n)) : 10
+
+    try {
+      const wiki = new WikiCompiler(path.join(this.avatarsPath, avatarId))
+      const meta = await wiki.getMeta()
+      const pages = await wiki.getConceptPages()
+      if (pages.length === 0) {
+        return { content: JSON.stringify({
+          count: 0,
+          last_compiled: meta?.lastCompiled ?? null,
+          note: '当前分身尚未编译实体概念页（wiki/concepts/ 为空）。请在「设置 → 知识库 → 编译 wiki」手动触发，或开启「导入后自动编译」。',
+        }, null, 2) }
+      }
+
+      // 无 query 模式：返回元数据列表（向后兼容）
+      if (!query) {
+        return { content: JSON.stringify({
+          count: pages.length,
+          last_compiled: meta?.lastCompiled ?? null,
+          pages: pages.map(p => ({ name: p.name, entity: p.entity, generated_at: p.generatedAt })),
+          hint: '**建议加 query 参数**按关键词匹配概念页正文——某些分身 name 字段是通用高频词无法直接匹配实体（如想找 "ENS-L262" 但 name 列表里只有 "明确"/"数值" 等）。无 query 仅适合探索式浏览。',
+        }, null, 2) }
+      }
+
+      // 有 query 模式：扫正文做关键词模糊匹配 + 评分
+      const queryLower = query.toLowerCase()
+      const scored: Array<{ name: string; entity: string; score: number; preview: string }> = []
+      for (const p of pages) {
+        try {
+          const content = await wiki.readConceptPage(p.name)
+          if (!content || !content.trim()) continue
+          const contentLower = content.toLowerCase()
+          // 简单评分：entity 名命中 +10，name 字段命中 +5，正文每次命中 +1（上限 20）
+          let score = 0
+          if (p.entity && p.entity.toLowerCase().includes(queryLower)) score += 10
+          if (p.name.toLowerCase().includes(queryLower)) score += 5
+          if (contentLower.includes(queryLower)) {
+            const matches = contentLower.split(queryLower).length - 1
+            score += Math.min(matches, 20)
+          }
+          if (score > 0) {
+            // 预览：找第一段非标题非引用的实际内容（200 字符）
+            const previewLine = content.split('\n').find(
+              line => line.trim().length > 20 && !line.startsWith('#') && !line.startsWith('>') && !line.startsWith('---') && !line.startsWith('|'),
+            )
+            const preview = ((previewLine ?? '').trim()).slice(0, 200)
+            scored.push({ name: p.name, entity: p.entity, score, preview })
+          }
+        } catch {/* 单页读取失败跳过 */}
+      }
+      scored.sort((a, b) => b.score - a.score)
+      const top = scored.slice(0, topN)
+
+      return { content: JSON.stringify({
+        query,
+        count: top.length,
+        total_pages: pages.length,
+        last_compiled: meta?.lastCompiled ?? null,
+        matches: top,
+        hint: top.length === 0
+          ? `query="${query}" 在 ${pages.length} 个概念页里都没匹配。可能该实体未被编译进 wiki，建议改用 search_knowledge / knowledge_grep。`
+          : `按相关度排序。拿 matches[i].name 后调 read_wiki_concept(name) 看完整聚合页。`,
+      }, null, 2) }
+    } catch (err) {
+      return { content: '', error: `读取 wiki/concepts/ 失败: ${err instanceof Error ? err.message : String(err)}` }
+    }
+  }
+
+  /**
+   * read_wiki_concept: 读取指定的实体概念页 markdown 全文。
+   *
+   * 入参 name 来自 list_wiki_concepts 返回的 matches[].name 或 pages[].name。
+   *
+   * 容错（2026-05-18 补丁）：WikiCompiler 编译质量问题导致概念页文件名（`__`）
+   * 与 entity 字段（`**`）不一致，LLM 易混淆。本工具会先尝试 name 直读，失败时
+   * 在概念页元数据里**按 entity 反查**，找到对应文件后透明取回，附 hint 告知 LLM 正确字段。
+   */
+  private async readWikiConcept(avatarId: string, args: Record<string, unknown>): Promise<ToolCallResult> {
+    const name = typeof args.name === 'string' ? args.name.trim() : ''
+    if (!name) return { content: '', error: '缺少 name 参数（从 list_wiki_concepts 返回的 matches[i].name 取）' }
+
+    try {
+      const wiki = new WikiCompiler(path.join(this.avatarsPath, avatarId))
+
+      // 路径 1：name 通过 path-security + 文件直读
+      let segmentSafe = false
+      try {
+        assertSafeSegment(name, '概念页名')
+        segmentSafe = true
+      } catch {/* fall through to fallback lookup */}
+
+      if (segmentSafe) {
+        try {
+          const content = await wiki.readConceptPage(name)
+          if (content && content.trim()) return { content }
+        } catch {/* file not found, fall through */}
+      }
+
+      // 路径 2：name 直读失败 → 在 getConceptPages 元数据里反查 entity 字段
+      // 适用于 LLM 把 entity 当 name 传的常见错误（WikiCompiler 实体提取污染导致）
+      const pages = await wiki.getConceptPages()
+      const fallback = pages.find(p => p.entity === name || p.name === name)
+      if (fallback) {
+        try {
+          const content = await wiki.readConceptPage(fallback.name)
+          if (content && content.trim()) {
+            const hint = fallback.entity === name && fallback.name !== name
+              ? `\n\n<!-- soul 提示：你传的 name="${name}" 是 entity 字段，正确 name 应是 "${fallback.name}"。下次请用 list_wiki_concepts 返回的 matches[i].name 字段。 -->`
+              : ''
+            return { content: content + hint }
+          }
+        } catch {/* still fail, fall through */}
+      }
+
+      return {
+        content: '',
+        error: `概念页不存在: ${name}。已尝试按 name 直读和按 entity 反查均失败。请先调 list_wiki_concepts(query="关键词")，从返回的 matches[i].name 字段取真正的 name 再传给本工具。`,
+      }
+    } catch (err) {
+      return { content: '', error: `读取概念页失败: ${err instanceof Error ? err.message : String(err)}` }
+    }
+  }
+
+  /**
+   * knowledge_glob: 按 glob 模式匹配知识库文件路径，返回相对路径列表。
+   *
+   * 用法：`knowledge_glob({pattern: "**\/*电价*.md"})` 列出所有名字含"电价"的 md 文件。
+   * 比 list_knowledge_files 精准（不用扫所有再 LLM 过滤）。
+   *
+   * 复用模块级 globToRegExp（与 list_files 一致），支持 `*` `**` `?`。
+   */
+  private knowledgeGlob(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const pattern = typeof args.pattern === 'string' ? args.pattern : ''
+    if (!pattern.trim()) return { content: '', error: '缺少 pattern 参数（glob 模式，如 "**/*电价*.md"）' }
+
+    let regex: RegExp
+    try {
+      regex = globToRegExp(pattern)
+    } catch (e) {
+      return { content: '', error: `非法 glob 模式: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    const roots = this.listKnowledgeRoots(avatarId)
+    if (roots.length === 0) {
+      return { content: JSON.stringify({ pattern, count: 0, files: [] }, null, 2) }
+    }
+
+    const files: string[] = []
+    const MAX_FILES = 500
+    let truncated = false
+    outer:
+    for (const root of roots) {
+      const all = collectFilesRecursive(root.absRoot, '', DEFAULT_MAX_DIR_DEPTH)
+      for (const f of all) {
+        const rel = path.relative(root.absRoot, f).replace(/\\/g, '/')
+        // 同时匹配 "完整相对路径" 和 "纯文件名"，让 `*.md` 这种 LLM 习惯写法也能命中
+        if (regex.test(rel) || regex.test(path.basename(f))) {
+          files.push(root.relPrefix + rel)
+          if (files.length >= MAX_FILES) { truncated = true; break outer }
+        }
+      }
+    }
+
+    return { content: JSON.stringify({
+      pattern,
+      count: files.length,
+      truncated,
+      files,
+      hint: truncated ? '已达硬上限 500，请缩窄 pattern' : undefined,
+    }, null, 2) }
+  }
+
+  private listDesignSystems(args: Record<string, unknown>): ToolCallResult {
+    const categoryRaw = args.category as string | undefined
+    const category = categoryRaw?.trim()
+    if (category) {
+      try {
+        assertSafeSegment(category, 'category')
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+    }
+    const designRoot = path.join(this.designSystemsPath, 'design-md')
+    const scanRoot = category
+      ? resolveUnderRoot(designRoot, category)
+      : designRoot
+    const files = collectFilesRecursive(scanRoot, '.md', DEFAULT_MAX_DIR_DEPTH)
+      .map((file) => {
+        const relative = path.relative(designRoot, file).replace(/\\/g, '/')
+        const firstSlash = relative.indexOf('/')
+        const cat = firstSlash >= 0 ? relative.slice(0, firstSlash) : 'uncategorized'
+        const base = path.basename(relative, '.md')
+        return {
+          category: cat,
+          slug: base,
+          path: relative,
+        }
+      })
+      .sort((a, b) => a.path.localeCompare(b.path))
+
+    return {
+      content: JSON.stringify({
+        root: 'shared/design-systems/design-md',
+        count: files.length,
+        items: files,
+      }, null, 2),
+    }
+  }
+
+  private readDesignSystem(args: Record<string, unknown>): ToolCallResult {
+    const slug = args.slug as string
+    if (!slug) return { content: '', error: '缺少 slug 参数' }
+    try {
+      assertSafeSegment(slug, 'slug')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const categoryRaw = args.category as string | undefined
+    const category = categoryRaw?.trim()
+    if (category) {
+      try {
+        assertSafeSegment(category, 'category')
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+    }
+
+    const designRoot = path.join(this.designSystemsPath, 'design-md')
+    const targetPath = category
+      ? resolveUnderRoot(designRoot, path.join(category, `${slug}.md`))
+      : null
+    if (targetPath) {
+      if (!fs.existsSync(targetPath)) {
+        return { content: '', error: `design system 不存在: ${category}/${slug}.md` }
+      }
+      const content = fs.readFileSync(targetPath, 'utf-8')
+      const rel = path.relative(this.designSystemsPath, targetPath).replace(/\\/g, '/')
+      return { content: `[来源: shared/design-systems/${rel}]\n${content}` }
+    }
+
+    const allMatches = collectFilesRecursive(designRoot, '.md', DEFAULT_MAX_DIR_DEPTH)
+      .filter((f) => path.basename(f, '.md') === slug)
+      .sort((a, b) => a.localeCompare(b))
+    if (allMatches.length === 0) {
+      return { content: '', error: `design system 不存在: ${slug}.md` }
+    }
+    if (allMatches.length > 1) {
+      const candidates = allMatches
+        .map((f) => path.relative(designRoot, f).replace(/\\/g, '/'))
+        .join('\n')
+      return {
+        content: '',
+        error: `slug "${slug}" 命中多个分类，请补充 category 参数。\n可选路径：\n${candidates}`,
+      }
+    }
+    const only = allMatches[0]
+    const content = fs.readFileSync(only, 'utf-8')
+    const rel = path.relative(this.designSystemsPath, only).replace(/\\/g, '/')
+    return { content: `[来源: shared/design-systems/${rel}]\n${content}` }
+  }
+
+  private searchDesignSystems(args: Record<string, unknown>): ToolCallResult {
+    const query = args.query as string
+    if (!query || !query.trim()) return { content: '', error: '缺少 query 参数' }
+    const topNRaw = args.top_n
+    const topN = typeof topNRaw === 'number' && Number.isFinite(topNRaw)
+      ? Math.max(1, Math.min(20, Math.floor(topNRaw)))
+      : 5
+    const queryParts = query
+      .toLowerCase()
+      .split(/\s+/)
+      .map(part => part.trim())
+      .filter(part => part.length > 0)
+    if (queryParts.length === 0) return { content: '', error: 'query 参数不能为空' }
+
+    const designRoot = path.join(this.designSystemsPath, 'design-md')
+    const allFiles = collectFilesRecursive(designRoot, '.md', DEFAULT_MAX_DIR_DEPTH)
+    const hits: DesignSystemSearchHit[] = []
+
+    for (const file of allFiles) {
+      const relative = path.relative(designRoot, file).replace(/\\/g, '/')
+      const firstSlash = relative.indexOf('/')
+      const category = firstSlash >= 0 ? relative.slice(0, firstSlash) : 'uncategorized'
+      const slug = path.basename(relative, '.md')
+      const text = fs.readFileSync(file, 'utf-8')
+      const lowerText = text.toLowerCase()
+      const titleBoostText = `${slug} ${category}`.toLowerCase()
+      let score = 0
+      for (const token of queryParts) {
+        const contentHit = lowerText.includes(token) ? 1 : 0
+        const titleHit = titleBoostText.includes(token) ? 1 : 0
+        score += contentHit + titleHit * 2
+      }
+      if (score <= 0) continue
+
+      const firstMatchToken = queryParts.find(token => lowerText.includes(token)) ?? queryParts[0]
+      const hitIndex = lowerText.indexOf(firstMatchToken)
+      const snippetStart = Math.max(0, hitIndex - 80)
+      const snippetEnd = Math.min(text.length, hitIndex + 220)
+      const snippet = text.slice(snippetStart, snippetEnd).replace(/\s+/g, ' ').trim()
+
+      hits.push({
+        category,
+        slug,
+        path: relative,
+        score,
+        snippet,
+      })
+    }
+
+    hits.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      return a.path.localeCompare(b.path)
+    })
+
+    const topHits = hits.slice(0, topN)
+    if (topHits.length === 0) {
+      return { content: '未找到匹配的 design system。' }
+    }
+
+    return {
+      content: JSON.stringify({
+        query,
+        count: topHits.length,
+        results: topHits.map(hit => ({
+          category: hit.category,
+          slug: hit.slug,
+          path: hit.path,
+          score: hit.score,
+          snippet: hit.snippet,
+        })),
+      }, null, 2),
+    }
+  }
+
+  // ─── Excel 结构化查询（v0.5.x 新增）─────────────────────────────────────────
+
+  /**
+   * query_excel: 按 MongoDB 风格 filter 精确过滤 Excel 行，返回 JSON。
+   *
+   * 严格保护：返回值不能太大，否则会污染 chat history 引发 context overflow。
+   *   - 返回内容硬上限 QUERY_EXCEL_MAX_CONTENT_CHARS 字符
+   *   - 默认 limit 50，硬上限 QUERY_EXCEL_HARD_LIMIT
+   *   - 不传 filter 且不传 columns 时，要求加 limit 否则报错（防止 dump 全表）
+   *   - 超出 content 上限时按行数截断，附 truncated_by_size 标志和提示
+   *
+   * 参数：
+   *   file    — _excel/ 目录下的 basename（不含 .json）
+   *   sheet   — sheet 名
+   *   filter? — 列名 → 值（$eq 默认）或 {$gte/$lte/$gt/$lt/$ne/$in: ...}
+   *   columns? — 只返回这些列
+   *   limit?   — 最多返回行数，默认 50，硬上限 200
+   */
+  private queryExcel(avatarId: string, args: Record<string, unknown>): ToolCallResult {
+    const file = args.file as string
+    const sheetName = args.sheet as string
+    if (!file) return { content: '', error: '缺少 file 参数（Excel basename）' }
+    if (!sheetName) return { content: '', error: '缺少 sheet 参数' }
+
+    try {
+      assertSafeSegment(file, 'file')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    let parsed: CachedExcelSource['parsed']
+    try {
+      parsed = this.loadExcelSource(avatarId, file)
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const sheet = parsed.sheets?.find(s => s.name === sheetName)
+    if (!sheet) {
+      const available = (parsed.sheets ?? []).map(s => s.name).join(', ')
+      return { content: '', error: `sheet 不存在: "${sheetName}"（可用: ${available}）` }
+    }
+
+    // F1 按需 schema 模式：返回完整列 schema（包含类型、唯一值数、范围、样例）
+    //
+    // 关键约束：每列的 samples 是「按列独立去重抽样」，跨列之间 NOT 按行对齐。
+    // 历史 bug：LLM 看到 col1.samples[0]="256（华致）" 和 故障次数.samples[0]="9" 后
+    // 误以为这是同一行的数据，把 9 当成 314（华致）的故障次数答案返回。schema 模式
+    // 本意只是让 LLM 了解列结构，绝不能用 samples 直接作为行级查询答案。
+    // soul-loader.ts 的 system prompt 已有"禁止从 schema sample 推数字"约束，
+    // 但实战发现仅 system prompt 不足以阻止模型把 samples 当行对齐数据用。
+    // 因此在工具响应自身再加双重保险：
+    //   1. 顶层加显眼的 _usage 警示，要求必须再调一次带 filter 的 query_excel
+    //   2. 每列 samples 同行附 _note，强化"非行对齐"语义
+    // 注意：字段名保持 samples，与 system prompt 里的硬约束一致，不要改名。
+    if (args.mode === 'schema') {
+      const schemaPayload = {
+        file,
+        sheet: sheetName,
+        source_anchor: formatSourceAnchor(buildExcelSourceAnchor(file, sheetName)),
+        _usage: '本次返回仅为 schema（列结构）。每列的 samples 是该列独立去重抽样的代表值，跨列之间不构成行的对应关系，禁止作为行级查询答案。要获取某行某列的精确值，必须再发起一次 query_excel（不带 mode=schema），并传 filter（如 filter: {col1: "314（华致）"}）后从 rows[].该列名 取值。',
+        sheet_row_count: sheet.rowCount,
+        columns: sheet.columns.map(c => ({
+          name: c.name,
+          dtype: c.dtype,
+          uniqueCount: c.uniqueCount,
+          ...(c.min !== undefined && c.max !== undefined ? { min: c.min, max: c.max } : {}),
+          samples: (c.samples ?? []).slice(0, 3),
+          samples_note: '本列代表值（独立去重抽样），跨列不按行对齐，不可作为行级答案',
+        })),
+      }
+      return { content: JSON.stringify(schemaPayload, null, 2) }
+    }
+
+    const filter = (args.filter as Record<string, unknown>) || {}
+    const columns = args.columns as string[] | undefined
+    const limitRaw = args.limit
+    const limit = Math.min(
+      QUERY_EXCEL_HARD_LIMIT,
+      typeof limitRaw === 'number' && Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.floor(limitRaw)
+        : QUERY_EXCEL_DEFAULT_LIMIT,
+    )
+
+    // 防 dump：没 filter 没 columns 时强制要求显式 limit，且 limit 必须很小。
+    // 例外：表本身就只有 ≤ SMALL_TABLE_ROW_THRESHOLD 行时直接放行（污染量可忽略，
+    // 让 LLM 不必为 9 行的小表再多绕一轮"加 limit" 重试）。
+    const SMALL_TABLE_ROW_THRESHOLD = 50
+    const hasFilter = Object.keys(filter).length > 0
+    const hasColumns = Array.isArray(columns) && columns.length > 0
+    const isSmallTable = sheet.rowCount <= SMALL_TABLE_ROW_THRESHOLD
+    if (!hasFilter && !hasColumns && typeof limitRaw !== 'number' && !isSmallTable) {
+      // 守卫主动拦截，不是工具真错误：用 content + "工具执行已跳过：" 前缀走 chatStore 的 skipped 识别（chatStore.ts:3985），
+      // UI timeline 显示为 ⊘ 中性而不是 ✗ 警告，与 load_skill / query_excel 次数上限等其它守卫拦截视觉对齐。
+      // 不再用 error 字段，避免前端包装成"工具执行失败: ..."前缀而错过 skipped 识别。
+      return {
+        content: `工具执行已跳过：查询过宽：没有 filter、没有 columns、也没有 limit，会一次性返回整张表 ${sheet.rowCount} 行污染 context。请至少指定 filter（推荐）、columns 或显式 limit≤50。`,
+      }
+    }
+
+    // 执行过滤
+    const matched: Array<{ rowNumber: number; row: Record<string, string | number | null> }> = []
+    for (const [rowIndex, row] of sheet.rows.entries()) {
+      if (matchFilter(row, filter)) {
+        if (hasColumns) {
+          const picked: Record<string, string | number | null> = {}
+          for (const col of columns!) {
+            if (col in row) picked[col] = row[col]
+          }
+          matched.push({ rowNumber: rowIndex + 2, row: picked })
+        } else {
+          matched.push({ rowNumber: rowIndex + 2, row })
+        }
+        if (matched.length >= limit) break
+      }
+    }
+
+    const colNames = new Set(sheet.columns.map(c => c.name))
+    const invalidFilterKeys = Object.keys(filter).filter(k => !colNames.has(k))
+    let zeroMatchHint: string | undefined
+    if (hasFilter && matched.length === 0) {
+      const parts: string[] = []
+      if (invalidFilterKeys.length > 0) {
+        parts.push(
+          `filter 中的列名在本 sheet「${sheetName}」不存在: ${invalidFilterKeys.join(', ')}。仅可使用本次返回的 schema 中的 name（注意空格，如「项目 类型」「装机 容量」）。`,
+        )
+        // 当大部分 filter key 都不在该 sheet 时，提示 LLM 很可能选错了 sheet
+        const invalidRatio = invalidFilterKeys.length / Object.keys(filter).length
+        if (invalidRatio >= 0.5) {
+          const otherSheets = (parsed.sheets ?? [])
+            .filter(s => s.name !== sheetName)
+            .map(s => `「${s.name}」(${s.columns.map(c => c.name).join(', ')})`)
+            .join('；\n')
+          if (otherSheets) {
+            parts.push(
+              `⚠️ 你可能选错了 sheet。本文件其他可用 sheet 及其列名如下，请根据列名重新选择合适的 sheet 再查询：\n${otherSheets}`,
+            )
+          }
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(filter, '统计周期') || invalidFilterKeys.length === 0) {
+        parts.push(
+          '若按「年/月」筛选：本表「统计周期」列多为 YYMM 整数（如 2601≈2026年1月）；勿用「2026-01」等与数字做 $gte/$lte 比较，否则常得到 0 行。可用 $in: [2601,2602,2603] 或先只筛「机型」再用 limit 试探。',
+        )
+      }
+      parts.push('若放宽后仍无 2～3 月，可能是源 Excel 尚未录入对应月份行（非工具故障）。')
+      zeroMatchHint = parts.join('\n')
+    }
+
+    const truncatedByLimit = matched.length >= limit
+
+    // 二级保护：返回内容字符数上限。若 JSON serialize 后超过阈值，按行截断。
+    let resultRows = matched
+    let truncatedBySize = false
+    let serialized = JSON.stringify(resultRows)
+    while (serialized.length > QUERY_EXCEL_MAX_CONTENT_CHARS && resultRows.length > 1) {
+      // 砍一半重试
+      resultRows = resultRows.slice(0, Math.max(1, Math.floor(resultRows.length / 2)))
+      truncatedBySize = true
+      serialized = JSON.stringify(resultRows)
+    }
+
+    // 精简 schema 附在每次查询结果里：name + dtype，让 LLM 每次查询后都能看到列定义，
+    // 避免早先的 tool 结果被 compressOldToolResults 压缩后"记忆模糊"又从头试探列名。
+    // 不带 samples / uniqueCount / range（这些在 system prompt 的 Schema 摘要里有）。
+    const schemaBrief = sheet.columns.map(c => ({ name: c.name, dtype: c.dtype }))
+    const rowNumbers = resultRows.map((entry) => entry.rowNumber)
+    const sourceAnchor = formatSourceAnchor(buildExcelSourceAnchor(
+      file,
+      sheetName,
+      rowNumbers.length > 0 ? Math.min(...rowNumbers) : undefined,
+      rowNumbers.length > 0 ? Math.max(...rowNumbers) : undefined,
+    ))
+
+    const payload = {
+      file,
+      sheet: sheetName,
+      source_anchor: sourceAnchor,
+      source_rows: rowNumbers,
+      sheet_row_count: sheet.rowCount,
+      schema: schemaBrief,
+      count: resultRows.length,
+      total_matched: matched.length,
+      truncated: truncatedByLimit || truncatedBySize,
+      truncated_by_limit: truncatedByLimit,
+      truncated_by_size: truncatedBySize,
+      hint: truncatedBySize
+        ? `数据被按 content size (${QUERY_EXCEL_MAX_CONTENT_CHARS} chars) 截断，请加更精细的 filter 或减少 columns 重新查询`
+        : truncatedByLimit
+          ? `数据被按 limit=${limit} 截断，原匹配 ${matched.length} 行，请加 filter 缩小或翻页`
+          : undefined,
+      rows: resultRows.map((entry) => ({ _source_row: entry.rowNumber, ...entry.row })),
+      ...(zeroMatchHint
+        ? {
+            zero_match_hint: zeroMatchHint,
+            ...(invalidFilterKeys.length > 0 ? { invalid_filter_keys: invalidFilterKeys } : {}),
+          }
+        : {}),
+    }
+
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * export_excel: 把 LLM 整理的结构化数据落盘为 .xlsx 文件，供用户下载。
+   *
+   * 设计动机：query_excel 是只读工具，对比 / 差异 / 报表类任务的输出无法直接落盘，
+   * LLM 只能在主回答里贴 markdown 表格，用户没法二次复用。本工具与 query_excel
+   * 配对：LLM 先用 query_excel 拉取所需行，再把整理后的 rows 通过本工具写成 xlsx。
+   *
+   * 安全模型（多层防御）：
+   *   1. avatarId / conversationId 通过 assertSafeSegment 校验（getWorkspaceRoot 内部）
+   *   2. filename 先 assertSafeSegment 拦截路径分隔符 / ..，再正则 sanitize 特殊字符
+   *   3. 落盘路径强制限制在 <workspace>/exports/ 下（resolveUnderRoot）
+   *   4. 行数上限 EXPORT_EXCEL_MAX_ROWS_PER_SHEET、sheet 数上限 EXPORT_EXCEL_MAX_SHEETS
+   *   5. 写盘后立即 statSync 检查大小，超 EXPORT_EXCEL_MAX_FILE_SIZE_BYTES 删除并报错
+   *   6. overwrite 默认 false，避免误覆盖之前导出的报告
+   *
+   * @param avatarId       分身 ID（已被 handleToolCall 上层校验）
+   * @param conversationId 当前对话 ID（必填，决定落盘工作区）
+   * @param args           入参：filename / sheets / overwrite
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private exportExcel(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    const filenameRaw = args.filename
+    const sheetsRaw = args.sheets
+    const overwrite = args.overwrite === true
+
+    if (typeof filenameRaw !== 'string' || !filenameRaw.trim()) {
+      return { content: '', error: '缺少 filename 参数（不含 .xlsx 后缀）' }
+    }
+    if (!Array.isArray(sheetsRaw) || sheetsRaw.length === 0) {
+      return { content: '', error: 'sheets 必须为非空数组' }
+    }
+    if (sheetsRaw.length > EXPORT_EXCEL_MAX_SHEETS) {
+      return {
+        content: '',
+        error: `sheets 数量 ${sheetsRaw.length} 超过上限 ${EXPORT_EXCEL_MAX_SHEETS}，请拆分成多个文件`,
+      }
+    }
+
+    const filename = filenameRaw.trim()
+    try {
+      assertSafeSegment(filename, 'filename')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    const safeFilename = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    if (!safeFilename) {
+      return { content: '', error: 'filename sanitize 后为空，请使用中文/英文/数字/-/_ 组合' }
+    }
+
+    const seenSheetNames = new Set<string>()
+    const validatedSheets: Array<{
+      name: string
+      rows: Array<Record<string, string | number | null>>
+    }> = []
+    let totalRows = 0
+    for (let i = 0; i < sheetsRaw.length; i++) {
+      const entry = sheetsRaw[i]
+      if (!entry || typeof entry !== 'object') {
+        return { content: '', error: `sheets[${i}] 不是对象` }
+      }
+      const sheetObj = entry as Record<string, unknown>
+      const sheetName = sheetObj.name
+      const sheetRows = sheetObj.rows
+      if (typeof sheetName !== 'string' || !sheetName.trim()) {
+        return { content: '', error: `sheets[${i}].name 必须为非空字符串` }
+      }
+      const trimmedName = sheetName.trim()
+      if (trimmedName.length > 31) {
+        return {
+          content: '',
+          error: `sheets[${i}].name "${trimmedName}" 超过 Excel 31 字符上限`,
+        }
+      }
+      if (seenSheetNames.has(trimmedName)) {
+        return { content: '', error: `sheets[${i}].name 重复: "${trimmedName}"` }
+      }
+      seenSheetNames.add(trimmedName)
+      if (!Array.isArray(sheetRows)) {
+        return { content: '', error: `sheets[${i}].rows 必须为数组` }
+      }
+      if (sheetRows.length > EXPORT_EXCEL_MAX_ROWS_PER_SHEET) {
+        return {
+          content: '',
+          error: `sheets[${i}] "${trimmedName}" 行数 ${sheetRows.length} 超过上限 ${EXPORT_EXCEL_MAX_ROWS_PER_SHEET}`,
+        }
+      }
+      const safeRows: Array<Record<string, string | number | null>> = []
+      for (let r = 0; r < sheetRows.length; r++) {
+        const row = sheetRows[r]
+        if (!row || typeof row !== 'object' || Array.isArray(row)) {
+          return { content: '', error: `sheets[${i}].rows[${r}] 必须为对象` }
+        }
+        safeRows.push(row as Record<string, string | number | null>)
+      }
+      validatedSheets.push({ name: trimmedName, rows: safeRows })
+      totalRows += safeRows.length
+    }
+
+    let workspaceRoot: string
+    try {
+      workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const exportsDir = resolveUnderRoot(workspaceRoot, 'exports')
+    fs.mkdirSync(exportsDir, { recursive: true })
+
+    const targetFilename = `${safeFilename}.xlsx`
+    const absolutePath = resolveUnderRoot(exportsDir, targetFilename)
+    const relativePath = path.posix.join('exports', targetFilename)
+
+    if (fs.existsSync(absolutePath) && !overwrite) {
+      return {
+        content: '',
+        error: `目标文件已存在: ${relativePath}（如需覆盖请传 overwrite: true）`,
+      }
+    }
+
+    try {
+      const workbook = XLSX.utils.book_new()
+      for (const sheet of validatedSheets) {
+        // json_to_sheet 在 rows 为空时会抛错，因此空 sheet 走 aoa_to_sheet 兜底
+        const worksheet = sheet.rows.length > 0
+          ? XLSX.utils.json_to_sheet(sheet.rows)
+          : XLSX.utils.aoa_to_sheet([[]])
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name)
+      }
+      XLSX.writeFile(workbook, absolutePath)
+    } catch (e) {
+      // 写盘失败时清理半成品，避免下次 overwrite=false 误判
+      try { if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath) } catch { /* ignore cleanup error */ }
+      return {
+        content: '',
+        error: `写入 Excel 失败: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+
+    let fileSizeBytes: number
+    try {
+      fileSizeBytes = fs.statSync(absolutePath).size
+    } catch (e) {
+      return {
+        content: '',
+        error: `落盘后无法读取文件大小: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+    if (fileSizeBytes > EXPORT_EXCEL_MAX_FILE_SIZE_BYTES) {
+      try { fs.unlinkSync(absolutePath) } catch { /* ignore cleanup error */ }
+      return {
+        content: '',
+        error: `导出文件 ${fileSizeBytes} 字节超过上限 ${EXPORT_EXCEL_MAX_FILE_SIZE_BYTES}（10 MB），已删除。请减少 rows / 拆分多文件`,
+      }
+    }
+
+    const payload = {
+      success: true,
+      format: 'xlsx' as const,
+      file_path: relativePath,
+      absolute_path: absolutePath,
+      // 2026-05-26：前端 IPC 改为接 (conversationId, file_path) 让主进程自查
+      // workspace exports root；带上 conversation_id 给 chat-types/FileCard 用。
+      // absolute_path 保留供 logging / 调试，**前端不再用它直接调 shell**。
+      conversation_id: conversationId,
+      sheet_count: validatedSheets.length,
+      total_rows: totalRows,
+      file_size_bytes: fileSizeBytes,
+      _usage: '文件已落盘到当前对话工作区，桌面端会自动以文件卡片展示。在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。',
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * generate_document: 生成 Markdown / PDF / Word 文档文件落盘到当前对话工作区。
+   *
+   * 设计动机：与 export_excel 并列的"内容落盘"工具，但目标是半结构化文档而非
+   * 表格数据。LLM 通过 IR（markdown + frontmatter + 自定义扩展）一次性表达
+   * 内容，由本函数分发到 3 种渲染器，避免"切换格式重新调 LLM"。
+   *
+   * 决策 A1（依赖注入）：md 用 packages/core 内部纯字符串渲染器；pdf/docx 走
+   * Electron 主进程，通过构造函数注入的 documentRenderers 钩子调用，保持
+   * packages/core 环境无关。
+   *
+   * @author zhi.qu
+   * @date 2026-05-08
+   */
+  private async generateDocument(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const formatRaw = args.format
+    const irRaw = args.ir
+    const filenameRaw = args.filename
+    const templateNameRaw = args.templateName
+    const overwrite = args.overwrite === true
+
+    if (typeof formatRaw !== 'string' || !SUPPORTED_DOCUMENT_FORMATS.includes(formatRaw as DocumentFormat)) {
+      return {
+        content: '',
+        error: `format 必须为 ${SUPPORTED_DOCUMENT_FORMATS.join('|')} 之一，收到 ${JSON.stringify(formatRaw)}`,
+      }
+    }
+    const format = formatRaw as DocumentFormat
+
+    if (typeof irRaw !== 'string' || irRaw.trim().length === 0) {
+      return { content: '', error: 'ir 必须为非空字符串（markdown + frontmatter）' }
+    }
+    if (irRaw.length > MAX_IR_LENGTH) {
+      return {
+        content: '',
+        error: `ir 长度 ${irRaw.length} 超过上限 ${MAX_IR_LENGTH}，请拆分多次调用或精简内容`,
+      }
+    }
+
+    if (typeof filenameRaw !== 'string' || !filenameRaw.trim()) {
+      return { content: '', error: '缺少 filename 参数（不含扩展名）' }
+    }
+    const filename = filenameRaw.trim()
+    try {
+      assertSafeSegment(filename, 'filename')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    const safeFilename = filename.replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    if (!safeFilename) {
+      return { content: '', error: 'filename sanitize 后为空，请使用中文/英文/数字/-/_ 组合' }
+    }
+
+    let templateName = 'default'
+    if (templateNameRaw !== undefined && templateNameRaw !== null) {
+      if (typeof templateNameRaw !== 'string' || !templateNameRaw.trim()) {
+        return { content: '', error: 'templateName 必须为字符串' }
+      }
+      try {
+        assertSafeSegment(templateNameRaw.trim(), '文档模板名')
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+      templateName = templateNameRaw.trim()
+    }
+
+    let workspaceRoot: string
+    try {
+      workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+
+    const exportsDir = resolveUnderRoot(workspaceRoot, 'exports')
+    fs.mkdirSync(exportsDir, { recursive: true })
+
+    const targetFilename = `${safeFilename}.${format}`
+    const absolutePath = resolveUnderRoot(exportsDir, targetFilename)
+    const relativePath = path.posix.join('exports', targetFilename)
+
+    if (fs.existsSync(absolutePath) && !overwrite) {
+      return {
+        content: '',
+        error: `目标文件已存在: ${relativePath}（如需覆盖请传 overwrite: true）`,
+      }
+    }
+
+    if ((format === 'pdf' || format === 'docx') && !this.documentRenderers) {
+      return {
+        content: '',
+        error: `format=${format} 需要主进程渲染器，但 documentRenderers 未注入；当前仅支持 md 格式。`,
+      }
+    }
+
+    // 解析 IR：宽进严出。先尽可能拿到结构化 blocks，再按 validateIR 决定接受/拒绝。
+    const { parseIR } = await import('./document/ir-parser')
+    const { validateIR } = await import('./document/ir-schema')
+    const parsed = parseIR(irRaw)
+    const validation = validateIR(parsed.ir)
+    if (!validation.valid || !validation.ir) {
+      const detail = validation.errors
+        .slice(0, 5)
+        .map(e => `[block ${e.blockIndex}] ${e.message}`)
+        .join('; ')
+      return {
+        content: '',
+        error: `IR 校验失败：${detail}${validation.errors.length > 5 ? `（另有 ${validation.errors.length - 5} 条错误）` : ''}`,
+      }
+    }
+    const ir = validation.ir
+
+    // 渲染分发
+    // avatarRoot 同时充当 PDF 模板加载根 + DOCX 图片相对路径解析根
+    // （IR 中 image.src 形如 `knowledge/foo.png`，按分身根解析最自然）
+    const avatarRoot = path.join(this.avatarsPath, avatarId)
+    let writtenSize: number
+    try {
+      if (format === 'md') {
+        const { renderMarkdown } = await import('./document/renderers/markdown-renderer')
+        const md = renderMarkdown(ir)
+        fs.writeFileSync(absolutePath, md, 'utf-8')
+        writtenSize = fs.statSync(absolutePath).size
+      } else if (format === 'pdf') {
+        const { renderHtml } = await import('./document/renderers/html-renderer')
+        const html = renderHtml(ir, { avatarRoot, templateName })
+        const result = await this.documentRenderers!.renderPdf(html, absolutePath)
+        writtenSize = result.size
+      } else {
+        // docx：注入 imageRoot 让渲染器在分身根目录下安全解析相对图片路径
+        const result = await this.documentRenderers!.renderDocx(ir, absolutePath, { imageRoot: avatarRoot })
+        writtenSize = result.size
+      }
+    } catch (e) {
+      try { if (fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath) } catch { /* ignore */ }
+      return {
+        content: '',
+        error: `${format} 渲染失败: ${e instanceof Error ? e.message : String(e)}`,
+      }
+    }
+
+    if (writtenSize > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+      try { fs.unlinkSync(absolutePath) } catch { /* ignore */ }
+      return {
+        content: '',
+        error: `输出文件 ${writtenSize} 字节超过上限 ${MAX_DOCUMENT_FILE_SIZE_BYTES}（20 MB），已删除。请精简内容或拆分多文件`,
+      }
+    }
+
+    // 收集 cite 块的引用来源（FileCard 可以折叠展示）
+    const sources = ir.blocks
+      .filter(b => b.type === 'cite')
+      .map(b => {
+        const c = b as { source: string; page?: number }
+        return c.page !== undefined ? { source: c.source, page: c.page } : { source: c.source }
+      })
+
+    const payload = {
+      success: true,
+      format,
+      file_path: relativePath,
+      absolute_path: absolutePath,
+      // 见 export_excel payload 注释——conversation_id 让前端 IPC 走 conv 反查路径
+      conversation_id: conversationId,
+      file_size_bytes: writtenSize,
+      block_count: ir.blocks.length,
+      template_name: templateName,
+      sources: sources.length > 0 ? sources : undefined,
+      parser_warnings: parsed.warnings.length > 0 ? parsed.warnings.slice(0, 5) : undefined,
+      _usage: '文件已落盘到当前对话工作区，桌面端会自动以文件卡片展示。在主回答末尾用一句话告知用户：「已生成 <filename>，可在下方文件卡片点击打开」。',
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  // ─── 通用执行类工具 ─────────────────────────────────────────────────────────
+
+  /**
+   * exec_shell: 在工作区目录内执行 shell 命令（支持前台同步 + 后台异步两种模式）。
+   *
+   * 安全模型（多层防御）：
+   *   1. cwd 强制锁定到 workspace 根目录的子目录（resolveWorkspacePath 已校验目录穿越）
+   *   2. 命令首词必须命中白名单 EXEC_SHELL_WHITELIST
+   *   3. 完整命令字符串必须不命中黑名单 EXEC_SHELL_BLACKLIST（sudo/rm 根/curl|sh 等）
+   *   4. 前台硬超时 EXEC_SHELL_HARD_TIMEOUT_MS（5 分钟）；后台无单次超时但靠 kill_shell 终止
+   *   5. stdout/stderr 各自硬截断（前台 8KB / 后台 64KB）
+   *
+   * 模式：
+   *   - background:false（默认）：前台同步，等待进程结束后返回完整结果
+   *   - background:true：异步，立即返回 task_id，进程在后台跑，用 await_shell / kill_shell 操作
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private async execShell(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const command = (typeof args.command === 'string' ? args.command : '').trim()
+    if (!command) return { content: '', error: '缺少 command 参数（完整命令行字符串）' }
+    if (command.length > 4000) {
+      return { content: '', error: 'command 过长（>4000 字符），请拆分或使用脚本文件' }
+    }
+
+    // 解析子目录 cwd（必须在 workspace 内）
+    const subCwd = typeof args.cwd === 'string' && args.cwd.trim() ? args.cwd.trim() : '.'
+    let cwd: string
+    try {
+      cwd = this.resolveWorkspacePath(avatarId, conversationId, subCwd)
+    } catch (e) {
+      return { content: '', error: `cwd 校验失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+      return { content: '', error: `cwd 不存在或不是目录: ${subCwd}` }
+    }
+
+    // 第 2 层：白名单（取首词，按 shell 分隔符切）
+    const firstToken = command.split(/[\s|;&<>]+/).filter(Boolean)[0] ?? ''
+    if (!EXEC_SHELL_WHITELIST.has(firstToken)) {
+      return {
+        content: '',
+        error: `命令未在白名单中: "${firstToken}"。允许的命令前缀: ${[...EXEC_SHELL_WHITELIST].sort().join(', ')}。如需联网请改用 web_fetch / web_search 工具。`,
+      }
+    }
+
+    // 第 3 层：黑名单（完整命令字符串校验）
+    const dangerousPattern = findDangerousShellPattern(command)
+    if (dangerousPattern) {
+      return {
+        content: '',
+        error: `命令命中危险模式（${dangerousPattern.source}），已拒绝执行。常见原因：sudo / rm 根目录 / 远程脚本管道执行 / gh 写操作 / yt-dlp --exec 等。请改写后重试。`,
+      }
+    }
+
+    // ─── 后台模式：立即返回 task_id ─────────────────────────────────────────────
+    if (args.background === true) {
+      return this.startBackgroundShell(command, subCwd, cwd)
+    }
+
+    // ─── 前台模式：等进程结束 ───────────────────────────────────────────────────
+    const timeoutMs = Math.min(
+      EXEC_SHELL_HARD_TIMEOUT_MS,
+      typeof args.timeout_ms === 'number' && Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
+        ? Math.floor(args.timeout_ms)
+        : EXEC_SHELL_HARD_TIMEOUT_MS,
+    )
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawn } = require('child_process') as typeof import('child_process')
+    const startedAt = Date.now()
+
+    return new Promise<ToolCallResult>((resolve) => {
+      const child = spawn(command, {
+        cwd,
+        shell: true,
+        env: {
+          ...process.env,
+          // 防 LLM 误用启动新 Electron 子实例 / 触发交互式登录 shell
+          ELECTRON_RUN_AS_NODE: '1',
+          NO_COLOR: '1',
+          PAGER: 'cat',
+        },
+      })
+
+      let stdout = ''
+      let stderr = ''
+      let truncated = false
+      let killedByTimeout = false
+
+      const timer = setTimeout(() => {
+        killedByTimeout = true
+        try { child.kill('SIGTERM') } catch { /* ignore */ }
+        setTimeout(() => { try { child.kill('SIGKILL') } catch { /* ignore */ } }, 1000)
+      }, timeoutMs)
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        if (stdout.length >= EXEC_SHELL_OUTPUT_MAX) { truncated = true; return }
+        stdout += chunk.toString('utf-8')
+        if (stdout.length > EXEC_SHELL_OUTPUT_MAX) {
+          stdout = stdout.slice(0, EXEC_SHELL_OUTPUT_MAX)
+          truncated = true
+        }
+      })
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        if (stderr.length >= EXEC_SHELL_OUTPUT_MAX) { truncated = true; return }
+        stderr += chunk.toString('utf-8')
+        if (stderr.length > EXEC_SHELL_OUTPUT_MAX) {
+          stderr = stderr.slice(0, EXEC_SHELL_OUTPUT_MAX)
+          truncated = true
+        }
+      })
+
+      child.on('error', (err: Error) => {
+        clearTimeout(timer)
+        resolve({
+          content: '',
+          error: `子进程启动失败: ${err.message}`,
+        })
+      })
+
+      child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+        clearTimeout(timer)
+        const duration = Date.now() - startedAt
+        const payload = {
+          command,
+          cwd: subCwd,
+          exit_code: code,
+          signal,
+          duration_ms: duration,
+          killed_by_timeout: killedByTimeout,
+          truncated,
+          stdout: stdout || '(空)',
+          stderr: stderr || '(空)',
+          ...(truncated ? { truncate_hint: `输出超过 ${EXEC_SHELL_OUTPUT_MAX} 字节已截断；如需完整输出请把命令结果重定向到工作区文件，再用 read_file 分页读取。` } : {}),
+          ...(killedByTimeout ? { timeout_hint: `执行超过 ${timeoutMs}ms，已强制终止；请优化命令或调小 timeout_ms 后重试。` } : {}),
+        }
+        resolve({ content: JSON.stringify(payload, null, 2) })
+      })
+    })
+  }
+
+  /**
+   * 启动一个后台 shell 进程，立即返回 task_id；进程在后台持续运行，
+   * stdout/stderr 累积到 BackgroundShellRecord 中，可由 await_shell / kill_shell 操作。
+   *
+   * 调用前已通过 execShell 的全部安全检查（白名单 / 黑名单 / cwd 校验），此处不再重复。
+   */
+  private startBackgroundShell(command: string, subCwd: string, cwd: string): ToolCallResult {
+    this.evictBackgroundShells()
+    if (this.backgroundShells.size >= BG_SHELL_MAX_ENTRIES) {
+      return {
+        content: '',
+        error: `后台 shell 注册表已满（${BG_SHELL_MAX_ENTRIES} 条）。请先用 kill_shell 终止不需要的任务，或等待已结束的旧任务被自动清理。`,
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawn } = require('child_process') as typeof import('child_process')
+    const taskId = `bg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+
+    let child: import('child_process').ChildProcess
+    try {
+      child = spawn(command, {
+        cwd,
+        shell: true,
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          NO_COLOR: '1',
+          PAGER: 'cat',
+        },
+      })
+    } catch (err) {
+      return {
+        content: '',
+        error: `后台子进程启动失败: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+
+    const record: BackgroundShellRecord = {
+      taskId,
+      command,
+      cwd: subCwd,
+      pid: child.pid,
+      startedAt: Date.now(),
+      child,
+      stdout: '',
+      stderr: '',
+      truncated: false,
+      exitCode: null,
+      signal: null,
+      status: 'running',
+      pendingWaiters: [],
+    }
+    this.backgroundShells.set(taskId, record)
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (record.stdout.length >= BG_SHELL_OUTPUT_MAX) { record.truncated = true; return }
+      record.stdout += chunk.toString('utf-8')
+      if (record.stdout.length > BG_SHELL_OUTPUT_MAX) {
+        record.stdout = record.stdout.slice(0, BG_SHELL_OUTPUT_MAX)
+        record.truncated = true
+      }
+      // 唤醒 await_shell 中等待 pattern 的 waiters
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (record.stderr.length >= BG_SHELL_OUTPUT_MAX) { record.truncated = true; return }
+      record.stderr += chunk.toString('utf-8')
+      if (record.stderr.length > BG_SHELL_OUTPUT_MAX) {
+        record.stderr = record.stderr.slice(0, BG_SHELL_OUTPUT_MAX)
+        record.truncated = true
+      }
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.on('error', (err: Error) => {
+      record.status = 'killed'
+      record.endedAt = Date.now()
+      record.stderr += `\n[spawn error] ${err.message}\n`
+      record.child = null
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      record.exitCode = code
+      record.signal = signal
+      record.status = signal ? 'killed' : 'exited'
+      record.endedAt = Date.now()
+      record.child = null
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    return {
+      content: JSON.stringify({
+        task_id: taskId,
+        pid: child.pid,
+        command,
+        cwd: subCwd,
+        started_at: record.startedAt,
+        hint: '进程已在后台启动。用 await_shell({task_id}) 等待结束或读取输出，用 kill_shell({task_id}) 终止。',
+      }, null, 2),
+    }
+  }
+
+  /** 清理已结束且超过保留时长的后台 shell 记录，控制注册表大小 */
+  private evictBackgroundShells(): void {
+    const now = Date.now()
+    const expired: string[] = []
+    for (const [id, rec] of this.backgroundShells.entries()) {
+      if (rec.status !== 'running' && rec.endedAt && now - rec.endedAt > BG_SHELL_RETAIN_MS) {
+        expired.push(id)
+      }
+    }
+    for (const id of expired) this.backgroundShells.delete(id)
+
+    // 仍然超出上限：按结束时间最早的优先 evict（只动已结束的，正在跑的不动）
+    if (this.backgroundShells.size >= BG_SHELL_MAX_ENTRIES) {
+      const ended = [...this.backgroundShells.values()]
+        .filter(r => r.status !== 'running' && r.endedAt)
+        .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
+      const toRemove = ended.slice(0, Math.max(0, this.backgroundShells.size - BG_SHELL_MAX_ENTRIES + 1))
+      for (const r of toRemove) this.backgroundShells.delete(r.taskId)
+    }
+  }
+
+  /** 唤醒指定记录的所有 pending waiters（进程结束 / 输出更新时触发） */
+  private flushBackgroundShellWaiters(rec: BackgroundShellRecord): void {
+    const waiters = rec.pendingWaiters
+    rec.pendingWaiters = []
+    for (const w of waiters) {
+      try { w() } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * await_shell: 阻塞等待后台 shell 任务的进展，返回当前快照。
+   *
+   * 三种结束条件（任意命中即返回）：
+   *   1. 进程已结束
+   *   2. stdout / stderr 命中正则 pattern
+   *   3. 阻塞时长达到 block_until_ms
+   *
+   * 参数：
+   *   task_id: string         — startBackgroundShell 返回的 task_id（必填）
+   *   pattern?: string        — 正则字符串，匹配 stdout/stderr 即唤醒
+   *   block_until_ms?: number — 最长阻塞时长（默认 30s，上限 5min）
+   */
+  private async awaitShell(args: Record<string, unknown>): Promise<ToolCallResult> {
+    const taskId = typeof args.task_id === 'string' ? args.task_id : ''
+    if (!taskId) return { content: '', error: '缺少 task_id 参数' }
+    const rec = this.backgroundShells.get(taskId)
+    if (!rec) return { content: '', error: `task_id 不存在或已被清理: ${taskId}` }
+
+    const blockMs = Math.min(
+      AWAIT_SHELL_MAX_BLOCK_MS,
+      typeof args.block_until_ms === 'number' && Number.isFinite(args.block_until_ms) && args.block_until_ms > 0
+        ? Math.floor(args.block_until_ms)
+        : AWAIT_SHELL_DEFAULT_BLOCK_MS,
+    )
+
+    let regex: RegExp | null = null
+    if (typeof args.pattern === 'string' && args.pattern.length > 0) {
+      try {
+        regex = new RegExp(args.pattern, 'm')
+      } catch (e) {
+        return { content: '', error: `pattern 正则非法: ${e instanceof Error ? e.message : String(e)}` }
+      }
+    }
+
+    const matchesPattern = (): boolean => {
+      if (!regex) return false
+      return regex.test(rec.stdout) || regex.test(rec.stderr)
+    }
+
+    // 已结束 / 已匹配 → 立即返回
+    if (rec.status !== 'running' || matchesPattern()) {
+      return { content: this.snapshotBackgroundShell(rec, regex !== null) }
+    }
+
+    // 注册一个 waiter，配套超时定时器
+    await new Promise<void>((resolve) => {
+      let resolved = false
+      const wakeup = (): void => {
+        if (resolved) return
+        // 仅在进程结束 / pattern 命中时真正 resolve；否则继续等
+        if (rec.status !== 'running' || matchesPattern()) {
+          resolved = true
+          clearTimeout(timer)
+          resolve()
+        } else {
+          // 还没达到结束条件，重新挂回去等下一次输出
+          rec.pendingWaiters.push(wakeup)
+        }
+      }
+      const timer = setTimeout(() => {
+        if (resolved) return
+        resolved = true
+        // 超时也 resolve，由调用端拿快照
+        resolve()
+      }, blockMs)
+      rec.pendingWaiters.push(wakeup)
+    })
+
+    return { content: this.snapshotBackgroundShell(rec, regex !== null) }
+  }
+
+  /** 序列化后台 shell 当前状态为 LLM 可读 JSON */
+  private snapshotBackgroundShell(rec: BackgroundShellRecord, hasPattern: boolean): string {
+    const now = Date.now()
+    return JSON.stringify({
+      task_id: rec.taskId,
+      command: rec.command,
+      cwd: rec.cwd,
+      pid: rec.pid,
+      status: rec.status,
+      exit_code: rec.exitCode,
+      signal: rec.signal,
+      started_at: rec.startedAt,
+      ended_at: rec.endedAt ?? null,
+      duration_ms: (rec.endedAt ?? now) - rec.startedAt,
+      truncated: rec.truncated,
+      stdout: rec.stdout || '(空)',
+      stderr: rec.stderr || '(空)',
+      ...(rec.status === 'running' && hasPattern ? { hint: '进程仍在运行；await_shell 因超时返回当前快照，可再次 await_shell 继续等待。' } : {}),
+      ...(rec.status === 'running' && !hasPattern ? { hint: '进程仍在运行；可传 pattern 等待特定输出，或直接再次 await_shell 等待结束。' } : {}),
+    }, null, 2)
+  }
+
+  /**
+   * kill_shell: 终止指定的后台 shell 任务（SIGTERM，1 秒后 SIGKILL）。
+   *
+   * 参数：
+   *   task_id: string  — 必填
+   */
+  private killShell(args: Record<string, unknown>): ToolCallResult {
+    const taskId = typeof args.task_id === 'string' ? args.task_id : ''
+    if (!taskId) return { content: '', error: '缺少 task_id 参数' }
+    const rec = this.backgroundShells.get(taskId)
+    if (!rec) return { content: '', error: `task_id 不存在或已被清理: ${taskId}` }
+
+    if (rec.status !== 'running' || !rec.child) {
+      return {
+        content: JSON.stringify({
+          task_id: taskId,
+          status: rec.status,
+          message: '任务已结束，无需终止。',
+          exit_code: rec.exitCode,
+        }, null, 2),
+      }
+    }
+
+    const child = rec.child
+    try { child.kill('SIGTERM') } catch { /* ignore */ }
+    setTimeout(() => { try { child.kill('SIGKILL') } catch { /* ignore */ } }, 1000)
+
+    return {
+      content: JSON.stringify({
+        task_id: taskId,
+        message: '已发送 SIGTERM；1 秒后若未退出会强制 SIGKILL。可再次调用 await_shell 拿最终输出。',
+      }, null, 2),
+    }
+  }
+
+  /**
+   * web_search: 调用 Tavily 搜索 API 获取网页摘要。
+   *
+   * 为 LLM 提供联网能力。Tavily 已对结果做了语义重排和摘要提取，
+   * 返回的 content 直接可读，不需要再解析 HTML。
+   *
+   * 凭据：tavily_api_key 由用户在「设置 → 工具集成」中配置。
+   *       未配置时返回友好错误，提示用户去填。
+   *
+   * 参数：
+   *   query: string                 — 搜索关键词（必填）
+   *   max_results?: number          — 返回结果数（默认 5，上限 10）
+   *   search_depth?: 'basic'|'advanced' — basic 快/便宜；advanced 深/慢/贵
+   *   include_answer?: boolean      — 是否让 Tavily 用 LLM 综合一段答案（默认 true）
+   *   topic?: 'general'|'news'      — 搜索领域（默认 general；news 仅取最近资讯）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  /**
+   * read_tool_ref: 取回 lazy-store 落盘的工具结果正文（分页）。
+   *
+   * 用于 lazy_store 化的长输出（v1：web_fetch ≥ 4000 字符触发）。
+   * LLM 看到 `body_lazy_ref` 标记后调此工具取正文。
+   *
+   * 红线：
+   *   - call_id 必须通过 isValidCallId 格式校验（防路径穿越）
+   *   - 单次返回硬上限 READ_TOOL_REF_HARD_LIMIT (8000 字符)，分页用 offset
+   *   - 文件不存在时返回明确错误 + 引导 LLM 重新调原工具
+   */
+  private readToolRefTool(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    if (!conversationId) {
+      return { content: '', error: 'read_tool_ref 需要 conversationId（当前调用上下文缺失，无法定位会话工作区）' }
+    }
+    const callId = typeof args.call_id === 'string' ? args.call_id.trim() : ''
+    const TOOL_DISAMBIGUATE_HINT = '\n\n统一取回入口：新结果请调用 `read_tool_result`。'
+      + 'lazy 正文传 call_id="tool-{12hex}"；spool 原文传 ref="tool-result:..."。'
+      + '`read_tool_ref` 仅为旧会话兼容。'
+    if (!callId) {
+      return {
+        content: '',
+        error: '缺少 call_id 参数。read_tool_ref 仅用于 web_fetch 返回的 body_lazy_ref，'
+          + '此时 call_id 形如 "tool-a8f2c4e9b1c2" 已经在 lazy_ref 对象里。'
+          + '如果你正在处理 search_knowledge / query_excel / read_knowledge_file 等其他工具的结果，'
+          + '它们已经直接返回完整内容，**不要**调用 read_tool_ref——直接基于现有结果回答。'
+          + TOOL_DISAMBIGUATE_HINT,
+      }
+    }
+    if (!isValidCallId(callId)) {
+      // 常见误用：LLM 把"工具名-时间戳"（如 search_knowledge-1779426503790、tool-1779426503790）
+      // 编成 call_id；或者把 spool 文件绝对路径整段当 call_id。
+      // 真正的 call_id 形如 tool-a8f2c4e9b1c2（12 位十六进制），且必须来自 web_fetch body_lazy_ref。
+      // 详见 2026-05-22 用户反馈"工具调用 4 失败"——LLM 看到 spool 提示"调用 read_tool_result"
+      // 但 token-level 混淆调成了 read_tool_ref。
+      const looksLikeSpoolPath = callId.includes('tool-results/') || callId.endsWith('.txt')
+      const looksLikeToolTimestamp = /^[a-z_]+-\d{10,}$/i.test(callId)
+      let extraHint = ''
+      if (looksLikeSpoolPath) {
+        extraHint = '\n\n你传入的 call_id 看起来是旧 spool 文件路径，应该用 `read_tool_result(path="...")`。'
+          + '把这整串作为 path 重新调一次 read_tool_result。'
+      } else if (looksLikeToolTimestamp) {
+        extraHint = '\n\n你传入的 call_id 看起来是"工具名-时间戳"，**这是 spool 文件名的一部分，不是 call_id**。'
+          + '如果你想读完整工具返回内容，应该调 `read_tool_result(ref="<工具返回提示里的稳定引用>")`。'
+      }
+      return {
+        content: '',
+        error: `非法 call_id 格式: ${callId}（必须为 tool-{12hex}，形如 "tool-a8f2c4e9b1c2"）。`
+          + '真正的 call_id 只能从 web_fetch 返回的 body_lazy_ref.call_id 字段里取，**不能凭印象编**。'
+          + extraHint
+          + TOOL_DISAMBIGUATE_HINT,
+      }
+    }
+    const offset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? Math.floor(args.offset) : 0
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.floor(args.limit) : undefined
+    try {
+      const workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+      const out = readToolRef(workspaceRoot, callId, offset, limit)
+      return {
+        content: JSON.stringify({
+          call_id: callId,
+          total_chars: out.total_chars,
+          offset: out.offset,
+          limit: out.limit,
+          truncated: out.truncated,
+          content: out.content,
+          ...(out.truncated ? {
+            hint: `已截断；下一段调用 read_tool_result(call_id="${callId}", offset=${out.offset + out.limit}, limit=${out.limit})`,
+          } : {}),
+        }, null, 2),
+      }
+    } catch (err) {
+      return { content: '', error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  private async webSearch(args: Record<string, unknown>): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return { content: '', error: '缺少 query 参数（搜索关键词）' }
+    if (query.length > 400) {
+      return { content: '', error: 'query 过长（>400 字符），请精简关键词' }
+    }
+
+    if (!this.getSetting) {
+      return { content: '', error: 'web_search 未注入设置读取器（这是部署配置问题，请联系开发）' }
+    }
+    // 防御性闸门：联网总开关未开启则直接拒绝（即使 system prompt / tools 数组上层过滤被绕过也兜底）
+    if (this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
+    }
+    const apiKey = (this.getSetting('tavily_api_key') ?? '').trim()
+    if (!apiKey) {
+      return {
+        content: '',
+        error: '未配置 Tavily API Key。请前往「设置 → 工具集成 → Tavily Search」粘贴 API Key（免费额度 1000 次/月，注册 https://tavily.com 即可获取）。',
+      }
+    }
+
+    const maxResults = Math.min(
+      WEB_SEARCH_HARD_MAX,
+      typeof args.max_results === 'number' && Number.isFinite(args.max_results) && args.max_results > 0
+        ? Math.floor(args.max_results)
+        : WEB_SEARCH_DEFAULT_MAX,
+    )
+    const searchDepth = args.search_depth === 'advanced' ? 'advanced' : 'basic'
+    const includeAnswer = args.include_answer !== false  // 默认 true
+    const topic = args.topic === 'news' ? 'news' : 'general'
+
+    try {
+      const response = await fetchWithTimeout(TAVILY_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          query,
+          max_results: maxResults,
+          search_depth: searchDepth,
+          include_answer: includeAnswer,
+          topic,
+        }),
+        timeoutMs: WEB_SEARCH_TIMEOUT_MS,
+      })
+
+      const data = await response.json() as {
+        query?: string
+        answer?: string
+        results?: Array<{ title: string; url: string; content: string; score: number; published_date?: string }>
+      }
+
+      const results = (data.results ?? []).slice(0, maxResults).map((r) => ({
+        title: r.title,
+        url: r.url,
+        // 截断单条 content 防止 context 爆
+        content: r.content.length > WEB_SEARCH_CONTENT_MAX_CHARS
+          ? r.content.slice(0, WEB_SEARCH_CONTENT_MAX_CHARS) + '...[已截断]'
+          : r.content,
+        score: Math.round(r.score * 1000) / 1000,
+        ...(r.published_date ? { published_date: r.published_date } : {}),
+      }))
+
+      const payload = {
+        query: data.query ?? query,
+        ...(includeAnswer && data.answer ? { answer: data.answer } : {}),
+        result_count: results.length,
+        results,
+        hint: results.length === 0
+          ? '搜索无结果。建议改用更宽泛或更具体的关键词，或切换 topic 到 "news"。'
+          : '已返回精选结果（按相关性排序）。如需深入某条，可用 web_fetch 抓完整页面。',
+      }
+
+      return { content: JSON.stringify(payload, null, 2) }
+    } catch (err) {
+      // HttpError 包含 status，区分 401（key 失效）/ 429（限流）/ 5xx（服务端）
+      if (err instanceof HttpError) {
+        if (err.status === 401 || err.status === 403) {
+          return { content: '', error: 'Tavily API Key 无效或已过期，请到「设置 → 工具集成」重新填入有效 Key。' }
+        }
+        if (err.status === 429) {
+          return { content: '', error: 'Tavily 调用超出免费额度（1000 次/月）；请等下个月或升级付费计划。' }
+        }
+        return { content: '', error: `Tavily API 错误 (${err.status}): ${err.message}` }
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return { content: '', error: `web_search 请求失败: ${msg}` }
+    }
+  }
+
+  /**
+   * cn_web_search: 通过本机 wigolo 边车搜索（中文/国内站点优先）。
+   *
+   * 与 web_search（Tavily）的分工：中文内容、国内站点走此工具（免 key、$0、
+   * 结果带 citation_id + source_span 字节级溯源、本地缓存可离线重查）；
+   * 英文/国际内容走 web_search。
+   *
+   * 诚实降级纪律（docs/wigolo-cn-search-plan.md）：
+   *   - 边车未安装/启动失败 → 把 bridge 返回的 detail 原样透给 LLM，并提示可改用 web_search
+   *   - wigolo 自身的引擎失败列表（failed_engines 等）随结果透传，不隐藏
+   */
+  private async cnWebSearch(args: Record<string, unknown>): Promise<ToolCallResult> {
+    const query = typeof args.query === 'string' ? args.query.trim() : ''
+    if (!query) return { content: '', error: '缺少 query 参数（搜索关键词）' }
+    if (query.length > 400) {
+      return { content: '', error: 'query 过长（>400 字符），请精简关键词' }
+    }
+
+    if (!this.getSetting) {
+      return { content: '', error: 'cn_web_search 未注入设置读取器（这是部署配置问题，请联系开发）' }
+    }
+    // 与 web_search 共用联网总开关（防御性闸门，同 webSearch 的兜底逻辑）
+    if (this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
+    }
+    if (!this.wigoloBridge) {
+      return { content: '', error: 'cn_web_search 未注入 wigolo 边车桥（这是部署配置问题，请联系开发）' }
+    }
+
+    const ready = await this.wigoloBridge.ensureReady()
+    if (!ready.ok || !ready.baseUrl) {
+      return {
+        content: '',
+        error: `wigolo 边车不可用：${ready.detail ?? '未知原因'}。本轮可改用 web_search（Tavily）联网，或基于知识库回答并说明缺口。`,
+      }
+    }
+
+    const maxResults = Math.min(
+      CN_WEB_SEARCH_HARD_MAX,
+      typeof args.max_results === 'number' && Number.isFinite(args.max_results) && args.max_results > 0
+        ? Math.floor(args.max_results)
+        : CN_WEB_SEARCH_DEFAULT_MAX,
+    )
+
+    try {
+      const response = await fetchWithTimeout(`${ready.baseUrl}/v1/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, max_results: maxResults }),
+        timeoutMs: CN_WEB_SEARCH_TIMEOUT_MS,
+      })
+
+      const data = await response.json() as {
+        results?: Array<{
+          title?: string
+          url?: string
+          excerpt?: string
+          citation_id?: string
+          source_span?: { start: number; end: number }
+          evidence_score?: { final?: number }
+          engine?: string
+        }>
+        engines_used?: string[]
+        failed_engines?: unknown
+        freshness_signal?: unknown
+      }
+
+      const results = (data.results ?? []).slice(0, maxResults).map((r) => ({
+        title: r.title ?? '',
+        url: r.url ?? '',
+        // 同 web_search：截断单条摘要防 context 爆；citation/span 保留供溯源引用
+        excerpt: (r.excerpt ?? '').length > CN_WEB_SEARCH_EXCERPT_MAX_CHARS
+          ? (r.excerpt ?? '').slice(0, CN_WEB_SEARCH_EXCERPT_MAX_CHARS) + '...[已截断]'
+          : (r.excerpt ?? ''),
+        ...(r.citation_id ? { citation_id: r.citation_id } : {}),
+        ...(r.source_span ? { source_span: r.source_span } : {}),
+        ...(typeof r.evidence_score?.final === 'number'
+          ? { score: Math.round(r.evidence_score.final * 1000) / 1000 }
+          : {}),
+      }))
+
+      const payload = {
+        query,
+        result_count: results.length,
+        results,
+        // wigolo 的引擎遥测如实透传（哪些引擎参与、哪些失败），不伪装成全量成功
+        ...(Array.isArray(data.engines_used) && data.engines_used.length > 0 ? { engines_used: data.engines_used } : {}),
+        ...(data.failed_engines ? { failed_engines: data.failed_engines } : {}),
+        ...(data.freshness_signal ? { freshness_signal: data.freshness_signal } : {}),
+        hint: results.length === 0
+          ? '搜索无结果。建议换更宽泛的关键词；若 failed_engines 显示引擎大量失败，可能是网络受限，可改用 web_search。'
+          : '结果带 citation_id / source_span（字节级溯源），引用数字或结论时请标注来源 URL。深入某条用 web_fetch 抓全文。',
+      }
+
+      return { content: JSON.stringify(payload, null, 2) }
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return { content: '', error: `wigolo 边车响应异常 (${err.status}): ${err.message}。可用 web_search 兜底。` }
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return { content: '', error: `cn_web_search 请求失败: ${msg}。可用 web_search 兜底。` }
+    }
+  }
+
+  /**
+   * web_fetch: 抓取单个 URL 的内容，自动转 Markdown / 文本 / JSON。
+   *
+   * 与 web_search 互补：先用 web_search 得到候选 URL，再用 web_fetch 抓全文。
+   *
+   * 安全控制：
+   *   - 仅允许 http / https
+   *   - 屏蔽 localhost / 内网 IP（防 SSRF 攻击）
+   *   - 30 秒强制超时
+   *   - 30KB 默认输出截断（可调高，硬上限 100KB）
+   *
+   * 参数：
+   *   url: string                                — 必填，绝对 URL
+   *   format?: 'markdown' | 'text' | 'json' | 'raw' — 默认 'markdown'
+   *     - markdown: HTML 转 Markdown（保留链接/标题/列表/代码块），最适合 LLM
+   *     - text: 纯文本（剥所有标签和实体）
+   *     - json: 解析 JSON 响应（非 JSON 报错）
+   *     - raw: 原始响应字符串（不处理）
+   *   max_chars?: number                         — 输出上限（默认 30000，硬上限 100000）
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private async webFetch(args: Record<string, unknown>): Promise<ToolCallResult> {
+    // 防御性闸门：联网总开关未开启则直接拒绝（与 webSearch 同款兜底）
+    if (this.getSetting && this.getSetting('web_search_enabled') !== 'true') {
+      return {
+        content: '',
+        error: '联网功能未启用。请到「设置 → 工具集成」打开"启用联网功能"开关；未开启时分身只基于知识库回答。',
+      }
+    }
+    // fake-ip 代理放宽：用户在用 Clash/Surge 等 TUN+fake-ip 时，公网域名会被解析到
+    // 198.18.x.x 这类段，默认 SSRF 拦截会误杀。开启此设置后只硬拦 loopback/link-local。
+    const allowPrivate = !!this.getSetting && this.getSetting('web_fetch_allow_private') === 'true'
+    const rawUrl = typeof args.url === 'string' ? args.url.trim() : ''
+    if (!rawUrl) return { content: '', error: '缺少 url 参数' }
+
+    let parsed: URL
+    try {
+      parsed = new URL(rawUrl)
+    } catch {
+      return { content: '', error: `无效的 URL: ${rawUrl}` }
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { content: '', error: `仅支持 http/https 协议，拒绝 ${parsed.protocol}` }
+    }
+
+    const format = (args.format === 'text' || args.format === 'json' || args.format === 'raw')
+      ? args.format
+      : 'markdown'
+    const maxChars = Math.min(
+      WEB_FETCH_HARD_MAX_CHARS,
+      typeof args.max_chars === 'number' && Number.isFinite(args.max_chars) && args.max_chars > 0
+        ? Math.floor(args.max_chars)
+        : WEB_FETCH_DEFAULT_MAX_CHARS,
+    )
+
+    // 收集所有 hop 创建的 Agent，最终 finally 统一 close()——否则每次 web_fetch
+     // 都泄漏 socket pool / timer。声明在 try 外面，finally 才能读到。
+    const agents: Agent[] = []
+    // 终态响应对应的超时句柄：必须覆盖整个 body 流式读取阶段，不能在拿到 headers 后就 clear
+    // （否则慢/恶意服务器先发 headers 再挂起 body 会让 read 无限等待）。声明在 try 外面，
+    // finally 才能读到——统一在 finally 清，覆盖所有出口。
+    let bodyTimeoutId: ReturnType<typeof setTimeout> | null = null
+    try {
+      // 手动重定向 + 每跳 DNS 校验 + IP pinning：避免 DNS rebinding。
+      // 流程：lookup → 校验 IP 不是内网 → undici Agent 用 connect.lookup 把这个 IP
+      // 灌进去，fetch 实际 socket 连接就用这个 IP，不会被同一 hostname 第二次解析
+      // 返回内网替换。
+      const MAX_REDIRECTS = 5
+      // 16MB 硬上限：防超大响应或无限流撑爆主进程内存（在 maxChars 字符截断之外的字节级兜底）
+      const HARD_BYTE_LIMIT = 16 * 1024 * 1024
+      let currentUrl = parsed.href
+      const redirectChain: string[] = []
+      let response: Response | null = null
+      // 重定向 hop 的 timer 在本跳内 clear；只有 break 出来的终态响应才把 timer 记到
+      // bodyTimeoutId（声明在 try 外），延后到 body 读完 / 出错才在 finally 里 clear。
+      for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+        const u = new URL(currentUrl)
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+          return { content: '', error: `重定向跳到不支持的协议 ${u.protocol}` }
+        }
+        const pinned = await resolveAndAssertNotPrivate(u.hostname, allowPrivate)
+        // undici Agent: 自定义 connect.lookup 把校验过的 IP pin 死。
+        // 注意：fetch 全局是 undici，Node 22+ RequestInit 不声明 dispatcher 字段，
+        // 用 init 对象 + 类型扩展规避
+        const agent = new Agent({
+          connect: {
+            lookup: (_hostname: string, _options: dns.LookupOptions, callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
+              callback(null, pinned.address, pinned.family)
+            },
+          },
+        })
+        agents.push(agent)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(new Error('timeout')), WEB_FETCH_TIMEOUT_MS)
+        let resp: Response
+        try {
+          // dispatcher 是 undici 的扩展字段，全局 RequestInit 不声明；
+          // undici-types（@types/node 用）与本地 undici 包的 Dispatcher 类型独立声明，
+          // 互相不兼容 → 通过 unknown 桥接断言
+          const init = {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SoulBot/1.0)',
+              'Accept': 'text/html,application/xhtml+xml,application/json,text/plain,*/*',
+            },
+            redirect: 'manual' as const,  // 自己处理重定向，每跳都重新走 DNS 校验
+            signal: controller.signal,
+            dispatcher: agent as unknown,
+          } as unknown as RequestInit
+          resp = await fetch(currentUrl, init)
+        } catch (e) {
+          // fetch 自身失败（含 abort 超时）：本跳 timer 立即清，避免泄漏
+          clearTimeout(timeoutId)
+          throw e
+        }
+        if (resp.status >= 300 && resp.status < 400) {
+          const loc = resp.headers.get('location')
+          if (!loc) {
+            // 3xx 但没 Location header，视作终止（拿 status/headers 给上层看）。
+            // 终态响应：timer 不在这里清，留给 body 读取阶段（见下方 bodyTimeoutId）。
+            response = resp
+            bodyTimeoutId = timeoutId
+            break
+          }
+          // 跳转前 cancel 这一跳的 body——不消费的话 undici 会保持 socket 等读完，
+          // 长跳转链会积累空闲连接。本跳到此结束，timer 清掉。
+          clearTimeout(timeoutId)
+          try { await resp.body?.cancel() } catch { /* swallow */ }
+          if (hop >= MAX_REDIRECTS) {
+            return { content: '', error: `超过最大重定向数 ${MAX_REDIRECTS}` }
+          }
+          redirectChain.push(currentUrl)
+          currentUrl = new URL(loc, currentUrl).href
+          continue
+        }
+        // 终态响应：timer 延后到 body 读完再清（覆盖整个流式读取阶段）
+        response = resp
+        bodyTimeoutId = timeoutId
+        break
+      }
+      if (!response) {
+        return { content: '', error: '请求未返回响应（manual redirect 循环异常）' }
+      }
+
+      const contentType = response.headers.get('content-type') ?? ''
+      // Content-Length 预检：明显超 HARD_BYTE_LIMIT 直接拒，不下载
+      const clHeader = response.headers.get('content-length')
+      if (clHeader) {
+        const cl = parseInt(clHeader, 10)
+        if (Number.isFinite(cl) && cl > HARD_BYTE_LIMIT) {
+          // 提前 return 前必须 cancel body，否则未消费的响应体会拖住 socket/agent，
+          // 拖累 finally 的 agent.close()
+          try { await response.body?.cancel() } catch { /* swallow */ }
+          return {
+            content: '',
+            error: `响应 Content-Length=${cl} 字节超过上限 ${HARD_BYTE_LIMIT}（16MB），已拒绝下载`,
+          }
+        }
+      }
+
+      // 流式读取 + abort：达到字节/字符上限立即 cancel reader，避免整包读入再截断
+      const reader = response.body?.getReader()
+      let rawText = ''
+      let totalBytes = 0
+      let truncated = false
+      if (reader) {
+        const decoder = new TextDecoder('utf-8')
+        // 字符上限取大点（×2）做软停，给最终格式化 / json 留余量；最终再 slice 到 maxChars
+        const softCharLimit = maxChars * 2
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          totalBytes += value.byteLength
+          if (totalBytes > HARD_BYTE_LIMIT) {
+            await reader.cancel()
+            return {
+              content: '',
+              error: `响应已读取 ${totalBytes} 字节超过上限 ${HARD_BYTE_LIMIT}（16MB），已中止下载`,
+            }
+          }
+          rawText += decoder.decode(value, { stream: true })
+          if (rawText.length >= softCharLimit) {
+            await reader.cancel()
+            truncated = true
+            break
+          }
+        }
+        rawText += decoder.decode()  // flush
+      }
+
+      // 按 format 处理
+      let body: string
+      if (format === 'json') {
+        try {
+          const json = JSON.parse(rawText)
+          body = JSON.stringify(json, null, 2)
+        } catch (e) {
+          return {
+            content: '',
+            error: `format=json 但响应不是合法 JSON：${e instanceof Error ? e.message : String(e)}（content-type: ${contentType}）`,
+          }
+        }
+      } else if (format === 'raw') {
+        body = rawText
+      } else if (format === 'text') {
+        body = htmlToPlainText(rawText)
+      } else {
+        body = htmlToMarkdown(rawText)
+      }
+
+      if (body.length > maxChars) {
+        body = body.slice(0, maxChars)
+        truncated = true
+      }
+
+      const wasRedirected = currentUrl !== parsed.href
+      const payload = {
+        url: parsed.href,
+        // 跟随重定向后实际拉取的 URL（正文来源），与原始 URL 区分；下游做 source citation
+        // 时应该用 final_url，而不是被引导误用原始 URL
+        ...(wasRedirected ? { final_url: currentUrl, redirect_chain: redirectChain } : {}),
+        status: response.status,
+        content_type: contentType,
+        format,
+        char_count: body.length,
+        truncated,
+        ...(truncated ? { hint: `内容已截断到 ${maxChars} 字符。如需更多，调用时设 max_chars=较大值（≤${WEB_FETCH_HARD_MAX_CHARS}）。` } : {}),
+        body,
+      }
+      return { content: JSON.stringify(payload, null, 2) }
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return { content: '', error: `web_fetch 失败 (${err.type}${err.status ? ` ${err.status}` : ''}): ${err.message}` }
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return { content: '', error: `web_fetch 异常: ${msg}` }
+    } finally {
+      // 终态响应的 body 读取超时句柄在此统一清——覆盖正常读完 / json 解析失败 / 字节超限
+      // / 抛错等所有出口，保证 abort deadline 一直管到 body 读完或出错才解除。
+      if (bodyTimeoutId !== null) clearTimeout(bodyTimeoutId)
+      // 释放所有 hop 创建的 Agent。close() 是异步的，失败也不能再 throw（finally 内）
+      for (const agent of agents) {
+        try { await agent.close() } catch { /* swallow */ }
+      }
+    }
+  }
+
+  /**
+   * list_mcp_tools: 列出当前所有已连接 MCP server 的工具。
+   *
+   * 设计意图：不一次性把全部 MCP 工具塞进 system prompt（会浪费 token），
+   *           而是让 LLM 主动按需查询，再根据描述决定调用哪个。
+   *
+   * @param args.server_name 可选，只列指定 server 的工具
+   */
+  private listMcpTools(args: Record<string, unknown>): ToolCallResult {
+    if (!this.mcpManager) {
+      return {
+        content: '',
+        error: 'MCP 未启用（主进程未注入 mcpManager）。请到「设置 → 工具集成 → MCP」配置后重启。',
+      }
+    }
+    const filterServer = typeof args.server_name === 'string' ? args.server_name : undefined
+    const allTools = this.mcpManager.listTools()
+    const filtered = filterServer
+      ? allTools.filter((t) => t.serverName === filterServer)
+      : allTools
+
+    if (filtered.length === 0) {
+      const servers = this.mcpManager.listServers()
+      const hint = servers.length === 0
+        ? '没有任何已配置的 MCP server。'
+        : `已配置 server: ${servers.map((s) => `${s.name}(${s.status})`).join(', ')}。${filterServer ? `'${filterServer}' 没有可用工具。` : ''}`
+      return { content: JSON.stringify({ tool_count: 0, tools: [], hint }, null, 2) }
+    }
+
+    return {
+      content: JSON.stringify({
+        tool_count: filtered.length,
+        tools: filtered.map((t) => ({
+          name: t.qualifiedName,
+          server: t.serverName,
+          description: t.description,
+          input_schema: t.inputSchema,
+        })),
+        hint: '调用时使用 call_mcp_tool({ name: "<上面的 name>", arguments: { ... } })。',
+      }, null, 2),
+    }
+  }
+
+  /**
+   * call_mcp_tool: 调用某个 MCP server 暴露的工具。
+   *
+   * @param args.name      工具全名（mcp__<server>__<tool>）
+   * @param args.arguments 工具入参（按 input_schema 校验）
+   * @param args.timeout_ms 可选，单次超时（默认 60s，硬上限 300s）
+   */
+  private async callMcpTool(args: Record<string, unknown>): Promise<ToolCallResult> {
+    if (!this.mcpManager) {
+      return {
+        content: '',
+        error: 'MCP 未启用（主进程未注入 mcpManager）。请到「设置 → 工具集成 → MCP」配置后重启。',
+      }
+    }
+    const name = typeof args.name === 'string' ? args.name.trim() : ''
+    if (!name) return { content: '', error: '缺少 name 参数（MCP 工具全名）' }
+
+    const toolArgs = (args.arguments && typeof args.arguments === 'object')
+      ? args.arguments as Record<string, unknown>
+      : {}
+
+    const timeoutRaw = typeof args.timeout_ms === 'number' && Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
+      ? Math.floor(args.timeout_ms)
+      : undefined
+    const timeoutMs = timeoutRaw ? Math.min(timeoutRaw, 300_000) : undefined
+
+    const result = await this.mcpManager.callTool(name, toolArgs, timeoutMs ? { timeoutMs } : undefined)
+    if (result.error) return { content: result.content, error: result.error }
+    return { content: result.content }
+  }
+
+  /**
+   * ask_question: 向用户弹出多选卡片（轻量级 questions_v2 包装）。
+   *
+   * 实现策略：
+   *   - tool-router 仅做参数校验、生成结构化 payload
+   *   - 真正的 IPC 推送（chat:ask-question）由主进程在 execute-tool-call 上层做
+   *     （main.ts 已在 questions_v2 处实现类似逻辑）
+   *   - LLM 看到的返回字符串是「请等待用户在卡片上点选」的提示，下一轮 user
+   *     消息会带 [ask_question answer] 前缀
+   *
+   * @author zhi.qu
+   * @date 2026-04-30
+   */
+  private askQuestion(args: Record<string, unknown>): ToolCallResult {
+    const question = typeof args.question === 'string' ? args.question.trim() : ''
+    if (!question) return { content: '', error: '缺少 question 参数（问题文本）' }
+    if (question.length > 300) {
+      return { content: '', error: 'question 过长（>300 字符），请精简' }
+    }
+    const rawOptions = Array.isArray(args.options) ? args.options : []
+    const options: string[] = rawOptions
+      .filter((o): o is string => typeof o === 'string')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0)
+      .slice(0, 5)
+    if (options.length < 2) {
+      return { content: '', error: 'options 至少 2 项有效字符串（建议 2-5 项）' }
+    }
+    const allowCustom = args.allow_custom === true
+    const payload = {
+      type: 'ask_question',
+      question,
+      options,
+      allow_custom: allowCustom,
+      hint: '已弹出多选卡片，正在等待用户点选。下一轮你会收到 user 消息形如 "[ask_question answer] <用户选择>"。',
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * generate_image: 调用 DashScope 通义万相 wanx2.1-t2i-turbo 生成图片，落盘到 workspace。
+   *
+   * DashScope 异步 API 流程：
+   *   1. POST /api/v1/services/aigc/text2image/image-synthesis（async）→ 拿 task_id
+   *   2. GET /api/v1/tasks/{task_id} 轮询 task_status（PENDING/RUNNING/SUCCEEDED/FAILED）
+   *   3. SUCCEEDED → 拿 results[0].url（公网 PNG）
+   *   4. fetch 图片 → 保存到 workspace/generated/img-<ts>.png
+   *
+   * 凭据：image_api_key（getSetting 注入），缺失时返回友好错误。
+   * 限制：单次 1 张；总超时 90 秒；图片下载 30 秒。
+   *
+   * @author zhi.qu
+   * @date 2026-04-30
+   */
+  private async generateImage(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
+    if (!prompt) return { content: '', error: '缺少 prompt 参数（图片描述）' }
+    if (prompt.length > 800) {
+      return { content: '', error: `prompt 过长（${prompt.length} > 800 字符），请精简` }
+    }
+    const negativePrompt = typeof args.negative_prompt === 'string' ? args.negative_prompt.trim() : ''
+    const sizeRaw = typeof args.size === 'string' ? args.size.trim() : ''
+    const size = (sizeRaw === '720*1280' || sizeRaw === '1280*720') ? sizeRaw : '1024*1024'
+
+    if (!this.getSetting) {
+      return { content: '', error: 'generate_image 未注入设置读取器（部署配置问题）' }
+    }
+    const apiKey = (this.getSetting('image_api_key') ?? '').trim()
+    if (!apiKey) {
+      return {
+        content: '',
+        error: '未配置 DashScope API Key。请前往「设置 → 工具集成 → 图片生成」配置（注册 https://dashscope.console.aliyun.com 即可获取）。',
+      }
+    }
+
+    let workspaceRoot: string
+    try {
+      workspaceRoot = this.getWorkspaceRoot(avatarId, conversationId)
+    } catch (e) {
+      return { content: '', error: `无法定位 workspace: ${e instanceof Error ? e.message : String(e)}` }
+    }
+
+    // 1. 创建异步任务
+    let taskId: string
+    try {
+      const createResp = await fetchWithTimeout(IMAGE_GEN_CREATE_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'X-DashScope-Async': 'enable',
+        },
+        body: JSON.stringify({
+          model: 'wanx2.1-t2i-turbo',
+          input: {
+            prompt,
+            ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+          },
+          parameters: {
+            size,
+            n: 1,
+          },
+        }),
+        timeoutMs: IMAGE_GEN_CREATE_TIMEOUT_MS,
+      })
+      const createJson = await createResp.json() as { output?: { task_id?: string }; message?: string }
+      if (!createJson.output?.task_id) {
+        return { content: '', error: `DashScope 任务创建失败: ${createJson.message ?? JSON.stringify(createJson).slice(0, 200)}` }
+      }
+      taskId = createJson.output.task_id
+    } catch (err) {
+      if (err instanceof HttpError) {
+        if (err.status === 401 || err.status === 403) {
+          return { content: '', error: 'DashScope API Key 无效或已过期，请重新配置' }
+        }
+        return { content: '', error: `generate_image 创建任务失败 (${err.status ?? err.type}): ${err.message}` }
+      }
+      return { content: '', error: `generate_image 异常: ${err instanceof Error ? err.message : String(err)}` }
+    }
+
+    // 2. 轮询直到完成
+    const pollDeadline = Date.now() + IMAGE_GEN_POLL_TIMEOUT_MS
+    let imageUrl: string | undefined
+    let lastStatus = 'UNKNOWN'
+    while (Date.now() < pollDeadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, IMAGE_GEN_POLL_INTERVAL_MS))
+      try {
+        const taskResp = await fetchWithTimeout(`${IMAGE_GEN_TASK_URL}/${encodeURIComponent(taskId)}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          timeoutMs: IMAGE_GEN_POLL_TIMEOUT_PER_REQ_MS,
+        })
+        const taskJson = await taskResp.json() as {
+          output?: {
+            task_status?: string
+            results?: Array<{ url?: string }>
+            message?: string
+          }
+        }
+        lastStatus = taskJson.output?.task_status ?? 'UNKNOWN'
+        if (lastStatus === 'SUCCEEDED') {
+          imageUrl = taskJson.output?.results?.[0]?.url
+          if (!imageUrl) {
+            return { content: '', error: 'DashScope 任务成功但未返回图片 URL（可能内容审核被驳回）' }
+          }
+          break
+        }
+        if (lastStatus === 'FAILED' || lastStatus === 'UNKNOWN_ERROR') {
+          return { content: '', error: `DashScope 任务失败 (${lastStatus}): ${taskJson.output?.message ?? '无详情'}` }
+        }
+        // PENDING / RUNNING → 继续轮询
+      } catch (err) {
+        // 单次轮询失败容忍，继续重试
+        if (err instanceof HttpError && (err.status === 401 || err.status === 403)) {
+          return { content: '', error: 'DashScope API Key 在轮询时被拒（可能权限变更），请重新配置' }
+        }
+        // 其他错误继续轮询，等待 deadline
+      }
+    }
+    if (!imageUrl) {
+      return { content: '', error: `generate_image 轮询超时（${IMAGE_GEN_POLL_TIMEOUT_MS}ms），最后状态: ${lastStatus}。请稍后重试或简化 prompt。` }
+    }
+
+    // 3. 下载图片 + 落盘
+    const savePathRaw = typeof args.save_path === 'string' && args.save_path.trim()
+      ? args.save_path.trim()
+      : `generated/img-${Date.now()}.png`
+    let absSavePath: string
+    try {
+      absSavePath = this.resolveWorkspacePath(avatarId, conversationId, savePathRaw)
+    } catch (e) {
+      return { content: '', error: `save_path 校验失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    try {
+      const imgResp = await fetchWithTimeout(imageUrl, {
+        method: 'GET',
+        timeoutMs: IMAGE_GEN_DOWNLOAD_TIMEOUT_MS,
+      })
+      const buf = Buffer.from(await imgResp.arrayBuffer())
+      fs.mkdirSync(path.dirname(absSavePath), { recursive: true })
+      fs.writeFileSync(absSavePath, buf)
+    } catch (err) {
+      return { content: '', error: `图片下载/落盘失败: ${err instanceof Error ? err.message : String(err)}` }
+    }
+    const relPath = path.relative(workspaceRoot, absSavePath).replace(/\\/g, '/')
+
+    return {
+      content: JSON.stringify({
+        path: relPath,
+        size,
+        prompt,
+        ...(negativePrompt ? { negative_prompt: negativePrompt } : {}),
+        hint: `图片已生成并保存到 ${relPath}。可用 show_to_user(${JSON.stringify(relPath)}) 在预览窗口展示，或直接在回答中引用。`,
+      }, null, 2),
+    }
+  }
+
+  /**
+   * switch_mode: 切换分身工作模式（agent / plan / ask）。
+   *
+   * 模式状态由前端 chatStore.mode 维护；本工具只做参数校验 + 返回结构化通知，
+   * 实际状态变更由前端在收到 tool_result 后做（main.ts 也会广播 chat:mode-changed
+   * 让其他组件刷新）。
+   *
+   * @author zhi.qu
+   * @date 2026-04-30
+   */
+  private switchMode(args: Record<string, unknown>): ToolCallResult {
+    const mode = typeof args.mode === 'string' ? args.mode.trim().toLowerCase() : ''
+    if (mode !== 'agent' && mode !== 'plan' && mode !== 'ask') {
+      return { content: '', error: 'mode 必须是 agent / plan / ask 之一' }
+    }
+    const reason = typeof args.reason === 'string' ? args.reason.trim() : ''
+    const payload = {
+      type: 'switch_mode',
+      mode,
+      ...(reason ? { reason } : {}),
+      hint: `已切换到 ${mode} 模式。下一轮 LLM 调用的工具列表会按模式过滤（plan 禁写、ask 禁所有工具）。`,
+    }
+    return { content: JSON.stringify(payload, null, 2) }
+  }
+
+  /**
+   * exec_code: 在工作区目录内执行 Python / Node / TSX 代码片段。
+   *
+   * 与 exec_shell 互补：覆盖 LLM 现场写脚本场景（数据处理、批量改写、报表分析、
+   * 调用 pandas/openpyxl/pypdf 等三方库）。这是"造粗工具"难以穷举的能力补充。
+   *
+   * 工作流：
+   *   1. 校验 language 在白名单 EXEC_CODE_INTERPRETERS
+   *   2. code 字符数校验（≤ EXEC_CODE_SCRIPT_MAX_CHARS）
+   *   3. 写入 workspace/.code-exec/{taskId}.{ext}（保留供 read_file 复盘）
+   *   4. spawn(interpreter, [scriptPath]) without shell:true（避免命令注入）
+   *   5. 收集 stdout/stderr 各 16KB / 前台超时 5 分钟
+   *   6. 后台模式复用 backgroundShells 注册表，task_id 兼容 await_shell / kill_shell
+   *
+   * 安全说明：
+   *   - cwd 锁定 workspace；脚本仍可调用 OS API（subprocess / open /etc 等），
+   *     这点与 shell 一致 —— 桌面端单用户场景信任 LLM；如需强隔离，未来可切 Docker / Firecracker
+   *   - 网络请求请走 web_fetch 工具，不要在脚本内 requests/fetch 远程资源
+   *
+   * 参数：
+   *   language: 'python' | 'python3' | 'node' | 'tsx'
+   *   code: string                       — 完整脚本内容（≤ 16000 字符）
+   *   cwd?: string                       — 相对工作区根的子目录（默认 "."）
+   *   timeout_ms?: number                — 前台超时（不超过 300000）
+   *   background?: boolean               — 后台运行；返回 task_id
+   *
+   * @author zhi.qu
+   * @date 2026-04-29
+   */
+  private async execCode(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): Promise<ToolCallResult> {
+    const language = typeof args.language === 'string' ? args.language : ''
+    const code = typeof args.code === 'string' ? args.code : ''
+
+    if (!language) {
+      return { content: '', error: `缺少 language 参数。可选: ${Object.keys(EXEC_CODE_INTERPRETERS).join(', ')}` }
+    }
+    const interp = EXEC_CODE_INTERPRETERS[language]
+    if (!interp) {
+      return {
+        content: '',
+        error: `不支持的 language: "${language}"。可选: ${Object.keys(EXEC_CODE_INTERPRETERS).join(', ')}`,
+      }
+    }
+    if (!code.trim()) return { content: '', error: '缺少 code 参数（脚本内容不能为空）' }
+    if (code.length > EXEC_CODE_SCRIPT_MAX_CHARS) {
+      return { content: '', error: `code 过长（${code.length} > ${EXEC_CODE_SCRIPT_MAX_CHARS} 字符）。请拆分成多个脚本，或写到 .py/.js 文件后用 exec_shell 运行。` }
+    }
+
+    // 解析 cwd（必须在 workspace 内）
+    const subCwd = typeof args.cwd === 'string' && args.cwd.trim() ? args.cwd.trim() : '.'
+    let cwd: string
+    try {
+      cwd = this.resolveWorkspacePath(avatarId, conversationId, subCwd)
+    } catch (e) {
+      return { content: '', error: `cwd 校验失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+      return { content: '', error: `cwd 不存在或不是目录: ${subCwd}` }
+    }
+
+    // 写脚本文件到 workspace/.code-exec/{taskId}.{ext}
+    const taskId = `code-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const codeDir = path.join(this.getWorkspaceRoot(avatarId, conversationId), '.code-exec')
+    fs.mkdirSync(codeDir, { recursive: true })
+    const scriptPath = path.join(codeDir, `${taskId}${interp.ext}`)
+    try {
+      fs.writeFileSync(scriptPath, code, 'utf-8')
+    } catch (e) {
+      return { content: '', error: `写入临时脚本失败: ${e instanceof Error ? e.message : String(e)}` }
+    }
+    const scriptRelPath = path.join('.code-exec', path.basename(scriptPath)).replace(/\\/g, '/')
+
+    // ─── 后台模式 ───────────────────────────────────────────────────────────
+    if (args.background === true) {
+      return this.startBackgroundCode(taskId, interp, scriptPath, scriptRelPath, cwd, subCwd, language)
+    }
+
+    // ─── 前台模式 ───────────────────────────────────────────────────────────
+    const timeoutMs = Math.min(
+      EXEC_CODE_HARD_TIMEOUT_MS,
+      typeof args.timeout_ms === 'number' && Number.isFinite(args.timeout_ms) && args.timeout_ms > 0
+        ? Math.floor(args.timeout_ms)
+        : EXEC_CODE_HARD_TIMEOUT_MS,
+    )
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawn } = require('child_process') as typeof import('child_process')
+    const startedAt = Date.now()
+
+    return new Promise<ToolCallResult>((resolve) => {
+      // 关键：不用 shell:true，参数数组化，避免命令注入
+      const child = spawn(interp.command, [...interp.preArgs, scriptPath], {
+        cwd,
+        shell: false,
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          NO_COLOR: '1',
+          PYTHONUNBUFFERED: '1', // 确保 Python print 实时输出
+          PAGER: 'cat',
+        },
+      })
+
+      let stdout = ''
+      let stderr = ''
+      let truncated = false
+      let killedByTimeout = false
+
+      const timer = setTimeout(() => {
+        killedByTimeout = true
+        try { child.kill('SIGTERM') } catch { /* ignore */ }
+        setTimeout(() => { try { child.kill('SIGKILL') } catch { /* ignore */ } }, 1000)
+      }, timeoutMs)
+
+      child.stdout?.on('data', (chunk: Buffer) => {
+        if (stdout.length >= EXEC_CODE_OUTPUT_MAX) { truncated = true; return }
+        stdout += chunk.toString('utf-8')
+        if (stdout.length > EXEC_CODE_OUTPUT_MAX) {
+          stdout = stdout.slice(0, EXEC_CODE_OUTPUT_MAX)
+          truncated = true
+        }
+      })
+
+      child.stderr?.on('data', (chunk: Buffer) => {
+        if (stderr.length >= EXEC_CODE_OUTPUT_MAX) { truncated = true; return }
+        stderr += chunk.toString('utf-8')
+        if (stderr.length > EXEC_CODE_OUTPUT_MAX) {
+          stderr = stderr.slice(0, EXEC_CODE_OUTPUT_MAX)
+          truncated = true
+        }
+      })
+
+      child.on('error', (err: Error) => {
+        clearTimeout(timer)
+        // 常见：命令找不到（PATH 里无 python/node/tsx）
+        const hint = err.message.includes('ENOENT')
+          ? `\n[提示] 未找到解释器 "${interp.command}"。请检查系统是否已安装并加入 PATH；macOS 可用 brew install python3/node/tsx。`
+          : ''
+        resolve({
+          content: '',
+          error: `子进程启动失败: ${err.message}${hint}`,
+        })
+      })
+
+      child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+        clearTimeout(timer)
+        const duration = Date.now() - startedAt
+        const payload = {
+          task_id: taskId,
+          language,
+          script_path: scriptRelPath,
+          cwd: subCwd,
+          exit_code: code,
+          signal,
+          duration_ms: duration,
+          killed_by_timeout: killedByTimeout,
+          truncated,
+          stdout: stdout || '(空)',
+          stderr: stderr || '(空)',
+          ...(truncated ? { truncate_hint: `输出超过 ${EXEC_CODE_OUTPUT_MAX} 字节已截断；请在脚本中减少 print，或把结果写到文件再用 read_file 分页读取。` } : {}),
+          ...(killedByTimeout ? { timeout_hint: `执行超过 ${timeoutMs}ms，已强制终止。可优化算法、改 background:true 后台跑、或拆分子任务。` } : {}),
+          ...(code !== 0 ? { reuse_hint: `脚本已保留在 ${scriptRelPath}，可用 read_file 查看后用 str_replace_edit 修复，再 exec_shell({command:"${interp.command} ${scriptRelPath}"}) 重跑。` } : {}),
+        }
+        resolve({ content: JSON.stringify(payload, null, 2) })
+      })
+    })
+  }
+
+  /**
+   * 后台模式启动代码进程。复用 backgroundShells 注册表，task_id 可直接被 await_shell / kill_shell 操作。
+   */
+  private startBackgroundCode(
+    taskId: string,
+    interp: InterpreterConfig,
+    scriptPath: string,
+    scriptRelPath: string,
+    cwd: string,
+    subCwd: string,
+    language: string,
+  ): ToolCallResult {
+    this.evictBackgroundShells()
+    if (this.backgroundShells.size >= BG_SHELL_MAX_ENTRIES) {
+      return {
+        content: '',
+        error: `后台任务注册表已满（${BG_SHELL_MAX_ENTRIES} 条）。请先用 kill_shell 终止不需要的任务。`,
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { spawn } = require('child_process') as typeof import('child_process')
+    let child: import('child_process').ChildProcess
+    try {
+      child = spawn(interp.command, [...interp.preArgs, scriptPath], {
+        cwd,
+        shell: false,
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          NO_COLOR: '1',
+          PYTHONUNBUFFERED: '1',
+          PAGER: 'cat',
+        },
+      })
+    } catch (err) {
+      return {
+        content: '',
+        error: `后台子进程启动失败: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+
+    const record: BackgroundShellRecord = {
+      taskId,
+      command: `${interp.command} ${scriptRelPath}`,
+      cwd: subCwd,
+      pid: child.pid,
+      startedAt: Date.now(),
+      child,
+      stdout: '',
+      stderr: '',
+      truncated: false,
+      exitCode: null,
+      signal: null,
+      status: 'running',
+      pendingWaiters: [],
+    }
+    this.backgroundShells.set(taskId, record)
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (record.stdout.length >= BG_SHELL_OUTPUT_MAX) { record.truncated = true; return }
+      record.stdout += chunk.toString('utf-8')
+      if (record.stdout.length > BG_SHELL_OUTPUT_MAX) {
+        record.stdout = record.stdout.slice(0, BG_SHELL_OUTPUT_MAX)
+        record.truncated = true
+      }
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (record.stderr.length >= BG_SHELL_OUTPUT_MAX) { record.truncated = true; return }
+      record.stderr += chunk.toString('utf-8')
+      if (record.stderr.length > BG_SHELL_OUTPUT_MAX) {
+        record.stderr = record.stderr.slice(0, BG_SHELL_OUTPUT_MAX)
+        record.truncated = true
+      }
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.on('error', (err: Error) => {
+      record.status = 'killed'
+      record.endedAt = Date.now()
+      record.stderr += `\n[spawn error] ${err.message}\n`
+      record.child = null
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      record.exitCode = code
+      record.signal = signal
+      record.status = signal ? 'killed' : 'exited'
+      record.endedAt = Date.now()
+      record.child = null
+      this.flushBackgroundShellWaiters(record)
+    })
+
+    return {
+      content: JSON.stringify({
+        task_id: taskId,
+        pid: child.pid,
+        language,
+        script_path: scriptRelPath,
+        cwd: subCwd,
+        started_at: record.startedAt,
+        hint: '代码已在后台启动。用 await_shell({task_id}) 等待结束，用 kill_shell({task_id}) 终止。',
+      }, null, 2),
+    }
+  }
+
+  // ─── 计算工具（GAP4 计算引擎）────────────────────────────────────────────────
+
+  /**
+   * 工商储收益测算（GAP4 计算引擎核心）
+   * 计算峰谷套利、需量管理收益
+   */
+  private calculateRoi(args: Record<string, unknown>): ToolCallResult {
+    const toNum = (v: unknown, fallback: number): number => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : fallback
+    }
+
+    const capacity_kwh = toNum(args.capacity_kwh, 0)
+    const power_kw = toNum(args.power_kw, 0)
+    const peak_price = toNum(args.peak_price, 1.2)
+    const valley_price = toNum(args.valley_price, 0.4)
+    const daily_cycles = toNum(args.daily_cycles, 1)
+    const dod = toNum(args.dod, 0.9)
+    const efficiency = toNum(args.efficiency, 0.9)
+    const annual_degradation = toNum(args.annual_degradation, 0.03)
+    const project_life_years = Math.min(toNum(args.project_life_years, 10), 50)
+    const investment_per_kwh = toNum(args.investment_per_kwh, 1800)
+    const demand_charge_saving = toNum(args.demand_charge_saving, 0)
+    const annual_opex = toNum(args.annual_opex, 0)
+
+    if (capacity_kwh <= 0) {
+      return { content: '', error: '储能容量 capacity_kwh 必须大于 0' }
+    }
+    if (power_kw <= 0) {
+      return { content: '', error: '充放电功率 power_kw 必须大于 0' }
+    }
+    const investmentTotal = capacity_kwh * investment_per_kwh
+    const results: string[] = []
+    results.push(`## 储能收益测算报告`)
+    results.push(`\n### 基础参数`)
+    results.push(`- 储能容量: ${capacity_kwh} kWh`)
+    results.push(`- 充放功率: ${power_kw} kW`)
+    results.push(`- 峰谷电价差: ${peak_price - valley_price} 元/kWh`)
+    results.push(`- 放电深度: ${dod * 100}%，系统效率: ${efficiency * 100}%`)
+    results.push(`- 总投资: ${investmentTotal.toFixed(0)} 元`)
+
+    results.push(`\n### 逐年收益预测`)
+    let totalRevenue = 0
+    let paybackYear: number | null = null
+    let cumulativeCashflow = -investmentTotal
+
+    for (let year = 1; year <= project_life_years; year++) {
+      const degradedCapacity = capacity_kwh * Math.pow(1 - annual_degradation, year - 1)
+      const dailyEnergy = degradedCapacity * dod * efficiency
+      const dailyArbitrage = dailyEnergy * (peak_price - valley_price) * daily_cycles
+      const annualArbitrage = dailyArbitrage * 330
+      const annualRevenue = annualArbitrage + demand_charge_saving
+      const netRevenue = annualRevenue - annual_opex
+      totalRevenue += netRevenue
+      cumulativeCashflow += netRevenue
+
+      if (paybackYear === null && cumulativeCashflow >= 0) paybackYear = year
+
+      results.push(`- 第 ${year} 年: 年收益 ${annualRevenue.toFixed(0)} 元，净收益 ${netRevenue.toFixed(0)} 元，累计现金流 ${cumulativeCashflow.toFixed(0)} 元`)
+    }
+
+    const roi = (totalRevenue / investmentTotal) * 100
+    const irr = estimateIRR(investmentTotal, project_life_years,
+      capacity_kwh, peak_price, valley_price,
+      dod, efficiency, daily_cycles, demand_charge_saving, annual_opex, annual_degradation)
+
+    results.push(`\n### 汇总`)
+    results.push(`- 总投资: **${investmentTotal.toFixed(0)} 元**`)
+    results.push(`- ${project_life_years} 年累计净收益: **${totalRevenue.toFixed(0)} 元**`)
+    results.push(`- 静态回收期: **${paybackYear !== null ? paybackYear + ' 年' : '超过项目寿命'}**`)
+    results.push(`- 整体投资回报率: **${roi.toFixed(1)}%**`)
+    results.push(`- 估算 IRR: **${(irr * 100).toFixed(1)}%**`)
+
+    return { content: results.join('\n') }
+  }
+
+  /**
+   * Feature 5: 按需加载技能完整内容（渐进式披露）。
+   * system prompt 中只注入技能摘要，AI 在需要执行技能时调用此工具获取完整定义。
+   *
+   * 启用状态强制（修复 P2 绕过）：
+   *   - local 技能：必须不在 .config.json 的 disabledSkills 列表里
+   *   - shared 技能：必须在 skill-index.yaml 里 source: shared 引用
+   *   - community 技能：必须在 skill-index.yaml 里 source: community 引用，
+   *     且按 index 里声明的具体 path 加载（避免同名 pack 串包）
+   *
+   * 之前直接按 local/shared/community 路径全盘扫描，被禁用 / 未启用 / 同名跨 pack
+   * 的技能只要猜到 ID 就能加载，绕过 UI 启用状态。
+   */
+  private loadSkill(avatarId: string, args: Record<string, unknown>, conversationId?: string): ToolCallResult {
+    const skillId = args.skill_id as string
+    if (!skillId) return { content: '', error: '缺少 skill_id 参数' }
+    // B1（agentskills.io 对齐）：目录型技能引用二次读取。
+    // skill_id 形如 "<技能名>/references/<文件名>" 时走引用读取路径——
+    // 复用 skill_id 传相对路径（不加新参数），与 SKILL.md 正文里的引用写法一致。
+    if (skillId.includes('/') || skillId.includes('\\')) {
+      return this.loadSkillReference(avatarId, skillId)
+    }
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    // 1) local：优先扫，但要尊重 .config.json 的 disabledSkills
+    const disabled = this.readDisabledSkillIds(avatarId)
+    if (!disabled.has(skillId)) {
+      const localCandidates = [
+        path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.md`),
+        path.join(this.avatarsPath, avatarId, 'skills', skillId, 'SKILL.md'),
+      ]
+      for (const p of localCandidates) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8')
+          const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
+          const sop = this.decorateSkillWithSop(avatarId, conversationId, skillId, p)
+          return { content: `## 技能：${skillId}\n\n${content}${extras}${sop}` }
+        }
+      }
+    } else {
+      // local 同名禁用：明确告诉模型，避免它去试 shared 同名（虽然下面已挡）
+      return { content: '', error: `技能 ${skillId} 已在分身设置里禁用（.config.json 的 disabledSkills）` }
+    }
+
+    // 2/3) shared/community：必须在 skill-index.yaml 里被显式引用
+    const refs = this.readEnabledSkillRefsFromIndex(avatarId)
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    if (refs.shared.has(skillId)) {
+      const sharedCandidates = [
+        path.join(sharedRoot, `${skillId}.md`),
+        path.join(sharedRoot, skillId, 'SKILL.md'),
+      ]
+      for (const p of sharedCandidates) {
+        if (fs.existsSync(p)) {
+          const content = fs.readFileSync(p, 'utf-8')
+          const extras = path.basename(p) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(p), skillId) : ''
+          const sop = this.decorateSkillWithSop(avatarId, conversationId, skillId, p)
+          return { content: `## 技能：${skillId}\n\n${content}${extras}${sop}` }
+        }
+      }
+    }
+    const communityDeclaredPath = refs.community.get(skillId)
+    if (communityDeclaredPath) {
+      // 按 yaml 声明的 path 加载，避免同名跨 pack 串包。
+      // 历史 community-skill-manager 写 ../../../shared/...（相对 yaml 文件位置），
+      // 新版改成 shared/skills/community/...（相对 repo root，canonical）；都试一下。
+      // 越界校验：解析后必须落在 communityRoot 下
+      const communityRoot = path.resolve(this.avatarsPath, '..', 'shared', 'skills', 'community')
+      const yamlDir = path.join(this.avatarsPath, avatarId, 'skills')
+      const candidates = [
+        path.resolve(this.avatarsPath, '..', communityDeclaredPath),  // canonical: repo-root 相对
+        path.resolve(yamlDir, communityDeclaredPath),                 // legacy: yaml-relative
+      ]
+      for (const absPath of candidates) {
+        const rel = path.relative(communityRoot, absPath)
+        if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(absPath)) {
+          const content = fs.readFileSync(absPath, 'utf-8')
+          const extras = path.basename(absPath) === 'SKILL.md' ? this.listSkillDirResources(path.dirname(absPath), skillId) : ''
+          return { content: `## 技能：${skillId}\n\n${content}${extras}` }
+        }
+      }
+    }
+    return { content: '', error: `技能不存在或未启用：${skillId}（local 需有同名文件且未禁用；shared/community 需在 skill-index.yaml 里显式引用）` }
+  }
+
+  // ─── SOP 状态机集成（W5.3/W5.4，见 docs/staffdeck-adoption-plan.md） ────────
+  // 双轨：技能目录里有同名 `<skill>.sop.yaml` 才进流程模式，否则完全走原散文链路。
+
+  /** SOP 会话状态 key；无 conversationId 时不启用流程（无法隔离并发会话） */
+  private sopKey(avatarId: string, conversationId: string, skill: string): string {
+    return `${avatarId}::${conversationId}::${skill}`
+  }
+
+  /** 读取并缓存 sop.yaml；解析失败返回 errors 供 fail-loud 提示（不静默降级成普通技能） */
+  private loadSopCard(sopPath: string): { card?: SopCard; errors?: string[] } {
+    let mtimeMs: number
+    try {
+      mtimeMs = fs.statSync(sopPath).mtimeMs
+    } catch {
+      return {}
+    }
+    const cached = this.sopCardCache.get(sopPath)
+    if (cached && cached.mtimeMs === mtimeMs) return { card: cached.card }
+    const parsed = parseSopCard(fs.readFileSync(sopPath, 'utf-8'))
+    if (!parsed.ok) return { errors: parsed.errors }
+    this.sopCardCache.set(sopPath, { card: parsed.card, mtimeMs })
+    return { card: parsed.card }
+  }
+
+  /**
+   * load_skill 返回前的 SOP 装配：技能同目录有 `<skillId>.sop.yaml` 时开一条流程，
+   * 把首个节点的 turn prompt 追加在 SKILL.md 正文之后。
+   * 返回空串 = 该技能不是流程型（绝大多数技能），调用方原样返回正文。
+   */
+  private decorateSkillWithSop(
+    avatarId: string,
+    conversationId: string | undefined,
+    skillId: string,
+    skillFilePath: string,
+  ): string {
+    const sopPath = path.join(path.dirname(skillFilePath), `${skillId}.sop.yaml`)
+    if (!fs.existsSync(sopPath)) return ''
+    const { card, errors } = this.loadSopCard(sopPath)
+    if (!card) {
+      // 有 sop.yaml 但解析失败：明确告知，不假装这是普通技能（否则流程纪律静默消失）
+      return `\n\n---\n\n⚠️ 本技能带 SOP 流程定义（${skillId}.sop.yaml），但解析失败，`
+        + `本轮按普通技能执行。请修复后重试：\n- ${(errors ?? ['未知错误']).join('\n- ')}\n`
+    }
+    if (!conversationId) {
+      return `\n\n---\n\n⚠️ 本技能有 SOP 流程，但当前调用缺少会话上下文，无法维护流程状态，按普通技能执行。\n`
+    }
+    const runner = new SopRunner(card)
+    const key = this.sopKey(avatarId, conversationId, card.skill)
+    // 已在流程中（用户重复 load_skill）→ 沿用现有状态，不重置已收集的槽位
+    const state = this.sopStates.get(key) ?? runner.initialState(Date.now())
+    this.sopStates.set(key, state)
+    return `\n\n---\n\n## 流程模式已启用（SOP: ${card.skill}）\n\n`
+      + `${runner.buildTurnPrompt(state, { reportChannel: 'tool' })}\n`
+  }
+
+  /**
+   * sop_report: LLM 汇报本轮 SOP 进展，由状态机硬校验后推进。
+   *
+   * 纪律全在 SopRunner.applyTurn：槽位未齐不许转移、非法转移拒绝、非终点不许完成。
+   * 本工具只负责取状态、应用、回写、把下一节点指令与 warnings 交回模型。
+   */
+  private sopReport(
+    avatarId: string,
+    conversationId: string | undefined,
+    args: Record<string, unknown>,
+  ): ToolCallResult {
+    const skill = typeof args.skill === 'string' ? args.skill.trim() : ''
+    if (!skill) return { content: '', error: '缺少 skill 参数（正在执行的 SOP 技能名）' }
+    if (!conversationId) {
+      return { content: '', error: 'sop_report 需要会话上下文（当前调用缺失，无法定位流程状态）' }
+    }
+    const key = this.sopKey(avatarId, conversationId, skill)
+    const state = this.sopStates.get(key)
+    if (!state) {
+      return {
+        content: '',
+        error: `没有正在进行的 SOP 流程「${skill}」。请先调用 load_skill("${skill}") 开启流程；`
+          + '若该技能没有 sop.yaml，则它不是流程型技能，不要调用 sop_report。',
+      }
+    }
+    // 技能与卡片重新解析一次（走缓存）：状态里只存 skill 名，card 从磁盘恢复
+    const sopPath = this.findSopPathForSkill(avatarId, skill)
+    if (!sopPath) {
+      this.sopStates.delete(key)
+      return { content: '', error: `SOP 定义文件已不存在（${skill}.sop.yaml），流程已终止。` }
+    }
+    const { card, errors } = this.loadSopCard(sopPath)
+    if (!card) {
+      return { content: '', error: `SOP 定义解析失败：${(errors ?? []).join('；')}` }
+    }
+    const runner = new SopRunner(card)
+    const report = {
+      filled: args.filled && typeof args.filled === 'object' && !Array.isArray(args.filled)
+        ? Object.fromEntries(
+          Object.entries(args.filled as Record<string, unknown>)
+            .filter(([, v]) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')
+            .map(([k, v]) => [k, String(v)]),
+        )
+        : undefined,
+      next: typeof args.next === 'string' ? args.next : undefined,
+      done: args.done === true,
+    }
+    const result = runner.applyTurn(state, report, Date.now())
+    this.sopStates.set(key, result.state)
+    if (result.finished) {
+      this.sopStates.delete(key)
+      return {
+        content: JSON.stringify({
+          skill,
+          finished: true,
+          collected: result.state.filled,
+          path: result.state.history,
+          ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          hint: '流程已完成。基于 collected 里的信息给出最终交付，引用知识库数据时标注来源。',
+        }, null, 2),
+      }
+    }
+    return {
+      content: JSON.stringify({
+        skill,
+        transitioned: result.transitioned,
+        current_node: result.state.nodeId,
+        ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+        next_instruction: runner.buildTurnPrompt(result.state, { reportChannel: 'tool' }),
+      }, null, 2),
+    }
+  }
+
+  /** 按 local → shared 顺序找技能的 sop.yaml（community 技能不支持 SOP，避免跨包状态混淆） */
+  private findSopPathForSkill(avatarId: string, skillId: string): string | null {
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+    } catch {
+      return null
+    }
+    const candidates = [
+      path.join(this.avatarsPath, avatarId, 'skills', `${skillId}.sop.yaml`),
+      path.join(this.avatarsPath, '..', 'shared', 'skills', `${skillId}.sop.yaml`),
+    ]
+    return candidates.find((p) => fs.existsSync(p)) ?? null
+  }
+
+  /** B1 目录型技能允许二次读取的子目录白名单（agentskills.io spec 的三个标准子目录） */
+  private static readonly SKILL_RESOURCE_SUBDIRS = ['references', 'scripts', 'assets'] as const
+
+  /**
+   * B1 目录型技能资源清单：列出技能目录下 references/ scripts/ assets/ 的一层文件，
+   * 附在 SKILL.md 正文之后，引导模型用 load_skill("<技能名>/references/<文件名>")
+   * 二次读取（load_skill 的 schema 不加新参数，复用 skill_id 传相对路径）。
+   */
+  private listSkillDirResources(skillDir: string, skillId: string): string {
+    const lines: string[] = []
+    for (const sub of ToolRouter.SKILL_RESOURCE_SUBDIRS) {
+      const dir = path.join(skillDir, sub)
+      try {
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isFile()) lines.push(`- ${skillId}/${sub}/${entry.name}`)
+        }
+      } catch { /* 单个子目录读失败不阻塞技能正文 */ }
+    }
+    if (lines.length === 0) return ''
+    return '\n\n---\n\n本技能为目录型技能，以下配套文件可按需二次读取（把下列路径原样作为 load_skill 的 skill_id 传入；引用限一层深）：\n' + lines.join('\n')
+  }
+
+  /**
+   * B1：目录型技能引用二次读取。
+   *
+   * skill_id 形如 "<技能名>/references/<文件名>"（scripts/ assets/ 同理），
+   * 恰好三段——引用限一层深（references/ 下不再嵌套），更深直接拒绝。
+   *
+   * 安全边界（缺一不可）：
+   *   - 技能名段 / 文件名段各自过 assertSafeSegment（挡 .. 与路径分隔符）
+   *   - 子目录段白名单（references/scripts/assets），不允许读技能目录里任意文件
+   *   - resolveUnderRoot 守护：解析结果必须落在该技能目录内，逃逸即拒绝
+   *   - realpath 复查：技能目录内的符号链接指向目录外时同样按逃逸拒绝
+   *   - 技能启用状态与 loadSkill 主路径同一套强制（禁用 / 未引用均拒绝）
+   */
+  private loadSkillReference(avatarId: string, ref: string): ToolCallResult {
+    const segments = ref.split('/')
+    if (segments.length !== 3 || segments.some(s => !s.trim())) {
+      return { content: '', error: `技能引用路径必须形如 "<技能名>/references/<文件名>"（引用限一层深，references/ 下不再嵌套）: ${ref}` }
+    }
+    const [skillId, subdir, fileName] = segments
+    try {
+      assertSafeSegment(skillId, 'skill_id')
+      assertSafeSegment(fileName, '引用文件名')
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!(ToolRouter.SKILL_RESOURCE_SUBDIRS as readonly string[]).includes(subdir)) {
+      return { content: '', error: `技能引用只允许 ${ToolRouter.SKILL_RESOURCE_SUBDIRS.join('/')} 子目录，收到: ${subdir}` }
+    }
+    const skillDir = this.resolveEnabledSkillDir(avatarId, skillId)
+    if (!skillDir) {
+      return { content: '', error: `技能不存在、未启用或不是目录型技能：${skillId}（引用二次读取只对含 SKILL.md 的目录型技能开放）` }
+    }
+    let absPath: string
+    try {
+      // 路径守护①：解析结果必须落在技能目录内（统一走 resolveUnderRoot，禁止自实现）
+      absPath = resolveUnderRoot(skillDir, path.join(subdir, fileName))
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+    if (!fs.existsSync(absPath)) {
+      return { content: '', error: `引用文件不存在：${ref}` }
+    }
+    try {
+      // 路径守护②：realpath 复查——技能目录里的符号链接若指向目录外，同样按逃逸拒绝
+      const realDir = fs.realpathSync(skillDir)
+      const realFile = fs.realpathSync(absPath)
+      resolveUnderRoot(realDir, path.relative(realDir, realFile))
+      if (fs.statSync(realFile).isDirectory()) {
+        return { content: '', error: `引用路径是目录不是文件：${ref}` }
+      }
+      const content = fs.readFileSync(realFile, 'utf-8')
+      return { content: `## 技能引用：${ref}\n\n${content}` }
+    } catch (e) {
+      return { content: '', error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  /**
+   * B1：解析技能对应的目录型技能根目录（…/skills/<skillId>/，须含 SKILL.md）。
+   * 启用状态强制与 loadSkill 主路径同一套：
+   *   - local 被 .config.json 禁用 → 整体拒绝（与主路径一致，不落到 shared）
+   *   - shared/community → 必须在 skill-index.yaml 显式引用
+   * 只识别目录型技能；单文件 .md 技能没有 references/，返回 null。
+   */
+  private resolveEnabledSkillDir(avatarId: string, skillId: string): string | null {
+    try {
+      assertSafeSegment(avatarId, '分身ID')
+    } catch {
+      return null
+    }
+    const disabled = this.readDisabledSkillIds(avatarId)
+    if (disabled.has(skillId)) return null
+    // 1) local
+    const localDir = path.join(this.avatarsPath, avatarId, 'skills', skillId)
+    if (fs.existsSync(path.join(localDir, 'SKILL.md'))) return localDir
+    // 2) shared：必须在 skill-index.yaml 里 source: shared 引用
+    const refs = this.readEnabledSkillRefsFromIndex(avatarId)
+    const sharedRoot = path.join(this.avatarsPath, '..', 'shared', 'skills')
+    if (refs.shared.has(skillId)) {
+      const sharedDir = path.join(sharedRoot, skillId)
+      if (fs.existsSync(path.join(sharedDir, 'SKILL.md'))) return sharedDir
+    }
+    // 3) community：按 yaml 声明 path 定位（避免同名跨 pack 串包），SKILL.md 所在目录即技能根
+    const declaredPath = refs.community.get(skillId)
+    if (declaredPath) {
+      const communityRoot = path.resolve(this.avatarsPath, '..', 'shared', 'skills', 'community')
+      const yamlDir = path.join(this.avatarsPath, avatarId, 'skills')
+      const candidates = [
+        path.resolve(this.avatarsPath, '..', declaredPath),  // canonical: repo-root 相对
+        path.resolve(yamlDir, declaredPath),                 // legacy: yaml-relative
+      ]
+      for (const absPath of candidates) {
+        const rel = path.relative(communityRoot, absPath)
+        if (rel.startsWith('..') || path.isAbsolute(rel)) continue
+        if (path.basename(absPath) === 'SKILL.md' && fs.existsSync(absPath)) {
+          return path.dirname(absPath)
+        }
+        // 声明 path 也可能直接写技能目录本身（目录型条目的另一种写法）
+        if (fs.existsSync(path.join(absPath, 'SKILL.md'))) return absPath
+      }
+    }
+    return null
+  }
+
+  /** 读 avatars/<id>/skills/.config.json 的 disabledSkills 列表 */
+  private readDisabledSkillIds(avatarId: string): Set<string> {
+    const out = new Set<string>()
+    const p = path.join(this.avatarsPath, avatarId, 'skills', '.config.json')
+    if (!fs.existsSync(p)) return out
+    try {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf-8')) as { disabledSkills?: unknown[] }
+      if (Array.isArray(parsed.disabledSkills)) {
+        for (const id of parsed.disabledSkills) {
+          if (typeof id === 'string') out.add(id)
+        }
+      }
+    } catch { /* 配置解析失败不阻塞，按"无禁用"兜底 */ }
+    return out
+  }
+
+  /**
+   * 读 skill-index.yaml，按 source 分桶：
+   *   - shared: Set<skillId>
+   *   - community: Map<skillId, declaredPath>（path 来自 yaml 的 path 字段，避免同名跨 pack）
+   * 纯文本切块，不引 yaml 库。
+   */
+  private readEnabledSkillRefsFromIndex(avatarId: string): { shared: Set<string>; community: Map<string, string> } {
+    const shared = new Set<string>()
+    const community = new Map<string, string>()
+    const indexPath = path.join(this.avatarsPath, avatarId, 'skills', 'skill-index.yaml')
+    if (!fs.existsSync(indexPath)) return { shared, community }
+    let raw: string
+    try { raw = fs.readFileSync(indexPath, 'utf-8') } catch { return { shared, community } }
+    const lines = raw.split('\n')
+    let currentName: string | null = null
+    let currentBlock: string[] = []
+    const flush = () => {
+      if (!currentName) return
+      const blockText = currentBlock.join('\n')
+      const sourceMatch = blockText.match(/^\s+source:\s*(shared|community)\s*$/m)
+      if (!sourceMatch) return
+      if (sourceMatch[1] === 'shared') {
+        shared.add(currentName)
+      } else {
+        const pathMatch = blockText.match(/^\s+path:\s*(.+?)\s*$/m)
+        if (pathMatch) {
+          community.set(currentName, pathMatch[1].replace(/['"]/g, '').trim())
+        }
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^\s*-\s*name:\s*(.+?)\s*$/)
+      if (m) {
+        flush()
+        currentName = m[1].replace(/['"]/g, '').trim()
+        currentBlock = [line]
+      } else {
+        currentBlock.push(line)
+      }
+    }
+    flush()
+    return { shared, community }
+  }
+
+  /**
+   * Feature 7: 委派子任务给独立子代理。
+   * 若提供 callLLM，子代理会立即执行；否则返回任务 ID 供后续轮询。
+   */
+  private async delegateTask(
+    avatarId: string,
+    args: Record<string, unknown>,
+    callLLM?: (sys: string, user: string, maxTokens?: number) => Promise<string>,
+    conversationId?: string,
+  ): Promise<ToolCallResult> {
+    const task = args.task as string
+    if (!task) return { content: '', error: '缺少 task 参数' }
+
+    // v18 CrewAI 借鉴：可选 expected_output 描述（自然语言；非空时注入子代理 userPrompt）
+    const expectedOutput = typeof args.expected_output === 'string' ? args.expected_output.trim() : ''
+
+    /**
+     * 子代理角色（2026-05-22 Mavis 借鉴）。
+     *
+     * - 未传 / 非法值 → 走旧行为（agent_type=null）
+     * - 'verifier'    → 在 systemPrompt 前缀加复核 hint；ctx.agentType='verifier' 让 sink 落库
+     * - 'explore' / 'plan' / 'worker' → 仅透传给 sink 便于 UI 区分；prompt 不变
+     *
+     * Verifier 的 hint 在主 prompt 前缀注入而不是替换：保留分身人格（保证语气一致），
+     * 只追加"你这次的任务是复核来源/数字真实性，不接受占位骨架"这条强约束。
+     */
+    const VALID_AGENT_TYPES = ['explore', 'plan', 'worker', 'verifier'] as const
+    type AgentTypeArg = (typeof VALID_AGENT_TYPES)[number]
+    const rawAgentType = typeof args.agent_type === 'string' ? args.agent_type.trim() : ''
+    const agentType: AgentTypeArg | null = (VALID_AGENT_TYPES as readonly string[]).includes(rawAgentType)
+      ? (rawAgentType as AgentTypeArg)
+      : null
+    const VERIFIER_PROMPT_PREFIX = [
+      '【本轮以复核子代理（Verifier）身份执行——MiniMax Mavis 借鉴的 Leader/Worker/Verifier 三角色】',
+      '你的任务不是回答问题，而是检查另一个子代理给出的结论是否站得住。检查项（Soul 数据可溯源红线）：',
+      '1) 每个具体数字是否真的能在引用来源里找到？query_excel / read_file 自己复算一遍。',
+      '2) 引用的 knowledge/<path>.md 是否真实存在且包含被引段落？',
+      '3) Excel 来源是否标到 sheet 名级别？还是用 markdown 总结冒充原始 sheet？',
+      '4) 有没有"缺数据但画了占位骨架"？',
+      '不写文件、不 spawn 子代理。最终输出必须是：✅ 通过 / ❌ 不通过 + 具体不通过项 + 缺口清单。',
+      '— 以上是本轮约束，下面恢复你的分身人格 —',
+    ].join('\n')
+
+    if (!callLLM) {
+      return { content: `[子任务已记录] 任务描述：${task}\n\n由于当前无 LLM 调用权限，请在主对话中直接完成此任务。` }
+    }
+
+    /**
+     * 解析委派目标。
+     *
+     * - 未传 target_avatar  → 完全沿用旧行为：用当前分身的 systemPromptCache
+     * - 传了但等于 avatarId → 等同未传（避免误把"自己"当跨分身处理）
+     * - 传了且与当前不同   → 按 SoulLoader 回调加载目标分身的 systemPrompt
+     *   - 加载失败 / 回调未注入 → 返回错误并列出可用分身
+     */
+    const rawTarget = typeof args.target_avatar === 'string' ? args.target_avatar.trim() : ''
+    const targetAvatar = rawTarget && rawTarget !== avatarId ? rawTarget : ''
+
+    let systemPrompt: string
+    if (targetAvatar) {
+      try {
+        assertSafeSegment(targetAvatar, 'target_avatar')
+      } catch (e) {
+        return { content: '', error: e instanceof Error ? e.message : String(e) }
+      }
+      // 优先用 systemPromptCache（用户曾经切到过该分身，已被注入）
+      const cached = this.systemPromptCache.get(targetAvatar)
+      if (cached) {
+        systemPrompt = cached
+      } else if (this.loadAvatarSystemPrompt) {
+        // 现场加载：通常调外部注入的 SoulLoader.loadAvatar(...).systemPrompt
+        let loaded: string | undefined
+        try {
+          loaded = this.loadAvatarSystemPrompt(targetAvatar)
+        } catch (e) {
+          loaded = undefined
+          console.warn(`[tool-router] loadAvatarSystemPrompt 抛错: ${e instanceof Error ? e.message : String(e)}`)
+        }
+        if (!loaded) {
+          const available = this.listAvailableAvatars?.() ?? []
+          const hint = available.length > 0 ? `\n可用分身：${available.join(', ')}` : ''
+          return {
+            content: '',
+            error: `target_avatar "${targetAvatar}" 不存在或无法加载 systemPrompt。${hint}`,
+          }
+        }
+        systemPrompt = loaded
+        // 加载成功后写回缓存，避免下次重复加载
+        this.systemPromptCache.set(targetAvatar, loaded)
+      } else {
+        return {
+          content: '',
+          error: `委派到 "${targetAvatar}" 失败：未注入 loadAvatarSystemPrompt 回调，无法跨分身委派。`,
+        }
+      }
+    } else {
+      systemPrompt = this.systemPromptCache.get(avatarId) || `你是一个专业 AI 助手，请独立完成分配的任务。`
+    }
+
+    // verifier 前缀注入：放在分身人格 systemPrompt 之前，保留分身语气、追加复核约束。
+    if (agentType === 'verifier') {
+      systemPrompt = `${VERIFIER_PROMPT_PREFIX}\n\n${systemPrompt}`
+    }
+
+    /**
+     * 构造派发上下文 + sink 闭包。
+     *
+     * 仅在同时具备 sink + conversationId 时才落库——纯核心单测/无 conversation 上下文
+     * 场景下 sink 直接 no-op，不报错也不写垃圾数据。
+     */
+    const onChange = this.subAgentTaskSink && conversationId
+      ? (t: SubAgentTask) => {
+          this.subAgentTaskSink!(t, {
+            conversationId,
+            parentAvatarId: avatarId,
+            targetAvatar: targetAvatar || null,
+            agentType,
+          })
+        }
+      : undefined
+
+    const agentTask = await this.subAgentManager.delegate(task, systemPrompt, callLLM, onChange, {
+      ...(expectedOutput ? { expectedOutput } : {}),
+    })
+
+    // 基于事件通知等待完成，无轮询
+    const TIMEOUT_MS = 30000
+    const t = await this.subAgentManager.waitForTask(agentTask.id, TIMEOUT_MS)
+    if (!t) {
+      return { content: '', error: '子任务丢失（可能已被清理），请重试。' }
+    }
+    if (t.status === 'done') {
+      return { content: t.result ?? '子任务完成，无结果输出。' }
+    }
+    if (t.status === 'error') {
+      return { content: '', error: `子任务失败: ${t.error}` }
+    }
+    return { content: `子任务执行超时（ID: ${agentTask.id}），请稍后查询结果。` }
+  }
+}
+
+/**
+ * MongoDB 风格 filter 匹配器。支持：
+ *   - 标量值：{col: "215"} 等价于 $eq
+ *   - 运算符对象：{col: {$gte: "2026-01", $lte: "2026-03"}}
+ *   - 支持 $eq / $ne / $gt / $gte / $lt / $lte / $in
+ *
+ * 字符串/数字统一用 JS 宽松比较（支持 "2026-01" 字典序、数字大小比较）。
+ */
+function matchFilter(
+  row: Record<string, string | number | null>,
+  filter: Record<string, unknown>,
+): boolean {
+  for (const [col, cond] of Object.entries(filter)) {
+    const cell = row[col]
+    if (cond === null || cond === undefined) {
+      if (cell !== null && cell !== undefined) return false
+      continue
+    }
+    if (typeof cond === 'object' && !Array.isArray(cond)) {
+      const ops = cond as Record<string, unknown>
+      for (const [op, val] of Object.entries(ops)) {
+        if (!matchOp(cell, op, val)) return false
+      }
+    } else {
+      // 标量默认 $eq
+      if (!looseEquals(cell, cond)) return false
+    }
+  }
+  return true
+}
+
+function matchOp(cell: string | number | null, op: string, val: unknown): boolean {
+  switch (op) {
+    case '$eq':
+      return looseEquals(cell, val)
+    case '$ne':
+      return !looseEquals(cell, val)
+    case '$gt':
+      return cell !== null && val !== null && val !== undefined && cell > (val as string | number)
+    case '$gte':
+      return cell !== null && val !== null && val !== undefined && cell >= (val as string | number)
+    case '$lt':
+      return cell !== null && val !== null && val !== undefined && cell < (val as string | number)
+    case '$lte':
+      return cell !== null && val !== null && val !== undefined && cell <= (val as string | number)
+    case '$in':
+      if (!Array.isArray(val)) return false
+      return val.some(v => looseEquals(cell, v))
+    default:
+      // 未知运算符 → 不匹配
+      return false
+  }
+}
+
+/**
+ * 把 cell_language 映射到 .ipynb 的 cell_type。
+ *
+ * 仅返回三种合法值（'code' | 'markdown' | 'raw'），其余视作 code。
+ * 不识别的语言返回 null（由调用方报错）。
+ */
+function mapNotebookCellType(language: string): 'code' | 'markdown' | 'raw' | null {
+  switch (language.toLowerCase()) {
+    case 'markdown':
+      return 'markdown'
+    case 'raw':
+      return 'raw'
+    case 'python':
+    case 'javascript':
+    case 'typescript':
+    case 'r':
+    case 'sql':
+    case 'shell':
+    case 'bash':
+    case 'other':
+      return 'code'
+    default:
+      return null
+  }
+}
+
+/**
+ * .ipynb 的 cell.source 既可能是 string 也可能是 string[]（每元素含末尾换行）。
+ * 统一拼成单一字符串以便做替换。
+ */
+function joinNotebookSource(source: unknown): string {
+  if (typeof source === 'string') return source
+  if (Array.isArray(source)) return source.map((s) => (typeof s === 'string' ? s : '')).join('')
+  return ''
+}
+
+/**
+ * 写回 cell.source 时拆成 string[]，每个元素以 \n 结尾（最后一行除外，与 Jupyter 默认序列化对齐）。
+ * 这种格式的 diff 友好度比单一字符串好得多（git diff 看 source[i] 比看一坨 string 直观）。
+ */
+function splitNotebookSource(text: string): string[] {
+  if (text === '') return []
+  const lines = text.split(/\r?\n/)
+  const result: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const isLast = i === lines.length - 1
+    result.push(isLast ? lines[i] : lines[i] + '\n')
+  }
+  // 末尾若是空行（原文本以 \n 结尾），split 会留一个空字符串元素，不需要保留
+  if (result.length > 0 && result[result.length - 1] === '') result.pop()
+  return result
+}
+
+/**
+ * 在指定 cwd 下安全地执行 git 子命令，统一收集 stdout/stderr 并做超时/截断保护。
+ *
+ * 设计要点：
+ *   - shell:false + 参数数组化，杜绝命令注入（即使 args 含分号 / `$()` 也只是字面量）
+ *   - 硬超时 GIT_HARD_TIMEOUT_MS，到点 SIGTERM 再 1s SIGKILL
+ *   - stdout/stderr 各自字符上限保护（默认 GIT_OUTPUT_MAX_CHARS）
+ *   - exitCode === 0 视为成功；非 0 由调用方决定如何呈现
+ *
+ * 返回形如 { exitCode, stdout, stderr, truncated }，调用方按需 JSON 序列化。
+ *
+ * @author zhi.qu
+ * @date 2026-04-29
+ */
+async function runGitCommand(
+  cwd: string,
+  args: readonly string[],
+  maxOutputChars: number = GIT_OUTPUT_MAX_CHARS,
+): Promise<{ exitCode: number | null; stdout: string; stderr: string; truncated: boolean }> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { spawn } = require('child_process') as typeof import('child_process')
+  return await new Promise((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    let truncated = false
+    let killedByTimeout = false
+
+    const child = spawn('git', [...args], {
+      cwd,
+      shell: false,
+      env: {
+        ...process.env,
+        // 让输出稳定可解析
+        GIT_TERMINAL_PROMPT: '0',
+        GIT_PAGER: 'cat',
+        PAGER: 'cat',
+        NO_COLOR: '1',
+        LC_ALL: 'C',
+      },
+    })
+
+    const timer = setTimeout(() => {
+      killedByTimeout = true
+      try { child.kill('SIGTERM') } catch { /* ignore */ }
+      setTimeout(() => { try { child.kill('SIGKILL') } catch { /* ignore */ } }, 1000)
+    }, GIT_HARD_TIMEOUT_MS)
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (stdout.length >= maxOutputChars) { truncated = true; return }
+      stdout += chunk.toString('utf-8')
+      if (stdout.length > maxOutputChars) {
+        stdout = stdout.slice(0, maxOutputChars)
+        truncated = true
+      }
+    })
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length >= maxOutputChars) { truncated = true; return }
+      stderr += chunk.toString('utf-8')
+      if (stderr.length > maxOutputChars) {
+        stderr = stderr.slice(0, maxOutputChars)
+        truncated = true
+      }
+    })
+
+    child.on('error', (err: Error) => {
+      clearTimeout(timer)
+      // git 二进制不在 PATH 时常见
+      resolve({
+        exitCode: -1,
+        stdout: '',
+        stderr: err.message.includes('ENOENT')
+          ? `未找到 git 命令；请确认系统已安装 git 并加入 PATH。`
+          : `子进程错误: ${err.message}`,
+        truncated: false,
+      })
+    })
+
+    child.on('close', (code: number | null) => {
+      clearTimeout(timer)
+      if (killedByTimeout) {
+        resolve({
+          exitCode: code ?? -1,
+          stdout,
+          stderr: stderr + `\n[killed by timeout after ${GIT_HARD_TIMEOUT_MS}ms]`,
+          truncated,
+        })
+      } else {
+        resolve({ exitCode: code, stdout, stderr, truncated })
+      }
+    })
+  })
+}
+
+/**
+ * 把 glob 模式（`*` / `**` / `?`）转成 RegExp，用于 list_files 的 glob 匹配。
+ *
+ * 规则（与 minimatch 子集对齐，覆盖 LLM 95% 用法）：
+ *   - `**`  匹配任意路径段（含 `/`），包括零段
+ *   - `*`   匹配单段内任意字符（不含 `/`）
+ *   - `?`   匹配单段内单个字符（不含 `/`）
+ *   - 其他字符按字面量匹配（特殊字符自动转义）
+ *
+ * 不支持：`{a,b}` 大括号扩展 / `[abc]` 字符类 / `!(...)` 否定。
+ * 这些罕见用法 LLM 极少传；如未来需要，可改用 minimatch 库（>50KB，目前不值得）。
+ *
+ * @example globToRegExp('**\/*.ts').test('src/foo/bar.ts') === true
+ * @example globToRegExp('*.tsx').test('App.tsx') === true
+ * @example globToRegExp('*.tsx').test('src/App.tsx') === false  // * 不跨目录
+ *
+ * @author zhi.qu
+ * @date 2026-04-29
+ */
+function globToRegExp(glob: string): RegExp {
+  // 先把 ** / * / ? 替换为占位符，避免与正则元字符转义冲突
+  const PLACEHOLDER_DOUBLE_STAR = '\u0001'
+  const PLACEHOLDER_SINGLE_STAR = '\u0002'
+  const PLACEHOLDER_QUESTION = '\u0003'
+  const tokenized = glob
+    .replace(/\*\*/g, PLACEHOLDER_DOUBLE_STAR)
+    .replace(/\*/g, PLACEHOLDER_SINGLE_STAR)
+    .replace(/\?/g, PLACEHOLDER_QUESTION)
+
+  // 转义所有正则特殊字符（- 在外的字符类不需转，但保险起见放进 set）
+  const escaped = tokenized.replace(/[.+^${}()|[\]\\/]/g, '\\$&')
+
+  // 还原占位符为对应正则片段
+  // - **/  匹配 `任意层目录/` 或 空（让 `**/x.ts` 也能命中根下的 `x.ts`）
+  // - 单独 ** 匹配 .* 任意字符
+  const restored = escaped
+    .replace(new RegExp(`${PLACEHOLDER_DOUBLE_STAR}\\\\/`, 'g'), '(?:.*/)?')
+    .replace(new RegExp(PLACEHOLDER_DOUBLE_STAR, 'g'), '.*')
+    .replace(new RegExp(PLACEHOLDER_SINGLE_STAR, 'g'), '[^/]*')
+    .replace(new RegExp(PLACEHOLDER_QUESTION, 'g'), '[^/]')
+
+  return new RegExp(`^${restored}$`)
+}
+
+function looseEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a === null || a === undefined || b === null || b === undefined) return false
+  return String(a) === String(b)
+}
+
+/**
+ * 简单 IRR 估算（牛顿迭代法，取 [-50, 300%] 区间）
+ */
+function estimateIRR(
+  investment: number, years: number, capacity: number,
+  peakPrice: number, valleyPrice: number, dod: number, efficiency: number,
+  cycles: number, demandSaving: number, opex: number, degradation: number
+): number {
+  const cashflows = [-investment]
+  for (let y = 1; y <= years; y++) {
+    const degraded = capacity * Math.pow(1 - degradation, y - 1)
+    const daily = degraded * dod * efficiency * (peakPrice - valleyPrice) * cycles
+    const annual = daily * 330 + demandSaving - opex
+    cashflows.push(annual)
+  }
+
+  let rate = 0.1
+  let converged = false
+  for (let i = 0; i < 50; i++) {
+    let npv = 0
+    let dnpv = 0
+    for (let t = 0; t < cashflows.length; t++) {
+      npv += cashflows[t] / Math.pow(1 + rate, t)
+      if (t > 0) dnpv -= t * cashflows[t] / Math.pow(1 + rate, t + 1)
+    }
+    if (Math.abs(dnpv) < 1e-10) {
+      converged = Math.abs(npv) < 1e-6
+      break
+    }
+    const newRate = rate - npv / dnpv
+    if (Math.abs(newRate - rate) < 1e-6) { rate = newRate; converged = true; break }
+    rate = newRate
+    if (rate < -0.99) { rate = -0.99; break }
+    if (rate > 5) { rate = 5; break }
+  }
+  if (!converged) {
+    console.warn(`[IRR] 牛顿迭代未收敛，返回估算值 ${(rate * 100).toFixed(2)}%`)
+  }
+  return rate
+}
+
+// ─── HTML → Markdown / Plain Text 工具函数（web_fetch 专用） ─────────────────
+//
+// 自研零依赖转换，覆盖 80% 常见 HTML 场景（标题/链接/列表/段落/代码块/表格）。
+// 不依赖 jsdom / cheerio / turndown 等大型库，让 packages/core 保持轻量。
+//
+// 已知局限：
+// - 不解析 CSS（display:none 的内容也会保留）
+// - 嵌套深的 ul/ol 缩进按 2 层处理，超深结构会扁平化
+// - 不处理 <script type="application/ld+json"> 这种结构化数据
+//
+// 这些局限对 LLM 阅读体验影响很小（LLM 能从主体内容读懂语义即可）。
+
+/**
+ * 解码 HTML 实体（&amp; / &lt; / &#39; / &#x4e2d; 等）。
+ * 顺序：
+ *   1. 数字实体 &#123; / &#x7B;（覆盖任意 Unicode）
+ *   2. 命名实体（高频常用集合，避免引入 he 这种 50KB+ 的库）
+ */
+function decodeHtmlEntities(html: string): string {
+  return html
+    // 十进制数字实体
+    .replace(/&#(\d+);/g, (_, code) => {
+      const n = parseInt(code, 10)
+      return Number.isFinite(n) && n >= 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : ''
+    })
+    // 十六进制数字实体
+    .replace(/&#[xX]([0-9a-fA-F]+);/g, (_, code) => {
+      const n = parseInt(code, 16)
+      return Number.isFinite(n) && n >= 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : ''
+    })
+    // 命名实体
+    .replace(/&[a-zA-Z]+;/g, (m) => HTML_ENTITIES[m] ?? m)
+}
+
+/**
+ * 剥离脚本/样式/隐藏/媒体等非内容标签（连同内容一起删）。
+ * 这是所有 HTML 处理的预处理步骤。
+ */
+function stripNonContentTags(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+}
+
+/**
+ * HTML → Markdown（用 turndown 库，业界主流方案）。
+ *
+ * 优势：
+ *   - 处理嵌套 / 边界 case 比手写 regex 健壮很多
+ *   - 自带 Node 端 DOM 实现（@mixmark-io/domino），无需 jsdom 大依赖
+ *   - 通过 .remove(['script', ...]) 配置去除噪声
+ *
+ * 已配置：
+ *   - headingStyle: 'atx'        → # H1（不用 setext 风格的 === 下划线）
+ *   - codeBlockStyle: 'fenced'   → ``` 代码块（不用缩进 4 空格）
+ *   - bulletListMarker: '-'      → - item（不用 *）
+ *   - linkStyle: 'inlined'       → [text](url)（不用 [text][1] 引用式）
+ *
+ * 注：turndown 默认不处理 GFM table；如需结构化表格，
+ *      可后续装 turndown-plugin-gfm 并 .use(gfm)。当前表格会扁平化为文本流。
+ */
+let turndownInstance: TurndownService | null = null
+function getTurndown(): TurndownService {
+  if (!turndownInstance) {
+    turndownInstance = new TurndownService({
+      headingStyle: 'atx',
+      hr: '---',
+      bulletListMarker: '-',
+      codeBlockStyle: 'fenced',
+      linkStyle: 'inlined',
+      emDelimiter: '*',
+    })
+    // 这些标签整段移除（连同内容）
+    turndownInstance.remove(['script', 'style', 'noscript', 'iframe', 'svg', 'form', 'nav'])
+  }
+  return turndownInstance
+}
+
+function htmlToMarkdown(html: string): string {
+  // turndown 自带 DOM parser 会处理 doctype/comments，但显式预清理一次更稳
+  const cleaned = stripNonContentTags(html)
+  return getTurndown()
+    .turndown(cleaned)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * HTML → 纯文本（剥所有标签和实体，保留段落分隔）。
+ * 用于 format=text 场景。
+ */
+function htmlToPlainText(html: string): string {
+  return decodeHtmlEntities(
+    stripNonContentTags(html)
+      .replace(/<\/(p|div|h[1-6]|li|tr|br)>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ''),
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}

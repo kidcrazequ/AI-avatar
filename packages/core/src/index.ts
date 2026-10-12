@@ -1,0 +1,733 @@
+/**
+ * @soul/core — Soul 分身框架核心 SDK
+ *
+ * 提供分身管理、知识检索、技能路由、模板加载等核心能力。
+ * 与运行环境无关，可用于 Electron、CLI、Node.js 服务等场景。
+ *
+ * @author zhi.qu
+ * @date 2026-04-02
+ */
+
+export { SoulLoader } from './soul-loader'
+export type { AvatarConfig } from './soul-loader'
+
+export { DEFAULT_AVATAR_PROJECT_ID } from './avatar-project'
+export { resolveAvatarWorkspaceSessionRoot } from './avatar-workspace-paths'
+export { CompositeKnowledgeRetriever, reciprocalRankFusion } from './composite-knowledge-retriever'
+export {
+  TASK_WORKSPACE_PROTOCOL_VERSION,
+  buildTaskWorkspaceLayout,
+  buildTaskWorkspacePromptHint,
+  ensureTaskWorkspace,
+  resolveTaskWorkspacePath,
+} from './agent-runtime/task-workspace'
+export type {
+  EnsureTaskWorkspaceOptions,
+  TaskWorkspaceDirKind,
+  TaskWorkspaceLayout,
+} from './agent-runtime/task-workspace'
+
+export { AvatarManager } from './avatar-manager'
+export type { Avatar } from './avatar-manager'
+
+export { KnowledgeManager } from './knowledge-manager'
+export type { FileNode, KnowledgeFileInfo, ImageKnowledgeInfo } from './knowledge-manager'
+
+export { KnowledgeRetriever, computeCoverageHint } from './knowledge-retriever'
+export type { KnowledgeSearchCoverage } from './knowledge-retriever'
+
+export { SkillManager } from './skill-manager'
+export type { Skill } from './skill-manager'
+
+export { ToolRouter } from './tool-router'
+export { SkillRouter } from './skill-router'
+export type { SkillIndexEntry, SkillIndex, RouteResult, RouteLog, RoutePlan, RouteStep } from './skill-router'
+export {
+  normalizeIntentLocal,
+  IMPLEMENTATION_PRIVACY_RESPONSE,
+  RETRIEVAL_BOUNDARY_RESPONSE,
+  KNOWLEDGE_PIPELINE_BOUNDARY_RESPONSE,
+} from './intent-normalizer'
+export type { IntentFrame, IntentGuardrail, IntentOverlay } from './intent-normalizer'
+
+export type {
+  CommunitySkillSource,
+  InstalledCommunityPack,
+  CommunitySkillInfo,
+  SkillSource,
+  CommunitySkillSyncProgress,
+  SkillsShSearchResult,
+} from './community-skill-types'
+export type { ToolCallRequest, ToolCallResult, DocumentRendererHook, DocumentRenderContext, SubAgentDispatchContext, SubAgentTaskSink } from './tool-router'
+
+export { TemplateLoader } from './template-loader'
+
+export * from './utils/markdown-parser'
+
+export { cleanOcrHtml, cleanPdfFullText, cleanLlmOutput, detectFabricatedNumbers, stripDocxToc, mergeVisionIntoText } from './utils/ocr-html-cleaner'
+
+export { splitIntoChapters, detectChapterHeadings, formatChapter, formatDocument, FORMAT_SYSTEM_PROMPT } from './document-formatter'
+export type { Chapter, FormatProgress, LLMCallFn } from './document-formatter'
+
+export { splitBookIntoChapters, estimateDeepRead, runDeepRead, sanitizeFileSegment, chapterFileName, DEEP_READ_SYSTEM_PROMPT, DEEP_READ_SYNTHESIS_FILES, DEEP_READ_LLM_FILES } from './deep-reader'
+export type {
+  BookChapter,
+  DeepReadDepth,
+  DeepReadContentType,
+  DeepReadStage,
+  DeepReadProgress,
+  DeepReadProduct,
+  DeepReadProductKind,
+  DeepReadOptions,
+  DeepReadRunResult,
+  DeepReadEstimate,
+} from './deep-reader'
+
+export { buildKnowledgeIndex, saveIndex, loadIndex, CONTEXT_PROMPT } from './knowledge-indexer'
+export type { EmbeddingCallFn, IndexerConfig, IndexBuildProgress } from './knowledge-indexer'
+
+export { ISS_DEFAULT_TOP_N, ISS_DEFAULT_PINNED_TOOL_NAMES, SkillReranker } from './skill-reranker'
+export type { SkillRerankerOptions } from './skill-reranker'
+
+export {
+  PLAN_MODE_BLOCKED_TOOL_NAMES,
+  GREY_ZONE_TOOL_NAMES,
+  evaluateConversationModeToolPolicy,
+  evaluateProxyTrustGreyDenial,
+  shouldConfirmGreyZoneOnDesktop,
+  isGreyZoneSessionAllowed,
+  rememberGreyZoneSessionAllow,
+  clearGreyZoneSessionMemory,
+} from './tool-permission-policy'
+export type {
+  ConversationModeForTools,
+  ToolCallTrustTier,
+  ToolPermissionEval,
+  ToolPermissionDenied,
+  ToolPermissionAllowed,
+  GreyZoneSessionMemory,
+} from './tool-permission-policy'
+export type { ToolForRerank } from './skill-reranker-types'
+export {
+  stableToolDocHash,
+  buildToolDocForEmbedding,
+  parseSkillEmbeddingCacheJson,
+  serializeSkillEmbeddingCacheJson,
+  trimSkillEmbeddingCache,
+} from './utils/skill-embedding-store'
+
+export { WikiCompiler } from './wiki-compiler'
+export type {
+  ChunkData, EntityInfo, EntityAppearance, ConceptPage,
+  LintIssue, LintReport, WikiMeta, WikiAnswer, WikiCompileProgress,
+  EvolutionDiff, EvolutionReport,
+} from './wiki-compiler'
+
+export { tokenize } from './knowledge-retriever'
+
+export { consolidateMemory, getMemoryStats, shouldConsolidate, shouldWarnMemory, MEMORY_CHAR_LIMIT, MEMORY_WARN_THRESHOLD } from './memory-manager'
+export type { MemoryStats } from './memory-manager'
+
+export {
+  STRUCTURED_MEMORY_FILENAME,
+  STRUCTURED_MEMORY_MAX_ENTRIES,
+  STRUCTURED_MEMORY_MAX_CONTENT_CHARS,
+  parseStructuredMemoryDocumentJson,
+  parseStructuredMemoryDocumentUnknown,
+  assertStructuredMemoryDocumentPayload,
+  normalizeStructuredMemoryDocumentUnknown,
+  formatStructuredMemoryEntriesForPrompt,
+  buildLongTermMemoryInjectionBody,
+  getCombinedMemoryInjectionStats,
+  serializeStructuredMemoryDocument,
+  formatStructuredMemoryDateLabel,
+  EMPTY_STRUCTURED_MEMORY_DOCUMENT,
+} from './structured-memory'
+export type { StructuredMemoryEntry, StructuredMemoryDocument } from './structured-memory'
+
+export {
+  mapTestCaseToQualityDimension,
+  computeAvatarQualityScores,
+} from './avatar-quality-scores'
+export type {
+  AvatarQualityAxis,
+  AvatarTestOutcomeForQuality,
+  AvatarQualityDimensionAggregate,
+  AvatarQualityScores,
+} from './avatar-quality-scores'
+
+export { SubAgentManager } from './sub-agent-manager'
+export type { SubAgentTask, SubAgentStatus } from './sub-agent-manager'
+
+export { McpClientManager, validateMcpServerConfig } from './mcp-client-manager'
+export type {
+  McpServerConfig,
+  McpServerStatus,
+  McpServerSnapshot,
+  McpToolMeta,
+  McpToolCallResult,
+} from './mcp-client-manager'
+
+export { assertSafeSegment, resolveUnderRoot } from './utils/path-security'
+export { safeSkillId } from './utils/skill-id'
+
+export { parseFrontmatterCore, extractFrontmatterFields, mergeFrontmatter, buildFrontmatterBlock } from './utils/knowledge-frontmatter'
+export type { FrontmatterParseResult } from './utils/knowledge-frontmatter'
+
+export { localDateString, collectFilesRecursive, DEFAULT_MAX_DIR_DEPTH } from './utils/common'
+
+export {
+  MAX_ATTACHMENT_SIZE_BYTES,
+  INLINE_TEXT_BYTE_THRESHOLD,
+  MAX_ATTACHMENT_COUNT_PER_MESSAGE,
+  ATTACHMENT_DOCUMENT_EXTENSIONS,
+  ATTACHMENT_TEXT_EXTENSIONS,
+  ATTACHMENT_CODE_EXTENSIONS,
+  ATTACHMENT_REJECTED_EXTENSIONS,
+  ATTACHMENT_WHITELIST_EXTENSIONS,
+  ATTACHMENT_SENSITIVE_EXTENSIONS,
+  isAttachmentExtensionAllowed,
+  buildAttachmentAcceptString,
+  classifyAttachmentRoute,
+} from './utils/attachment-types'
+export type { AttachmentRoute } from './utils/attachment-types'
+
+export { fetchWithTimeout, HttpError } from './utils/http'
+export type { FetchWithTimeoutOptions } from './utils/http'
+export {
+  DOUBAO_ASR_PROTOCOL_VERSION,
+  DOUBAO_ASR_BASE_HEADER_SIZE_WORDS,
+  DOUBAO_ASR_BASE_HEADER_SIZE_BYTES,
+  DOUBAO_ASR_DEFAULT_AUDIO,
+  DoubaoAsrMessageType,
+  DoubaoAsrMessageFlags,
+  DoubaoAsrSerialization,
+  DoubaoAsrCompressionCode,
+  DoubaoAsrProtocolError,
+  buildDoubaoAsrFullClientRequest,
+  buildDoubaoAsrAudioOnlyRequest,
+  parseDoubaoAsrServerResponse,
+} from './audio/doubao-asr-protocol'
+export type {
+  JsonValue,
+  JsonObject,
+  DoubaoAsrCompression,
+  DoubaoAsrAudioMetadata,
+  DoubaoAsrFullClientRequestOptions,
+  DoubaoAsrAudioOnlyRequestOptions,
+  DoubaoAsrParsedServerResponse,
+} from './audio/doubao-asr-protocol'
+export { callVisionOcr, DEFAULT_VISION_MODEL, DEFAULT_VISION_CONCURRENCY, DEFAULT_VISION_PROMPT, DEFAULT_VISION_TIMEOUT_MS } from './utils/vision-ocr'
+export type { VisionOcrOptions, VisionOcrResult, VisionOcrFailure } from './utils/vision-ocr'
+export { loadTokensCache, saveTokensCache, TOKENS_FILE } from './utils/chunk-cache'
+export { loadChartCache, saveChartCache, findChartCacheHit, insertChartCacheEntry, captureFileSnapshot, verifySnapshots, normalizeQueryForHash, hashQueryContent, CHART_CACHE_REL_PATH, DEFAULT_MAX_CHART_CACHE_ENTRIES } from './utils/chart-cache'
+export type { ChartCacheEntry, ChartCache, FileSnapshot } from './utils/chart-cache'
+
+
+export { resolvePolicy, shouldEnableChartConsistencyMode, deriveSeedFromContent, CHART_CONSISTENCY_HINT, CHART_KEYWORDS, TIME_RANGE_KEYWORDS, DETERMINISTIC_TEMPERATURE } from './consistency-policy'
+export type { ConsistencyMode, ConsistencyPolicy, ResolvePolicyOptions } from './consistency-policy'
+export { ToolBudget, DEFAULT_TOOL_POLICY, buildToolPolicyPromptHints, normalizeQueryExcelArgs } from './tool-budget'
+export type { ToolPolicy, ToolBudgetConsumeResult, ToolBudgetMessage } from './tool-budget'
+export { buildApiMessages } from './prompt-builder'
+export { rerankChunksWithDiversity, computeJaccardSimilarity } from './knowledge-rerank'
+export type { RerankableChunk, RerankOptions } from './knowledge-rerank'
+export type { BuildApiMessagesOptions, HistoryMessageLike, ApiMessageLike } from './prompt-builder'
+export { DYNAMIC_SYSTEM_PROMPT_MARKER, combineSystemPromptSections, splitSystemPromptSections, normalizeSystemPromptSections } from './prompt-sections'
+export type { SystemPromptSections } from './prompt-sections'
+export { buildKnowledgeLinkGraph, extractExplicitLinks, expandLinkedFiles, selectRelevantSnippet } from './link-graph'
+export type { LinkGraph, KnowledgeLinkEntry, LinkedFileCandidate, ExpandLinkedFilesOptions, SelectRelevantSnippetOptions } from './link-graph'
+export { routeConversation, detectFanOutSignal } from './conversation-router'
+export {
+  detectSelfDescriptionIntent,
+  buildSelfDescriptionAnswer,
+  type SelfDescriptionInput,
+  type SelfDescriptionSkill,
+} from './avatar-self-description'
+export { isContextOverflowError } from './context-overflow'
+export {
+  compareVersions,
+  evaluatePackUpdate,
+  type PackUpdateEvaluation,
+} from './expert-pack-version'
+export {
+  decideKnowledgeStrategy,
+  DEFAULT_SMALL_LIBRARY_CHAR_THRESHOLD,
+  type KnowledgeStrategy,
+} from './knowledge-strategy'
+export {
+  buildMcpServerSettingsSnippet,
+  type McpServerSnippet,
+  type McpServerSnippetInput,
+} from './mcp-settings-snippet'
+export {
+  buildConversationHtml,
+  markdownToSafeHtml,
+  extractRenderableBlocks,
+  type ConversationHtmlInput,
+  type ConversationHtmlMessage,
+  type RenderableBlock,
+  type RenderableAssetKind,
+  type AssetResolver,
+} from './conversation-html-export'
+export {
+  buildActivePath,
+  backfillLinearParents,
+  findBranchPoints,
+  type TreeNode,
+} from './session-tree'
+export type { RouteConversationOptions, RoutingDecision, ContextStrategy, FanOutSignal } from './conversation-router'
+
+export { detectProvider, getProviderCapabilities, normalizeMessagesForProvider } from './provider-capabilities'
+export type { ProviderName, ProviderCapabilities, BasicChatMessageLike } from './provider-capabilities'
+
+export { buildKnowledgeSourceAnchor, buildWholeFileKnowledgeAnchor, buildExcelSourceAnchor, formatKnowledgeSourceAnchor, formatExcelSourceAnchor, formatSourceAnchor, buildSourceAnchorPromptHint, buildSourceAnchorReferenceBlock, extractSourceAnchors, extractSourceAnchorsFromContent, extractSourceAnchorsFromMessages, extractParsedSourceAnchors, parseSourceAnchor, splitTextBySourceAnchors, normalizeSourceAnchorsInText, normalizeAvailableSourceAnchors, rewriteSourceAnchorsInText, filterSourceAnchorsInText, isSourceAnchorCoveredByAvailable, isSourceAnchorCoveredByAnyAvailable, filterSourceAnchorsByAvailableContext, ensureAnswerSourceCoverage, SOURCE_ANCHOR_REGEX } from './source-anchor'
+
+// ─── 人生经历（Avatar Life Experience） ──────────────────────────────────────
+export type {
+  LifeManifest,
+  LifeTimelineEntry,
+  LifeEpisode,
+  LifeProgress,
+  LifeFailedEpisode,
+  LifeArcItem,
+  LifeRelationship,
+  LifeEventCategory,
+  LifeEmotionType,
+  LifeConsolidationStatus,
+  LifeGenerationStatus,
+  LifePipelineStage,
+  LifePersonaNameSource,
+  LifeManifestUpdate,
+} from './life/types'
+export {
+  getLifeDir,
+  getLifeManifestPath,
+  getLifeTimelinePath,
+  getLifeConsolidatedPath,
+  getLifeProgressPath,
+  getLifeEpisodesDir,
+  getLifeEpisodePath,
+  ensureLifeDir,
+  readLifeManifest,
+  readLifeTimeline,
+  readLifeEpisode,
+  readLifeConsolidated,
+  readLifeProgress,
+  listLifeEpisodeIds,
+  writeLifeManifest,
+  writeLifeTimeline,
+  appendLifeTimelineEntry,
+  writeLifeEpisode,
+  deleteLifeEpisode,
+  updateLifeManifest,
+  resetGeneratedLife,
+  writeLifeConsolidated,
+  writeLifeProgress,
+} from './life/store'
+// 人生生成器（Phase 1）：4 Stage Pipeline + 单事件 + 遗忘机制
+export {
+  generateLife,
+  generateEpisode,
+  appendNewEpisodeForGrowth,
+  partitionAgeStages,
+  DEFAULT_OUTLINE_TARGET_COUNTS,
+  // 透传 forgetter 导出（Phase 2 grower 复用）
+  applyAlgorithmicForgetting,
+  generateConsolidated,
+  DEFAULT_FORGETTING_WEIGHTS,
+  CONSOLIDATED_MAX_CHARS,
+} from './life/generator'
+export type {
+  GenerateLifeOptions,
+  GenerateEpisodeOptions,
+  AppendNewEpisodeForGrowthOptions,
+  LifeLLMConfig,
+  LifeUserParams,
+  ForgettingWeights,
+} from './life/generator'
+// Prompt 模板（main.ts 不直接用，但测试 / Phase 2 grower 自定义 prompt 时复用）
+export {
+  buildManifestPrompt,
+  buildOutlinePrompt,
+  buildEpisodePrompt,
+  buildConsolidatedPrompt,
+  MANIFEST_SYSTEM_PROMPT,
+  OUTLINE_SYSTEM_PROMPT,
+  EPISODE_SYSTEM_PROMPT,
+  CONSOLIDATED_SYSTEM_PROMPT,
+} from './life/prompts'
+export type {
+  BuildManifestPromptOptions,
+  BuildOutlinePromptOptions,
+  BuildEpisodePromptOptions,
+  BuildConsolidatedPromptOptions,
+} from './life/prompts'
+// 持续生长（Phase 2，cron Stage 4）
+export {
+  eventDensityPerMonth,
+  monthsToYears,
+  DEFAULT_DENSITY_WEIGHTS,
+} from './life/density'
+export type { DensityWeights } from './life/density'
+export {
+  advanceLife,
+  advanceAllAvatars,
+  computeAvatarDeltaMonths,
+  samplePendingMonths,
+  shouldReconsolidate,
+  DEFAULT_RECONSOLIDATE_THRESHOLDS,
+  __clearGrowthLocksForTesting,
+} from './life/grower'
+export type {
+  AdvanceLifeOptions,
+  AdvanceLifeResult,
+  AdvanceAllAvatarsOptions,
+  AdvanceAllAvatarsResult,
+  ReconsolidateThresholds,
+} from './life/grower'
+export type { KnowledgeSourceAnchor, ExcelSourceAnchor, SourceAnchor, ParsedSourceAnchor, SourceAnchorSegment, NormalizeSourceAnchorsResult, RewriteSourceAnchorsResult, SourceCoverageResult, FilterAvailableSourceAnchorsResult, SourceAnchorReferenceBlockOptions, EnsureSourceCoverageOptions } from './source-anchor'
+
+// 文档生成模块（PDF / DOCX / Markdown 三格式渲染）
+export { validateIR, CALLOUT_LEVELS } from './document/ir-schema'
+export type {
+  DocumentBlock,
+  DocumentBlockType,
+  DocumentIR,
+  DocumentMetadata,
+  HeadingLevel as DocumentHeadingLevel,
+  CalloutLevel,
+  TableCellValue,
+  IRValidationError,
+  IRValidationResult,
+} from './document/ir-schema'
+export { parseIR } from './document/ir-parser'
+export type { IRParseResult } from './document/ir-parser'
+export { renderMarkdown } from './document/renderers/markdown-renderer'
+export { renderHtml, escapeHtml, sanitizeUrl } from './document/renderers/html-renderer'
+export type { RenderHtmlOptions } from './document/renderers/html-renderer'
+export { loadTemplateCss, resolveTemplatePath } from './document/renderers/template-loader'
+
+export * from './sync/snapshot-manifest'
+
+// v17 对话情景记忆（Phase 2a/2b of human-cognition extension）
+export {
+  CONVERSATION_EPISODE_SCHEMA_VERSION,
+} from './memory/episode-types'
+export type {
+  ConversationEpisode,
+  ExtractEpisodeInput,
+  ExtractEpisodeResult,
+} from './memory/episode-types'
+export {
+  writeConversationEpisode,
+  readConversationEpisode,
+  listConversationEpisodes,
+  deleteConversationEpisode,
+  shouldExtractEpisode,
+} from './memory/episode-store'
+export { extractConversationEpisode } from './memory/episode-extractor'
+export {
+  computeSalience,
+  computeWallClockRecencyFactor,
+  computeAgeGapRecencyFactor,
+  DEFAULT_SALIENCE_WEIGHTS,
+} from './memory/salience'
+export type {
+  SalienceInput,
+  SalienceWeights,
+  SalienceStatus,
+} from './memory/salience'
+export {
+  computeEpisodeForgetProbability,
+  probabilityToEpisodeStatus,
+  applyEpisodeAlgorithmicForgetting,
+  DEFAULT_EPISODE_FORGETTING_WEIGHTS,
+} from './memory/episode-forgetter'
+export type {
+  EpisodeForgettingWeights,
+} from './memory/episode-forgetter'
+
+// Lorebook keyword-trigger（SillyTavern 借鉴）：user message 命中 keyword 时
+// 被动注入对应知识片段到 prompt，补 BM25/向量召回漏 + 需 LLM 主动 grep 的短板
+export {
+  loadTriggers,
+  matchTriggers,
+  buildTriggerInjection,
+} from './lorebook-trigger'
+export type {
+  TriggerEntry,
+  TriggersConfig,
+  TriggerMatch,
+  TriggerInjection,
+} from './lorebook-trigger'
+
+// Standing Orders（OpenClaw + ReMeV2 借鉴）：LLM 抽 [STANDING_ORDER] 标签后落盘到
+// memory/standing-orders.md，soul-loader 注入紧挨 soul.md，作为运行时永久规则
+export {
+  readStandingOrders,
+  countStandingOrders,
+  appendStandingOrder,
+  MAX_STANDING_ORDERS,
+  MAX_ORDER_LENGTH,
+} from './memory/standing-orders'
+export type { AppendStandingOrderResult } from './memory/standing-orders'
+
+// Bounded Memory Store（A4 · Hermes Agent 借鉴）：有界条目化 MEMORY.md / USER.md，
+// 全文件字符预算 + add/replace/remove 原子操作，预算即遗忘、遗忘留痕
+export {
+  DEFAULT_MEMORY_CHAR_BUDGET,
+  MIN_MEMORY_CHAR_BUDGET,
+  MAX_MEMORY_CHAR_BUDGET,
+  MAX_BOUNDED_ENTRY_CHARS,
+  EMPTY_BOUNDED_MEMORY_DOC,
+  newBoundedMemoryEntryId,
+  parseBoundedMemoryMarkdown,
+  serializeBoundedMemoryDoc,
+  boundedMemoryChars,
+  getBoundedMemoryUsage,
+  formatMemoryUsageHeader,
+  applyBoundedMemoryOp,
+  listBoundedEntriesSummary,
+  readBoundedMemoryFile,
+  writeBoundedMemoryFileAtomic,
+  resolveMemoryCharBudget,
+} from './memory/bounded-store'
+export type {
+  BoundedMemoryEntry,
+  BoundedMemoryDoc,
+  BoundedMemoryOp,
+  BoundedMemoryUsage,
+  BoundedMemoryOpResult,
+} from './memory/bounded-store'
+
+// Memory Review（A4 · Hermes Agent 借鉴）：N 轮一次后台复盘的 prompt 构造与响应解析
+export {
+  MEMORY_REVIEW_DEFAULT_TURNS,
+  MEMORY_REVIEW_MAX_OPS,
+  MEMORY_REVIEW_MAX_MESSAGES,
+  MEMORY_REVIEW_SYSTEM_PROMPT,
+  buildMemoryReviewUserPrompt,
+  parseMemoryReviewResponse,
+} from './memory/memory-review'
+export type {
+  MemoryReviewStoreOp,
+  MemoryReviewParseResult,
+  MemoryReviewTranscriptMessage,
+} from './memory/memory-review'
+
+// Daily Summary Memory Tree（OpenHuman 借鉴）：每日 cron 把当天 episode 按时间维度
+// 合并成 daily-<YYYY-MM-DD>.md，补 WikiCompiler 实体维度之外的时间锚定
+export {
+  localDateStringFromMs,
+  groupEpisodesByDate,
+  compileDailySummary,
+  writeDailySummary,
+  readDailySummary,
+  listDailySummaries,
+  applyDailySummaryAllDates,
+} from './memory/daily-summary'
+
+// Palace（记忆宫殿）：职业处境工作区 + 任务路线卡 + 承诺 / inbox 文件协议
+export {
+  PALACE_SCHEMA_VERSION,
+  PALACE_PROTOCOL_VERSION,
+  PALACE_ROOT_DIR,
+  PALACE_MANIFEST_FILE,
+  PALACE_PROFILE_FILE,
+  PALACE_COMPANY_FILE,
+  PALACE_COMMITMENTS_FILE,
+  PALACE_INBOX_FILE,
+  PALACE_COMMITMENTS_MD_FILE,
+  PALACE_INBOX_MD_FILE,
+  PALACE_INDEX_FILE,
+  PALACE_DIRECTORIES,
+} from './palace/types'
+export type {
+  PalaceDirectory,
+  PalaceSedimentTarget,
+  PalaceManifest,
+  PalaceRoom,
+  PalaceCommitmentDirection,
+  PalaceCommitmentStatus,
+  PalaceCommitment,
+  PalaceCommitmentDocument,
+  PalaceInboxKind,
+  PalaceInboxStatus,
+  PalaceInboxItem,
+  PalaceInboxDocument,
+} from './palace/types'
+export {
+  isPalaceDirectory,
+  assertSafePalaceId,
+  getPalaceDir,
+  getPalaceManifestPath,
+  getPalaceProfilePath,
+  getPalaceCompanyPath,
+  getPalaceCommitmentsPath,
+  getPalaceDirectoryPath,
+  getPalaceRoomsDir,
+  getPalaceRoomPath,
+  getPalaceInboxDir,
+  getPalaceInboxPath,
+  getPalaceCommitmentsMarkdownPath,
+  getPalaceInboxMarkdownPath,
+  getPalaceIndexPath,
+  getPalaceDirectoryFilePath,
+} from './palace/paths'
+export {
+  makeDefaultPalaceRoom,
+  mergePalaceRoom,
+  serializePalaceRoom,
+  parsePalaceRoomMarkdown,
+} from './palace/room'
+export type {
+  PalaceRoomInput,
+} from './palace/room'
+export {
+  renderPalaceCommitmentsMarkdown,
+  renderPalaceInboxMarkdown,
+} from './palace/markdown-mirror'
+export {
+  buildPalaceIndexMarkdown,
+} from './palace/index-builder'
+export type {
+  PalaceIndexInput,
+} from './palace/index-builder'
+export {
+  buildExamplePalaceRooms,
+} from './palace/seed-rooms'
+export {
+  matchPalaceRooms,
+  extractMatchTerms,
+} from './palace/matcher'
+export type {
+  PalaceRoomMatch,
+  PalaceMatchOptions,
+} from './palace/matcher'
+export {
+  buildPalaceContextCard,
+} from './palace/context-card'
+export type {
+  PalaceContextCardInput,
+} from './palace/context-card'
+export {
+  PALACE_COMMITMENT_DIRECTIONS,
+  PALACE_COMMITMENT_STATUSES,
+  normalizePalaceCommitmentDocument,
+  createPalaceCommitment,
+  addPalaceCommitmentToDocument,
+  updatePalaceCommitmentInDocument,
+  filterPalaceCommitments,
+  sortPalaceCommitmentViews,
+  getPalaceCommitmentUrgency,
+  daysUntilDue,
+  isOpenPalaceCommitmentStatus,
+  generatePalaceCommitmentId,
+} from './palace/commitments'
+export type {
+  PalaceCommitmentUrgency,
+  PalaceCommitmentCreateInput,
+  PalaceCommitmentUpdatePatch,
+  PalaceCommitmentFilter,
+  PalaceCommitmentView,
+} from './palace/commitments'
+export {
+  PALACE_INBOX_KINDS,
+  PALACE_INBOX_STATUSES,
+  PALACE_SEDIMENT_TARGETS,
+  normalizePalaceInboxDocument,
+  createPalaceInboxItem,
+  addPalaceInboxItemToDocument,
+  updatePalaceInboxItemInDocument,
+  filterPalaceInboxItems,
+  sortPalaceInboxItems,
+  generatePalaceInboxItemId,
+} from './palace/inbox'
+export type {
+  PalaceInboxCreateInput,
+  PalaceInboxUpdatePatch,
+  PalaceInboxFilter,
+  PalaceInboxItemView,
+} from './palace/inbox'
+export {
+  buildDefaultPalaceManifest,
+  emptyPalaceCommitmentDocument,
+  emptyPalaceInboxDocument,
+  buildDefaultPalaceProfile,
+  buildDefaultPalaceCompany,
+  PALACE_PROFILE_MAX_CHARS,
+  ensurePalaceWorkspace,
+  readPalaceManifest,
+  writePalaceManifest,
+  readPalaceProfile,
+  writePalaceProfile,
+  readPalaceCompany,
+  writePalaceCompany,
+  readPalaceCommitments,
+  writePalaceCommitments,
+  listPalaceCommitmentViews,
+  addPalaceCommitment,
+  updatePalaceCommitmentEntry,
+  readPalaceInbox,
+  writePalaceInbox,
+  listPalaceInboxItems,
+  countPalacePendingInboxItems,
+  addPalaceInboxItem,
+  updatePalaceInboxItemEntry,
+  writePalaceRoom,
+  upsertPalaceRoom,
+  readPalaceRoom,
+  listPalaceRooms,
+  deletePalaceRoom,
+  listPalaceContextExtras,
+  regeneratePalaceIndex,
+  seedExamplePalaceRooms,
+  listPalaceDirectoryFiles,
+  readPalaceDirectoryFile,
+  writePalaceDirectoryFile,
+  deletePalaceDirectoryFile,
+} from './palace/store'
+export type {
+  PalaceContextExtras,
+} from './palace/store'
+export {
+  PALACE_PROFILE_SUMMARY_MAX_CHARS,
+  PALACE_DUE_REMINDER_MAX_ITEMS,
+  hasSubstantivePalaceProfile,
+  buildPalacePromptInjection,
+  loadPalacePromptInjection,
+} from './palace/prompt-injection'
+export type {
+  PalacePromptInjectionInput,
+} from './palace/prompt-injection'
+
+// soul-pack（Letta .af 借鉴）：分身可移植打包，单 JSON 文件含所有文本 inline +
+// 二进制 sha256 ref + 外部技能引用。跨用户分发 / 备份回滚 / 版本管理。
+export {
+  SOUL_PACK_SCHEMA_VERSION,
+  INLINE_MAX_BYTES,
+  INLINE_EXTENSIONS,
+  SOUL_PACK_MANIFEST_FILENAME,
+  SOUL_PACK_BLOB_DIR,
+  computeManifestSha256,
+  serializeSoulPack,
+  parseSoulPack,
+  toPosixPath,
+  exportSoulPack,
+  importSoulPack,
+  readInstalledPackState,
+} from './soul-pack'
+export type {
+  SoulPack,
+  SoulPackFile,
+  SoulPackBinaryRef,
+  SoulPackSkillsRef,
+  SoulPackMemory,
+  ExportSoulPackOptions,
+  ImportSoulPackOptions,
+  ImportSoulPackResult,
+  SoulPackInstallState,
+} from './soul-pack'
+
+// agent-runtime（feature-flagged 新治理层；默认旧路径不变）
+export * as AgentRuntime from './agent-runtime'

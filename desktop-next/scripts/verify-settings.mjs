@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { build } from 'esbuild';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), entry = path.join(root, 'build/settings-test.cjs');
+await build({ entryPoints: [path.join(root, 'tests/settings.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: entry, external: ['better-sqlite3'] });
+const executable = process.platform === 'win32' ? path.join(root, 'release/win-unpacked/Soul Next.exe') : path.join(root, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
+if (!fs.existsSync(executable)) throw new Error('Native Electron runtime required');
+const result = spawnSync(executable, [entry, path.join(root, `evidence/settings-${process.platform}-${process.arch}.json`)], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 60000, encoding: 'utf8' });
+process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); if (result.error || result.status !== 0) throw result.error ?? new Error(`Settings verification exited ${result.status}`);

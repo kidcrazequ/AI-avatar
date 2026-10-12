@@ -1,0 +1,37 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="70.5358" height="70.5358" viewBox="0 0 70.5358 70.5358" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle
+    cx="35.2679"
+    cy="35.2679"
+    r="30.1979"
+    fill="none"
+    stroke="#67C96C"
+    stroke-width="10.14"
+    pathLength="38"
+    stroke-dasharray="23 15"
+    transform="rotate(-90 35.2679 35.2679)"
+  />
+  <circle
+    cx="35.2679"
+    cy="35.2679"
+    r="30.1979"
+    fill="none"
+    stroke="#DFEDE4"
+    stroke-width="10.14"
+    pathLength="38"
+    stroke-dasharray="12 26"
+    stroke-dashoffset="-23"
+    transform="rotate(-90 35.2679 35.2679)"
+  />
+  <circle
+    cx="35.2679"
+    cy="35.2679"
+    r="30.1979"
+    fill="none"
+    stroke="#FFD666"
+    stroke-width="10.14"
+    pathLength="38"
+    stroke-dasharray="3 35"
+    stroke-dashoffset="-35"
+    transform="rotate(-90 35.2679 35.2679)"
+  />
+</svg>

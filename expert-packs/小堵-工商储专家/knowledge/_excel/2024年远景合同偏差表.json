@@ -1,0 +1,82 @@
+{
+  "fileName": "2024年远景合同偏差表.xlsx",
+  "importedAt": "2026-04-30T09:24:15.155Z",
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rowCount": 3,
+      "columns": [
+        {
+          "name": "序号",
+          "dtype": "number",
+          "uniqueCount": 2,
+          "samples": [
+            1,
+            2
+          ],
+          "min": 1,
+          "max": 2
+        },
+        {
+          "name": "所属模块",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "主合同第几条第几款",
+            "附件X第几条第几款"
+          ]
+        },
+        {
+          "name": "远景-原合同条款",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "内容"
+          ]
+        },
+        {
+          "name": "双方同意-修改后条款",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "内容"
+          ]
+        },
+        {
+          "name": "备注",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "序号": null,
+          "所属模块": null,
+          "远景-原合同条款": "内容",
+          "双方同意-修改后条款": "内容",
+          "备注": null
+        },
+        {
+          "序号": 1,
+          "所属模块": "主合同第几条第几款",
+          "远景-原合同条款": null,
+          "双方同意-修改后条款": null,
+          "备注": null
+        },
+        {
+          "序号": 2,
+          "所属模块": "附件X第几条第几款",
+          "远景-原合同条款": null,
+          "双方同意-修改后条款": null,
+          "备注": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data"
+      ]
+    }
+  ]
+}

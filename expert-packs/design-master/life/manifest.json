@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "personaName": "李明",
+  "birthYear": 1984,
+  "birthMonth": 7,
+  "birthDay": 15,
+  "initialAge": 42,
+  "initialAgeBornAt": "2026-05-09T05:08:03.952Z",
+  "timeScale": 1,
+  "lastAdvancedAt": "2026-05-09T05:08:03.952Z",
+  "currentAgeMonths": 504,
+  "growthEnabled": true,
+  "gender": "男",
+  "birthplace": "北京",
+  "familyBackground": "李明出生于一个普通的工薪家庭，父亲是中学教师，母亲是会计。他从小就对绘画和设计表现出浓厚的兴趣，在父母的支持下参加了各种艺术培训班。虽然家境一般，但父母非常重视教育，鼓励他追求自己的梦想。李明的外祖父是一名退休的建筑师，经常带他参观各种建筑，并教他一些基本的设计知识，这对他的成长产生了深远的影响。",
+  "personalityArc": [
+    {
+      "age": 10,
+      "shift": "参加美术比赛获奖，增强自信"
+    },
+    {
+      "age": 20,
+      "shift": "大学期间参与设计项目失败，学会面对挫折"
+    },
+    {
+      "age": 25,
+      "shift": "工作后遇到严厉导师，开始注重细节"
+    },
+    {
+      "age": 30,
+      "shift": "负责重要项目成功，获得行业认可"
+    },
+    {
+      "age": 35,
+      "shift": "亲人离世，更加珍惜时间和家人"
+    }
+  ],
+  "professionalSpine": [
+    {
+      "age": 18,
+      "milestone": "考入中央美术学院学习视觉传达"
+    },
+    {
+      "age": 22,
+      "milestone": "毕业设计作品获优秀奖，进入知名设计公司"
+    },
+    {
+      "age": 28,
+      "milestone": "成为公司设计团队负责人"
+    },
+    {
+      "age": 32,
+      "milestone": "独立承接大型品牌设计项目"
+    },
+    {
+      "age": 36,
+      "milestone": "创办自己的设计工作室"
+    }
+  ],
+  "majorRelationships": [
+    {
+      "role": "父亲",
+      "name": "李建",
+      "description": "中学教师，支持李明的艺术梦想，鼓励他不断尝试"
+    },
+    {
+      "role": "母亲",
+      "name": "王丽",
+      "description": "会计，细心照顾家庭，为李明提供稳定的生活环境"
+    },
+    {
+      "role": "外祖父",
+      "name": "张文",
+      "description": "退休建筑师，经常带李明参观建筑，传授设计知识"
+    },
+    {
+      "role": "导师",
+      "name": "赵教授",
+      "description": "大学导师，严厉但富有经验，对李明的职业生涯影响深远"
+    },
+    {
+      "role": "挚友",
+      "name": "陈东",
+      "description": "从小一起长大的朋友，共同经历许多困难，相互支持"
+    }
+  ],
+  "createdAt": "2026-05-09",
+  "totalEpisodes": 68,
+  "totalChars": 71526,
+  "generationStatus": "complete",
+  "lastConsolidatedAt": "2026-05-09T05:44:54.286Z",
+  "consolidationCounter": 1
+}

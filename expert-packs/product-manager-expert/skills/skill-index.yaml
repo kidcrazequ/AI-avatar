@@ -1,0 +1,143 @@
+# Skill 路由索引 v1.0 — 产品经理（品研）
+# @author zhi.qu
+# @date 2026-05-09
+
+version: "1.0"
+
+shared_skills:
+  # ── 决策回溯（v14，shared/skills/decision-trace.md） ──
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    source: shared
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 为什么取消
+      - 为什么沿用
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 谁讨论过
+      - 评估
+      - 变更点
+      - 评审
+      - 输入确认清单
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    priority: 1
+
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    source: shared
+    domain: 结构可视化
+    keywords:
+      - PRD 流程图
+      - 里程碑
+      - 评审顺序
+      - 甘特
+      - 路线图
+      - 用户旅程
+      - kanban
+    when: PRD / 路线图 / 里程碑需要 mermaid（先 load_skill）
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    source: shared
+    domain: 数据分析
+    keywords:
+      - 漏斗图
+      - 转化率
+      - 留存
+      - cohort
+      - 指标体系
+      - KPI
+    when: 已知数据在 knowledge/ 或多表对齐后画图（先 load_skill）
+    priority: 2
+
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    source: shared
+    domain: 数据分析
+    keywords:
+      - 柱状图
+      - 折线图
+      - 竞品对比维度
+      - AB 实验
+      - chart
+    when: 多精确数值制图（先 load_skill）
+    priority: 3
+
+  # ── 需求澄清（动手前的拷打；显式触发） ──
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把 PRD 问透
+      - 把需求问透
+      - 把决策树问透
+      - PRD 拷打
+      - 需求 grill
+      - 用户故事 grill
+      - 决策树拷打
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 术语对齐
+    when: 用户显式请求被反问/拷打需求或决策；品研起草 PRD/用户故事/产品方案前用本技能把决策树问透，并对照 knowledge/ 术语 + 沉淀 ADR
+    priority: 1
+
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    source: shared
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 反问我
+      - 在动手前把问题问清楚
+    when: 同 grill-against-knowledge 但无需 ADR / 术语对齐的轻量场景（兜底）
+    priority: 2
+
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    source: shared
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1

@@ -1,0 +1,21 @@
+skills:
+  - name: product-manager-general-capability-1
+    path: skills/product-manager-general-capability-1.md
+    source: local
+    domain: 需求全生命周期
+  - name: product-manager-general-capability-2
+    path: skills/product-manager-general-capability-2.md
+    source: local
+    domain: PRD 生成
+  - name: product-manager-general-capability-3
+    path: skills/product-manager-general-capability-3.md
+    source: local
+    domain: 竞品研究
+  - name: product-manager-general-capability-4
+    path: skills/product-manager-general-capability-4.md
+    source: local
+    domain: 反馈分析
+  - name: product-manager-general-capability-5
+    path: skills/product-manager-general-capability-5.md
+    source: local
+    domain: 更新日志

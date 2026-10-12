@@ -1,0 +1,423 @@
+# 公共技能索引 v1.0
+#
+# 本文件登记所有跨分身共享的技能。
+# 各分身的 skills/skill-index.yaml 通过 path 字段引用本目录下的 .md 文件。
+#
+# ┌─────────────────────────────────────────────────────────┐
+# │ 三级技能体系                                             │
+# ├──────────┬──────────────────────────────────────────────┤
+# │ source   │ 路径约定（相对项目根目录）                     │
+# ├──────────┼──────────────────────────────────────────────┤
+# │ local    │ avatars/<id>/skills/<name>.md                │
+# │ shared   │ shared/skills/<name>.md                      │
+# │ community│ shared/skills/community/<pkg>/skills/<name>.md│
+# └──────────┴──────────────────────────────────────────────┘
+#
+# 优先级（同名冲突时）：local > shared > community
+#
+# 分身索引引用示例：
+#   - name: draw-chart
+#     path: shared/skills/draw-chart.md           # ← 自有公共技能
+#     source: shared
+#
+#   - name: query-product-quality
+#     path: skills/query-product-quality.md        # ← 分身专属技能
+#     source: local
+#
+#   - name: prompt-engineering
+#     path: shared/skills/community/awesome-prompt/skills/prompt-engineering.md
+#     source: community                            # ← GitHub 开源技能
+#     origin: https://github.com/example/awesome-prompt-skills.git@v1.0.0
+
+version: "1.0"
+
+skills:
+  # ═══════════════════════════════════════
+  # 互联网内容获取
+  # ═══════════════════════════════════════
+  - name: agent-reach
+    path: shared/skills/agent-reach.md
+    domain: 互联网检索
+    keywords:
+      - 全网调研
+      - 联网搜索
+      - 搜索
+      - 查一下
+      - 找资料
+      - research
+      - 链接
+      - 网页
+      - URL
+      - GitHub
+      - YouTube
+      - B站
+      - V2EX
+      - RSS
+      - Twitter
+      - 推特
+      - Reddit
+      - 小红书
+      - 雪球
+      - LinkedIn
+      - 小宇宙
+      - 播客
+      - 字幕
+    when: 用户需要联网调研、读取 URL、搜索网页、查看 GitHub/YouTube/B站/V2EX/RSS 或社交社区平台内容时，使用 Agent Reach 选择可用后端并获取资料
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 决策回溯
+  # ═══════════════════════════════════════
+  - name: decision-trace
+    path: shared/skills/decision-trace.md
+    domain: 决策回溯
+    keywords:
+      - 为什么没用
+      - 为什么没采用
+      - 为什么不用
+      - 为什么没选
+      - 当时为什么
+      - 当时怎么定的
+      - 怎么决策的
+      - 决策回溯
+      - 决策记录
+      - 历史决策
+      - 谁拍板的
+      - 评估
+      - 变更点
+      - 评审
+    when: 用户问"为什么 X 没做 Y / 当时怎么决策的"等回溯型问题，需要串联 search_knowledge + query_excel + read_tool_result 还原决策链
+    aliases: [为什么没做, 当时怎么定, 谁拍板, 决策历史]
+    handles_intents: [trace_decision]
+    provides: [decision_trace]
+    consumes: [knowledge_data, decision_records]
+    can_compose_with: [chart-from-knowledge, draw-mermaid]
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 数据可视化
+  # ═══════════════════════════════════════
+  - name: draw-chart
+    path: shared/skills/draw-chart.md
+    domain: 数据可视化
+    keywords:
+      - 柱状图
+      - 折线图
+      - 饼图
+      - 散点图
+      - 雷达图
+      - 热力图
+      - 桑基图
+      - 趋势图
+      - 数据图
+      - 图表
+      - 可视化
+      - 对比图
+      - 占比
+      - 分布
+      - 统计
+      - 效率
+      - 折线
+      - 柱状
+      - 环形图
+      - K线
+      - chart
+      - echarts
+      - 画图
+      - 画个图
+      - 生成图
+      - 数据展示
+      - 走势
+      - 变化趋势
+      - 同比
+      - 环比
+    when: 用户需要精确数据可视化（柱状图/折线图/饼图/散点图/雷达图/热力图等），数据来源于知识库或用户提供
+    aliases: [画图, 可视化, 走势图, 数据展示]
+    handles_intents: [visualize_data, compare_metrics, evaluate_performance]
+    provides: [data_chart, echarts.line, echarts.bar, echarts.pie, echarts.scatter, echarts.radar, echarts.heatmap]
+    consumes: [inline_data, metrics, categories]
+    can_compose_with: [chart-from-knowledge]
+    priority: 1
+
+  - name: chart-from-knowledge
+    path: shared/skills/chart-from-knowledge.md
+    domain: 数据可视化
+    keywords:
+      - 知识库画图
+      - 基于数据画
+      - 从表格画
+      - 用数据生成
+      - Excel画图
+      - 表格可视化
+    when: 用户需要基于知识库已有数据画图，需要先检索再画图的两步链式调用
+    aliases: [知识库画图, 从表格画, 基于数据画]
+    handles_intents: [visualize_data, compare_metrics]
+    provides: [data_chart, echarts.line, echarts.bar, echarts.pie]
+    consumes: [knowledge_data, metrics, categories]
+    can_compose_with: [draw-chart]
+    priority: 2
+
+  # ═══════════════════════════════════════
+  # 结构可视化
+  # ═══════════════════════════════════════
+  - name: draw-mermaid
+    path: shared/skills/draw-mermaid.md
+    domain: 结构可视化
+    keywords:
+      - 甘特图
+      - 流程图
+      - 时序图
+      - 思维导图
+      - 看板
+      - 状态机
+      - ER图
+      - 类图
+      - Git图
+      - 架构图
+      - 工作流
+      - 调用链
+      - 交互图
+      - 关系图
+      - 全景图
+      - 项目计划
+      - 时间表
+      - 排期
+      - 里程碑
+      - gantt
+      - flowchart
+      - mermaid
+      - 脑图
+      - 序列图
+      - 泳道图
+      - 状态流转
+      - 数据模型
+    when: 用户需要结构化可视化（甘特图/流程图/时序图/思维导图/看板/状态机/ER图等），输出 mermaid 语法
+    aliases: [X 光透视, X光透视, 透视, 扒开看, 拆开看, 内部结构, 结构展开, 拓扑, 部件关系]
+    handles_intents: [expose_internal_relation, draw_structure, map_process, plan_timeline, annotate_with_metrics]
+    provides: [structure_diagram, mermaid.flowchart, mermaid.sequence, mermaid.gantt, mermaid.state, mermaid.er, mermaid.class, mermaid.mindmap]
+    consumes: [entities, relationships, timeline, states, metrics]
+    can_compose_with: [metric_lookup, draw-chart, chart-from-knowledge]
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 信息图叙事
+  # ═══════════════════════════════════════
+  - name: draw-infographic
+    path: shared/skills/draw-infographic.md
+    domain: 信息图叙事
+    keywords:
+      - 信息图
+      - 演示图
+      - 卡片
+      - SWOT
+      - 对比卡
+      - 金字塔
+      - 词云
+      - 阶梯图
+      - 列表展示
+      - 汇报材料
+      - 演示用
+      - 给领导看
+      - 漂亮的图
+      - 产品对比
+      - 时间线
+      - 特性展示
+      - 信息展示
+      - infographic
+      - 组织架构图
+      - 层级图
+      - 市场结构
+      - 产品特性
+      - 对比展示
+      - 服务列表
+    when: 用户需要叙事型可视化（信息图/对比卡/SWOT/金字塔/词云/演示图），非数据精确图表，输出 @antv/infographic DSL
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 设计系统 & 视觉
+  # ═══════════════════════════════════════
+  - name: claude-design-system
+    path: shared/skills/claude-design-system.md
+    domain: 设计系统
+    keywords:
+      - 设计系统
+      - 品牌规范
+      - 视觉规范
+      - 复刻风格
+      - 界面复刻
+      - design system
+      - design md
+      - DESIGN.md
+      - 组件规范
+      - 视觉语言
+      - token
+      - 颜色体系
+      - 字体规范
+      - 间距规范
+      - 样式指南
+      - 页面规范
+      - 品牌风格
+      - 原型规范
+      - claude 设计
+      - 品牌视觉
+    when: 用户需要基于品牌 DESIGN.md 构建设计系统、复刻视觉风格或输出可执行 UI 规范
+    priority: 2
+    recommended_avatar: design-master
+
+  - name: claude-frontend-design
+    path: shared/skills/claude-frontend-design.md
+    domain: 视觉方向
+    keywords: [前端设计, 美术风格, 视觉方向, aesthetic]
+    when: 用户需要在无品牌基础上确定视觉方向
+    priority: 3
+
+  # ═══════════════════════════════════════
+  # 设计制品
+  # ═══════════════════════════════════════
+  - name: claude-animated-video
+    path: shared/skills/claude-animated-video.md
+    domain: 设计制品
+    keywords: [动画视频, motion, timeline, keyframes, 动效]
+    when: 用户需要时间轴动画设计制品
+    priority: 3
+
+  - name: claude-interactive-prototype
+    path: shared/skills/claude-interactive-prototype.md
+    domain: 设计制品
+    keywords: [交互原型, prototype, 可点击, 交互演示]
+    when: 用户需要可交互原型
+    priority: 2
+
+  - name: claude-make-deck
+    path: shared/skills/claude-make-deck.md
+    domain: 演示文稿
+    keywords: [做个 deck, 幻灯片, 演示文稿, slides]
+    when: 用户需要生成演示文稿
+    priority: 2
+
+  - name: claude-make-tweakable
+    path: shared/skills/claude-make-tweakable.md
+    domain: 设计制品
+    keywords: [可调参数, tweak, 调颜色, 调间距]
+    when: 用户希望在制品中加入可调控件
+    priority: 3
+
+  - name: claude-wireframe
+    path: shared/skills/claude-wireframe.md
+    domain: 结构设计
+    keywords: [线框图, wireframe, 草图, storyboard]
+    when: 用户处于早期结构探索阶段
+    priority: 3
+
+  # ═══════════════════════════════════════
+  # 导出 & 交付
+  # ═══════════════════════════════════════
+  - name: claude-export-pptx-editable
+    path: shared/skills/claude-export-pptx-editable.md
+    domain: 导出
+    keywords: [导出pptx, editable pptx, 可编辑PPT]
+    when: 用户要求可编辑 PPTX
+    priority: 2
+
+  - name: claude-export-pptx-screenshots
+    path: shared/skills/claude-export-pptx-screenshots.md
+    domain: 导出
+    keywords: [截图pptx, screenshotted pptx, 像素保真]
+    when: 用户要求截图型 PPTX
+    priority: 3
+
+  - name: claude-save-pdf
+    path: shared/skills/claude-save-pdf.md
+    domain: 导出
+    keywords: [导出pdf, 保存pdf, print-ready]
+    when: 用户要求 PDF 导出
+    priority: 2
+
+  - name: claude-save-standalone-html
+    path: shared/skills/claude-save-standalone-html.md
+    domain: 导出
+    keywords: [保存html, 单文件html, 离线html]
+    when: 用户要求可离线 HTML
+    priority: 2
+
+  - name: claude-send-to-canva
+    path: shared/skills/claude-send-to-canva.md
+    domain: 导出
+    keywords: [send to canva, 导入canva, canva]
+    when: 用户要求发送到 Canva
+    priority: 3
+
+  - name: claude-handoff-to-code
+    path: shared/skills/claude-handoff-to-code.md
+    domain: 交付
+    keywords: [开发交付, handoff, 交给开发, claude code 交接]
+    when: 用户要求把设计交付给开发
+    priority: 2
+
+  # ═══════════════════════════════════════
+  # 需求澄清（动手前的拷打）
+  # ═══════════════════════════════════════
+  - name: grill-me
+    path: shared/skills/grill-me.md
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 拷问
+      - 反问我
+      - 把需求问透
+      - 把决策树问透
+      - 在动手前把问题问清楚
+      - 我想被反问
+    when: 用户**显式**请求被反问/拷打需求或决策（非默认对话），跑在「任务拆分计划」之前作为前置澄清
+    priority: 1
+
+  - name: grill-against-knowledge
+    path: shared/skills/grill-against-knowledge.md
+    domain: 需求澄清
+    keywords:
+      - grill me
+      - /grill-me
+      - 拷打
+      - 对照知识库 grill
+      - 沉淀 ADR
+      - 决策记录
+      - 术语对齐
+      - 知识库对齐
+    when: 同 grill-me；当前分身存在 knowledge/ 且 knowledge/README.md 不为空时优先用本技能（叠加术语对齐 + ADR 沉淀）
+    priority: 1
+
+  # ═══════════════════════════════════════
+  # 外部平台知识
+  # ═══════════════════════════════════════
+  - name: palantir-aip-foundry
+    path: shared/skills/palantir-aip-foundry.md
+    domain: 外部平台知识
+    keywords:
+      - Palantir
+      - Foundry
+      - AIP
+      - AIP Logic
+      - AIP Assist
+      - AIP Analyst
+      - Chatbot Studio
+      - Agent Studio
+      - Document Intelligence
+      - AIP Evals
+      - Model Catalog
+      - AIP Threads
+      - AI FDE
+      - Ontology
+      - BYOM
+      - 自带模型
+      - 注册模型
+      - registered model
+      - ChatCompletion
+      - compute-second
+      - 责任 AI
+      - prompt engineering
+      - Supported LLMs
+      - LLM proxy
+    when: 用户问及 Palantir Foundry AIP 平台/模块选型/接入自有模型/计费限流容量/治理合规/提示工程；回答须标来源页并对未覆盖项标 GAP
+    priority: 1

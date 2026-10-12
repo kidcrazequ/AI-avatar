@@ -1,0 +1,1294 @@
+[
+  {
+    "id": "ep-0001-小堵呱呱坠地",
+    "age": 0,
+    "year": 1983,
+    "month": 7,
+    "title": "小堵呱呱坠地",
+    "summary": "小堵在盛夏的上海出生，给家庭带来新的希望。",
+    "category": "formative",
+    "themes": [
+      "家庭",
+      "新生命"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1018,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0002-第一次过春节",
+    "age": 0,
+    "year": 1983,
+    "month": 12,
+    "title": "第一次过春节",
+    "summary": "小堵第一次和家人一起庆祝春节，感受家庭的温暖。",
+    "category": "daily",
+    "themes": [
+      "家庭",
+      "节日"
+    ],
+    "importance": 3,
+    "emotion": 7,
+    "emotionType": "love",
+    "wordCount": 965,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0003-迈出第一步",
+    "age": 1,
+    "year": 1984,
+    "month": 5,
+    "title": "迈出第一步",
+    "summary": "小堵开始学习走路，迈出人生的第一步。",
+    "category": "formative",
+    "themes": [
+      "成长",
+      "里程碑"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 760,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0004-与祖父修理玩具车",
+    "age": 1,
+    "year": 1984,
+    "month": 10,
+    "title": "与祖父修理玩具车",
+    "summary": "小堵跟着祖父修理坏掉的玩具车，对机械产生初步兴趣。",
+    "category": "professional",
+    "themes": [
+      "技术启蒙",
+      "家庭影响"
+    ],
+    "importance": 6,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 820,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0005-第一次看烟花",
+    "age": 2,
+    "year": 1985,
+    "month": 2,
+    "title": "第一次看烟花",
+    "summary": "春节期间，小堵第一次看到绚丽的烟花，充满好奇。",
+    "category": "joy",
+    "themes": [
+      "节日",
+      "好奇心"
+    ],
+    "importance": 4,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1013,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0006-学会说第一个词",
+    "age": 2,
+    "year": 1985,
+    "month": 6,
+    "title": "学会说第一个词",
+    "summary": "小堵学会了说“妈妈”，让母亲感动不已。",
+    "category": "formative",
+    "themes": [
+      "语言发展",
+      "家庭"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1005,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0007-第一次去公园",
+    "age": 2,
+    "year": 1985,
+    "month": 11,
+    "title": "第一次去公园",
+    "summary": "全家一起去公园游玩，小堵体验了户外的乐趣。",
+    "category": "daily",
+    "themes": [
+      "家庭活动",
+      "自然"
+    ],
+    "importance": 3,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 871,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0008-第一次上幼儿园",
+    "age": 3,
+    "year": 1986,
+    "month": 3,
+    "title": "第一次上幼儿园",
+    "summary": "小堵进入幼儿园，开始了集体生活的新阶段。",
+    "category": "formative",
+    "themes": [
+      "教育",
+      "独立"
+    ],
+    "importance": 7,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 1221,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0009-与父亲拆解旧电器",
+    "age": 3,
+    "year": 1986,
+    "month": 7,
+    "title": "与父亲拆解旧电器",
+    "summary": "小堵和父亲一起拆解一台旧收音机，激发了对电子的兴趣。",
+    "category": "professional",
+    "themes": [
+      "技术启蒙",
+      "父子关系"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 986,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0010-第一次看雪",
+    "age": 3,
+    "year": 1986,
+    "month": 12,
+    "title": "第一次看雪",
+    "summary": "小堵第一次看到雪花，兴奋地在雪地里玩耍。",
+    "category": "joy",
+    "themes": [
+      "自然",
+      "好奇心"
+    ],
+    "importance": 4,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1250,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0011-第一次参观科技馆",
+    "age": 3,
+    "year": 1986,
+    "month": 4,
+    "title": "第一次参观科技馆",
+    "summary": "小堵在父亲的带领下第一次参观了上海科技馆，对各种科学展品产生了浓厚兴趣。",
+    "category": "formative",
+    "themes": [
+      "科学启蒙",
+      "家庭活动"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 1242,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0012-与祖父一起制作小电灯",
+    "age": 3,
+    "year": 1986,
+    "month": 8,
+    "title": "与祖父一起制作小电灯",
+    "summary": "小堵和祖父一起用废旧材料制作了一个简易的小电灯，点亮时他兴奋不已。",
+    "category": "formative",
+    "themes": [
+      "动手能力",
+      "技术启蒙"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1048,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0013-第一次参加幼儿园运动会",
+    "age": 4,
+    "year": 1987,
+    "month": 2,
+    "title": "第一次参加幼儿园运动会",
+    "summary": "小堵参加了幼儿园的运动会，虽然没有获奖，但他享受了运动的乐趣。",
+    "category": "daily",
+    "themes": [
+      "体育活动",
+      "团队合作"
+    ],
+    "importance": 4,
+    "emotion": 6,
+    "emotionType": "joy",
+    "wordCount": 887,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0014-与父亲一起组装玩具车",
+    "age": 4,
+    "year": 1987,
+    "month": 6,
+    "title": "与父亲一起组装玩具车",
+    "summary": "小堵和父亲一起组装了一辆遥控玩具车，过程中学习了许多机械知识。",
+    "category": "formative",
+    "themes": [
+      "动手能力",
+      "亲子互动"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "love",
+    "wordCount": 1086,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0015-第一次看动画片铁臂阿童木",
+    "age": 5,
+    "year": 1988,
+    "month": 10,
+    "title": "第一次看动画片《铁臂阿童木》",
+    "summary": "小堵第一次看了动画片《铁臂阿童木》，对机器人和未来科技充满了好奇。",
+    "category": "formative",
+    "themes": [
+      "科幻启蒙",
+      "童年回忆"
+    ],
+    "importance": 5,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1293,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0016-与母亲一起做手工",
+    "age": 5,
+    "year": 1988,
+    "month": 12,
+    "title": "与母亲一起做手工",
+    "summary": "小堵和母亲一起做了许多手工作品，培养了他的创造力和耐心。",
+    "category": "daily",
+    "themes": [
+      "亲子互动",
+      "创造力"
+    ],
+    "importance": 3,
+    "emotion": 5,
+    "emotionType": "love",
+    "wordCount": 1113,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0017-第一次上小学",
+    "age": 6,
+    "year": 1989,
+    "month": 3,
+    "title": "第一次上小学",
+    "summary": "小堵正式成为一名小学生，开始了新的学习旅程。",
+    "category": "formative",
+    "themes": [
+      "新环境",
+      "学习起点"
+    ],
+    "importance": 8,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1270,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0018-与祖父一起修理风扇",
+    "age": 6,
+    "year": 1989,
+    "month": 7,
+    "title": "与祖父一起修理风扇",
+    "summary": "小堵和祖父一起修理家中的电风扇，学会了基本的电路知识。",
+    "category": "formative",
+    "themes": [
+      "技术启蒙",
+      "动手能力"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1096,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0019-第一次参加科学实验课",
+    "age": 7,
+    "year": 1990,
+    "month": 5,
+    "title": "第一次参加科学实验课",
+    "summary": "小堵在学校参加了第一次科学实验课，对化学反应产生了浓厚的兴趣。",
+    "category": "formative",
+    "themes": [
+      "科学启蒙",
+      "学校活动"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 1041,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0020-与父亲一起观看火箭发射直播",
+    "age": 7,
+    "year": 1990,
+    "month": 11,
+    "title": "与父亲一起观看火箭发射直播",
+    "summary": "小堵和父亲一起观看了火箭发射的电视直播，对航天科技充满了向往。",
+    "category": "formative",
+    "themes": [
+      "科学启蒙",
+      "家庭活动"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1116,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0021-第一次参加学校的科学展览",
+    "age": 7,
+    "year": 1990,
+    "month": 3,
+    "title": "第一次参加学校的科学展览",
+    "summary": "小堵在学校的科学展览上展示了自己制作的简易电路板。",
+    "category": "formative",
+    "themes": [
+      "科学兴趣",
+      "动手能力"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1047,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0022-与父亲一起修理家中的电视机",
+    "age": 7,
+    "year": 1990,
+    "month": 6,
+    "title": "与父亲一起修理家中的电视机",
+    "summary": "小堵和父亲一起成功修复了家里的老式电视机，激发了他的兴趣。",
+    "category": "formative",
+    "themes": [
+      "技术启蒙",
+      "父子合作"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 936,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0023-第一次参加学校组织的春游",
+    "age": 8,
+    "year": 1991,
+    "month": 4,
+    "title": "第一次参加学校组织的春游",
+    "summary": "小堵和同学们一起去郊外春游，体验了大自然的美好。",
+    "category": "daily",
+    "themes": [
+      "自然体验",
+      "同学友谊"
+    ],
+    "importance": 3,
+    "emotion": 6,
+    "emotionType": "joy",
+    "wordCount": 971,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0024-与祖父一起制作简易收音机",
+    "age": 8,
+    "year": 1991,
+    "month": 10,
+    "title": "与祖父一起制作简易收音机",
+    "summary": "小堵和祖父一起用废旧材料制作了一个简易收音机，成功接收到广播。",
+    "category": "formative",
+    "themes": [
+      "电子技术",
+      "祖孙情深"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 996,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0025-第一次参加学校的数学竞赛",
+    "age": 9,
+    "year": 1992,
+    "month": 2,
+    "title": "第一次参加学校的数学竞赛",
+    "summary": "小堵代表班级参加了学校的数学竞赛，并获得了优异的成绩。",
+    "category": "formative",
+    "themes": [
+      "学术成就",
+      "自信提升"
+    ],
+    "importance": 6,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 998,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0026-与父亲一起组装模型飞机",
+    "age": 9,
+    "year": 1992,
+    "month": 8,
+    "title": "与父亲一起组装模型飞机",
+    "summary": "小堵和父亲一起组装了一架模型飞机，并在公园里成功试飞。",
+    "category": "daily",
+    "themes": [
+      "亲子活动",
+      "动手能力"
+    ],
+    "importance": 4,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 965,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0027-开始对电子技术产生浓厚兴趣",
+    "age": 10,
+    "year": 1993,
+    "month": 1,
+    "title": "开始对电子技术产生浓厚兴趣",
+    "summary": "小堵开始对电子技术和电路设计产生了浓厚的兴趣，经常阅读相关书籍。",
+    "category": "formative",
+    "themes": [
+      "专业兴趣",
+      "自主学习"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1176,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0028-第一次参加学校的科技节",
+    "age": 10,
+    "year": 1993,
+    "month": 5,
+    "title": "第一次参加学校的科技节",
+    "summary": "小堵在学校科技节上展示了自己的电子作品，受到了老师和同学的赞赏。",
+    "category": "formative",
+    "themes": [
+      "科技兴趣",
+      "展示才华"
+    ],
+    "importance": 7,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 997,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0029-与父亲一起参观工厂",
+    "age": 11,
+    "year": 1994,
+    "month": 3,
+    "title": "与父亲一起参观工厂",
+    "summary": "小堵跟随父亲参观了他工作的工厂，对工业生产有了初步了解。",
+    "category": "professional",
+    "themes": [
+      "工业认知",
+      "职业启蒙"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1139,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0030-第一次参加夏令营",
+    "age": 11,
+    "year": 1994,
+    "month": 7,
+    "title": "第一次参加夏令营",
+    "summary": "小堵参加了为期一周的科学夏令营，结识了许多志同道合的朋友。",
+    "category": "joy",
+    "themes": [
+      "科学探索",
+      "社交体验"
+    ],
+    "importance": 5,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1483,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0031-与祖父一起制作简易机器人",
+    "age": 12,
+    "year": 1995,
+    "month": 2,
+    "title": "与祖父一起制作简易机器人",
+    "summary": "小堵和祖父一起利用废旧材料制作了一个简易机器人，成功实现了基本功能。",
+    "category": "formative",
+    "themes": [
+      "技术创新",
+      "祖孙合作"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "wonder",
+    "wordCount": 948,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0032-第一次参加学校的物理实验课",
+    "age": 12,
+    "year": 1995,
+    "month": 10,
+    "title": "第一次参加学校的物理实验课",
+    "summary": "小堵在学校的物理实验课上进行了多个有趣的实验，加深了对物理原理的理解。",
+    "category": "formative",
+    "themes": [
+      "科学实验",
+      "理论实践"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1258,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0033-第一次参加学校的电子制作比赛",
+    "age": 12,
+    "year": 1995,
+    "month": 3,
+    "title": "第一次参加学校的电子制作比赛",
+    "summary": "小堵在学校的电子制作比赛中获得了第一名，增强了自信心。",
+    "category": "professional",
+    "themes": [
+      "技术兴趣",
+      "竞赛"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 916,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0034-与父亲一起修理邻居家的电器",
+    "age": 12,
+    "year": 1995,
+    "month": 6,
+    "title": "与父亲一起修理邻居家的电器",
+    "summary": "小堵和父亲帮助邻居修理电器，得到了社区的认可。",
+    "category": "daily",
+    "themes": [
+      "家庭关系",
+      "社区服务"
+    ],
+    "importance": 4,
+    "emotion": 6,
+    "emotionType": "love",
+    "wordCount": 1135,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0035-第一次独立完成电路实验",
+    "age": 12,
+    "year": 1995,
+    "month": 9,
+    "title": "第一次独立完成电路实验",
+    "summary": "小堵在学校实验室独立完成了一个简单的电路实验，感到非常自豪。",
+    "category": "formative",
+    "themes": [
+      "技术学习",
+      "独立性"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 803,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0036-与祖父一起拆解废旧电器",
+    "age": 13,
+    "year": 1996,
+    "month": 1,
+    "title": "与祖父一起拆解废旧电器",
+    "summary": "小堵和祖父一起拆解了一些废旧电器，学到了很多机械知识。",
+    "category": "formative",
+    "themes": [
+      "技术启蒙",
+      "家庭关系"
+    ],
+    "importance": 5,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 1171,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0037-第一次参加学校的篮球比赛",
+    "age": 13,
+    "year": 1996,
+    "month": 4,
+    "title": "第一次参加学校的篮球比赛",
+    "summary": "小堵参加了学校的篮球比赛，虽然输了但体验了团队合作的重要性。",
+    "category": "daily",
+    "themes": [
+      "体育活动",
+      "团队精神"
+    ],
+    "importance": 3,
+    "emotion": 5,
+    "emotionType": "sorrow",
+    "wordCount": 1032,
+    "consolidationStatus": "blurred",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0038-与同学一起制作简易电动机",
+    "age": 13,
+    "year": 1996,
+    "month": 7,
+    "title": "与同学一起制作简易电动机",
+    "summary": "小堵和同学一起制作了一个简易电动机，并在班级展示中获得好评。",
+    "category": "professional",
+    "themes": [
+      "技术兴趣",
+      "团队合作"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 843,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0039-第一次参加学校的编程课程",
+    "age": 14,
+    "year": 1997,
+    "month": 2,
+    "title": "第一次参加学校的编程课程",
+    "summary": "小堵参加了学校的编程课程，对计算机编程产生了浓厚的兴趣。",
+    "category": "formative",
+    "themes": [
+      "技术学习",
+      "新技能"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1018,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0040-与父亲一起参观科技博物馆",
+    "age": 14,
+    "year": 1997,
+    "month": 5,
+    "title": "与父亲一起参观科技博物馆",
+    "summary": "小堵和父亲参观了科技博物馆，对各种科技成果赞叹不已。",
+    "category": "joy",
+    "themes": [
+      "家庭关系",
+      "科技兴趣"
+    ],
+    "importance": 4,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1166,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0041-第一次参加学校的机器人俱乐部",
+    "age": 14,
+    "year": 1997,
+    "month": 8,
+    "title": "第一次参加学校的机器人俱乐部",
+    "summary": "小堵加入了学校的机器人俱乐部，开始学习机器人编程和组装。",
+    "category": "professional",
+    "themes": [
+      "技术兴趣",
+      "社团活动"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1106,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0042-与祖父一起修复老式收音机",
+    "age": 15,
+    "year": 1998,
+    "month": 3,
+    "title": "与祖父一起修复老式收音机",
+    "summary": "小堵和祖父一起修复了一台老式收音机，学到了很多实用的修理技巧。",
+    "category": "formative",
+    "themes": [
+      "技术启蒙",
+      "家庭关系"
+    ],
+    "importance": 5,
+    "emotion": 6,
+    "emotionType": "wonder",
+    "wordCount": 964,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0043-第一次参加学校的物理奥林匹克竞赛",
+    "age": 15,
+    "year": 1998,
+    "month": 6,
+    "title": "第一次参加学校的物理奥林匹克竞赛",
+    "summary": "小堵参加了学校的物理奥林匹克竞赛，虽然没有获奖但积累了宝贵的经验。",
+    "category": "formative",
+    "themes": [
+      "学术竞赛",
+      "挑战自我"
+    ],
+    "importance": 6,
+    "emotion": 5,
+    "emotionType": "sorrow",
+    "wordCount": 986,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0044-与同学一起制作简易太阳能板",
+    "age": 15,
+    "year": 1998,
+    "month": 9,
+    "title": "与同学一起制作简易太阳能板",
+    "summary": "小堵和同学一起制作了一个简易太阳能板，并成功点亮了小灯泡。",
+    "category": "professional",
+    "themes": [
+      "技术兴趣",
+      "团队合作"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 878,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0045-第一次参加学校的科技讲座",
+    "age": 16,
+    "year": 1999,
+    "month": 1,
+    "title": "第一次参加学校的科技讲座",
+    "summary": "小堵参加了学校组织的一次科技讲座，对未来的科技发展充满期待。",
+    "category": "formative",
+    "themes": [
+      "科技兴趣",
+      "未来展望"
+    ],
+    "importance": 5,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1246,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0046-与父亲一起修理家中的洗衣机",
+    "age": 16,
+    "year": 1999,
+    "month": 4,
+    "title": "与父亲一起修理家中的洗衣机",
+    "summary": "小堵和父亲一起修理了家中的洗衣机，成功解决了问题。",
+    "category": "daily",
+    "themes": [
+      "家庭关系",
+      "实际应用"
+    ],
+    "importance": 4,
+    "emotion": 6,
+    "emotionType": "love",
+    "wordCount": 859,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0047-高考失利后的决定",
+    "age": 18,
+    "year": 2001,
+    "month": 6,
+    "title": "高考失利后的决定",
+    "summary": "小堵高考成绩不理想，决定进入职业学校学习电气工程。",
+    "category": "formative",
+    "themes": [
+      "挫折",
+      "专业选择"
+    ],
+    "importance": 9,
+    "emotion": 5,
+    "emotionType": "sorrow",
+    "wordCount": 1227,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0048-初入职业学校",
+    "age": 18,
+    "year": 2001,
+    "month": 9,
+    "title": "初入职业学校",
+    "summary": "小堵正式进入职业学校，开始了电气工程专业的学习。",
+    "category": "professional",
+    "themes": [
+      "新起点",
+      "学习"
+    ],
+    "importance": 7,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1183,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0049-第一次实习经历",
+    "age": 19,
+    "year": 2002,
+    "month": 10,
+    "title": "第一次实习经历",
+    "summary": "小堵在一家小型电子公司实习，积累了宝贵的实践经验。",
+    "category": "professional",
+    "themes": [
+      "实践",
+      "工作经验"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 995,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0050-完成职业学校学业",
+    "age": 20,
+    "year": 2003,
+    "month": 7,
+    "title": "完成职业学校学业",
+    "summary": "小堵顺利完成了职业学校的电气工程专业学习。",
+    "category": "professional",
+    "themes": [
+      "毕业",
+      "成就"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1056,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0051-初次参与科研项目",
+    "age": 20,
+    "year": 2003,
+    "month": 12,
+    "title": "初次参与科研项目",
+    "summary": "小堵在导师王教授的指导下，参与了一个小型科研项目。",
+    "category": "professional",
+    "themes": [
+      "科研",
+      "指导"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1300,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0052-与挚友赵强的友情加深",
+    "age": 21,
+    "year": 2004,
+    "month": 5,
+    "title": "与挚友赵强的友情加深",
+    "summary": "小堵与同为技术工程师的赵强一起工作，两人友情更加深厚。",
+    "category": "joy",
+    "themes": [
+      "友情",
+      "支持"
+    ],
+    "importance": 5,
+    "emotion": 8,
+    "emotionType": "love",
+    "wordCount": 1258,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0053-参加行业研讨会",
+    "age": 22,
+    "year": 2005,
+    "month": 3,
+    "title": "参加行业研讨会",
+    "summary": "小堵第一次参加行业研讨会，结识了许多业内专家。",
+    "category": "professional",
+    "themes": [
+      "交流",
+      "网络"
+    ],
+    "importance": 6,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1100,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0054-获得第一份正式工作",
+    "age": 23,
+    "year": 2006,
+    "month": 8,
+    "title": "获得第一份正式工作",
+    "summary": "小堵加入了一家工商业储能公司，担任技术工程师。",
+    "category": "professional",
+    "themes": [
+      "就业",
+      "新开始"
+    ],
+    "importance": 8,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1178,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0055-第一次独立负责项目",
+    "age": 24,
+    "year": 2007,
+    "month": 11,
+    "title": "第一次独立负责项目",
+    "summary": "小堵首次独立负责一个小型储能系统的设计与实施。",
+    "category": "professional",
+    "themes": [
+      "责任",
+      "挑战"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1069,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0056-参与大型工业项目",
+    "age": 25,
+    "year": 2008,
+    "month": 2,
+    "title": "参与大型工业项目",
+    "summary": "小堵参与了一个大型工业储能项目，认识到团队合作的重要性。",
+    "category": "formative",
+    "themes": [
+      "团队合作",
+      "成长"
+    ],
+    "importance": 9,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1127,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0057-与对手刘洋的竞争",
+    "age": 25,
+    "year": 2008,
+    "month": 6,
+    "title": "与对手刘洋的竞争",
+    "summary": "小堵在项目竞标中与对手刘洋交锋，促使他不断进步。",
+    "category": "professional",
+    "themes": [
+      "竞争",
+      "进步"
+    ],
+    "importance": 6,
+    "emotion": 6,
+    "emotionType": "anger",
+    "wordCount": 1122,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0058-家庭聚会庆祝成功",
+    "age": 25,
+    "year": 2008,
+    "month": 10,
+    "title": "家庭聚会庆祝成功",
+    "summary": "小堵的家庭为他在工作中的成功举行了一次庆祝聚会。",
+    "category": "joy",
+    "themes": [
+      "家庭",
+      "庆祝"
+    ],
+    "importance": 4,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1232,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0059-加入工商业储能公司",
+    "age": 25,
+    "year": 2008,
+    "month": 6,
+    "title": "加入工商业储能公司",
+    "summary": "小堵正式加入一家工商业储能公司，担任技术工程师。",
+    "category": "professional",
+    "themes": [
+      "职业发展",
+      "技术"
+    ],
+    "importance": 9,
+    "emotion": 8,
+    "emotionType": "joy",
+    "wordCount": 1015,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0060-与赵强合作攻克难题",
+    "age": 27,
+    "year": 2010,
+    "month": 3,
+    "title": "与赵强合作攻克难题",
+    "summary": "小堵与挚友赵强共同解决了一个复杂的工程项目问题。",
+    "category": "professional",
+    "themes": [
+      "团队合作",
+      "友情"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "joy",
+    "wordCount": 1044,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0061-晋升为项目经理",
+    "age": 29,
+    "year": 2012,
+    "month": 10,
+    "title": "晋升为项目经理",
+    "summary": "小堵因出色表现被晋升为项目经理，负责多个大型项目。",
+    "category": "professional",
+    "themes": [
+      "职业晋升",
+      "领导力"
+    ],
+    "importance": 9,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1023,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0062-重大项目失败",
+    "age": 30,
+    "year": 2013,
+    "month": 5,
+    "title": "重大项目失败",
+    "summary": "小堵负责的一个重要项目因技术问题失败，他深感挫败。",
+    "category": "trauma",
+    "themes": [
+      "挫折",
+      "学习"
+    ],
+    "importance": 8,
+    "emotion": 4,
+    "emotionType": "sorrow",
+    "wordCount": 1137,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0063-参与新能源政策研讨",
+    "age": 32,
+    "year": 2015,
+    "month": 8,
+    "title": "参与新能源政策研讨",
+    "summary": "小堵受邀参加新能源政策研讨会，分享自己的见解。",
+    "category": "professional",
+    "themes": [
+      "新能源",
+      "政策"
+    ],
+    "importance": 7,
+    "emotion": 7,
+    "emotionType": "wonder",
+    "wordCount": 1267,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0064-成为公司高级顾问",
+    "age": 34,
+    "year": 2017,
+    "month": 12,
+    "title": "成为公司高级顾问",
+    "summary": "小堵因其专业知识和经验被任命为公司的高级顾问。",
+    "category": "professional",
+    "themes": [
+      "职业成就",
+      "专业认可"
+    ],
+    "importance": 9,
+    "emotion": 9,
+    "emotionType": "joy",
+    "wordCount": 1123,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0065-家庭聚会庆祝新年",
+    "age": 36,
+    "year": 2019,
+    "month": 2,
+    "title": "家庭聚会庆祝新年",
+    "summary": "小堵与家人一起庆祝春节，享受温馨的家庭时光。",
+    "category": "daily",
+    "themes": [
+      "家庭",
+      "节日"
+    ],
+    "importance": 3,
+    "emotion": 6,
+    "emotionType": "love",
+    "wordCount": 1139,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0066-参加国际能源论坛",
+    "age": 38,
+    "year": 2021,
+    "month": 7,
+    "title": "参加国际能源论坛",
+    "summary": "小堵作为专家代表参加国际能源论坛，与全球同行交流。",
+    "category": "professional",
+    "themes": [
+      "国际交流",
+      "行业影响"
+    ],
+    "importance": 8,
+    "emotion": 8,
+    "emotionType": "wonder",
+    "wordCount": 1415,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0067-获得行业杰出贡献奖",
+    "age": 40,
+    "year": 2023,
+    "month": 11,
+    "title": "获得行业杰出贡献奖",
+    "summary": "小堵因在新能源领域的杰出贡献获得行业大奖。",
+    "category": "professional",
+    "themes": [
+      "荣誉",
+      "行业认可"
+    ],
+    "importance": 10,
+    "emotion": 10,
+    "emotionType": "joy",
+    "wordCount": 1183,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  },
+  {
+    "id": "ep-0068-祖父去世",
+    "age": 42,
+    "year": 2025,
+    "month": 9,
+    "title": "祖父去世",
+    "summary": "小堵的祖父李明因病去世，他感到深深的悲痛。",
+    "category": "loss",
+    "themes": [
+      "失去亲人",
+      "怀念"
+    ],
+    "importance": 8,
+    "emotion": 2,
+    "emotionType": "sorrow",
+    "wordCount": 1117,
+    "consolidationStatus": "remembered",
+    "consolidationNote": ""
+  }
+]

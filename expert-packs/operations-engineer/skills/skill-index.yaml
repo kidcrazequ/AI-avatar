@@ -1,0 +1,17 @@
+skills:
+  - name: operations-engineer-capability-1
+    path: skills/operations-engineer-capability-1.md
+    source: local
+    domain: 日常运维巡检
+  - name: operations-engineer-capability-2
+    path: skills/operations-engineer-capability-2.md
+    source: local
+    domain: 告警与故障分诊
+  - name: operations-engineer-capability-3
+    path: skills/operations-engineer-capability-3.md
+    source: local
+    domain: 运行手册执行
+  - name: operations-engineer-capability-4
+    path: skills/operations-engineer-capability-4.md
+    source: local
+    domain: 可靠性报告

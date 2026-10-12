@@ -1,0 +1,69 @@
+# Soul 技能包描述文件（skill-manifest.yaml）模板
+#
+# 每个开源技能仓库的根目录放一个 skill-manifest.yaml，
+# 让 Soul 用户能自动发现和安装你的技能。
+#
+# 仓库目录结构示例：
+#
+#   my-soul-skills/
+#   ├── skill-manifest.yaml    ← 本文件
+#   ├── README.md
+#   ├── LICENSE
+#   └── skills/
+#       ├── skill-a.md         ← 按 Soul skill-template.md 格式编写
+#       └── skill-b.md
+#
+# 技能文件格式参考：templates/skill-template.md
+
+# ═══════════════════════════════════════
+# 包基本信息
+# ═══════════════════════════════════════
+name: "{{PACKAGE_NAME}}"           # 包名（小写 + 连字符，如 awesome-prompt-skills）
+version: "1.0.0"                   # 语义化版本（MAJOR.MINOR.PATCH）
+description: "{{DESCRIPTION}}"     # 一句话描述
+author: "{{AUTHOR}}"               # 作者 / 组织
+license: "MIT"                     # 开源协议
+homepage: "https://github.com/{{OWNER}}/{{REPO}}"
+
+# Soul 兼容性
+soul_skill_format: "1.0"           # 对应 templates/skill-template.md 的格式版本
+
+# ═══════════════════════════════════════
+# 技能列表
+# ═══════════════════════════════════════
+skills:
+  - name: "{{SKILL_NAME_A}}"
+    file: "skills/{{SKILL_NAME_A}}.md"
+    domain: "{{DOMAIN}}"           # 如：数据可视化 / AI 工程 / 项目管理
+    description: "{{SKILL_DESCRIPTION}}"
+    keywords:
+      - "{{KEYWORD_1}}"
+      - "{{KEYWORD_2}}"
+      - "{{KEYWORD_3}}"
+    when: "{{TRIGGER_CONDITION}}"   # 什么场景下应该加载此技能
+    priority: 2                     # 数字越小优先级越高（建议社区技能 ≥ 2）
+
+  # - name: "{{SKILL_NAME_B}}"
+  #   file: "skills/{{SKILL_NAME_B}}.md"
+  #   domain: "{{DOMAIN}}"
+  #   description: "{{SKILL_DESCRIPTION}}"
+  #   keywords: [...]
+  #   when: "..."
+  #   priority: 2
+
+# ═══════════════════════════════════════
+# 依赖（可选）
+# ═══════════════════════════════════════
+# 声明本技能包依赖的 Soul 内置公共技能。
+# 安装时会检查这些技能是否存在于 shared/skills/。
+dependencies: []
+  # - draw-chart              # 依赖 Soul 公共技能 draw-chart
+  # - draw-mermaid
+
+# ═══════════════════════════════════════
+# 标签（可选，用于搜索发现）
+# ═══════════════════════════════════════
+tags: []
+  # - prompt-engineering
+  # - data-analysis
+  # - productivity

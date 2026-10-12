@@ -1,0 +1,17 @@
+skills:
+  - name: devops-engineer-capability-1
+    path: skills/devops-engineer-capability-1.md
+    source: local
+    domain: CI/CD 流水线设计
+  - name: devops-engineer-capability-2
+    path: skills/devops-engineer-capability-2.md
+    source: local
+    domain: 基础设施自动化
+  - name: devops-engineer-capability-3
+    path: skills/devops-engineer-capability-3.md
+    source: local
+    domain: 发布与回滚治理
+  - name: devops-engineer-capability-4
+    path: skills/devops-engineer-capability-4.md
+    source: local
+    domain: 平台可靠性护栏

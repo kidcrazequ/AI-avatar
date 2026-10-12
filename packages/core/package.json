@@ -1,0 +1,60 @@
+{
+  "name": "@soul/core",
+  "version": "1.0.0",
+  "description": "Soul 分身框架核心 SDK，与运行环境无关（Node.js / Electron / CLI）",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "soul-mcp": "dist/mcp-server-bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test $(find dist/tests -name '*.test.js' ! -name 'journey.test.js')",
+    "test:cleaner": "node --test dist/tests/ocr-html-cleaner.test.js",
+    "test:integration": "node --test dist/tests/journey.test.js",
+    "test:all": "npm run test && npm run test:integration",
+    "test:import-perf-sim": "npx --yes tsx ../../testdocs/import-perf-sim.ts",
+    "test:knowledge-score": "npx --yes tsx ../../testdocs/knowledge-quality-rescore.js",
+    "test:knowledge-score-compare": "npx --yes tsx ../../testdocs/knowledge-quality-score-compare.js",
+    "test:knowledge-standard-gate": "npx --yes tsx ../../testdocs/knowledge-standard-gate.js",
+    "test:simulate-desktop-format": "npx --yes tsx ../../testdocs/simulate-desktop-format.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --max-warnings 0",
+    "lint:fix": "eslint src/ --fix",
+    "quality": "echo '=== TypeScript 类型检查 ===' && npm run typecheck && echo '=== ESLint 代码质量检查 ===' && npm run lint && echo '=== 全部检查通过 ==='"
+  },
+  "keywords": [
+    "soul",
+    "avatar",
+    "ai"
+  ],
+  "author": "zhi.qu",
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "@types/turndown": "^5.0.6",
+    "eslint": "^10.2.0",
+    "globals": "^17.4.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.58.1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "nodejieba": "^3.5.8",
+    "turndown": "^7.2.4",
+    "undici": "^6.26.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "yaml": "^2.5.1"
+  }
+}

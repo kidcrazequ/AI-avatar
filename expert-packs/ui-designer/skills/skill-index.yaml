@@ -1,0 +1,17 @@
+skills:
+  - name: ui-designer-capability-1
+    path: skills/ui-designer-capability-1.md
+    source: local
+    domain: 项目组件体系 组件路由
+  - name: ui-designer-capability-2
+    path: skills/ui-designer-capability-2.md
+    source: local
+    domain: React UI 实现
+  - name: ui-designer-capability-3
+    path: skills/ui-designer-capability-3.md
+    source: local
+    domain: Figma 交接
+  - name: ui-designer-capability-4
+    path: skills/ui-designer-capability-4.md
+    source: local
+    domain: UI 评审与优化

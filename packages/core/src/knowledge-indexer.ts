@@ -1,0 +1,328 @@
+/**
+ * 知识索引模块：上下文摘要生成 + 向量嵌入 + JSON 持久化。
+ *
+ * 在知识导入后调用，为每个 chunk 生成：
+ *   1. 上下文索引描述（1 句话摘要 + 同义词，供 BM25 增强）
+ *   2. 向量 embedding（供 RRF 融合排序）
+ * 索引持久化为 JSON 文件，桌面端和测试共用此模块。
+ *
+ * @author zhi.qu
+ * @date 2026-04-03
+ */
+
+import fs from 'fs'
+import path from 'path'
+import crypto from 'crypto'
+import { tokenize, type KnowledgeRetriever } from './knowledge-retriever'
+import type { LLMCallFn } from './document-formatter'
+import { loadTokensCache, saveTokensCache } from './utils/chunk-cache'
+
+/** 与 KnowledgeRetriever.searchChunks 中的 TOKENIZE_MAX_CHARS 保持一致：3000 字以内 segmentit 单 chunk 耗时 ≤500ms */
+const INDEX_TOKENIZE_MAX_CHARS = 3000
+/** 分词循环每 N 个 chunk yield 一次事件循环，给 GC 喘息时间，防止 build 期间自身 OOM */
+const TOKENIZE_YIELD_EVERY = 50
+
+/** 写入临时文件后原子 rename，防止进程中断导致索引损坏 */
+function atomicWriteSync(filePath: string, data: string): void {
+  const tmpPath = filePath + `.${crypto.randomBytes(4).toString('hex')}.tmp`
+  fs.writeFileSync(tmpPath, data, 'utf-8')
+  try {
+    fs.renameSync(tmpPath, filePath)
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath) } catch { /* 清理失败不阻塞 */ }
+    throw err
+  }
+}
+
+/**
+ * Embedding 调用函数签名。
+ * 调用方注入具体实现（桌面端/测试各自适配 DashScope API）。
+ */
+export type EmbeddingCallFn = (texts: string[]) => Promise<number[][]>
+
+export interface IndexerConfig {
+  callLLM: LLMCallFn
+  callEmbedding: EmbeddingCallFn
+}
+
+export interface IndexBuildProgress {
+  phase: 'context' | 'embedding' | 'tokenize'
+  current: number
+  total: number
+  detail?: string
+}
+
+/**
+ * 上下文索引描述生成 Prompt。
+ * 为每个 chunk 生成 1 句话摘要 + 同义词，用于增强 BM25 检索召回。
+ */
+export const CONTEXT_PROMPT = `你是一个文档索引助手。请为以下文档片段生成索引描述，用于关键词检索匹配。
+
+## 任务
+1. 用 1 句话（不超过 60 字）概括本片段的主题
+2. 在主题句后，用逗号补充 3-5 个用户可能搜索的同义词/近义词
+
+## 示例
+片段内容是"尺寸参数：高度2470mm、宽度989mm"
+→ 尺寸参数包括高度和宽度数值，外形尺寸，占地面积，体积，长宽高
+
+## 约束（不可违反）
+1. 不添加原文中没有的数值、结论或建议
+2. 不使用"建议"、"应该"、"需要注意"等主观措辞
+3. 直接输出描述文字，不加引号、括号或前缀`
+
+const INDEX_DIR_NAME = '_index'
+const CONTEXTS_FILE = 'contexts.json'
+const EMBEDDINGS_FILE = 'embeddings.json'
+/** 保存每个 chunk 内容的快速 hash，用于增量 embedding 跳过未变更 chunk */
+const HASHES_FILE = 'hashes.json'
+
+/**
+ * 对字符串生成简单的 FNV-1a 32bit hash（16 进制），用于增量 embedding 比对。
+ * 不需要密码强度，只需快速判断内容是否变更。
+ */
+function fnv1a(str: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = (hash * 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, '0')
+}
+
+/**
+ * 为知识库构建完整检索索引（上下文摘要 + 向量嵌入）。
+ * 支持增量更新：若传入 existingIndex，将复用未变更 chunk 的 embedding，仅重建变更/新增的 chunk。
+ *
+ * @param retriever     已加载知识文件的 KnowledgeRetriever 实例
+ * @param config        LLM 和 Embedding 调用函数
+ * @param onProgress    可选进度回调
+ * @param existingIndex 上次构建的索引（由 loadIndex 加载），用于增量跳过
+ * @returns 生成的 contexts 和 embeddings Map
+ */
+export async function buildKnowledgeIndex(
+  retriever: KnowledgeRetriever,
+  config: IndexerConfig,
+  onProgress?: (progress: IndexBuildProgress) => void,
+  existingIndex?: { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens?: Map<string, string[]> } | null,
+): Promise<{ contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens: Map<string, string[]> }> {
+  const chunkKeys = retriever.getChunkKeys()
+
+  // Phase 1: 上下文摘要（跳过 hash 未变更的 chunk）
+  const contextMap = new Map<string, string>()
+  const hashMap = new Map<string, string>()
+
+  for (let i = 0; i < chunkKeys.length; i++) {
+    const ck = chunkKeys[i]
+    // 计算 chunk 内容 hash
+    const contentForHash = ck.heading + '|' + ck.contentPreview
+    const newHash = fnv1a(contentForHash)
+    hashMap.set(ck.key, newHash)
+
+    // 如果已有索引且 hash 未变更，直接复用旧上下文
+    if (existingIndex && existingIndex.hashes.get(ck.key) === newHash && existingIndex.contexts.has(ck.key)) {
+      contextMap.set(ck.key, existingIndex.contexts.get(ck.key)!)
+      if (onProgress) {
+        onProgress({ phase: 'context', current: i + 1, total: chunkKeys.length, detail: `[cached] ${ck.heading}` })
+      }
+      continue
+    }
+
+    const prevHeading = i > 0 ? chunkKeys[i - 1].heading : '（无）'
+    const nextHeading = i < chunkKeys.length - 1 ? chunkKeys[i + 1].heading : '（无）'
+
+    if (onProgress) {
+      onProgress({ phase: 'context', current: i + 1, total: chunkKeys.length, detail: ck.heading })
+    }
+
+    const userPrompt = `文档：${ck.file}
+上一节：${prevHeading}
+当前节：${ck.heading}
+下一节：${nextHeading}
+
+片段内容（前 300 字）：
+${ck.contentPreview.slice(0, 300)}`
+
+    try {
+      const ctx = await config.callLLM(CONTEXT_PROMPT, userPrompt, 100)
+      const cleaned = ctx.replace(/^["'「【[（(]|["'」】\]）)]$/g, '').trim()
+      contextMap.set(ck.key, cleaned)
+    } catch (err) {
+      console.warn(`[knowledge-indexer] chunk "${ck.heading}" 上下文生成失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  retriever.setContexts(contextMap)
+
+  // Phase 2: 向量嵌入（批量，每批 10 条，跳过 hash 未变更的 chunk）
+  const embeddingMap = new Map<string, number[]>()
+
+  // 先把未变更的 embedding 直接复制过来
+  if (existingIndex) {
+    for (const ck of chunkKeys) {
+      const newHash = hashMap.get(ck.key)
+      if (existingIndex.hashes.get(ck.key) === newHash && existingIndex.embeddings.has(ck.key)) {
+        embeddingMap.set(ck.key, existingIndex.embeddings.get(ck.key)!)
+      }
+    }
+  }
+
+  // 只对需要重新生成 embedding 的 chunk 分批处理
+  const needEmbedding = chunkKeys.filter(ck => !embeddingMap.has(ck.key))
+  const batchSize = 10
+
+  for (let i = 0; i < needEmbedding.length; i += batchSize) {
+    const batch = needEmbedding.slice(i, i + batchSize)
+    const texts = batch.map(ck => {
+      const ctx = contextMap.get(ck.key) || ''
+      // 3000 字覆盖整个 MAX_CHAPTER_CHARS 章节，配合 formatter 的切分阈值形成"隐式滑窗"：
+      // 每章节 ≤ 3000 字 → 单向量完整覆盖章节语义。现代 embedding 模型（bge/text-3）上下文 8k+，
+      // 500 字是历史遗留的过度保守值，会让 1000-6000 字章节的后半段无法语义召回。
+      return (ctx + ' ' + ck.heading + ' ' + ck.contentPreview).slice(0, 3000)
+    })
+
+    if (onProgress) {
+      onProgress({
+        phase: 'embedding',
+        current: Math.min(i + batchSize, needEmbedding.length),
+        total: needEmbedding.length,
+      })
+    }
+
+    try {
+      const embeddings = await config.callEmbedding(texts)
+      if (!Array.isArray(embeddings) || embeddings.length !== batch.length) {
+        console.warn(`[knowledge-indexer] Embedding 批次 ${i}-${i + batchSize} 返回长度不匹配：期望 ${batch.length}，实际 ${Array.isArray(embeddings) ? embeddings.length : 'N/A'}`)
+        continue
+      }
+      for (let j = 0; j < batch.length; j++) {
+        embeddingMap.set(batch[j].key, embeddings[j])
+      }
+    } catch (err) {
+      console.warn(`[knowledge-indexer] Embedding 批次 ${i}-${i + batchSize} 失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  retriever.setEmbeddings(embeddingMap)
+
+  // Phase 3: BM25 token 缓存（重 CPU，必须 yield 事件循环避免 build 过程自身 OOM）。
+  // 持久化到 _index/tokens.json 后，运行时 searchChunks 不需要再冷分词，根治
+  // "2493 chunks 同步 segmentit 累积 4GB 主进程 OOM" 的回归。
+  const tokensMap = new Map<string, string[]>()
+  for (let i = 0; i < chunkKeys.length; i++) {
+    const ck = chunkKeys[i]
+    const newHash = hashMap.get(ck.key)
+    // 增量：hash 未变 + 旧 tokens 存在则复用，跳过重新分词
+    if (existingIndex?.tokens && existingIndex.hashes.get(ck.key) === newHash) {
+      const cached = existingIndex.tokens.get(ck.key)
+      if (cached) {
+        tokensMap.set(ck.key, cached)
+        continue
+      }
+    }
+    const ctx = contextMap.get(ck.key) ?? ''
+    const rawText = (ctx ? ctx + ' ' : '') + ck.heading + ' ' + ck.contentPreview
+    const safeText = rawText.length > INDEX_TOKENIZE_MAX_CHARS
+      ? rawText.slice(0, INDEX_TOKENIZE_MAX_CHARS)
+      : rawText
+    tokensMap.set(ck.key, tokenize(safeText.toLowerCase()))
+
+    // 每 50 个 chunk 上报进度。nodejieba 在 native 堆分词，~10x segmentit 速度且
+    // 不吃 V8 主进程 4GB 配额，不需要事件循环 yield。
+    if (i % TOKENIZE_YIELD_EVERY === TOKENIZE_YIELD_EVERY - 1) {
+      if (onProgress) {
+        onProgress({ phase: 'tokenize', current: i + 1, total: chunkKeys.length })
+      }
+    }
+  }
+  if (onProgress) {
+    onProgress({ phase: 'tokenize', current: chunkKeys.length, total: chunkKeys.length })
+  }
+
+  return { contexts: contextMap, embeddings: embeddingMap, hashes: hashMap, tokens: tokensMap }
+}
+
+/**
+ * 将索引持久化到磁盘（JSON 格式）。
+ * 写入 `knowledgePath/_index/contexts.json`、`_index/embeddings.json`、
+ * `_index/hashes.json` 和（可选）`_index/tokens.json`。
+ */
+export function saveIndex(
+  knowledgePath: string,
+  contexts: Map<string, string>,
+  embeddings: Map<string, number[]>,
+  hashes?: Map<string, string>,
+  tokens?: Map<string, string[]>,
+): void {
+  const indexDir = path.join(knowledgePath, INDEX_DIR_NAME)
+  if (!fs.existsSync(indexDir)) {
+    fs.mkdirSync(indexDir, { recursive: true })
+  }
+
+  const contextsObj: Record<string, string> = {}
+  for (const [k, v] of contexts) contextsObj[k] = v
+
+  const embeddingsObj: Record<string, number[]> = {}
+  for (const [k, v] of embeddings) embeddingsObj[k] = v
+
+  // 原子写入：先写临时文件再 rename，防止进程崩溃时索引文件损坏
+  atomicWriteSync(path.join(indexDir, CONTEXTS_FILE), JSON.stringify(contextsObj))
+  atomicWriteSync(path.join(indexDir, EMBEDDINGS_FILE), JSON.stringify(embeddingsObj))
+
+  if (hashes) {
+    const hashesObj: Record<string, string> = {}
+    for (const [k, v] of hashes) hashesObj[k] = v
+    atomicWriteSync(path.join(indexDir, HASHES_FILE), JSON.stringify(hashesObj))
+  }
+
+  // BM25 token 缓存（跨 session 复用，避免每次重启都重新 segmentit 中文分词）
+  if (tokens && tokens.size > 0) {
+    saveTokensCache(indexDir, tokens)
+  }
+}
+
+/**
+ * 从磁盘加载持久化索引（含 hashes 用于增量比对，含 tokens 用于跳过 BM25 分词）。
+ * 任一**核心**文件（contexts / embeddings）不存在则返回 null。
+ * tokens 和 hashes 是可选增强，缺失时返回的 Map 为空。
+ */
+export function loadIndex(
+  knowledgePath: string,
+): { contexts: Map<string, string>; embeddings: Map<string, number[]>; hashes: Map<string, string>; tokens: Map<string, string[]> } | null {
+  const indexDir = path.join(knowledgePath, INDEX_DIR_NAME)
+  const contextsPath = path.join(indexDir, CONTEXTS_FILE)
+  const embeddingsPath = path.join(indexDir, EMBEDDINGS_FILE)
+
+  if (!fs.existsSync(contextsPath) || !fs.existsSync(embeddingsPath)) {
+    return null
+  }
+
+  try {
+    const contextsObj = JSON.parse(fs.readFileSync(contextsPath, 'utf-8')) as Record<string, string>
+    const embeddingsObj = JSON.parse(fs.readFileSync(embeddingsPath, 'utf-8')) as Record<string, number[]>
+
+    const contexts = new Map<string, string>()
+    for (const [k, v] of Object.entries(contextsObj)) contexts.set(k, v)
+
+    const embeddings = new Map<string, number[]>()
+    for (const [k, v] of Object.entries(embeddingsObj)) embeddings.set(k, v)
+
+    // hashes 文件可选（旧版索引没有此文件）
+    const hashes = new Map<string, string>()
+    const hashesPath = path.join(indexDir, HASHES_FILE)
+    if (fs.existsSync(hashesPath)) {
+      try {
+        const hashesObj = JSON.parse(fs.readFileSync(hashesPath, 'utf-8')) as Record<string, string>
+        for (const [k, v] of Object.entries(hashesObj)) hashes.set(k, v)
+      } catch {
+        // hashes 文件损坏则忽略，全量重建
+      }
+    }
+
+    // tokens 文件可选（v0.6.0 新增），缺失时返回空 Map（首次查询会重新分词）
+    const tokens = loadTokensCache(indexDir) ?? new Map<string, string[]>()
+
+    return { contexts, embeddings, hashes, tokens }
+  } catch (err) {
+    console.warn(`[knowledge-indexer] 索引加载失败：${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}

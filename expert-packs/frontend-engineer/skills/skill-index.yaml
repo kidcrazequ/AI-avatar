@@ -1,0 +1,21 @@
+skills:
+  - name: frontend-engineer-capability-1
+    path: skills/frontend-engineer-capability-1.md
+    source: local
+    domain: 前端设计
+  - name: frontend-engineer-capability-2
+    path: skills/frontend-engineer-capability-2.md
+    source: local
+    domain: 组件架构
+  - name: frontend-engineer-capability-3
+    path: skills/frontend-engineer-capability-3.md
+    source: local
+    domain: 响应式设计
+  - name: frontend-engineer-capability-4
+    path: skills/frontend-engineer-capability-4.md
+    source: local
+    domain: 无障碍审计
+  - name: frontend-engineer-capability-5
+    path: skills/frontend-engineer-capability-5.md
+    source: local
+    domain: 性能优化

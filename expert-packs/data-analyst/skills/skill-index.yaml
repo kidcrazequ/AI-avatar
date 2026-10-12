@@ -1,0 +1,21 @@
+skills:
+  - name: data-analyst-capability-1
+    path: skills/data-analyst-capability-1.md
+    source: local
+    domain: 问题框定
+  - name: data-analyst-capability-2
+    path: skills/data-analyst-capability-2.md
+    source: local
+    domain: 指标口径
+  - name: data-analyst-capability-3
+    path: skills/data-analyst-capability-3.md
+    source: local
+    domain: 数据源审阅
+  - name: data-analyst-capability-4
+    path: skills/data-analyst-capability-4.md
+    source: local
+    domain: 数据诊断
+  - name: data-analyst-capability-5
+    path: skills/data-analyst-capability-5.md
+    source: local
+    domain: 证据化报告

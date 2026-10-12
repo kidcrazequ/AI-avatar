@@ -1,0 +1,53 @@
+# 外部技能来源清单 v1.0
+#
+# 本文件声明所有来自 GitHub 等外部源的技能包。
+# 运行 `scripts/soul-sync.sh` 将技能同步到 shared/skills/community/
+#
+# ┌─────────────────────────────────────────────────────┐
+# │ 格式说明                                            │
+# ├─────────────────────────────────────────────────────┤
+# │ name     : 本地目录名（小写 + 连字符）               │
+# │ repo     : Git 仓库 HTTPS URL                       │
+# │ ref      : tag / branch / commit hash（推荐 tag）   │
+# │ path     : 仓库内技能目录（默认 skills/）            │
+# │ skills   : 选择性安装的技能名列表（空 = 全部安装）    │
+# │ file     : 只安装单个文件（与 path/skills 互斥）      │
+# └─────────────────────────────────────────────────────┘
+#
+# 安装后技能文件位于：
+#   shared/skills/community/<name>/skills/<skill-name>.md
+#
+# 在分身的 skill-index.yaml 中引用：
+#   - name: <skill-name>
+#     path: shared/skills/community/<name>/skills/<skill-name>.md
+#     source: community
+#
+# 技能优先级（冲突解决）：
+#   local（分身专属）> shared（自有公共）> community（社区外部）
+
+version: "1.0"
+
+sources: []
+  # ── 示例（取消注释即可使用）──────────────────────────
+  #
+  # 示例 1：安装整个技能包
+  # - name: awesome-prompt
+  #   repo: https://github.com/example/awesome-prompt-skills.git
+  #   ref: v1.0.0
+  #   path: skills/
+  #   skills: []                    # 空 = 全部安装
+  #
+  # 示例 2：只安装技能包中的部分技能
+  # - name: data-analysis-pack
+  #   repo: https://github.com/example/soul-data-skills.git
+  #   ref: main
+  #   path: skills/
+  #   skills:
+  #     - pandas-analysis
+  #     - sql-query
+  #
+  # 示例 3：安装单个技能文件
+  # - name: financial-calc
+  #   repo: https://github.com/example/soul-skills.git
+  #   ref: a1b2c3d
+  #   file: skills/financial-analysis.md

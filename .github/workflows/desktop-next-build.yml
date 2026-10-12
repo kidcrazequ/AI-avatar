@@ -1,0 +1,80 @@
+name: Soul Next native install gate
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/soul-next-windows-qa-20261012']
+    paths: ['desktop-next/**', '.github/workflows/desktop-next-build.yml', 'packages/core/src/**', 'expert-packs/**', 'shared/**', 'templates/**']
+jobs:
+  native-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            arch: x64
+            target: win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop-next
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop-next/package-lock.json
+      - name: Confirm native host architecture
+        run: node -e "if(process.arch !== '${{ matrix.arch }}') throw new Error('Non-native architecture'); console.log(process.platform, process.arch, process.version)"
+      - name: Install locked dependencies
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build native installer
+        run: npm run dist:${{ matrix.target }}
+      - name: Verify expert persistence using the native Electron runtime
+        run: npm run verify:experts
+      - name: Verify resource isolation, recovery and persistence
+        run: npm run verify:resources
+      - name: Verify task execution, approvals and crash recovery
+        run: npm run verify:tasks
+      - name: Verify workflow versions, triggers and crash recovery
+        run: npm run verify:workflows
+      - name: Verify connectors, IM pairing, permissions and settings
+        run: npm run verify:integrations
+      - name: Verify update safety and data migration
+        run: npm run verify:updates
+      - name: Install and launch the installed app twice
+        run: npm run verify:${{ matrix.target }}
+      - name: Verify native two-version installation and data preservation
+        run: npm run verify:upgrade
+      - name: Upload installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-next-evidence-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            desktop-next/evidence/
+            desktop-next/build/resources/build-inputs.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload internal installation packages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soul-next-packages-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            desktop-next/release/*.exe
+            desktop-next/release/*.dmg
+            desktop-next/release/*.zip
+            desktop-next/release/*.blockmap
+            desktop-next/release/builder-effective-config.yaml
+          if-no-files-found: warn
+          retention-days: 7

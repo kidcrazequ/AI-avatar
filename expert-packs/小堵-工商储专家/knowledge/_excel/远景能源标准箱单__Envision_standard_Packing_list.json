@@ -1,0 +1,412 @@
+{
+  "fileName": "远景能源标准箱单  Envision standard Packing list.xls",
+  "importedAt": "2026-04-30T09:24:20.708Z",
+  "sheets": [
+    {
+      "name": "1-1",
+      "rowCount": 14,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 14,
+          "samples": [
+            "送货箱单-远景",
+            "收货地址：",
+            "The receiving Address：",
+            "发货供应商名称：",
+            "Supplier Name:",
+            "订单号 \nOrder number：",
+            "序号\nNo.",
+            "1"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "批号\nBatch Number"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "物料编码\nMaterial Code"
+          ]
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "远景能源有限公司-江阴工厂\n江阴临港新城低碳产业园申泰路2号滨江西路北大门",
+            "Vision Energy Co. LTD -Jiangyin Plant\nShentai Road, Jiangyin Lingang New City low-carbon Industrial Park, Binjiangxi Road, North Gate",
+            "描述\nDescription",
+            "宽 Width"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "高 Height"
+          ]
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 4,
+          "samples": [
+            "送货日期:\nShip Date：",
+            "零件规格\nPart specification",
+            "整托重量 （公斤）\nTotal Weight（KG）",
+            "净重 Net Weight"
+          ]
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "零件数量/内包装\nPart QTY / Internal Package"
+          ]
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "箱号：\n Case No.:"
+          ]
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "毛重 Gross Weight"
+          ]
+        },
+        {
+          "name": "col14",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "1-1号",
+            "内包装数量/木箱\n Internal Package QTY/Woden Box"
+          ]
+        },
+        {
+          "name": "col15",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col16",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "col1": "送货箱单-远景",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "收货地址：",
+          "col2": null,
+          "col3": null,
+          "col4": "远景能源有限公司-江阴工厂\n江阴临港新城低碳产业园申泰路2号滨江西路北大门",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": "箱号：\n Case No.:",
+          "col13": null,
+          "col14": "1-1号",
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "The receiving Address：",
+          "col2": null,
+          "col3": null,
+          "col4": "Vision Energy Co. LTD -Jiangyin Plant\nShentai Road, Jiangyin Lingang New City low-carbon Industrial Park, Binjiangxi Road, North Gate",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "发货供应商名称：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "Supplier Name:",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "订单号 \nOrder number：",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": "送货日期:\nShip Date：",
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "序号\nNo.",
+          "col2": "批号\nBatch Number",
+          "col3": "物料编码\nMaterial Code",
+          "col4": "描述\nDescription",
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": "零件规格\nPart specification",
+          "col11": "零件数量/内包装\nPart QTY / Internal Package",
+          "col12": null,
+          "col13": null,
+          "col14": "内包装数量/木箱\n Internal Package QTY/Woden Box",
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": 1,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": 2,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": 3,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": 4,
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "合计Total:",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "外包装尺寸（木箱/整托） （毫米）\nOutside  Size （Wooden Box/Pallet）（mm）",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": "整托重量 （公斤）\nTotal Weight（KG）",
+          "col11": null,
+          "col12": null,
+          "col13": null,
+          "col14": null,
+          "col15": null,
+          "col16": null
+        },
+        {
+          "col1": "长 length",
+          "col2": null,
+          "col3": null,
+          "col4": "宽 Width",
+          "col5": null,
+          "col6": null,
+          "col7": "高 Height",
+          "col8": null,
+          "col9": null,
+          "col10": "净重 Net Weight",
+          "col11": null,
+          "col12": null,
+          "col13": "毛重 Gross Weight",
+          "col14": null,
+          "col15": null,
+          "col16": null
+        }
+      ],
+      "rowMetaRoles": [
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "total",
+        "subtitle",
+        "data"
+      ]
+    }
+  ]
+}

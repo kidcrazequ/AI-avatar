@@ -1,0 +1,292 @@
+{
+  "fileName": "远景出货报告模板 - V1 明美的副本.xlsx",
+  "importedAt": "2026-04-30T09:24:20.607Z",
+  "sheets": [
+    {
+      "name": "出货报告",
+      "rowCount": 15,
+      "columns": [
+        {
+          "name": "基础信息 Basic Info",
+          "dtype": "string",
+          "uniqueCount": 14,
+          "samples": [
+            "序号",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7"
+          ]
+        },
+        {
+          "name": "产品型号 Product Model：",
+          "dtype": "string",
+          "uniqueCount": 12,
+          "samples": [
+            "整机序列号\nS/N",
+            "检测项目",
+            "外观",
+            "防护等级",
+            "启停机",
+            "功率控制",
+            "报警和保护",
+            "通信"
+          ]
+        },
+        {
+          "name": "ENS-L262 （此为示例，请填写实际型号）",
+          "dtype": "string",
+          "uniqueCount": 12,
+          "samples": [
+            "标准/要求",
+            "a) 外观完整,无结构形变、剥落、锈蚀及裂痕等现象;\nb) 舱门和开关操作灵活;\nc) 铭牌、标志、标记完整清晰。",
+            "IP54",
+            "可正常启动和停机",
+            "设置功率运行充放电",
+            "交直流仓电压越限、电压极差越限、簇电流越限、温度越限、簇内电池单体温度极差越\n限、绝缘电阻越限、通信异常、消防、冷却系统故障等报警和保护功能;",
+            "具备对外通信接口,实现舱内设备通信数据传输功能;具备独立的消防系统通信接口；",
+            "显示电池运行状态、电池运行参数、热管理系统运行状态、消防系统运行状态事件记录等信息的功能。"
+          ]
+        },
+        {
+          "name": "产品名称： Product Name",
+          "dtype": "string",
+          "uniqueCount": 9,
+          "samples": [
+            "检验日期：\nDate：",
+            "检验方法",
+            "目视",
+            "淋水工装\n+目视",
+            "主控下发指令",
+            "主控",
+            "绝缘测试仪",
+            "耐压测试仪"
+          ]
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "结果",
+            "OK"
+          ]
+        },
+        {
+          "name": "工商业 一体柜",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "判定",
+            "PASS"
+          ]
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        }
+      ],
+      "rows": [
+        {
+          "基础信息 Basic Info": null,
+          "产品型号 Product Model：": "整机序列号\nS/N",
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": "检验日期：\nDate：",
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "序号",
+          "产品型号 Product Model：": "检测项目",
+          "ENS-L262 （此为示例，请填写实际型号）": "标准/要求",
+          "产品名称： Product Name": "检验方法",
+          "col5": "结果",
+          "工商业 一体柜": "判定",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 1,
+          "产品型号 Product Model：": "外观",
+          "ENS-L262 （此为示例，请填写实际型号）": "a) 外观完整,无结构形变、剥落、锈蚀及裂痕等现象;\nb) 舱门和开关操作灵活;\nc) 铭牌、标志、标记完整清晰。",
+          "产品名称： Product Name": "目视",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 2,
+          "产品型号 Product Model：": "防护等级",
+          "ENS-L262 （此为示例，请填写实际型号）": "IP54",
+          "产品名称： Product Name": "淋水工装\n+目视",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 3,
+          "产品型号 Product Model：": "启停机",
+          "ENS-L262 （此为示例，请填写实际型号）": "可正常启动和停机",
+          "产品名称： Product Name": "主控下发指令",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 4,
+          "产品型号 Product Model：": "功率控制",
+          "ENS-L262 （此为示例，请填写实际型号）": "设置功率运行充放电",
+          "产品名称： Product Name": "主控下发指令",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 5,
+          "产品型号 Product Model：": "报警和保护",
+          "ENS-L262 （此为示例，请填写实际型号）": "交直流仓电压越限、电压极差越限、簇电流越限、温度越限、簇内电池单体温度极差越\n限、绝缘电阻越限、通信异常、消防、冷却系统故障等报警和保护功能;",
+          "产品名称： Product Name": "主控",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 6,
+          "产品型号 Product Model：": "通信",
+          "ENS-L262 （此为示例，请填写实际型号）": "具备对外通信接口,实现舱内设备通信数据传输功能;具备独立的消防系统通信接口；",
+          "产品名称： Product Name": "主控",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 7,
+          "产品型号 Product Model：": "显示",
+          "ENS-L262 （此为示例，请填写实际型号）": "显示电池运行状态、电池运行参数、热管理系统运行状态、消防系统运行状态事件记录等信息的功能。",
+          "产品名称： Product Name": "主控",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 8,
+          "产品型号 Product Model：": "绝缘值",
+          "ENS-L262 （此为示例，请填写实际型号）": "DC2500V 30s ≥500MΩ",
+          "产品名称： Product Name": "绝缘测试仪",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 9,
+          "产品型号 Product Model：": "耐压测试",
+          "ENS-L262 （此为示例，请填写实际型号）": "DC3820V 60s ≤10mA",
+          "产品名称： Product Name": "耐压测试仪",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": 10,
+          "产品型号 Product Model：": "接地连续性测试",
+          "ENS-L262 （此为示例，请填写实际型号）": "< 0.1Ω",
+          "产品名称： Product Name": "接地电阻\n测试仪",
+          "col5": "OK",
+          "工商业 一体柜": "PASS",
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "备注\nRemark",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "最终判定\nFinal Conclusion",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": "PASS",
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        },
+        {
+          "基础信息 Basic Info": "Form No:QR18TOD00001-01A",
+          "产品型号 Product Model：": null,
+          "ENS-L262 （此为示例，请填写实际型号）": null,
+          "产品名称： Product Name": null,
+          "col5": null,
+          "工商业 一体柜": null,
+          "col7": null,
+          "col8": null,
+          "col9": null
+        }
+      ],
+      "rowMetaRoles": [
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    }
+  ]
+}

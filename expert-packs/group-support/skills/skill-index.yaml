@@ -1,0 +1,21 @@
+skills:
+  - name: group-support-capability-1
+    path: skills/group-support-capability-1.md
+    source: local
+    domain: 自然对话答疑
+  - name: group-support-capability-2
+    path: skills/group-support-capability-2.md
+    source: local
+    domain: 证据化处理
+  - name: group-support-capability-3
+    path: skills/group-support-capability-3.md
+    source: local
+    domain: 上下文延续
+  - name: group-support-capability-4
+    path: skills/group-support-capability-4.md
+    source: local
+    domain: 主动确认求证
+  - name: group-support-capability-5
+    path: skills/group-support-capability-5.md
+    source: local
+    domain: 确认后学习

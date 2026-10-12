@@ -1,0 +1,21 @@
+skills:
+  - name: backend-engineer-capability-1
+    path: skills/backend-engineer-capability-1.md
+    source: local
+    domain: 代码审查
+  - name: backend-engineer-capability-2
+    path: skills/backend-engineer-capability-2.md
+    source: local
+    domain: 调试排障
+  - name: backend-engineer-capability-3
+    path: skills/backend-engineer-capability-3.md
+    source: local
+    domain: 架构
+  - name: backend-engineer-capability-4
+    path: skills/backend-engineer-capability-4.md
+    source: local
+    domain: 规划
+  - name: backend-engineer-capability-5
+    path: skills/backend-engineer-capability-5.md
+    source: local
+    domain: 测试策略

@@ -1,0 +1,459 @@
+{
+  "fileName": "产品出厂检验报告.xlsx",
+  "importedAt": "2026-04-30T09:24:17.057Z",
+  "sheets": [
+    {
+      "name": "Sheet1",
+      "rowCount": 21,
+      "columns": [
+        {
+          "name": "col1",
+          "dtype": "string",
+          "uniqueCount": 15,
+          "samples": [
+            "上海金傲能新能源有限公司",
+            "产品出货检验报告",
+            "客户",
+            "产品名称",
+            "检验项目",
+            "外观",
+            "安全性测试",
+            "功能测试"
+          ]
+        },
+        {
+          "name": "col2",
+          "dtype": "string",
+          "uniqueCount": 15,
+          "samples": [
+            "检验标准",
+            "箱体的外形和安装尺寸应符合图样，焊接及表面涂层应符合规定要求",
+            "接线、正负色标正确；接地紧密，无涂覆物、无生锈",
+            "标志和铭牌内容应齐全、清晰、正确，安装牢固",
+            "一次、二次线加工应整齐、美观、牢固可靠，符合工艺要求；标签应齐全、清晰、正确、牢固",
+            "元器件型号、规格应符合图纸规定和规范表要求，特殊元件要有说明书",
+            "绝缘检测阻值>8MΩ",
+            "耐压测试时，不应出现击穿或闪络现象"
+          ]
+        },
+        {
+          "name": "col3",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col4",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col5",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "检验员"
+          ]
+        },
+        {
+          "name": "col6",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col7",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col8",
+          "dtype": "string",
+          "uniqueCount": 2,
+          "samples": [
+            "型号/规格",
+            "SN码"
+          ]
+        },
+        {
+          "name": "col9",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "审核"
+          ]
+        },
+        {
+          "name": "col10",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col11",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "检验记录"
+          ]
+        },
+        {
+          "name": "col12",
+          "dtype": "string",
+          "uniqueCount": 0,
+          "samples": []
+        },
+        {
+          "name": "col13",
+          "dtype": "string",
+          "uniqueCount": 1,
+          "samples": [
+            "判定"
+          ]
+        }
+      ],
+      "rows": [
+        {
+          "col1": "上海金傲能新能源有限公司",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "产品出货检验报告",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "客户",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": "型号/规格",
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "产品名称",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": "SN码",
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "检验项目",
+          "col2": "检验标准",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": "检验记录",
+          "col12": null,
+          "col13": "判定"
+        },
+        {
+          "col1": "外观",
+          "col2": "箱体的外形和安装尺寸应符合图样，焊接及表面涂层应符合规定要求",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "接线、正负色标正确；接地紧密，无涂覆物、无生锈",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "标志和铭牌内容应齐全、清晰、正确，安装牢固",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "一次、二次线加工应整齐、美观、牢固可靠，符合工艺要求；标签应齐全、清晰、正确、牢固",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "元器件型号、规格应符合图纸规定和规范表要求，特殊元件要有说明书",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "安全性测试",
+          "col2": "绝缘检测阻值>8MΩ",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "耐压测试时，不应出现击穿或闪络现象",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": null,
+          "col2": "急停测试，急停按钮是否正常停机",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "功能测试",
+          "col2": "高压箱通断测试，BMS功能测试，电池簇充放电测试，环控系统测试，系统保护测试",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "通讯测试",
+          "col2": "BMS参数远程设置，环控系统远程设置，遥控遥信测试，遥调摇测测试，遥测，远程响应时间测试",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "容量测试",
+          "col2": "≥215kwh",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "包装标识",
+          "col2": "无受潮、撞击痕迹，无晃动、破损，标识完整、正确",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "软件版本",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "附件",
+          "col2": "□产品说明书     □合格证        □出厂检验报告",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "综合评定",
+          "col2": "□合格                                 □不合格",
+          "col3": null,
+          "col4": null,
+          "col5": null,
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": null,
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        },
+        {
+          "col1": "检验日期",
+          "col2": null,
+          "col3": null,
+          "col4": null,
+          "col5": "检验员",
+          "col6": null,
+          "col7": null,
+          "col8": null,
+          "col9": "审核",
+          "col10": null,
+          "col11": null,
+          "col12": null,
+          "col13": null
+        }
+      ],
+      "rowMetaRoles": [
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "data",
+        "data",
+        "subtitle",
+        "data",
+        "data",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle",
+        "subtitle"
+      ]
+    }
+  ]
+}
